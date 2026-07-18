@@ -292,6 +292,11 @@ export async function publishKnowledgeBatch(
   createdBy = 'clideck-mcp-worker',
 ): Promise<{ releaseId: string; sequence: number }> {
   if (items.length === 0) throw new Error('RELEASE_REQUIRES_ITEMS')
+  await client.query(
+    `SELECT pg_advisory_xact_lock(
+       hashtext('clideck-mcp-release-publication')
+     )`,
+  )
   const current = await client.query<{ release_id: string }>(
     'SELECT release_id FROM active_release WHERE singleton FOR UPDATE',
   )

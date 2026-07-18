@@ -53,6 +53,9 @@ export async function getAdminOverview(
          ps.enabled AS pipeline_enabled,
          ps.ai_model,
          ps.reasoning_effort,
+         ps.max_concurrent_ai_runs,
+         ps.control_generation,
+         ps.pause_requested_at,
          ps.paused_reason,
          ps.updated_at AS pipeline_updated_at,
          sc.id AS active_source_id,
@@ -88,6 +91,28 @@ export async function getAdminOverview(
           WHERE started_at >= date_trunc('day', now())) AS tokens_today,
          (SELECT count(*)::int FROM agent_runs
           WHERE status = 'running') AS active_agent_runs,
+         (SELECT count(*)::int FROM pipeline_tasks
+          WHERE status IN ('claimed', 'running')
+            AND task_type IN (
+              'expert_research',
+              'source_discovery',
+              'fragment_analysis',
+              'candidate_verification',
+              'source_refresh'
+            )) AS active_luna_executors,
+         (SELECT count(*)::int FROM pipeline_tasks
+          WHERE status = 'queued'
+            AND task_type = 'expert_research') AS queued_expert,
+         (SELECT count(*)::int FROM pipeline_tasks
+          WHERE status = 'queued'
+            AND task_type = 'candidate_verification') AS queued_verify,
+         (SELECT count(*)::int FROM pipeline_tasks
+          WHERE status = 'queued'
+            AND task_type = 'fragment_analysis') AS queued_analyze,
+         (SELECT count(*)::int FROM pipeline_tasks
+          WHERE status = 'queued'
+            AND task_type IN ('source_discovery', 'source_refresh'))
+           AS queued_discover,
          (SELECT coalesce(
             sum(input_tokens + output_tokens + reasoning_output_tokens)
             / nullif(sum(published_revisions), 0),
@@ -283,6 +308,9 @@ export async function getAdminOverview(
   )
   return {
     ...data,
+    pause_pending:
+      data['pipeline_enabled'] === false &&
+      Number(data['active_luna_executors'] ?? 0) > 0,
     published_records_24h: publishedRecords24h,
     deployed_commit_sha: deployedCommitSha,
     processes: [
@@ -741,6 +769,8 @@ export async function setPipelineEnabled(
       `UPDATE pipeline_settings
           SET enabled = $1,
               paused_reason = CASE WHEN $1 THEN NULL ELSE $2 END,
+              pause_requested_at = CASE WHEN $1 THEN NULL ELSE now() END,
+              control_generation = control_generation + 1,
               updated_at = now(),
               updated_by = $3
         WHERE singleton
@@ -780,6 +810,42 @@ export async function setPipelineEnabled(
     return updated.rows[0]
   })
   if (enabled) await ensurePipelineWork(database)
+  return result
+}
+
+export async function setPipelineConcurrency(
+  database: Database,
+  maxConcurrentAiRuns: number,
+  actor: { id: string; role: AdminRole },
+) {
+  const result = await withTransaction(database, async (client) => {
+    const updated = await client.query(
+      `UPDATE pipeline_settings
+          SET max_concurrent_ai_runs = $1,
+              control_generation = control_generation + 1,
+              updated_at = now(),
+              updated_by = $2
+        WHERE singleton
+        RETURNING *`,
+      [maxConcurrentAiRuns, actor.id],
+    )
+    await client.query(
+      `INSERT INTO admin_audit_events (
+         actor_id, actor_role, action, target_type, target_id, metadata
+       )
+       VALUES (
+         $1,
+         $2,
+         'pipeline.concurrency',
+         'pipeline',
+         NULL,
+         jsonb_build_object('max_concurrent_ai_runs', $3::int)
+       )`,
+      [actor.id, actor.role, maxConcurrentAiRuns],
+    )
+    return updated.rows[0]
+  })
+  await ensurePipelineWork(database)
   return result
 }
 
@@ -850,12 +916,28 @@ export async function actOnSource(
         await client.query(
           `UPDATE source_fragments fragment
               SET status = 'queued',
+                  reservation_task_id = NULL,
                   attempts = 0,
                   updated_at = now()
              FROM source_artifacts artifact
             WHERE fragment.source_artifact_id = artifact.id
               AND artifact.source_candidate_id = $1
-              AND fragment.status IN ('queued','analyzing','failed')`,
+              AND fragment.status IN (
+                'queued',
+                'reserved',
+                'analyzing',
+                'failed'
+              )`,
+          [sourceId],
+        )
+        await client.query(
+          `UPDATE knowledge_candidates candidate
+              SET verification_task_id = NULL,
+                  updated_at = now()
+             FROM pipeline_tasks task
+            WHERE candidate.pipeline_task_id = task.id
+              AND task.source_candidate_id = $1
+              AND candidate.status = 'analyzed'`,
           [sourceId],
         )
       }

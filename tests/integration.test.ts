@@ -8,7 +8,8 @@ import pg from 'pg'
 import { createPublicTaskId, sha256, sha256Label } from '../src/crypto.js'
 import {
   actOnSource,
-  getAdminOverview
+  getAdminOverview,
+  setPipelineEnabled
 } from '../src/domain/admin.js'
 import { createAdminActorSignature } from '../src/http/admin-auth.js'
 import {
@@ -20,6 +21,7 @@ import {
 } from '../src/domain/knowledge.js'
 import {
   createKnowledgeRevision,
+  publishKnowledgeBatch,
   processNextCandidate,
   runWorkerMaintenance
 } from '../src/domain/publication.js'
@@ -29,6 +31,7 @@ import {
   completeMechanicalPipelineTask,
   ensurePipelineWork,
   failPipelineTask,
+  heartbeatPipelineTask,
   recordAgentRunResult,
   submitCandidateAnalysis,
   submitCandidateVerification,
@@ -115,6 +118,65 @@ describeIntegration('PostgreSQL integration', () => {
     expect(gaps.rows[0]?.missing).toBe(0)
   })
 
+  it('serializes concurrent knowledge release publication', async () => {
+    const baseline = await database.query<{
+      item_id: string
+      revision_id: string
+      revision_count: number
+    }>(
+      `SELECT
+         ri.knowledge_item_id AS item_id,
+         ri.revision_id,
+         count(*) OVER ()::int AS revision_count
+       FROM active_release ar
+       JOIN release_items ri ON ri.release_id = ar.release_id
+       WHERE ar.singleton
+       ORDER BY ri.knowledge_item_id
+       LIMIT 2`,
+    )
+    expect(baseline.rows).toHaveLength(2)
+
+    const publish = async (
+      row: { item_id: string; revision_id: string },
+      reason: string,
+    ) => {
+      const client = await database.connect()
+      try {
+        await client.query('BEGIN')
+        const release = await publishKnowledgeBatch(
+          client,
+          [{ itemId: row.item_id, revisionId: row.revision_id }],
+          reason,
+          'parallel-integration-test',
+        )
+        await client.query('COMMIT')
+        return release
+      } catch (error) {
+        await client.query('ROLLBACK')
+        throw error
+      } finally {
+        client.release()
+      }
+    }
+
+    const [first, second] = await Promise.all([
+      publish(baseline.rows[0]!, 'Concurrent publication A'),
+      publish(baseline.rows[1]!, 'Concurrent publication B')
+    ])
+    expect(new Set([first.sequence, second.sequence]).size).toBe(2)
+    const active = await database.query<{
+      revision_count: number
+    }>(
+      `SELECT count(*)::int AS revision_count
+       FROM active_release ar
+       JOIN release_items ri ON ri.release_id = ar.release_id
+       WHERE ar.singleton`,
+    )
+    expect(active.rows[0]?.revision_count).toBe(
+      baseline.rows[0]!.revision_count,
+    )
+  })
+
   it('resets exhausted fragment attempts on an audited source retry', async () => {
     const unique = randomUUID().replaceAll('-', '')
     const hash = sha256Label(`source-retry-${unique}`)
@@ -198,7 +260,7 @@ describeIntegration('PostgreSQL integration', () => {
       [fragment.rows[0]!.id],
     )
     expect(retried.rows[0]).toEqual({
-      status: 'queued',
+      status: 'reserved',
       attempts: 0
     })
     const audit = await database.query<{ count: number }>(
@@ -604,6 +666,37 @@ describeIntegration('PostgreSQL integration', () => {
     })
     expect(resume.status).toBe(200)
 
+    const concurrencyPath = '/admin/v1/pipeline/concurrency'
+    const concurrencyBody = JSON.stringify({
+      max_concurrent_ai_runs: 3
+    })
+    const adminConcurrency = await app.request(concurrencyPath, {
+      method: 'POST',
+      headers: signedAdminHeaders(config, {
+        method: 'POST',
+        path: concurrencyPath,
+        body: concurrencyBody,
+        role: 'admin'
+      }),
+      body: concurrencyBody
+    })
+    expect(adminConcurrency.status).toBe(403)
+    const superAdminConcurrency = await app.request(concurrencyPath, {
+      method: 'POST',
+      headers: signedAdminHeaders(config, {
+        method: 'POST',
+        path: concurrencyPath,
+        body: concurrencyBody
+      }),
+      body: concurrencyBody
+    })
+    expect(superAdminConcurrency.status).toBe(200)
+    expect(await superAdminConcurrency.json()).toMatchObject({
+      max_concurrent_ai_runs: 3,
+      ai_model: 'gpt-5.6-luna',
+      reasoning_effort: 'low'
+    })
+
     const revisionResult = await database.query<{ id: string }>(
       `SELECT id::text
        FROM knowledge_revisions
@@ -923,6 +1016,7 @@ describeIntegration('PostgreSQL integration', () => {
       `UPDATE pipeline_settings
           SET active_source_id = NULL,
               enabled = true,
+              max_concurrent_ai_runs = 3,
               paused_reason = NULL,
               updated_at = now(),
               updated_by = 'integration-test'
@@ -972,7 +1066,7 @@ describeIntegration('PostgreSQL integration', () => {
       task_type: 'source_discovery',
       stage: 'discover',
       status: 'queued',
-      count: 1
+      count: 3
     })
 
     const initiallyQueued = await database.query<{ id: string }>(
@@ -1162,6 +1256,23 @@ describeIntegration('PostgreSQL integration', () => {
         'integration-worker',
       )).resolves.toBe(true)
 
+      const reservedBeforeClaim = await database.query<{
+        status: string
+        reservation_task_id: string | null
+      }>(
+        `SELECT status, reservation_task_id
+         FROM source_fragments
+         WHERE source_artifact_id = (
+           SELECT id FROM source_artifacts
+           WHERE source_candidate_id = $1
+         )`,
+        [sourceId],
+      )
+      expect(reservedBeforeClaim.rows[0]).toMatchObject({
+        status: 'reserved',
+        reservation_task_id: expect.any(String)
+      })
+
       const analysis = await claimPipelineTask(
         database,
         config,
@@ -1237,6 +1348,16 @@ describeIntegration('PostgreSQL integration', () => {
         ],
         rejected_fragments: []
       })
+      const verificationReservations = await database.query<{
+        count: number
+      }>(
+        `SELECT count(*)::int AS count
+         FROM knowledge_candidates
+         WHERE verification_task_id IS NOT NULL
+           AND pipeline_task_id = $1`,
+        [String(analysis['pipeline_task_id'])],
+      )
+      expect(verificationReservations.rows[0]?.count).toBe(2)
       await recordAgentRunResult(database, {
         agent_run_id: String(analysis['agent_run_id']),
         status: 'completed',
@@ -1492,5 +1613,135 @@ describeIntegration('PostgreSQL integration', () => {
     } finally {
       await rm(scratch, { recursive: true, force: true })
     }
+  })
+
+  it('leases three Luna tasks, blocks a fourth, and pauses safely', async () => {
+    await database.query(
+      `UPDATE pipeline_settings
+          SET enabled = true,
+              max_concurrent_ai_runs = 3,
+              paused_reason = NULL,
+              pause_requested_at = NULL,
+              updated_at = now(),
+              updated_by = 'parallel-integration-test'
+        WHERE singleton`,
+    )
+    const suffix = randomUUID().replaceAll('-', '').slice(0, 10)
+    const created = await Promise.all(
+      Array.from({ length: 3 }, (_, index) =>
+        createExpertTask(
+          database,
+          config,
+          { kind: 'anonymous' },
+          `Parallel Luna lease test ${suffix} number ${index + 1}`,
+          {
+            vendor: 'Cisco',
+            model: 'C9300',
+            operating_system: 'IOS XE',
+            version: '17.15'
+          },
+        ),
+      ),
+    )
+    expect(created).toHaveLength(3)
+
+    const claims: Record<string, unknown>[] = []
+    for (let index = 0; index < 3; index += 1) {
+      claims.push(await claimPipelineTask(
+        database,
+        config,
+        `pipeline-executor-0${index + 1}`,
+        `pipeline-executor-0${index + 1}:integration`,
+      ))
+    }
+    expect(new Set(
+      claims.map((claim) => String(claim['pipeline_task_id'])),
+    ).size).toBe(3)
+    expect(claims.every(
+      (claim) => claim['task_type'] === 'expert_research',
+    )).toBe(true)
+
+    const fourth = await claimPipelineTask(
+      database,
+      config,
+      'pipeline-executor-04',
+      'pipeline-executor-04:integration',
+    )
+    expect(fourth).toMatchObject({
+      pipeline_state: 'capacity_reached',
+      configured_concurrency: 3,
+      active_luna_runs: 3
+    })
+
+    await setPipelineEnabled(
+      database,
+      false,
+      { id: siteAdminActorId, role: 'super_admin' },
+      'Parallel integration pause test.',
+    )
+    const stopped = await Promise.all(claims.map((claim, index) =>
+      heartbeatPipelineTask(
+        database,
+        config,
+        String(claim['pipeline_task_id']),
+        String(claim['lease_token']),
+        `pipeline-executor-0${index + 1}`,
+        `pipeline-executor-0${index + 1}:integration`,
+      ),
+    ))
+    expect(stopped.every((result) => result['should_stop'] === true)).toBe(true)
+
+    const requeued = await database.query<{
+      queued: number
+      running: number
+    }>(
+      `SELECT
+         count(*) FILTER (WHERE status = 'queued')::int AS queued,
+         count(*) FILTER (
+           WHERE status IN ('claimed', 'running')
+         )::int AS running
+       FROM pipeline_tasks
+       WHERE id = ANY($1::uuid[])`,
+      [claims.map((claim) => String(claim['pipeline_task_id']))],
+    )
+    expect(requeued.rows[0]).toMatchObject({
+      queued: 3,
+      running: 0
+    })
+
+    for (const claim of claims) {
+      await recordAgentRunResult(database, {
+        agent_run_id: String(claim['agent_run_id']),
+        status: 'cancelled',
+        input_tokens: 10,
+        cached_input_tokens: 0,
+        output_tokens: 0,
+        reasoning_output_tokens: 0,
+        duration_ms: 20,
+        error_code: 'PIPELINE_PAUSED'
+      })
+    }
+    await database.query(
+      `UPDATE pipeline_tasks
+          SET status = 'cancelled',
+              completed_at = now(),
+              updated_at = now()
+        WHERE id = ANY($1::uuid[])`,
+      [claims.map((claim) => String(claim['pipeline_task_id']))],
+    )
+    await database.query(
+      `UPDATE expert_tasks
+          SET status = 'cancelled',
+              completed_at = now(),
+              updated_at = now()
+        WHERE public_id = ANY($1::text[])`,
+      [created.map((task) => task.task_id)],
+    )
+    await setPipelineEnabled(
+      database,
+      true,
+      { id: siteAdminActorId, role: 'super_admin' },
+      null,
+    )
   })
 })

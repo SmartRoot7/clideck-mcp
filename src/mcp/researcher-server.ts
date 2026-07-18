@@ -37,6 +37,7 @@ type ResearcherServerDependencies = {
   database: Database
   logger: Logger
   researcherId: string
+  researcherInstanceId: string
 }
 
 const leaseSchema = z.object({
@@ -67,7 +68,7 @@ export function createResearcherMcpServer(
 ): McpServer {
   const server = new McpServer({
     name: 'CliDeck MCP — Restricted Researcher',
-    version: '0.3.0'
+    version: '0.4.0'
   })
 
   server.registerTool(
@@ -88,6 +89,7 @@ export function createResearcherMcpServer(
         dependencies.database,
         dependencies.config,
         dependencies.researcherId,
+        dependencies.researcherInstanceId,
       ),
     ),
   )
@@ -116,6 +118,8 @@ export function createResearcherMcpServer(
           dependencies.config,
           input.pipeline_task_id,
           input.lease_token,
+          dependencies.researcherId,
+          dependencies.researcherInstanceId,
         ),
     ),
   )
