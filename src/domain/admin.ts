@@ -38,6 +38,7 @@ export async function getAdminOverview(
     funnel,
     breakdown,
     activity,
+    publishedHourly,
     errors,
     activeTask
   ] = await Promise.all([
@@ -106,15 +107,40 @@ export async function getAdminOverview(
        ORDER BY worker_name`,
     ),
     database.query(
-      `SELECT stage, status, count(*)::int AS count
-       FROM pipeline_tasks
-       GROUP BY stage, status
-       ORDER BY
-         array_position(
-           ARRAY['discover','acquire','convert','chunk','analyze','verify','publish'],
-           stage
-         ),
-         status`,
+      `WITH stages(stage, ordinal) AS (
+         SELECT *
+         FROM unnest(
+           ARRAY[
+             'discover',
+             'acquire',
+             'convert',
+             'chunk',
+             'analyze',
+             'verify',
+             'publish'
+           ]::text[]
+         ) WITH ORDINALITY
+       )
+       SELECT
+         stages.stage,
+         count(pt.id)::int AS count,
+         count(pt.id) FILTER (WHERE pt.status = 'queued')::int AS queued,
+         count(pt.id) FILTER (
+           WHERE pt.status IN ('claimed', 'running')
+         )::int AS running,
+         count(pt.id) FILTER (WHERE pt.status = 'completed')::int
+           AS completed,
+         count(pt.id) FILTER (WHERE pt.status = 'failed')::int AS failed,
+         count(pt.id) FILTER (WHERE pt.status = 'cancelled')::int
+           AS cancelled,
+         count(pt.id) FILTER (WHERE pt.status = 'skipped')::int AS skipped
+       FROM stages
+       LEFT JOIN pipeline_tasks pt
+         ON pt.stage = stages.stage
+        AND coalesce(pt.completed_at, pt.updated_at, pt.created_at)
+          >= now() - interval '24 hours'
+       GROUP BY stages.stage, stages.ordinal
+       ORDER BY stages.ordinal`,
     ),
     database.query(
       `SELECT
@@ -155,6 +181,13 @@ export async function getAdminOverview(
          WHERE created_at >= current_date - 29
          GROUP BY created_at::date
        ),
+       published_daily AS (
+         SELECT updated_at::date AS day, count(*)::int AS count
+         FROM knowledge_candidates
+         WHERE status = 'published'
+           AND updated_at >= current_date - 29
+         GROUP BY updated_at::date
+       ),
        task_daily AS (
          SELECT completed_at::date AS day, count(*)::int AS count
          FROM pipeline_tasks
@@ -174,14 +207,41 @@ export async function getAdminOverview(
        )
        SELECT
          d.day,
+         coalesce(pd.count, 0) AS published,
          coalesce(rd.count, 0) AS revisions_created,
          coalesce(td.count, 0) AS stages_completed,
          coalesce(ad.tokens, 0) AS tokens
        FROM days d
+       LEFT JOIN published_daily pd ON pd.day = d.day
        LEFT JOIN revision_daily rd ON rd.day = d.day
        LEFT JOIN task_daily td ON td.day = d.day
        LEFT JOIN agent_daily ad ON ad.day = d.day
        ORDER BY d.day`,
+    ),
+    database.query(
+      `WITH hours AS (
+         SELECT generate_series(
+           date_trunc('hour', now()) - interval '23 hours',
+           date_trunc('hour', now()),
+           interval '1 hour'
+         ) AS hour
+       ),
+       published AS (
+         SELECT
+           date_trunc('hour', updated_at) AS hour,
+           count(*)::int AS count
+         FROM knowledge_candidates
+         WHERE status = 'published'
+           AND updated_at >=
+             date_trunc('hour', now()) - interval '23 hours'
+         GROUP BY date_trunc('hour', updated_at)
+       )
+       SELECT
+         hours.hour,
+         coalesce(published.count, 0)::int AS published
+       FROM hours
+       LEFT JOIN published ON published.hour = hours.hour
+       ORDER BY hours.hour`,
     ),
     database.query(
       `SELECT id, pipeline_task_id, source_candidate_id, stage,
@@ -217,8 +277,13 @@ export async function getAdminOverview(
   ])
 
   const data = summary.rows[0] ?? {}
+  const publishedRecords24h = publishedHourly.rows.reduce(
+    (total, row) => total + Number(row.published ?? 0),
+    0,
+  )
   return {
     ...data,
+    published_records_24h: publishedRecords24h,
     deployed_commit_sha: deployedCommitSha,
     processes: [
       {
@@ -249,6 +314,7 @@ export async function getAdminOverview(
       origin: breakdown.rows.filter((row) => row.dimension === 'origin')
     },
     activity_30d: activity.rows,
+    published_hourly_24h: publishedHourly.rows,
     recent_errors: errors.rows
   }
 }
