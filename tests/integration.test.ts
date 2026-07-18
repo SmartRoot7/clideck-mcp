@@ -94,6 +94,22 @@ describeIntegration('PostgreSQL integration', () => {
     await database.end()
   }, 30_000)
 
+  it('resolves every coverage target to a catalog operating system', async () => {
+    const gaps = await database.query<{ missing: number }>(
+      `SELECT count(*)::int AS missing
+       FROM coverage_targets target
+       WHERE NOT EXISTS (
+         SELECT 1
+         FROM vendors vendor
+         JOIN operating_systems operating_system
+           ON operating_system.vendor_id = vendor.id
+         WHERE vendor.slug = target.vendor_slug
+           AND operating_system.slug = target.operating_system_slug
+       )`,
+    )
+    expect(gaps.rows[0]?.missing).toBe(0)
+  })
+
   it('returns known knowledge without private provenance fields', async () => {
     const context = await resolveNetworkContext(database, {
       vendor: 'Cisco',
