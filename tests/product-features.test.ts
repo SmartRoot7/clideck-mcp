@@ -131,6 +131,28 @@ describe('deterministic source processing', () => {
     ).toBe(30_000)
   })
 
+  it('batches small related fragments into one AI run', () => {
+    const fragments = Array.from(
+      { length: 10 },
+      (_, index) => ({
+        id: `fragment-${index}`,
+        content: `model-specific release row ${index}`
+      }),
+    )
+    const selected = boundFragmentAnalysisBatch(fragments)
+
+    expect(selected.map((fragment) => fragment.id)).toEqual(
+      fragments.slice(0, 8).map((fragment) => fragment.id),
+    )
+    expect(
+      selected.reduce(
+        (bytes, fragment) =>
+          bytes + Buffer.byteLength(fragment.content, 'utf8'),
+        0,
+      ),
+    ).toBeLessThan(30_000)
+  })
+
   it('emits OpenAI-strict object schemas for every AI artifact', () => {
     const unsupportedKeywords = new Set([
       '$schema',
