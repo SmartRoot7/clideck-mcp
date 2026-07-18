@@ -14,7 +14,8 @@ import {
   discoveryArtifactSchema,
   discoverySubmissionSchema,
   expertResearchStructuredArtifactSchema,
-  materializeCandidateVerificationArtifact
+  materializeCandidateVerificationArtifact,
+  normalizeCandidateAnalysisStableKeys
 } from '../src/domain/pipeline.js'
 import { chunkSourceText } from '../src/domain/pipeline-worker.js'
 import { enforceKnowledgeRisk } from '../src/domain/risk.js'
@@ -233,6 +234,66 @@ describe('deterministic source processing', () => {
         findings: []
       }]
     }, candidateIds).decisions).toHaveLength(1)
+  })
+
+  it('canonicalizes mechanical stable-key separators before validation', () => {
+    const artifact = {
+      candidates: [{
+        fragment_id: '00000000-0000-4000-8000-000000000001',
+        candidate: {
+          stable_key: ' Cisco IOS-XE / Show Clock (Detail) ',
+          kind: 'command',
+          vendor_slug: 'cisco',
+          operating_system_slug: 'ios-xe',
+          title: 'Show clock detail',
+          summary: 'Displays detailed device clock information.',
+          question_patterns: ['How do I inspect the detailed clock?'],
+          procedure: [],
+          prerequisites: [],
+          risks: [],
+          verification: ['Confirm the clock output is returned.'],
+          rollback: [],
+          limitations: [],
+          dangerous: false,
+          risk_level: 'safe_read_only',
+          confidence: 0.95,
+          quality_score: 0.95,
+          confidence_reason: 'The command is directly supported by evidence.',
+          last_verified_at: '2026-07-18',
+          provenance: [{
+            url: 'https://www.cisco.com/example-clock',
+            document_type: 'command_reference',
+            title: 'Internal test evidence',
+            verified_at: '2026-07-18',
+            content_hash: `sha256:${'c'.repeat(64)}`,
+            evidence_fragment: 'show clock detail',
+            evidence_role: 'primary'
+          }]
+        }
+      }],
+      rejected_fragments: []
+    }
+
+    const normalized = normalizeCandidateAnalysisStableKeys(artifact)
+    expect(
+      candidateAnalysisArtifactSchema.parse(normalized)
+        .candidates[0]!.candidate.stable_key,
+    ).toBe('cisco-ios-xe-show-clock-detail')
+    expect(artifact.candidates[0]!.candidate.stable_key)
+      .toBe(' Cisco IOS-XE / Show Clock (Detail) ')
+  })
+
+  it('leaves irreparable stable keys invalid', () => {
+    const normalized = normalizeCandidateAnalysisStableKeys({
+      candidates: [{
+        fragment_id: '00000000-0000-4000-8000-000000000001',
+        candidate: { stable_key: '--' }
+      }],
+      rejected_fragments: []
+    })
+
+    expect(() => candidateAnalysisArtifactSchema.parse(normalized))
+      .toThrow('stable_key')
   })
 
   it('models optional structured-output properties as nullable required fields', () => {

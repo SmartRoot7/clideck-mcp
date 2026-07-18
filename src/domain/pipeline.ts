@@ -82,6 +82,62 @@ export const candidateAnalysisArtifactSchema = z.object(
   candidateAnalysisArtifactShape,
 ).superRefine(requireHandledAnalysisArtifact)
 
+const stableKeyPattern = /^[a-z0-9][a-z0-9._-]{2,159}$/
+
+function normalizeStableKey(value: string): string {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, '-')
+    .replace(/^[^a-z0-9]+/, '')
+    .replace(/[._-]{2,}/g, '-')
+    .replace(/[._-]+$/, '')
+    .slice(0, 160)
+    .replace(/[._-]+$/, '')
+
+  return stableKeyPattern.test(normalized) ? normalized : value
+}
+
+export function normalizeCandidateAnalysisStableKeys(
+  unparsedArtifact: unknown,
+): unknown {
+  if (
+    !unparsedArtifact ||
+    typeof unparsedArtifact !== 'object' ||
+    Array.isArray(unparsedArtifact)
+  ) {
+    return unparsedArtifact
+  }
+
+  const artifact = unparsedArtifact as Record<string, unknown>
+  if (!Array.isArray(artifact['candidates'])) return unparsedArtifact
+
+  return {
+    ...artifact,
+    candidates: artifact['candidates'].map((entry) => {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+        return entry
+      }
+      const candidateEntry = entry as Record<string, unknown>
+      const candidate = candidateEntry['candidate']
+      if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+        return entry
+      }
+      const candidateRecord = candidate as Record<string, unknown>
+      const stableKey = candidateRecord['stable_key']
+      if (typeof stableKey !== 'string') return entry
+
+      return {
+        ...candidateEntry,
+        candidate: {
+          ...candidateRecord,
+          stable_key: normalizeStableKey(stableKey)
+        }
+      }
+    })
+  }
+}
+
 export const candidateAnalysisSubmissionSchema = pipelineLeaseSchema.extend(
   candidateAnalysisArtifactShape,
 ).superRefine(requireHandledAnalysisArtifact)
