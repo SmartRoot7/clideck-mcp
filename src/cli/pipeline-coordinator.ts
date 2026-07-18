@@ -16,7 +16,8 @@ import {
   discoveryArtifactSchema,
   expertResearchArtifactSchema,
   expertResearchStructuredArtifactSchema,
-  materializeCandidateVerificationArtifact
+  materializeCandidateVerificationArtifact,
+  normalizeCandidateAnalysisStableKeys
 } from '../domain/pipeline.js'
 import {
   omitNullObjectProperties,
@@ -473,7 +474,9 @@ function validateAgentArtifact(
       )
     case 'fragment_analysis':
       return candidateAnalysisArtifactSchema.parse(
-        omitNullObjectProperties(parsed),
+        omitNullObjectProperties(
+          normalizeCandidateAnalysisStableKeys(parsed),
+        ),
       )
     case 'candidate_verification':
       return materializeCandidateVerificationArtifact(
