@@ -23,17 +23,27 @@ root-owned environment files outside the repository.
 ## Release
 
 1. Back up PostgreSQL and verify the previous checkout and knowledge release.
-2. Build, typecheck, test PostgreSQL integration, and run the 250-case eval.
+2. Build, typecheck, run every PostgreSQL integration test without skip, and
+   run the 250-case eval.
 3. Run isolated Batfish/containerlab CI and download its hashed report.
 4. Fetch the exact immutable Git commit on `clideck-mcp.lan`.
-5. Install, build, and run migrations.
+5. Install `poppler-utils` and `tesseract-ocr`, install application
+   dependencies, build, and run migrations.
 6. Import only a lab report whose commit equals the deployed commit.
-7. Seed the 50-item pack and record the production eval result.
-8. Restart researcher, worker, then API.
-9. Verify health, readiness, stats, MCP tool discovery, known query, redaction,
+7. Confirm the pre-import active release contains exactly 51 revisions.
+8. Verify the read-only legacy JSONL manifest and import all 56,747 records with
+   resumable batches. Activate only the single 56,798-revision import release.
+9. Restart researcher, worker, then API.
+10. Verify health, readiness, stats, all fixed admin endpoints, MCP tool
+   discovery, known query, redaction,
    blocked change, failed verification, upgrade scope, and topology.
-10. Enable the playground only when the site has the matching BFF token.
-11. Preserve the previous checkout until smoke tests pass.
+11. Run one public source through acquire, convert, chunk, analyze, verify, and
+   package publication; confirm the next coverage target is immediately queued.
+12. Install and verify `com.clideck.mcp.pipeline`, then disable the old
+   five-minute Codex automation.
+13. Deploy the matching CliDeck site commit and enable the admin feature only
+   when every backend contract returns 200 through bearer + HMAC.
+14. Preserve the previous checkout until smoke tests pass.
 
 Production uses separate API, admin, worker, researcher, and quarantine DB roles.
 The site and backend share their playground token only through secret stores.
@@ -47,18 +57,26 @@ the HMAC input; mutation audit columns store the verified actor ID.
 
 The backend accepts signatures within 120 seconds of its clock and rejects nonce
 replay in the running API process. Keep the website and backend clocks
-synchronized. Put Cloudflare Access in front of `/admin/*`; never make the admin
-bearer token or HMAC secret available to browser code.
+synchronized. Cloudflare Access is optional for this deployment; whether used
+or not, never make the admin bearer token or HMAC secret available to browser
+code.
 
-Enable the website feature flag only after testing all of these through the
-website BFF:
+`/admin/mcp` is an independent control center. It uses only fixed BFF mappings,
+strict response filtering, `no-store`, bearer + HMAC, and server-side RBAC.
+Enable the website feature flag only after testing all of these through the BFF:
 
-1. `admin` can read overview, tasks, conflicts, releases, and approvals.
-2. `admin` cannot read provenance or perform mutations.
+1. `admin` can read Overview, Coverage, Sources, Pipeline, Active Source,
+   Knowledge, Imports, Agent Runs, Expert Tasks, Quality, Lab, Conflicts,
+   Releases, Feedback, and Approvals.
+2. `admin` cannot read provenance, source URLs, or perform mutations.
 3. `super_admin` can read provenance.
 4. A confirmed release switch returns the complete active release.
 5. A confirmed approval decision returns the complete updated approval.
 6. Reusing a signed request nonce fails.
+
+The control-center performance targets on the full release are p95 ≤1 second
+for Overview and Knowledge pagination. Raw UUIDs are secondary labels; releases
+use their sequence as the primary identifier.
 
 ## Backup
 
@@ -75,6 +93,10 @@ release. This does not mutate or delete knowledge revisions.
 Application rollback restores the previous checkout and services. Browser
 rollback disables its playground feature flag. Knowledge rollback remains the
 atomic release switch; schema migrations are not blindly reversed.
+
+For the 0.3 rollout, rollback stops the launchd coordinator, restores the
+previous backend checkout, and atomically activates release sequence 3. Imported
+immutable revisions remain stored and are not deleted.
 
 ## Alerts
 

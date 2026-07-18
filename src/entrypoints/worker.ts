@@ -7,6 +7,10 @@ import {
   processNextCandidate,
   runWorkerMaintenance
 } from '../domain/publication.js'
+import {
+  processNextPipelineTask,
+  purgeExpiredSourceArtifacts
+} from '../domain/pipeline-worker.js'
 import { createLogger } from '../logger.js'
 
 const config = getConfig()
@@ -23,7 +27,17 @@ logger.info({ instanceId }, 'CliDeck MCP worker started')
 try {
   while (!abortController.signal.aborted) {
     await runWorkerMaintenance(database, instanceId)
-    const processed = await processNextCandidate(database, config, logger)
+    await purgeExpiredSourceArtifacts(database, logger)
+    const processedPipeline = await processNextPipelineTask(
+      database,
+      config,
+      logger,
+      instanceId,
+    )
+    const processedExpert = processedPipeline
+      ? false
+      : await processNextCandidate(database, config, logger)
+    const processed = processedPipeline || processedExpert
     if (!processed) {
       try {
         await delay(config.workerPollMs, undefined, {

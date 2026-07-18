@@ -5,11 +5,32 @@ import { Hono, type Context } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { secureHeaders } from 'hono/secure-headers'
 import { timeout } from 'hono/timeout'
+import { z } from 'zod'
 
 import type { AppConfig } from '../config.js'
 import { constantTimeTokenEquals } from '../crypto.js'
 import type { Database } from '../db.js'
 import { resolvePublicActor } from '../domain/auth.js'
+import {
+  actOnExpertTask,
+  actOnSource,
+  decideConflict,
+  forceDiscovery,
+  getActiveSource,
+  getAdminOverview,
+  getPipelineDetails,
+  getQualityDashboard,
+  listAgentRuns,
+  listCoverageTargets,
+  listFeedback,
+  listImports,
+  listKnowledge,
+  listLabValidations,
+  listSources,
+  recordAdminAudit,
+  setPipelineEnabled,
+  updateCoveragePriority
+} from '../domain/admin.js'
 import {
   reviewNetworkChange,
   verifyNetworkChange
@@ -121,7 +142,7 @@ export function createApiApp(dependencies: ApiDependencies) {
     context.json({
       status: 'ok',
       service: 'CliDeck MCP — Network Knowledge',
-      version: '0.2.0'
+      version: '0.3.0'
     }),
   )
 
@@ -534,9 +555,11 @@ export function createApiApp(dependencies: ApiDependencies) {
     requireSignedAdminActor(config.adminActorHmacSecret),
   )
   app.use('/admin/*', async (context, next) => {
+    context.header('cache-control', 'no-store')
+    const actor = context.get('adminActor')
     const rate = await consumeRateLimit(
       database,
-      getClientAddress(context, config),
+      `admin:${actor.id}`,
       'admin_api',
       config.adminRateLimitPerMinute,
     )
@@ -548,30 +571,257 @@ export function createApiApp(dependencies: ApiDependencies) {
   })
 
   app.get('/admin/v1/overview', async (context) => {
-    const result = await adminDatabase.query<{
-      active_release: string | null
-      published_revisions: number
-      queued_tasks: number
-      open_conflicts: number
-      feedback_24h: number
-    }>(
-      `SELECT
-         (SELECT release_id::text FROM active_release) AS active_release,
-         (SELECT count(*)::int FROM public_active_knowledge) AS published_revisions,
-         (SELECT count(*)::int FROM expert_tasks WHERE status = 'queued') AS queued_tasks,
-         (SELECT count(*)::int FROM knowledge_conflicts WHERE status = 'open') AS open_conflicts,
-         (SELECT count(*)::int FROM feedback WHERE created_at >= now() - interval '24 hours') AS feedback_24h`,
+    return context.json(
+      await getAdminOverview(adminDatabase, config.deployCommitSha),
     )
-    return context.json(result.rows[0])
+  })
+
+  app.get('/admin/v1/coverage', async (context) =>
+    context.json(await listCoverageTargets(adminDatabase)),
+  )
+
+  app.get('/admin/v1/sources', async (context) => {
+    const status = context.req.query('status')?.trim() || null
+    const limit = Math.min(
+      500,
+      Math.max(1, Number(context.req.query('limit') ?? 200) || 200),
+    )
+    return context.json(await listSources(adminDatabase, status, limit))
+  })
+
+  app.get('/admin/v1/pipeline', async (context) =>
+    context.json(await getPipelineDetails(adminDatabase)),
+  )
+
+  app.get('/admin/v1/active-source', async (context) =>
+    context.json(await getActiveSource(adminDatabase)),
+  )
+
+  app.get('/admin/v1/knowledge', async (context) => {
+    const limit = Math.min(
+      100,
+      Math.max(1, Number(context.req.query('limit') ?? 50) || 50),
+    )
+    const offset = Math.min(
+      100_000,
+      Math.max(0, Number(context.req.query('offset') ?? 0) || 0),
+    )
+    const query = (name: string) => context.req.query(name)?.trim() || null
+    return context.json(await listKnowledge(adminDatabase, {
+      query: query('q'),
+      vendor: query('vendor'),
+      operatingSystem: query('operating_system'),
+      kind: query('kind'),
+      risk: query('risk'),
+      origin: query('origin'),
+      limit,
+      offset
+    }))
+  })
+
+  app.get('/admin/v1/imports', async (context) =>
+    context.json(await listImports(adminDatabase)),
+  )
+
+  app.get('/admin/v1/agent-runs', async (context) => {
+    const limit = Math.min(
+      500,
+      Math.max(1, Number(context.req.query('limit') ?? 200) || 200),
+    )
+    return context.json(await listAgentRuns(adminDatabase, limit))
+  })
+
+  app.get('/admin/v1/quality', async (context) =>
+    context.json(await getQualityDashboard(adminDatabase)),
+  )
+
+  app.get('/admin/v1/lab', async (context) =>
+    context.json(await listLabValidations(adminDatabase)),
+  )
+
+  app.get('/admin/v1/feedback', async (context) =>
+    context.json(await listFeedback(adminDatabase)),
+  )
+
+  const superAdminMutation = z.object({
+    reason: z.string().trim().min(5).max(2_000).optional()
+  })
+
+  app.post('/admin/v1/pipeline/state', async (context) => {
+    const actor = context.get('adminActor')
+    if (actor.role !== 'super_admin') {
+      return context.json({ error: 'forbidden' }, 403)
+    }
+    const parsed = superAdminMutation.extend({
+      enabled: z.boolean()
+    }).safeParse(await context.req.json<unknown>())
+    if (!parsed.success) {
+      return context.json({ error: 'invalid_pipeline_state' }, 400)
+    }
+    return context.json(await setPipelineEnabled(
+      adminDatabase,
+      parsed.data.enabled,
+      actor,
+      parsed.data.reason ?? null,
+    ))
+  })
+
+  app.post('/admin/v1/coverage/:targetId/priority', async (context) => {
+    const actor = context.get('adminActor')
+    if (actor.role !== 'super_admin') {
+      return context.json({ error: 'forbidden' }, 403)
+    }
+    const targetId = context.req.param('targetId')
+    const parsed = z.object({
+      priority: z.number().int().min(-100).max(100)
+    }).safeParse(await context.req.json<unknown>())
+    if (!z.uuid().safeParse(targetId).success || !parsed.success) {
+      return context.json({ error: 'invalid_priority' }, 400)
+    }
+    const result = await updateCoveragePriority(
+      adminDatabase,
+      targetId,
+      parsed.data.priority,
+      actor,
+    )
+    return result
+      ? context.json(result)
+      : context.json({ error: 'not_found' }, 404)
+  })
+
+  app.post('/admin/v1/sources/:sourceId/action', async (context) => {
+    const actor = context.get('adminActor')
+    if (actor.role !== 'super_admin') {
+      return context.json({ error: 'forbidden' }, 403)
+    }
+    const sourceId = context.req.param('sourceId')
+    const parsed = z.object({
+      action: z.enum(['retry', 'skip', 'reject'])
+    }).safeParse(await context.req.json<unknown>())
+    if (!z.uuid().safeParse(sourceId).success || !parsed.success) {
+      return context.json({ error: 'invalid_source_action' }, 400)
+    }
+    const result = await actOnSource(
+      adminDatabase,
+      sourceId,
+      parsed.data.action,
+      actor,
+    )
+    return result
+      ? context.json(result)
+      : context.json({ error: 'not_found' }, 404)
+  })
+
+  app.post('/admin/v1/pipeline/discover', async (context) => {
+    const actor = context.get('adminActor')
+    if (actor.role !== 'super_admin') {
+      return context.json({ error: 'forbidden' }, 403)
+    }
+    const parsed = z.object({
+      coverage_target_id: z.uuid().nullable().default(null)
+    }).safeParse(await context.req.json<unknown>())
+    if (!parsed.success) {
+      return context.json({ error: 'invalid_discovery_request' }, 400)
+    }
+    const result = await forceDiscovery(
+      adminDatabase,
+      actor,
+      parsed.data.coverage_target_id,
+    )
+    return result
+      ? context.json(result)
+      : context.json({ error: 'not_found' }, 404)
+  })
+
+  app.post('/admin/v1/tasks/:taskId/action', async (context) => {
+    const actor = context.get('adminActor')
+    if (actor.role !== 'super_admin') {
+      return context.json({ error: 'forbidden' }, 403)
+    }
+    const taskId = context.req.param('taskId')
+    const parsed = z.object({
+      action: z.enum(['requeue', 'cancel'])
+    }).safeParse(await context.req.json<unknown>())
+    if (
+      !/^ekt_[A-Za-z0-9_-]{32}$/.test(taskId) ||
+      !parsed.success
+    ) {
+      return context.json({ error: 'invalid_task_action' }, 400)
+    }
+    const result = await actOnExpertTask(
+      adminDatabase,
+      taskId,
+      parsed.data.action,
+      actor,
+    )
+    return result
+      ? context.json(result)
+      : context.json({ error: 'not_found' }, 404)
+  })
+
+  app.post('/admin/v1/conflicts/:conflictId/decision', async (context) => {
+    const actor = context.get('adminActor')
+    if (actor.role !== 'super_admin') {
+      return context.json({ error: 'forbidden' }, 403)
+    }
+    const conflictId = context.req.param('conflictId')
+    const parsed = z.object({
+      decision: z.enum(['resolved', 'accepted']),
+      reason: z.string().trim().min(5).max(2_000)
+    }).safeParse(await context.req.json<unknown>())
+    if (!z.uuid().safeParse(conflictId).success || !parsed.success) {
+      return context.json({ error: 'invalid_conflict_decision' }, 400)
+    }
+    const result = await decideConflict(
+      adminDatabase,
+      conflictId,
+      parsed.data.decision,
+      parsed.data.reason,
+      actor,
+    )
+    return result
+      ? context.json(result)
+      : context.json({ error: 'not_found_or_already_decided' }, 404)
   })
 
   app.get('/admin/v1/tasks', async (context) => {
     const result = await adminDatabase.query(
       `SELECT
-         public_id, tenant_id, status, priority, attempts,
-         claim_owner, lease_until, expires_at, created_at, updated_at
-       FROM expert_tasks
-       ORDER BY created_at DESC
+         et.public_id,
+         et.tenant_id,
+         et.status,
+         et.priority,
+         et.attempts,
+         et.claim_owner,
+         et.lease_until,
+         et.expires_at,
+         et.created_at,
+         et.updated_at,
+         et.completed_at,
+         et.failure_code,
+         et.failure_message,
+         et.result_revision_id,
+         latest_event.stage,
+         latest_event.progress_percent,
+         latest_event.public_message,
+         release.sequence AS result_release_sequence
+       FROM expert_tasks et
+       LEFT JOIN LATERAL (
+         SELECT stage, progress_percent, public_message
+         FROM task_public_events
+         WHERE task_id = et.id
+         ORDER BY created_at DESC, id DESC
+         LIMIT 1
+       ) latest_event ON true
+       LEFT JOIN LATERAL (
+         SELECT r.sequence
+         FROM release_items ri
+         JOIN releases r ON r.id = ri.release_id
+         WHERE ri.revision_id = et.result_revision_id
+         ORDER BY r.sequence DESC
+         LIMIT 1
+       ) release ON true
+       ORDER BY et.created_at DESC
        LIMIT 100`,
     )
     return context.json(result.rows)
@@ -637,6 +887,14 @@ export function createApiApp(dependencies: ApiDependencies) {
       [releaseId, actor.id],
     )
     if (!result.rows[0]) return context.json({ error: 'not_found' }, 404)
+    await recordAdminAudit(
+      adminDatabase,
+      actor,
+      'release.activate',
+      'release',
+      releaseId,
+      { sequence: result.rows[0].sequence },
+    )
     return context.json(result.rows[0])
   })
 
@@ -653,27 +911,47 @@ export function createApiApp(dependencies: ApiDependencies) {
       `SELECT
          kr.id::text AS revision_id,
          CASE
-           WHEN count(sd.id) = 0 THEN NULL
-           ELSE string_agg(
-             concat_ws(
-               ' · ',
-               v.display_name,
-               sd.title,
-               sd.document_version,
-               sd.canonical_url
-             ),
-             E'\n'
-             ORDER BY rs.evidence_role, sd.verified_at DESC
-           )
-         END AS source,
+           WHEN lrm.revision_id IS NOT NULL THEN
+             jsonb_build_object(
+               'origin', 'legacy_import',
+               'legacy_key', lrm.legacy_key,
+               'item_type', lrm.legacy_item_type,
+               'source_trust', lrm.source_trust,
+               'lifecycle_status', lrm.lifecycle_status,
+               'original_risk_level', lrm.original_risk_level,
+               'original_confidence', lrm.original_confidence,
+               'original_quality_score', lrm.original_quality_score,
+               'published_at', lrm.published_at,
+               'provenance', lrm.provenance,
+               'payload_hash', lrm.payload_hash
+             )
+           ELSE coalesce((
+             SELECT jsonb_agg(
+               jsonb_build_object(
+                 'vendor', v.display_name,
+                 'title', sd.title,
+                 'document_version', sd.document_version,
+                 'canonical_url', sd.canonical_url,
+                 'document_date', sd.document_date,
+                 'verified_at', sd.verified_at,
+                 'content_hash', sd.content_hash,
+                 'evidence_fragment', sd.evidence_fragment,
+                 'evidence_role', rs.evidence_role,
+                 'confidence_reason', rs.confidence_reason
+               )
+               ORDER BY rs.evidence_role, sd.verified_at DESC
+             )
+             FROM revision_sources rs
+             JOIN source_documents sd ON sd.id = rs.source_document_id
+             JOIN vendors v ON v.id = sd.vendor_id
+             WHERE rs.revision_id = kr.id
+           ), '[]'::jsonb)
+         END AS provenance,
          kr.created_at,
          kr.status
        FROM knowledge_revisions kr
-       LEFT JOIN revision_sources rs ON rs.revision_id = kr.id
-       LEFT JOIN source_documents sd ON sd.id = rs.source_document_id
-       LEFT JOIN vendors v ON v.id = sd.vendor_id
-       WHERE kr.id = $1
-       GROUP BY kr.id`,
+       LEFT JOIN legacy_revision_metadata lrm ON lrm.revision_id = kr.id
+       WHERE kr.id = $1`,
       [revisionId],
     )
     if (!result.rows[0]) return context.json({ error: 'not_found' }, 404)
@@ -754,6 +1032,14 @@ export function createApiApp(dependencies: ApiDependencies) {
     if (!result.rows[0]) {
       return context.json({ error: 'not_found_or_already_decided' }, 404)
     }
+    await recordAdminAudit(
+      adminDatabase,
+      actor,
+      'code_approval.decision',
+      'code_change_approval',
+      approvalId,
+      { decision: String(body.decision) },
+    )
     return context.json(result.rows[0])
   })
 

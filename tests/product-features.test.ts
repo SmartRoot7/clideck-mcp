@@ -6,6 +6,9 @@ import {
   finalizeLabReport,
   verifyLabReport
 } from '../src/domain/lab.js'
+import { discoverySubmissionSchema } from '../src/domain/pipeline.js'
+import { chunkSourceText } from '../src/domain/pipeline-worker.js'
+import { enforceKnowledgeRisk } from '../src/domain/risk.js'
 import {
   analyzeDeviceSnapshot,
   sanitizeSnapshot
@@ -13,6 +16,134 @@ import {
 import { analyzeNetworkPath } from '../src/domain/topology.js'
 import { adviseNetworkUpgrade } from '../src/domain/upgrade.js'
 import { createTestConfig } from './helpers.js'
+
+describe('knowledge safety classification', () => {
+  it('never permits a disruptive command to remain safe', () => {
+    const guarded = enforceKnowledgeRisk({
+      stable_key: 'cisco-iosxe-reload-risk-guard',
+      kind: 'command',
+      vendor_slug: 'cisco',
+      platform_slug: 'catalyst-9300',
+      operating_system_slug: 'ios-xe',
+      version_min: '17.9.0',
+      title: 'Reload a switch',
+      summary: 'Restarts the network device.',
+      question_patterns: ['How do I reload this Cisco switch?'],
+      cli_mode: 'privileged_exec',
+      command: 'reload',
+      procedure: [],
+      prerequisites: [],
+      risks: [],
+      verification: ['show version'],
+      rollback: [],
+      limitations: [],
+      dangerous: false,
+      risk_level: 'safe_read_only',
+      confidence: 0.99,
+      quality_score: 0.99,
+      confidence_reason:
+        'The structured evidence identifies the command and its effect.',
+      last_verified_at: '2026-07-18',
+      provenance: [{
+        url: 'https://www.cisco.com/example',
+        document_type: 'command_reference',
+        title: 'Internal test evidence',
+        verified_at: '2026-07-18',
+        content_hash: `sha256:${'a'.repeat(64)}`,
+        evidence_fragment: 'reload',
+        evidence_role: 'primary'
+      }]
+    })
+
+    expect(guarded.dangerous).toBe(true)
+    expect(guarded.risk_level).toBe('service_disruptive')
+  })
+
+  it('keeps read-only inspection commands safe despite risky words', () => {
+    const inspected = enforceKnowledgeRisk({
+      stable_key: 'cisco-iosxe-show-reload-risk-guard',
+      kind: 'command',
+      vendor_slug: 'cisco',
+      operating_system_slug: 'ios-xe',
+      title: 'Inspect reload information',
+      summary: 'Shows reload state without changing the device.',
+      question_patterns: ['How do I inspect reload state?'],
+      cli_mode: 'privileged_exec',
+      command: 'show reload',
+      procedure: [],
+      prerequisites: [],
+      risks: [],
+      verification: ['Confirm the command returns operational state.'],
+      rollback: [],
+      limitations: [],
+      dangerous: false,
+      risk_level: 'safe_read_only',
+      confidence: 0.99,
+      quality_score: 0.99,
+      confidence_reason:
+        'The command is a read-only show operation with no state change.',
+      last_verified_at: '2026-07-18',
+      provenance: [{
+        url: 'https://www.cisco.com/example-show',
+        document_type: 'command_reference',
+        title: 'Internal test evidence',
+        verified_at: '2026-07-18',
+        content_hash: `sha256:${'b'.repeat(64)}`,
+        evidence_fragment: 'show reload',
+        evidence_role: 'primary'
+      }]
+    })
+
+    expect(inspected.dangerous).toBe(false)
+    expect(inspected.risk_level).toBe('safe_read_only')
+  })
+})
+
+describe('deterministic source processing', () => {
+  it('requires every discovery run to produce a source or rejection artifact', () => {
+    const lease = {
+      pipeline_task_id: '00000000-0000-4000-8000-000000000001',
+      lease_token: 'x'.repeat(32)
+    }
+    expect(discoverySubmissionSchema.safeParse({
+      ...lease,
+      sources: []
+    }).success).toBe(false)
+    expect(discoverySubmissionSchema.safeParse({
+      ...lease,
+      sources: [],
+      rejection_reason:
+        'No official public document matched the bounded coverage target.'
+    }).success).toBe(true)
+  })
+
+  it('chunks a large document without loss or oversized fragments', () => {
+    const sections = Array.from(
+      { length: 220 },
+      (_, index) =>
+        `SECTION ${index + 1}\n\nshow interface ethernet ${index + 1}\n` +
+        `Operational detail ${index + 1}. `.repeat(80),
+    )
+    const source = sections.join('\n\n')
+    const fragments = chunkSourceText(source)
+    expect(fragments.length).toBeGreaterThan(1)
+    expect(fragments.every(
+      (fragment) =>
+        Buffer.byteLength(fragment.content, 'utf8') <= 30_000,
+    )).toBe(true)
+    expect(new Set(fragments.map((fragment) => fragment.contentHash)).size)
+      .toBe(fragments.length)
+    for (let index = 0; index < 220; index += 1) {
+      expect(
+        fragments.some((fragment) =>
+          fragment.content.includes(
+            `show interface ethernet ${index + 1}`,
+          ),
+        ),
+      ).toBe(true)
+    }
+  })
+})
 
 describe('device snapshot intelligence', () => {
   it('fingerprints IOS-XE and removes secrets and identifiers', () => {

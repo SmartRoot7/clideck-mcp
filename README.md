@@ -7,7 +7,8 @@ knowledge server for any Model Context Protocol client.
 - Product page and playground: `https://clideck.com/software/mcp`
 - Runtime: Node.js 24, TypeScript, Hono, Zod 4, MCP TypeScript SDK 1.29
 - Storage: PostgreSQL 16 with full-text search and `pg_trgm`
-- Processes: API, worker, and a restricted Codex researcher bridge
+- Processes: API, deterministic worker, restricted researcher bridge, and a
+  continuous ephemeral Codex coordinator
 - No Redis, vector database, external LLM API, or AI in the read path
 
 The public MCP response contains applicable vendor/platform/version context,
@@ -59,10 +60,19 @@ pnpm dev:worker
 - `advise_network_upgrade`
 - `analyze_network_path`
 
-The 0.2 knowledge pack contains 50 published Catalyst 9300 / IOS-XE items:
+The native knowledge pack contains 50 published Catalyst 9300 / IOS-XE items:
 20 operational commands, 15 change contracts, 10 post-change verification
 contracts, and 5 upgrade records. Junos and Arista EOS snapshots can be
 fingerprinted, but limited coverage is reported honestly instead of inferred.
+
+CliDeck MCP 0.3 adds a continuous coverage planner and a manifest-verified
+legacy migration. Its first production import release contains exactly 56,798
+active revisions: 51 current revisions and 56,747 established CliDeck records.
+The pipeline continuously discovers the next official public source, downloads
+and converts it deterministically, analyzes bounded fragments with Luna low,
+verifies them in an independent ephemeral run, and publishes one immutable
+source package. It idles only when manually paused or after a recorded system
+failure.
 
 CliDeck never connects to a network device and never executes a command. Raw CLI
 is processed in memory. An example can enter the isolated 30-day quarantine only
@@ -94,6 +104,10 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md),
 [docs/SECURITY.md](docs/SECURITY.md), and
 [docs/OPERATIONS.md](docs/OPERATIONS.md) for the system contract and production
 runbook.
+
+The continuous coordinator and import runbook are documented in
+[docs/RESEARCHER_AUTOMATION.md](docs/RESEARCHER_AUTOMATION.md) and
+[docs/OPERATIONS.md](docs/OPERATIONS.md).
 
 ## OpenAI Build Week
 

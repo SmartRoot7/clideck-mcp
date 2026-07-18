@@ -1,5 +1,7 @@
+import { lookup as lookupCallback } from 'node:dns'
 import { lookup } from 'node:dns/promises'
 import { isIP } from 'node:net'
+import type { LookupFunction } from 'node:net'
 
 function isBlockedIpv4(address: string): boolean {
   const octets = address.split('.').map(Number)
@@ -36,6 +38,45 @@ export function isBlockedAddress(address: string): boolean {
   if (family === 4) return isBlockedIpv4(address)
   if (family === 6) return isBlockedIpv6(address)
   return true
+}
+
+export const safePublicLookup: LookupFunction = (
+  hostname,
+  options,
+  callback,
+) => {
+  lookupCallback(
+    hostname,
+    {
+      family: options.family,
+      hints: options.hints,
+      all: true,
+      order: 'verbatim'
+    },
+    (error, addresses) => {
+      if (error) {
+        callback(error, '', 0)
+        return
+      }
+      if (
+        addresses.length === 0 ||
+        addresses.some((address) => isBlockedAddress(address.address))
+      ) {
+        const blocked = Object.assign(
+          new Error('UNSAFE_PROVENANCE_URL'),
+          { code: 'EACCES' },
+        )
+        callback(blocked, '', 0)
+        return
+      }
+      if (options.all) {
+        callback(null, addresses)
+        return
+      }
+      const selected = addresses[0]!
+      callback(null, selected.address, selected.family)
+    },
+  )
 }
 
 export async function assertSafeProvenanceUrl(value: string): Promise<void> {

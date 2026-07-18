@@ -32,6 +32,25 @@ export function createResearcherApp(dependencies: {
   app.use('*', timeout(30_000))
   app.get('/health', (context) => context.json({ status: 'ok' }))
   app.use('/mcp', requireStaticBearer(config.researcherToken))
+  app.use('/mcp', async (_context, next) => {
+    await database.query(
+      `INSERT INTO worker_heartbeats (
+         worker_name, instance_id, heartbeat_at, metadata
+       )
+       VALUES (
+         'researcher-bridge',
+         'restricted-mcp',
+         now(),
+         '{"status":"running"}'::jsonb
+       )
+       ON CONFLICT (worker_name)
+       DO UPDATE SET
+         instance_id = excluded.instance_id,
+         heartbeat_at = excluded.heartbeat_at,
+         metadata = excluded.metadata`,
+    )
+    await next()
+  })
   app.all('/mcp', async (context) => {
     const researcherId =
       context.req.header('x-researcher-id')?.slice(0, 120) ??

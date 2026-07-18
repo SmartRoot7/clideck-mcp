@@ -5,6 +5,23 @@ import type { AppConfig } from '../config.js'
 import type { Database } from '../db.js'
 import type { Logger } from '../logger.js'
 import {
+  candidateAnalysisSubmissionSchema,
+  candidateVerificationSubmissionSchema,
+  claimPipelineTask,
+  discoverySubmissionSchema,
+  failPipelineTask,
+  getPipelineTaskStatus,
+  heartbeatPipelineTask,
+  pausePipelineForSystemFailure,
+  pipelineFailureSchema,
+  pipelineSystemFailureSchema,
+  agentRunResultSchema,
+  recordAgentRunResult,
+  submitCandidateAnalysis,
+  submitCandidateVerification,
+  submitSourceDiscovery
+} from '../domain/pipeline.js'
+import {
   claimResearchTask,
   failResearchTask,
   heartbeatResearchTask,
@@ -50,8 +67,222 @@ export function createResearcherMcpServer(
 ): McpServer {
   const server = new McpServer({
     name: 'CliDeck MCP — Restricted Researcher',
-    version: '0.2.0'
+    version: '0.3.0'
   })
+
+  server.registerTool(
+    'claim_pipeline_task',
+    {
+      description:
+        'Lease the next useful AI stage from the continuous knowledge pipeline. When deterministic worker work is active, returns that active stage without creating an AI run.',
+      inputSchema: z.object({}),
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false
+      }
+    },
+    wrapResearcherTool(dependencies, 'claim_pipeline_task', async () =>
+      claimPipelineTask(
+        dependencies.database,
+        dependencies.config,
+        dependencies.researcherId,
+      ),
+    ),
+  )
+
+  server.registerTool(
+    'heartbeat_pipeline_task',
+    {
+      description: 'Extend the lease for an actively processed pipeline stage.',
+      inputSchema: z.object({
+        pipeline_task_id: z.string().uuid(),
+        lease_token: z.string().min(32).max(128)
+      }),
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false
+      }
+    },
+    wrapResearcherTool(
+      dependencies,
+      'heartbeat_pipeline_task',
+      async (input) =>
+        heartbeatPipelineTask(
+          dependencies.database,
+          dependencies.config,
+          input.pipeline_task_id,
+          input.lease_token,
+        ),
+    ),
+  )
+
+  server.registerTool(
+    'submit_source_discovery',
+    {
+      description:
+        'Submit bounded public official source candidates found for the leased coverage target. URLs and document metadata remain internal.',
+      inputSchema: discoverySubmissionSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: true
+      }
+    },
+    wrapResearcherTool(
+      dependencies,
+      'submit_source_discovery',
+      async (input) =>
+        submitSourceDiscovery(
+          dependencies.database,
+          input,
+          dependencies.researcherId,
+        ),
+    ),
+  )
+
+  server.registerTool(
+    'submit_fragment_analysis',
+    {
+      description:
+        'Submit original structured candidates for every leased fragment, or explicitly reject fragments that contain no useful network knowledge.',
+      inputSchema: candidateAnalysisSubmissionSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false
+      }
+    },
+    wrapResearcherTool(
+      dependencies,
+      'submit_fragment_analysis',
+      async (input) =>
+        submitCandidateAnalysis(dependencies.database, input),
+    ),
+  )
+
+  server.registerTool(
+    'submit_candidate_verification',
+    {
+      description:
+        'Record an independent verification decision for every leased candidate. Publication remains controlled by deterministic policy gates.',
+      inputSchema: candidateVerificationSubmissionSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false
+      }
+    },
+    wrapResearcherTool(
+      dependencies,
+      'submit_candidate_verification',
+      async (input) =>
+        submitCandidateVerification(
+          dependencies.database,
+          dependencies.config,
+          input,
+          dependencies.researcherId,
+        ),
+    ),
+  )
+
+  server.registerTool(
+    'fail_pipeline_task',
+    {
+      description:
+        'Finish a leased pipeline stage with a bounded, explicit error artifact.',
+      inputSchema: pipelineFailureSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+        openWorldHint: false
+      }
+    },
+    wrapResearcherTool(
+      dependencies,
+      'fail_pipeline_task',
+      async (input) => failPipelineTask(dependencies.database, input),
+    ),
+  )
+
+  server.registerTool(
+    'get_pipeline_task_status',
+    {
+      description:
+        'Check whether a pipeline task produced its required artifact. Returns no source or document content.',
+      inputSchema: z.object({
+        pipeline_task_id: z.string().uuid()
+      }),
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false
+      }
+    },
+    wrapResearcherTool(
+      dependencies,
+      'get_pipeline_task_status',
+      async (input) =>
+        getPipelineTaskStatus(
+          dependencies.database,
+          input.pipeline_task_id,
+        ),
+    ),
+  )
+
+  server.registerTool(
+    'record_agent_run_result',
+    {
+      description:
+        'Store numeric Codex run usage and outcome for internal cost telemetry. It accepts no prompts, outputs, or document content.',
+      inputSchema: agentRunResultSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false
+      }
+    },
+    wrapResearcherTool(
+      dependencies,
+      'record_agent_run_result',
+      async (input) =>
+        recordAgentRunResult(dependencies.database, input),
+    ),
+  )
+
+  server.registerTool(
+    'pause_pipeline_system_failure',
+    {
+      description:
+        'Pause the continuous pipeline only after repeated coordinator-level failures prevent any AI run from starting.',
+      inputSchema: pipelineSystemFailureSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+        openWorldHint: false
+      }
+    },
+    wrapResearcherTool(
+      dependencies,
+      'pause_pipeline_system_failure',
+      async (input) =>
+        pausePipelineForSystemFailure(
+          dependencies.database,
+          input,
+          dependencies.researcherId,
+        ),
+    ),
+  )
 
   server.registerTool(
     'claim_research_task',

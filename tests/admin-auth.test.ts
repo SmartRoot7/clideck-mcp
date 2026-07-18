@@ -60,6 +60,9 @@ function createAdminTestApp() {
     if (sql.includes('rate_limit_buckets')) {
       return { rows: [{ request_count: 1 }] }
     }
+    if (sql.includes('INSERT INTO admin_audit_events')) {
+      return { rows: [] }
+    }
     if (sql.includes('FROM expert_tasks') && !sql.includes('code_change')) {
       return {
         rows: [{

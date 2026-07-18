@@ -5,10 +5,18 @@ import { withTransaction } from '../db.js'
 import type { Logger } from '../logger.js'
 import { normalizeVendorVersion } from '../version.js'
 import { candidateRevisionSchema } from './schemas.js'
+import { enforceKnowledgeRisk } from './risk.js'
 
 const storedCandidateSchema = candidateRevisionSchema.omit({
   lease_token: true
 })
+export const candidateKnowledgeSchema = candidateRevisionSchema.omit({
+  task_id: true,
+  lease_token: true
+})
+export type CandidateKnowledge = ReturnType<
+  typeof candidateKnowledgeSchema.parse
+>
 
 type CandidateTaskRow = {
   id: string
@@ -19,7 +27,7 @@ type CandidateTaskRow = {
 
 async function resolveCandidateContext(
   client: DatabaseClient,
-  candidate: ReturnType<typeof storedCandidateSchema.parse>,
+  candidate: CandidateKnowledge,
 ) {
   const vendor = await client.query<{ id: string }>(
     'SELECT id FROM vendors WHERE slug = $1',
@@ -54,10 +62,14 @@ async function resolveCandidateContext(
   }
 }
 
-async function createRevision(
+export async function createKnowledgeRevision(
   client: DatabaseClient,
-  candidate: ReturnType<typeof storedCandidateSchema.parse>,
+  unparsedCandidate: unknown,
+  createdBy: 'researcher' | 'legacy_import' | 'super_admin' = 'researcher',
 ): Promise<{ itemId: string; revisionId: string }> {
+  const candidate = enforceKnowledgeRisk(
+    candidateKnowledgeSchema.parse(unparsedCandidate),
+  )
   const context = await resolveCandidateContext(client, candidate)
   const item = await client.query<{ id: string; kind: string }>(
     `INSERT INTO knowledge_items (stable_key, kind)
@@ -107,6 +119,7 @@ async function createRevision(
        rollback_steps,
        limitations,
        dangerous,
+       risk_level,
        confidence,
        quality_score,
        confidence_reason,
@@ -116,7 +129,7 @@ async function createRevision(
      VALUES (
        $1, $2, 'validated', $3, $4, $5, $6, $7, $8, $9,
        $10, $11, $12, $13, $14, $15::jsonb, $16::jsonb, $17::jsonb,
-       $18::jsonb, $19::jsonb, $20::jsonb, $21, $22, $23, $24, $25, 'researcher'
+       $18::jsonb, $19::jsonb, $20::jsonb, $21, $22, $23, $24, $25, $26, $27
      )
      RETURNING id`,
     [
@@ -145,10 +158,14 @@ async function createRevision(
       JSON.stringify(candidate.rollback),
       JSON.stringify(candidate.limitations),
       candidate.dangerous,
+      candidate.risk_level ?? (
+        candidate.dangerous ? 'changes_config' : 'safe_read_only'
+      ),
       candidate.confidence,
       candidate.quality_score,
       candidate.confidence_reason,
-      candidate.last_verified_at
+      candidate.last_verified_at,
+      createdBy
     ],
   )
   const revisionId = revision.rows[0]!.id
@@ -229,22 +246,24 @@ async function createRevision(
   return { itemId: existingItem.id, revisionId }
 }
 
-async function publishRevision(
+export async function publishKnowledgeBatch(
   client: DatabaseClient,
-  itemId: string,
-  revisionId: string,
-  taskPublicId: string,
-): Promise<string> {
+  items: { itemId: string; revisionId: string }[],
+  reason: string,
+  createdBy = 'clideck-mcp-worker',
+): Promise<{ releaseId: string; sequence: number }> {
+  if (items.length === 0) throw new Error('RELEASE_REQUIRES_ITEMS')
   const current = await client.query<{ release_id: string }>(
     'SELECT release_id FROM active_release WHERE singleton FOR UPDATE',
   )
-  const release = await client.query<{ id: string }>(
+  const release = await client.query<{ id: string; sequence: number }>(
     `INSERT INTO releases (status, reason, created_by)
-     VALUES ('published', $1, 'clideck-mcp-worker')
-     RETURNING id`,
-    [`Published validated expert task ${taskPublicId}`],
+     VALUES ('published', $1, $2)
+     RETURNING id, sequence`,
+    [reason, createdBy],
   )
   const releaseId = release.rows[0]!.id
+  const replacementIds = items.map((item) => item.itemId)
 
   if (current.rows[0]) {
     await client.query(
@@ -254,16 +273,22 @@ async function publishRevision(
        SELECT $1, knowledge_item_id, revision_id
        FROM release_items
        WHERE release_id = $2
-         AND knowledge_item_id <> $3`,
-      [releaseId, current.rows[0].release_id, itemId],
+         AND NOT (knowledge_item_id = ANY($3::uuid[]))`,
+      [releaseId, current.rows[0].release_id, replacementIds],
     )
   }
   await client.query(
     `INSERT INTO release_items (
        release_id, knowledge_item_id, revision_id
      )
-     VALUES ($1, $2, $3)`,
-    [releaseId, itemId, revisionId],
+     SELECT $1, batch.knowledge_item_id, batch.revision_id
+     FROM unnest($2::uuid[], $3::uuid[])
+       AS batch(knowledge_item_id, revision_id)`,
+    [
+      releaseId,
+      items.map((item) => item.itemId),
+      items.map((item) => item.revisionId)
+    ],
   )
 
   if (current.rows[0]) {
@@ -284,7 +309,10 @@ async function publishRevision(
        switched_by = excluded.switched_by`,
     [releaseId],
   )
-  return releaseId
+  return {
+    releaseId,
+    sequence: Number(release.rows[0]!.sequence)
+  }
 }
 
 export async function processNextCandidate(
@@ -385,12 +413,14 @@ export async function processNextCandidate(
          )`,
         [candidateTask.id],
       )
-      const { itemId, revisionId } = await createRevision(client, candidate)
-      const releaseId = await publishRevision(
+      const { itemId, revisionId } = await createKnowledgeRevision(
         client,
-        itemId,
-        revisionId,
-        candidateTask.public_id,
+        candidate,
+      )
+      const release = await publishKnowledgeBatch(
+        client,
+        [{ itemId, revisionId }],
+        `Published validated expert task ${candidateTask.public_id}`,
       )
       const validationPayload = {
         policy_version: 1,
@@ -398,7 +428,7 @@ export async function processNextCandidate(
         quality_threshold: 0.85,
         dangerous: candidate.dangerous,
         decision: 'published',
-        release_id: releaseId,
+        release_id: release.releaseId,
         revision_id: revisionId
       }
       await client.query(
@@ -423,8 +453,18 @@ export async function processNextCandidate(
         [
           candidateTask.id,
           revisionId,
-          JSON.stringify({ release_id: releaseId })
+          JSON.stringify({ release_id: release.releaseId })
         ],
+      )
+      await client.query(
+        `UPDATE agent_runs
+            SET published_revisions = 1
+          WHERE pipeline_task_id IN (
+            SELECT id
+            FROM pipeline_tasks
+            WHERE expert_task_id = $1
+          )`,
+        [candidateTask.id],
       )
       await client.query(
         `INSERT INTO task_public_events (
@@ -438,7 +478,7 @@ export async function processNextCandidate(
          )`,
         [candidateTask.id],
       )
-      return { releaseId, revisionId }
+      return { releaseId: release.releaseId, revisionId }
     })
     logger.info(
       {

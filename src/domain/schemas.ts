@@ -81,6 +81,7 @@ export const publicKnowledgeSchema = z.object({
   dangerous: z.boolean(),
   assurance: z.object({
     validation_level: z.enum([
+      'legacy_migrated',
       'documentation_reviewed',
       'batfish_modeled',
       'runtime_lab_validated'
@@ -238,6 +239,18 @@ export const candidateRevisionSchema = z.object({
   rollback: z.array(z.string().trim().min(1).max(1_000)).max(30).default([]),
   limitations: z.array(z.string().trim().min(1).max(1_000)).max(30).default([]),
   dangerous: z.boolean(),
+  risk_level: z.enum([
+    'safe_read_only',
+    'changes_config',
+    'credential_sensitive',
+    'service_disruptive',
+    'data_loss',
+    'storage_wipe',
+    'firmware_change',
+    'boot_change',
+    'factory_reset',
+    'unknown'
+  ]).optional(),
   confidence: z.number().min(0).max(1),
   quality_score: z.number().min(0).max(1),
   confidence_reason: z.string().trim().min(10).max(2_000),

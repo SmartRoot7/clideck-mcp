@@ -13,11 +13,16 @@ name is `CliDeck MCP — Network Knowledge`.
 
 1. `clideck-mcp-api` exposes the public MCP endpoint, health/readiness/metrics,
    and an authenticated admin API.
-2. `clideck-mcp-worker` expires tasks, releases stale leases, validates candidate
-   revisions, and atomically publishes eligible releases.
+2. `clideck-mcp-worker` downloads public sources, converts and chunks them,
+   releases stale leases, validates deterministic gates, and atomically
+   publishes source packages.
 3. `clideck-mcp-researcher` exposes a loopback-only, token-protected MCP surface
-   used by a Codex Automation. It cannot read client credentials or administer
-   the host.
+   used by the continuous coordinator. It cannot read client credentials or
+   administer the host.
+4. A macOS `launchd` coordinator runs ephemeral Codex executions. It gives Luna
+   low one bounded discovery, extraction, verification, or expert artifact at a
+   time. It has no database credentials and reaches state only through the
+   restricted researcher bridge.
 
 PostgreSQL 16 is the only stateful dependency. The API and researcher processes
 are stateless.
@@ -47,10 +52,49 @@ Search ranking combines:
 
 No vector similarity or generative ranking is used.
 
-The first deep-support pack contains 50 Catalyst 9300 / IOS-XE revisions:
+The native deep-support pack contains 50 Catalyst 9300 / IOS-XE revisions:
 20 commands, 15 change contracts, 10 verification contracts, and 5 bounded
 upgrade records. Cisco, Juniper, and Arista models are recognized, while only
 the C9300 family is marked deep.
+
+The 0.3 import release adds 56,747 established CliDeck revisions without
+changing their search-rank class. Missing OS means vendor-level applicability;
+missing version bounds mean unbounded applicability. Original trust, confidence,
+quality, lifecycle, risk, and provenance remain in restricted metadata.
+Deterministic risk classification may only increase the effective risk.
+
+## Continuous coverage planner
+
+`coverage_targets` is the managed backlog across vendor, family/model, OS,
+version branch, document role, priority, coverage, freshness, and next check.
+When enabled, the scheduler always chooses useful work in this order:
+
+1. queued expert task;
+2. unfinished stage of the active source;
+3. next unprocessed fragment;
+4. candidate verification;
+5. source-package publication;
+6. discovery for the highest-priority coverage gap or refresh.
+
+There is no enabled idle state. When all currently due targets are covered, the
+oldest covered target is made due and discovery continues. The only idle states
+are an explicit super-admin pause or a recorded coordinator system failure.
+
+The source state machine is:
+
+`discover → acquire → convert → chunk → analyze → verify → publish`
+
+Acquire, conversion, local OCR, chunking, hashing, FTS indexing, and publication
+are deterministic worker stages. Discovery, fragment analysis, and independent
+verification are isolated Luna-low runs. Every run must submit a schema-valid
+artifact, an explicit rejection, or a recorded failure. A source is published
+once as a single immutable release; rejected fragments and blocked candidates
+do not prevent safe verified candidates from publishing.
+
+Pipeline tasks have bounded leases, heartbeats, idempotent dedupe keys, and five
+attempts. Transient failures return the same stage to the queue. Exhausted
+stages record a terminal source failure, clear the active source, and return the
+planner to discovery; a failed source cannot reach publication.
 
 ## Product intelligence
 
@@ -66,7 +110,7 @@ the C9300 family is marked deep.
 - Opt-in samples are re-redacted through a dedicated quarantine DB role with a
   30-day TTL.
 
-## Task lifecycle
+## Expert task lifecycle
 
 The durable state machine is:
 
@@ -99,6 +143,10 @@ Candidates require:
 Publication creates a new immutable release and switches `active_release` in the
 same transaction. Rollback switches it to an earlier release; revisions are never
 overwritten.
+
+Legacy import is separately resumable by manifest hash and legacy key, but its
+activation is one atomic release. The required release contains exactly 56,798
+active revisions: 51 current revisions plus 56,747 legacy revisions.
 
 ## Lab assurance
 

@@ -26,6 +26,10 @@ const envSchema = z.object({
   PLAYGROUND_TOKEN: z.string().min(32).optional(),
   VERIFICATION_SIGNING_KEY: z.string().min(32).optional(),
   PUBLIC_BASE_URL: z.string().url().default('http://127.0.0.1:8787'),
+  DEPLOY_COMMIT_SHA: z.preprocess(
+    (value) => value === '' ? undefined : value,
+    z.string().regex(/^[0-9a-f]{40}$/).optional(),
+  ),
   TRUSTED_PROXY_CIDRS: z.string().default('127.0.0.1/32,::1/128'),
   ANONYMOUS_TASK_TTL_MINUTES: z.coerce.number().int().min(5).max(1440).default(60),
   TASK_LEASE_SECONDS: z.coerce.number().int().min(30).max(900).default(120),
@@ -33,9 +37,16 @@ const envSchema = z.object({
   HEAVY_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).max(1000).default(10),
   EXPERT_RATE_LIMIT_PER_DAY: z.coerce.number().int().min(1).max(100).default(3),
   CONTRIBUTION_RATE_LIMIT_PER_DAY: z.coerce.number().int().min(1).max(100).default(3),
-  ADMIN_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).max(1000).default(30),
+  ADMIN_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).max(1000)
+    .default(300),
   MAX_REQUEST_BYTES: z.coerce.number().int().min(1024).max(1048576).default(65536),
   WORKER_POLL_MS: z.coerce.number().int().min(250).max(60000).default(2000),
+  SOURCE_STORAGE_DIR: z.string().min(1).default('./var/source-artifacts'),
+  SOURCE_MAX_BYTES: z.coerce.number().int().min(1024).max(104857600)
+    .default(104857600),
+  SOURCE_RETENTION_DAYS: z.coerce.number().int().min(1).max(90).default(30),
+  PIPELINE_FRAGMENT_BATCH_SIZE: z.coerce.number().int().min(1).max(32)
+    .default(8),
   AUTO_PUBLISH_CONFIDENCE: z.coerce.number().min(0.5).max(1).default(0.9),
   DANGEROUS_AUTO_PUBLISH_CONFIDENCE: z.coerce.number().min(0.5).max(1).default(0.95),
   ENABLE_NATIVE_MCP_TASKS: booleanString.default(false),
@@ -60,6 +71,7 @@ export type AppConfig = {
   playgroundToken: string
   verificationSigningKey: string
   publicBaseUrl: string
+  deployCommitSha: string | null
   trustedProxyCidrs: string[]
   anonymousTaskTtlMinutes: number
   taskLeaseSeconds: number
@@ -70,6 +82,10 @@ export type AppConfig = {
   adminRateLimitPerMinute: number
   maxRequestBytes: number
   workerPollMs: number
+  sourceStorageDir: string
+  sourceMaxBytes: number
+  sourceRetentionDays: number
+  pipelineFragmentBatchSize: number
   autoPublishConfidence: number
   dangerousAutoPublishConfidence: number
   enableNativeMcpTasks: boolean
@@ -109,6 +125,7 @@ export function getConfig(
     verificationSigningKey:
       parsed.VERIFICATION_SIGNING_KEY ?? parsed.ADMIN_TOKEN ?? '',
     publicBaseUrl: parsed.PUBLIC_BASE_URL,
+    deployCommitSha: parsed.DEPLOY_COMMIT_SHA ?? null,
     trustedProxyCidrs: parsed.TRUSTED_PROXY_CIDRS.split(',')
       .map((value) => value.trim())
       .filter(Boolean),
@@ -121,6 +138,10 @@ export function getConfig(
     adminRateLimitPerMinute: parsed.ADMIN_RATE_LIMIT_PER_MINUTE,
     maxRequestBytes: parsed.MAX_REQUEST_BYTES,
     workerPollMs: parsed.WORKER_POLL_MS,
+    sourceStorageDir: parsed.SOURCE_STORAGE_DIR,
+    sourceMaxBytes: parsed.SOURCE_MAX_BYTES,
+    sourceRetentionDays: parsed.SOURCE_RETENTION_DAYS,
+    pipelineFragmentBatchSize: parsed.PIPELINE_FRAGMENT_BATCH_SIZE,
     autoPublishConfidence: parsed.AUTO_PUBLISH_CONFIDENCE,
     dangerousAutoPublishConfidence:
       parsed.DANGEROUS_AUTO_PUBLISH_CONFIDENCE,

@@ -31,6 +31,7 @@ type KnowledgeRow = {
   quality_score: string
   last_verified_at: string | Date
   validation_level:
+    | 'legacy_migrated'
     | 'documentation_reviewed'
     | 'batfish_modeled'
     | 'runtime_lab_validated'
@@ -107,7 +108,17 @@ export async function searchKnowledge(
     .replace(/\s+/g, ' ')
     .trim()
   const result = await database.query<KnowledgeRow>(
-    `SELECT
+    `WITH candidate_revisions AS MATERIALIZED (
+       SELECT id
+       FROM knowledge_revisions
+       WHERE search_document @@ websearch_to_tsquery('simple', $1)
+       UNION
+       SELECT id
+       FROM knowledge_revisions
+       WHERE lower(title) % lower($1)
+         AND similarity(lower(title), lower($1)) >= 0.32
+     )
+     SELECT
        pak.*,
        (
          ts_rank_cd(pak.search_document, websearch_to_tsquery('simple', $1), 32)
@@ -117,15 +128,14 @@ export async function searchKnowledge(
          + CASE WHEN pak.platform_slug IS NOT NULL AND pak.platform_slug = $4 THEN 0.15 ELSE 0 END
        )::float8 AS rank
      FROM public_active_knowledge pak
+     JOIN candidate_revisions cr ON cr.id = pak.revision_id
      WHERE pak.vendor_slug = $2
-       AND pak.operating_system_slug = $3
+       AND (
+         pak.operating_system_slug IS NULL
+         OR pak.operating_system_slug = $3
+       )
        AND ($4::text IS NULL OR pak.platform_slug IS NULL OR pak.platform_slug = $4)
        AND ($5::text IS NULL OR pak.kind = $5)
-       AND (
-         pak.search_document @@ websearch_to_tsquery('simple', $1)
-         OR similarity(lower(pak.title), lower($1)) >= 0.32
-         OR similarity(lower(pak.summary), lower($1)) >= 0.28
-       )
      ORDER BY rank DESC, pak.confidence DESC, pak.last_verified_at DESC
      LIMIT 25`,
     [

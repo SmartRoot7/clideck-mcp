@@ -1,6 +1,6 @@
 {
   "name": "clideck-mcp",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "CliDeck MCP — deterministic network knowledge for any MCP client",
   "type": "module",
@@ -30,6 +30,15 @@
     "researcher:heartbeat": "node --env-file=.secrets/researcher-bridge.env --import tsx src/cli/researcher-client.ts heartbeat",
     "researcher:submit": "node --env-file=.secrets/researcher-bridge.env --import tsx src/cli/researcher-client.ts submit",
     "researcher:fail": "node --env-file=.secrets/researcher-bridge.env --import tsx src/cli/researcher-client.ts fail",
+    "pipeline:coordinator": "node --env-file=.secrets/researcher-bridge.env --import tsx src/cli/pipeline-coordinator.ts",
+    "pipeline:install-launchd": "tsx src/cli/install-pipeline-launchd.ts",
+    "pipeline:claim": "node --env-file=.secrets/researcher-bridge.env --import tsx src/cli/pipeline-client.ts claim",
+    "pipeline:task": "node --env-file=.secrets/researcher-bridge.env --import tsx src/cli/pipeline-client.ts task",
+    "pipeline:heartbeat": "node --env-file=.secrets/researcher-bridge.env --import tsx src/cli/pipeline-client.ts heartbeat",
+    "pipeline:submit-discovery": "node --env-file=.secrets/researcher-bridge.env --import tsx src/cli/pipeline-client.ts submit-discovery",
+    "pipeline:submit-analysis": "node --env-file=.secrets/researcher-bridge.env --import tsx src/cli/pipeline-client.ts submit-analysis",
+    "pipeline:submit-verification": "node --env-file=.secrets/researcher-bridge.env --import tsx src/cli/pipeline-client.ts submit-verification",
+    "pipeline:submit-expert": "node --env-file=.secrets/researcher-bridge.env --import tsx src/cli/pipeline-client.ts submit-expert",
     "test": "vitest run",
     "test:watch": "vitest"
   },
