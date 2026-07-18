@@ -62,7 +62,7 @@ GRANT SELECT ON
   operating_systems,
   knowledge_conflicts
 TO clideck_mcp_worker;
-GRANT DELETE ON rate_limit_buckets TO clideck_mcp_worker;
+GRANT SELECT, DELETE ON rate_limit_buckets TO clideck_mcp_worker;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO clideck_mcp_worker;
 
 GRANT SELECT, UPDATE ON expert_tasks TO clideck_mcp_researcher;
