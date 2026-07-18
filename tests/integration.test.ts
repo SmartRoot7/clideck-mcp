@@ -788,6 +788,21 @@ describeIntegration('PostgreSQL integration', () => {
       inserted_sources: 1,
       duplicate_sources: 0
     })
+    const recoveredDiscovery = await database.query<{
+      status: string
+      failure_code: string | null
+      failure_message: string | null
+    }>(
+      `SELECT status, failure_code, failure_message
+       FROM pipeline_tasks
+       WHERE id = $1`,
+      [discoveryTaskId],
+    )
+    expect(recoveredDiscovery.rows[0]).toMatchObject({
+      status: 'completed',
+      failure_code: null,
+      failure_message: null
+    })
     await recordAgentRunResult(database, {
       agent_run_id: discoveryAgentRunId,
       status: 'completed',

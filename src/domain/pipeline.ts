@@ -142,6 +142,29 @@ const mechanicalTaskTypes: PipelineTaskRow['task_type'][] = [
   'source_chunking',
   'source_publication'
 ]
+const maxFragmentAnalysisBatchBytes = 60_000
+
+export function boundFragmentAnalysisBatch<
+  T extends { content: string }
+>(
+  fragments: T[],
+  maxBytes = maxFragmentAnalysisBatchBytes,
+): T[] {
+  const selected: T[] = []
+  let selectedBytes = 0
+  for (const fragment of fragments) {
+    const fragmentBytes = Buffer.byteLength(fragment.content, 'utf8')
+    if (
+      selected.length > 0 &&
+      selectedBytes + fragmentBytes > maxBytes
+    ) {
+      break
+    }
+    selected.push(fragment)
+    selectedBytes += fragmentBytes
+  }
+  return selected
+}
 
 async function recordEvent(
   client: DatabaseClient,
@@ -453,8 +476,11 @@ async function queueSourceWork(
      FOR UPDATE OF sf SKIP LOCKED`,
     [source.id],
   )
-  if (queuedFragments.rows.length > 0) {
-    const fragmentIds = queuedFragments.rows.map((row) => row.id)
+  const analysisFragments = boundFragmentAnalysisBatch(
+    queuedFragments.rows,
+  )
+  if (analysisFragments.length > 0) {
+    const fragmentIds = analysisFragments.map((row) => row.id)
     return Boolean(await insertTask(client, {
       type: 'fragment_analysis',
       stage: 'analyze',
@@ -466,7 +492,7 @@ async function queueSourceWork(
       sourceId: source.id,
       payload: {
         ...basePayload,
-        fragments: queuedFragments.rows
+        fragments: analysisFragments
       }
     }))
   }
@@ -1243,6 +1269,8 @@ async function completeTask(
     `UPDATE pipeline_tasks
         SET status = 'completed',
             result = $2::jsonb,
+            failure_code = NULL,
+            failure_message = NULL,
             claim_owner = NULL,
             lease_token_hash = NULL,
             lease_until = NULL,
