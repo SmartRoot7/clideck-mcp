@@ -44,6 +44,8 @@ GRANT SELECT ON
   feedback,
   source_documents,
   revision_sources,
+  knowledge_items,
+  knowledge_revisions,
   knowledge_revision_contracts,
   knowledge_validations,
   knowledge_public_trust,
@@ -56,14 +58,44 @@ GRANT SELECT ON
   vendors,
   platforms,
   operating_systems,
-  code_change_approvals
+  code_change_approvals,
+  coverage_targets,
+  source_candidates,
+  source_artifacts,
+  source_fragments,
+  pipeline_settings,
+  pipeline_tasks,
+  pipeline_events,
+  knowledge_candidates,
+  candidate_verifications,
+  agent_runs,
+  import_runs,
+  import_items,
+  legacy_revision_metadata,
+  admin_audit_events,
+  worker_heartbeats
 TO clideck_mcp_admin;
 GRANT INSERT ON product_eval_runs TO clideck_mcp_admin;
+GRANT INSERT ON
+  admin_audit_events,
+  pipeline_events,
+  pipeline_tasks
+TO clideck_mcp_admin;
 GRANT USAGE, SELECT ON SEQUENCE
-  product_eval_runs_id_seq
+  product_eval_runs_id_seq,
+  pipeline_events_id_seq,
+  admin_audit_events_id_seq
 TO clideck_mcp_admin;
 GRANT INSERT, UPDATE ON active_release TO clideck_mcp_admin;
-GRANT UPDATE ON code_change_approvals TO clideck_mcp_admin;
+GRANT UPDATE ON
+  code_change_approvals,
+  pipeline_settings,
+  coverage_targets,
+  source_candidates,
+  pipeline_tasks,
+  expert_tasks,
+  knowledge_conflicts
+TO clideck_mcp_admin;
 
 GRANT SELECT, INSERT ON
   knowledge_items,
@@ -91,7 +123,31 @@ GRANT SELECT ON
   operating_systems,
   device_models,
   public_active_knowledge,
-  knowledge_conflicts
+  knowledge_conflicts,
+  coverage_targets,
+  source_candidates,
+  source_artifacts,
+  source_fragments,
+  pipeline_settings,
+  pipeline_tasks,
+  pipeline_events,
+  knowledge_candidates,
+  candidate_verifications,
+  agent_runs
+TO clideck_mcp_worker;
+GRANT INSERT, UPDATE ON
+  source_artifacts,
+  source_fragments,
+  pipeline_tasks,
+  pipeline_events
+TO clideck_mcp_worker;
+GRANT INSERT ON candidate_verifications TO clideck_mcp_worker;
+GRANT UPDATE ON
+  coverage_targets,
+  source_candidates,
+  pipeline_settings,
+  knowledge_candidates,
+  agent_runs
 TO clideck_mcp_worker;
 GRANT SELECT, UPDATE, DELETE ON snapshot_contributions TO clideck_mcp_worker;
 GRANT UPDATE ON knowledge_public_trust TO clideck_mcp_worker;
@@ -104,9 +160,47 @@ GRANT SELECT, INSERT ON task_messages TO clideck_mcp_researcher;
 GRANT SELECT, INSERT ON task_public_events TO clideck_mcp_researcher;
 GRANT INSERT ON task_artifacts TO clideck_mcp_researcher;
 GRANT SELECT, INSERT ON code_change_approvals TO clideck_mcp_researcher;
+GRANT SELECT ON
+  coverage_targets,
+  source_candidates,
+  source_artifacts,
+  source_fragments,
+  pipeline_settings,
+  pipeline_tasks,
+  pipeline_events,
+  knowledge_candidates,
+  candidate_verifications,
+  agent_runs,
+  worker_heartbeats,
+  vendors,
+  platforms,
+  operating_systems,
+  knowledge_items,
+  knowledge_conflicts
+TO clideck_mcp_researcher;
+GRANT INSERT ON
+  source_candidates,
+  pipeline_tasks,
+  pipeline_events,
+  knowledge_candidates,
+  candidate_verifications,
+  agent_runs,
+  worker_heartbeats
+TO clideck_mcp_researcher;
+GRANT UPDATE ON
+  coverage_targets,
+  source_candidates,
+  source_fragments,
+  pipeline_settings,
+  pipeline_tasks,
+  knowledge_candidates,
+  agent_runs,
+  worker_heartbeats
+TO clideck_mcp_researcher;
 GRANT USAGE, SELECT ON SEQUENCE
   task_messages_id_seq,
-  task_public_events_id_seq
+  task_public_events_id_seq,
+  pipeline_events_id_seq
 TO clideck_mcp_researcher;
 
 GRANT SELECT, INSERT, UPDATE ON
