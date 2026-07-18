@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import pg from 'pg'
 
 import { createPublicTaskId, sha256, sha256Label } from '../src/crypto.js'
+import { actOnSource } from '../src/domain/admin.js'
 import { createAdminActorSignature } from '../src/http/admin-auth.js'
 import {
   resolveNetworkContext
@@ -108,6 +109,139 @@ describeIntegration('PostgreSQL integration', () => {
        )`,
     )
     expect(gaps.rows[0]?.missing).toBe(0)
+  })
+
+  it('resets exhausted fragment attempts on an audited source retry', async () => {
+    const unique = randomUUID().replaceAll('-', '')
+    const hash = sha256Label(`source-retry-${unique}`)
+    const source = await database.query<{ id: string }>(
+      `INSERT INTO source_candidates (
+         coverage_target_id,
+         canonical_url,
+         document_type,
+         title,
+         status,
+         discovered_by,
+         content_hash,
+         failure_code,
+         failure_message
+       )
+       VALUES (
+         (SELECT id FROM coverage_targets ORDER BY priority DESC LIMIT 1),
+         $1,
+         'command_reference',
+         'Source retry integration fixture',
+         'failed',
+         'integration-test',
+         $2,
+         'AGENT_ARTIFACT_REJECTED',
+         'Synthetic exhausted fragment.'
+       )
+       RETURNING id`,
+      [
+        `https://www.cisco.com/c/en/us/support/retry-${unique}.html`,
+        hash
+      ],
+    )
+    const artifact = await database.query<{ id: string }>(
+      `INSERT INTO source_artifacts (
+         source_candidate_id,
+         media_type,
+         byte_size,
+         content_hash,
+         storage_path,
+         status
+       )
+       VALUES ($1, 'text/plain', 16, $2, '/tmp/retry-fixture', 'chunked')
+       RETURNING id`,
+      [source.rows[0]!.id, hash],
+    )
+    const fragment = await database.query<{ id: string }>(
+      `INSERT INTO source_fragments (
+         source_artifact_id,
+         ordinal,
+         content,
+         content_hash,
+         status,
+         attempts
+       )
+       VALUES ($1, 0, 'show retry test', $2, 'failed', 10)
+       RETURNING id`,
+      [
+        artifact.rows[0]!.id,
+        sha256Label(`fragment-retry-${unique}`)
+      ],
+    )
+
+    await expect(actOnSource(
+      database,
+      source.rows[0]!.id,
+      'retry',
+      {
+        id: siteAdminActorId,
+        role: 'super_admin'
+      },
+    )).resolves.toMatchObject({
+      id: source.rows[0]!.id,
+      action: 'retry'
+    })
+
+    const retried = await database.query<{
+      status: string
+      attempts: number
+    }>(
+      `SELECT status, attempts FROM source_fragments WHERE id = $1`,
+      [fragment.rows[0]!.id],
+    )
+    expect(retried.rows[0]).toEqual({
+      status: 'queued',
+      attempts: 0
+    })
+    const audit = await database.query<{ count: number }>(
+      `SELECT count(*)::int AS count
+       FROM admin_audit_events
+       WHERE actor_id = $1
+         AND action = 'source.retry'
+         AND target_id = $2`,
+      [siteAdminActorId, source.rows[0]!.id],
+    )
+    expect(audit.rows[0]?.count).toBe(1)
+
+    await database.query(
+      `UPDATE pipeline_settings
+          SET active_source_id = NULL,
+              updated_at = now(),
+              updated_by = 'integration-cleanup'
+        WHERE active_source_id = $1`,
+      [source.rows[0]!.id],
+    )
+    await database.query(
+      'DELETE FROM pipeline_events WHERE source_candidate_id = $1',
+      [source.rows[0]!.id],
+    )
+    await database.query(
+      'DELETE FROM pipeline_tasks WHERE source_candidate_id = $1',
+      [source.rows[0]!.id],
+    )
+    await database.query(
+      'DELETE FROM source_fragments WHERE source_artifact_id = $1',
+      [artifact.rows[0]!.id],
+    )
+    await database.query(
+      'DELETE FROM source_artifacts WHERE id = $1',
+      [artifact.rows[0]!.id],
+    )
+    await database.query(
+      `DELETE FROM admin_audit_events
+        WHERE actor_id = $1
+          AND action = 'source.retry'
+          AND target_id = $2`,
+      [siteAdminActorId, source.rows[0]!.id],
+    )
+    await database.query(
+      'DELETE FROM source_candidates WHERE id = $1',
+      [source.rows[0]!.id],
+    )
   })
 
   it('returns known knowledge without private provenance fields', async () => {
