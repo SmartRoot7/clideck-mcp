@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: clideck_mcp_test
+          POSTGRES_USER: clideck_test
+          POSTGRES_PASSWORD: clideck_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U clideck_test -d clideck_mcp_test"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql://clideck_test:clideck_test@127.0.0.1:5432/clideck_mcp_test
+      ADMIN_TOKEN: ci-admin-token-that-is-at-least-32-chars
+      RESEARCHER_TOKEN: ci-researcher-token-at-least-32-chars
+      PLAYGROUND_TOKEN: ci-playground-token-that-is-at-least-32-chars
+      VERIFICATION_SIGNING_KEY: ci-verification-key-that-is-at-least-32-chars
+      QUARANTINE_DATABASE_URL: postgresql://clideck_test:clideck_test@127.0.0.1:5432/clideck_mcp_test
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm build
+      - run: pnpm db:migrate
+      - run: pnpm db:seed
+      - run: pnpm test
+      - name: Run product eval
+        run: |
+          mkdir -p artifacts
+          pnpm eval | tee artifacts/eval-report.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: clideck-eval-${{ github.sha }}
+          path: artifacts/eval-report.json
+          if-no-files-found: error
+          retention-days: 30

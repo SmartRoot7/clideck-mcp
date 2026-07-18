@@ -1,0 +1,21 @@
+[Unit]
+Description=CliDeck MCP PostgreSQL backup
+After=postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=oneshot
+User=clideck_mcp_backup
+Group=clideck_mcp
+EnvironmentFile=/etc/clideck-mcp/backup.env
+ExecStart=/opt/clideck-mcp/current/ops/scripts/backup.sh
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/backups/clideck-mcp
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+UMask=0077

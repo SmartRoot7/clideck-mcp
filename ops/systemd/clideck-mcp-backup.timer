@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily CliDeck MCP PostgreSQL backup
+
+[Timer]
+OnCalendar=*-*-* 03:15:00
+Persistent=true
+RandomizedDelaySec=900
+Unit=clideck-mcp-backup.service
+
+[Install]
+WantedBy=timers.target

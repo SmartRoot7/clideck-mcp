@@ -1,0 +1,15 @@
+.secrets/
+lab/results/*
+!lab/results/.gitkeep
+.env
+.env.*
+!.env.example
+node_modules/
+dist/
+coverage/
+.DS_Store
+*.log
+*.pid
+tmp/
+backups/
+artifacts/
