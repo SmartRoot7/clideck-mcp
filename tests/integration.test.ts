@@ -16,6 +16,7 @@ import {
   searchKnowledge
 } from '../src/domain/knowledge.js'
 import {
+  createKnowledgeRevision,
   processNextCandidate,
   runWorkerMaintenance
 } from '../src/domain/publication.js'
@@ -279,6 +280,89 @@ describeIntegration('PostgreSQL integration', () => {
     expect(answers[0]?.assurance.validation_level).toBe(
       'documentation_reviewed',
     )
+  })
+
+  it('preserves a broad knowledge item when researcher scope is narrower', async () => {
+    const unique = randomUUID().replaceAll('-', '')
+    const version = `17.15.${Number.parseInt(unique.slice(0, 4), 16)}`
+    const sourceUrl =
+      `https://www.cisco.com/c/en/us/support/scope-${unique}.html`
+    const client = await database.connect()
+
+    try {
+      await client.query('BEGIN')
+      const baseItem = await client.query<{ id: string }>(
+        `SELECT id
+         FROM knowledge_items
+         WHERE stable_key = 'cisco.ios-xe.show-mac-address-table'`,
+      )
+      expect(baseItem.rows).toHaveLength(1)
+
+      const candidate = {
+        stable_key: 'cisco.ios-xe.show-mac-address-table',
+        kind: 'command' as const,
+        vendor_slug: 'cisco',
+        platform_slug: 'catalyst-9000',
+        operating_system_slug: 'ios-xe',
+        version_min: version,
+        version_max: version,
+        title: 'Scoped MAC table integration fixture',
+        summary:
+          'Displays the MAC address table for a narrow integration scope.',
+        question_patterns: ['How do I inspect scoped MAC entries?'],
+        cli_mode: 'privileged EXEC',
+        command: 'show mac address-table',
+        procedure: [],
+        prerequisites: ['Use read-only CLI access.'],
+        risks: [],
+        verification: ['Confirm the command returns MAC entries.'],
+        rollback: [],
+        limitations: ['Applies only to the bounded test version.'],
+        dangerous: false,
+        risk_level: 'safe_read_only' as const,
+        confidence: 0.98,
+        quality_score: 0.95,
+        confidence_reason:
+          'The integration evidence directly supports the scoped command.',
+        last_verified_at: '2026-07-18',
+        provenance: [{
+          url: sourceUrl,
+          document_type: 'command_reference',
+          title: 'Scoped publication integration fixture',
+          verified_at: '2026-07-18',
+          content_hash: sha256Label(`scope-${unique}`),
+          evidence_fragment: 'show mac address-table',
+          evidence_role: 'primary' as const
+        }]
+      }
+
+      const first = await createKnowledgeRevision(client, candidate)
+      const second = await createKnowledgeRevision(client, candidate)
+
+      expect(first.itemId).not.toBe(baseItem.rows[0]!.id)
+      expect(second.itemId).toBe(first.itemId)
+      const scoped = await client.query<{
+        stable_key: string
+        revision_numbers: number[]
+      }>(
+        `SELECT
+           ki.stable_key,
+           array_agg(kr.revision_number ORDER BY kr.revision_number)
+             AS revision_numbers
+         FROM knowledge_items ki
+         JOIN knowledge_revisions kr ON kr.knowledge_item_id = ki.id
+         WHERE ki.id = $1
+         GROUP BY ki.stable_key`,
+        [first.itemId],
+      )
+      expect(scoped.rows[0]?.stable_key).toMatch(
+        /^cisco\.ios-xe\.show-mac-address-table\.scope-[0-9a-f]{12}$/,
+      )
+      expect(scoped.rows[0]?.revision_numbers).toEqual([1, 2])
+    } finally {
+      await client.query('ROLLBACK')
+      client.release()
+    }
   })
 
   it('exposes safe aggregate stats and protects playground operations', async () => {

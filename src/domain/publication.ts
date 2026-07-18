@@ -25,6 +25,40 @@ type CandidateTaskRow = {
   payload: unknown
 }
 
+function scopedResearcherStableKey(candidate: CandidateKnowledge): string {
+  const scopeHash = sha256Label([
+    candidate.kind,
+    candidate.vendor_slug,
+    candidate.platform_slug ?? 'all-platforms',
+    candidate.operating_system_slug,
+    candidate.version_min ?? 'unbounded-minimum',
+    candidate.version_max ?? 'unbounded-maximum'
+  ].join('\0')).slice('sha256:'.length, 'sha256:'.length + 12)
+  const suffix = `.scope-${scopeHash}`
+  const prefix = candidate.stable_key
+    .slice(0, 160 - suffix.length)
+    .replace(/[._-]+$/, '')
+  return `${prefix}${suffix}`
+}
+
+async function resolveCandidateStableKey(
+  client: DatabaseClient,
+  candidate: CandidateKnowledge,
+  createdBy: 'researcher' | 'legacy_import' | 'super_admin',
+): Promise<string> {
+  if (createdBy !== 'researcher') return candidate.stable_key
+
+  const collision = await client.query<{ exists: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1 FROM knowledge_items WHERE stable_key = $1
+     ) AS exists`,
+    [candidate.stable_key],
+  )
+  return collision.rows[0]?.exists
+    ? scopedResearcherStableKey(candidate)
+    : candidate.stable_key
+}
+
 async function resolveCandidateContext(
   client: DatabaseClient,
   candidate: CandidateKnowledge,
@@ -71,17 +105,22 @@ export async function createKnowledgeRevision(
     candidateKnowledgeSchema.parse(unparsedCandidate),
   )
   const context = await resolveCandidateContext(client, candidate)
+  const stableKey = await resolveCandidateStableKey(
+    client,
+    candidate,
+    createdBy,
+  )
   const item = await client.query<{ id: string; kind: string }>(
     `INSERT INTO knowledge_items (stable_key, kind)
      VALUES ($1, $2)
      ON CONFLICT (stable_key) DO NOTHING
      RETURNING id, kind`,
-    [candidate.stable_key, candidate.kind],
+    [stableKey, candidate.kind],
   )
   const existingItem = item.rows[0] ?? (
     await client.query<{ id: string; kind: string }>(
       'SELECT id, kind FROM knowledge_items WHERE stable_key = $1',
-      [candidate.stable_key],
+      [stableKey],
     )
   ).rows[0]
   if (!existingItem || existingItem.kind !== candidate.kind) {
