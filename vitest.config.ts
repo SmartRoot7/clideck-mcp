@@ -5,6 +5,7 @@ export default defineConfig({
     environment: 'node',
     globals: true,
     fileParallelism: false,
+    include: ['tests/**/*.test.ts'],
     coverage: {
       include: ['src/**/*.ts'],
       exclude: ['src/entrypoints/**', 'src/cli/**']

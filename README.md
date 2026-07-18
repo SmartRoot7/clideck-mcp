@@ -37,6 +37,7 @@ The local endpoints are:
 - health: `http://127.0.0.1:8787/health`
 - readiness: `http://127.0.0.1:8787/ready`
 - restricted researcher MCP: `http://127.0.0.1:8788/mcp`
+- independent local admin: `http://127.0.0.1:8790/admin` (development only)
 
 Run the worker in a second terminal:
 
@@ -87,6 +88,19 @@ available at `GET /public/v1/stats` with a five-minute cache contract.
 
 See [docs/PLAYGROUND_API.md](docs/PLAYGROUND_API.md) and
 [docs/SITE_INTEGRATION_HANDOFF.md](docs/SITE_INTEGRATION_HANDOFF.md).
+
+## LAN operations console
+
+CliDeck MCP 0.5 includes its own React operations console at
+`https://clideck-mcp.lan/admin`. A separate Hono process listens only on
+loopback, while Caddy terminates local-CA TLS and accepts the trusted LAN.
+Authentication is a single local `super_admin` account with a scrypt password
+hash and a 12-hour secure, HttpOnly, SameSite-Strict session. The console has no
+registration, email recovery or public listener.
+
+Run `sudo pnpm admin:setup` once to create the root-owned local authentication
+configuration. See [docs/lan-admin-operations.md](docs/lan-admin-operations.md)
+for HTTPS installation, validation, remote-admin cutover and rollback.
 
 ## Verification
 
@@ -161,7 +175,8 @@ API, or private dataset.
 ## Scope boundary
 
 This repository and `clideck-mcp.lan` are the only approved mutation targets.
-Integration into the existing CliDeck admin application requires separate
-approval. The approved site integration uses a hidden `/admin/mcp` page and
-explicit BFF routes. Backend admin requests require a static bearer token plus a
-signed, short-lived CliDeck administrator identity; see `docs/OPERATIONS.md`.
+The existing CliDeck website admin remains a temporary rollback path during the
+LAN-console production soak. It is maintained in another repository and is not
+modified here. After the soak, the public API's old signed remote-admin routes
+can be disabled with `ENABLE_REMOTE_ADMIN_API=false`; the public MCP endpoint
+is unaffected.

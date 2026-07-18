@@ -6,6 +6,7 @@ lab/results/*
 !.env.example
 node_modules/
 dist/
+dist-admin/
 coverage/
 .DS_Store
 *.log
