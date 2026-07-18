@@ -460,6 +460,30 @@ describe('deterministic source processing', () => {
       ).toBe(true)
     }
   })
+
+  it('deduplicates repeated source fragments before persistence', () => {
+    const repeated = [
+      'show clock',
+      'Displays the current system clock without changing device state.'
+    ].join('\n')
+    const source = [
+      'SECTION ONE',
+      repeated,
+      'SECTION TWO',
+      repeated,
+      'SECTION THREE',
+      'show version\nDisplays platform and software version details.'
+    ].join('\n\n')
+
+    const fragments = chunkSourceText(source)
+
+    expect(fragments).toHaveLength(2)
+    expect(fragments.map((fragment) => fragment.ordinal)).toEqual([0, 1])
+    expect(new Set(fragments.map((fragment) => fragment.contentHash)).size)
+      .toBe(fragments.length)
+    expect(fragments.filter((fragment) => fragment.content === repeated))
+      .toHaveLength(1)
+  })
 })
 
 describe('device snapshot intelligence', () => {
