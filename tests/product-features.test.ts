@@ -222,7 +222,17 @@ describe('deterministic source processing', () => {
           }
         ]
       }, candidateIds),
-    ).toThrow('candidate indexes must match the complete lease')
+    ).toThrow('candidate indexes must be unique and leased')
+
+    expect(materializeCandidateVerificationArtifact({
+      decisions: [{
+        candidate_index: 1,
+        decision: 'verified',
+        confidence: 0.96,
+        quality_score: 0.94,
+        findings: []
+      }]
+    }, candidateIds).decisions).toHaveLength(1)
   })
 
   it('models optional structured-output properties as nullable required fields', () => {
