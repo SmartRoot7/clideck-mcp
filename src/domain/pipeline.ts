@@ -86,20 +86,24 @@ export const candidateAnalysisSubmissionSchema = pipelineLeaseSchema.extend(
   candidateAnalysisArtifactShape,
 ).superRefine(requireHandledAnalysisArtifact)
 
+const candidateVerificationDecisionShape = {
+  decision: z.enum([
+    'verified',
+    'rejected',
+    'conflict',
+    'manual_review'
+  ]),
+  confidence: z.number().min(0).max(1),
+  quality_score: z.number().min(0).max(1),
+  findings: z.array(
+    z.string().trim().min(1).max(1_000),
+  ).max(30).default([])
+}
+
 const candidateVerificationArtifactShape = {
   decisions: z.array(z.object({
     candidate_id: z.string().uuid(),
-    decision: z.enum([
-      'verified',
-      'rejected',
-      'conflict',
-      'manual_review'
-    ]),
-    confidence: z.number().min(0).max(1),
-    quality_score: z.number().min(0).max(1),
-    findings: z.array(
-      z.string().trim().min(1).max(1_000),
-    ).max(30).default([])
+    ...candidateVerificationDecisionShape
   })).min(1).max(100)
 }
 
@@ -109,6 +113,50 @@ export const candidateVerificationArtifactSchema = z.object(
 
 export const candidateVerificationSubmissionSchema =
   pipelineLeaseSchema.extend(candidateVerificationArtifactShape)
+
+export const candidateVerificationAgentArtifactSchema = z.object({
+  decisions: z.array(z.object({
+    candidate_index: z.number().int().min(0).max(99),
+    ...candidateVerificationDecisionShape
+  })).min(1).max(100)
+})
+
+export function materializeCandidateVerificationArtifact(
+  unparsedArtifact: unknown,
+  candidateIds: string[],
+): z.infer<typeof candidateVerificationArtifactSchema> {
+  const artifact = candidateVerificationAgentArtifactSchema.parse(
+    unparsedArtifact,
+  )
+  if (artifact.decisions.length !== candidateIds.length) {
+    throw new Error(
+      'Verification artifact must contain one decision per leased candidate.',
+    )
+  }
+  const indexes = new Set(
+    artifact.decisions.map((decision) => decision.candidate_index),
+  )
+  if (
+    indexes.size !== candidateIds.length ||
+    [...indexes].some((index) => index >= candidateIds.length)
+  ) {
+    throw new Error(
+      'Verification artifact candidate indexes must match the complete lease.',
+    )
+  }
+  return candidateVerificationArtifactSchema.parse({
+    decisions: artifact.decisions.map((decision) => {
+      const {
+        candidate_index: candidateIndex,
+        ...result
+      } = decision
+      return {
+        candidate_id: candidateIds[candidateIndex],
+        ...result
+      }
+    })
+  })
+}
 
 export const expertResearchArtifactSchema = z.union([
   pipelineCandidatePayloadSchema,
