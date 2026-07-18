@@ -77,13 +77,14 @@ import {
   requireStaticBearer
 } from './security.js'
 
-type ApiDependencies = {
+export type ApiDependencies = {
   config: AppConfig
   database: Database
   adminDatabase: Database
   quarantineDatabase: Database
   logger: Logger
   metrics: Metrics
+  exposeAdminRoutes?: boolean
 }
 
 type ApiBindings = {
@@ -143,7 +144,7 @@ export function createApiApp(dependencies: ApiDependencies) {
     context.json({
       status: 'ok',
       service: 'CliDeck MCP — Network Knowledge',
-      version: '0.4.0'
+      version: '0.5.0'
     }),
   )
 
@@ -550,6 +551,7 @@ export function createApiApp(dependencies: ApiDependencies) {
     )
   })
 
+  if (dependencies.exposeAdminRoutes ?? config.enableRemoteAdminApi) {
   app.use('/admin/*', requireStaticBearer(config.adminToken))
   app.use(
     '/admin/*',
@@ -715,7 +717,8 @@ export function createApiApp(dependencies: ApiDependencies) {
     }
     const sourceId = context.req.param('sourceId')
     const parsed = z.object({
-      action: z.enum(['retry', 'skip', 'reject'])
+      action: z.enum(['retry', 'skip', 'reject']),
+      reason: z.string().trim().min(5).max(2_000).optional()
     }).safeParse(await context.req.json<unknown>())
     if (!z.uuid().safeParse(sourceId).success || !parsed.success) {
       return context.json({ error: 'invalid_source_action' }, 400)
@@ -725,6 +728,7 @@ export function createApiApp(dependencies: ApiDependencies) {
       sourceId,
       parsed.data.action,
       actor,
+      parsed.data.reason ?? null,
     )
     return result
       ? context.json(result)
@@ -759,7 +763,8 @@ export function createApiApp(dependencies: ApiDependencies) {
     }
     const taskId = context.req.param('taskId')
     const parsed = z.object({
-      action: z.enum(['requeue', 'cancel'])
+      action: z.enum(['requeue', 'cancel']),
+      reason: z.string().trim().min(5).max(2_000).optional()
     }).safeParse(await context.req.json<unknown>())
     if (
       !/^ekt_[A-Za-z0-9_-]{32}$/.test(taskId) ||
@@ -772,6 +777,7 @@ export function createApiApp(dependencies: ApiDependencies) {
       taskId,
       parsed.data.action,
       actor,
+      parsed.data.reason ?? null,
     )
     return result
       ? context.json(result)
@@ -882,6 +888,12 @@ export function createApiApp(dependencies: ApiDependencies) {
     if (!/^[0-9a-f-]{36}$/.test(releaseId)) {
       return context.json({ error: 'invalid_release_id' }, 400)
     }
+    const parsed = z.object({
+      reason: z.string().trim().min(5).max(2_000).optional()
+    }).safeParse(await context.req.json<unknown>())
+    if (!parsed.success) {
+      return context.json({ error: 'invalid_release_activation' }, 400)
+    }
     const result = await adminDatabase.query(
       `WITH switched AS (
          INSERT INTO active_release (singleton, release_id, switched_by)
@@ -912,7 +924,10 @@ export function createApiApp(dependencies: ApiDependencies) {
       'release.activate',
       'release',
       releaseId,
-      { sequence: result.rows[0].sequence },
+      {
+        sequence: result.rows[0].sequence,
+        reason: parsed.data.reason ?? null
+      },
     )
     return context.json(result.rows[0])
   })
@@ -1061,6 +1076,7 @@ export function createApiApp(dependencies: ApiDependencies) {
     )
     return context.json(result.rows[0])
   })
+  }
 
   app.notFound((context) => context.json({ error: 'not_found' }, 404))
   app.onError((error, context) => {

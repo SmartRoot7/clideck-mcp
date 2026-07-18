@@ -11,6 +11,17 @@ const envSchema = z.object({
     .default('info'),
   API_HOST: z.string().min(1).default('127.0.0.1'),
   API_PORT: z.coerce.number().int().min(1).max(65535).default(8787),
+  ADMIN_UI_HOST: z.string().min(1).default('127.0.0.1'),
+  ADMIN_UI_PORT: z.coerce.number().int().min(1).max(65535).default(8790),
+  ADMIN_UI_USERNAME: z.string().trim().min(1).max(128).default('admin'),
+  ADMIN_UI_PASSWORD_HASH: z.string().min(32).optional(),
+  ADMIN_UI_SESSION_SECRET: z.string().min(32).optional(),
+  ADMIN_UI_ACTOR_ID: z.uuid().optional(),
+  ADMIN_UI_ALLOWED_ORIGINS: z.string().default(
+    'https://clideck-mcp.lan,http://127.0.0.1:5173',
+  ),
+  ADMIN_UI_SESSION_HOURS: z.coerce.number().int().min(1).max(72).default(12),
+  ADMIN_UI_ASSET_ROOT: z.string().min(1).default('./dist-admin'),
   RESEARCHER_HOST: z.string().min(1).default('127.0.0.1'),
   RESEARCHER_PORT: z.coerce.number().int().min(1).max(65535).default(8788),
   DATABASE_URL: z.string().url().startsWith('postgresql://'),
@@ -50,13 +61,25 @@ const envSchema = z.object({
   AUTO_PUBLISH_CONFIDENCE: z.coerce.number().min(0.5).max(1).default(0.9),
   DANGEROUS_AUTO_PUBLISH_CONFIDENCE: z.coerce.number().min(0.5).max(1).default(0.95),
   ENABLE_NATIVE_MCP_TASKS: booleanString.default(false),
-  ENABLE_PLAYGROUND: booleanString.default(false)
+  ENABLE_PLAYGROUND: booleanString.default(false),
+  ENABLE_REMOTE_ADMIN_API: booleanString.default(true)
 })
 
 export type AppConfig = {
   nodeEnv: 'development' | 'test' | 'production'
   logLevel: z.infer<typeof envSchema>['LOG_LEVEL']
   api: { host: string; port: number }
+  adminUi: {
+    host: string
+    port: number
+    username: string
+    passwordHash: string
+    sessionSecret: string
+    actorId: string
+    allowedOrigins: string[]
+    sessionHours: number
+    assetRoot: string
+  }
   researcher: { host: string; port: number }
   databaseUrl: string
   adminDatabaseUrl: string
@@ -90,6 +113,7 @@ export type AppConfig = {
   dangerousAutoPublishConfidence: number
   enableNativeMcpTasks: boolean
   enablePlayground: boolean
+  enableRemoteAdminApi: boolean
 }
 
 let cachedConfig: AppConfig | undefined
@@ -104,6 +128,19 @@ export function getConfig(
     nodeEnv: parsed.NODE_ENV,
     logLevel: parsed.LOG_LEVEL,
     api: { host: parsed.API_HOST, port: parsed.API_PORT },
+    adminUi: {
+      host: parsed.ADMIN_UI_HOST,
+      port: parsed.ADMIN_UI_PORT,
+      username: parsed.ADMIN_UI_USERNAME,
+      passwordHash: parsed.ADMIN_UI_PASSWORD_HASH ?? '',
+      sessionSecret: parsed.ADMIN_UI_SESSION_SECRET ?? '',
+      actorId: parsed.ADMIN_UI_ACTOR_ID ?? '',
+      allowedOrigins: parsed.ADMIN_UI_ALLOWED_ORIGINS.split(',')
+        .map((value) => value.trim())
+        .filter(Boolean),
+      sessionHours: parsed.ADMIN_UI_SESSION_HOURS,
+      assetRoot: parsed.ADMIN_UI_ASSET_ROOT
+    },
     researcher: {
       host: parsed.RESEARCHER_HOST,
       port: parsed.RESEARCHER_PORT
@@ -146,7 +183,8 @@ export function getConfig(
     dangerousAutoPublishConfidence:
       parsed.DANGEROUS_AUTO_PUBLISH_CONFIDENCE,
     enableNativeMcpTasks: parsed.ENABLE_NATIVE_MCP_TASKS,
-    enablePlayground: parsed.ENABLE_PLAYGROUND
+    enablePlayground: parsed.ENABLE_PLAYGROUND,
+    enableRemoteAdminApi: parsed.ENABLE_REMOTE_ADMIN_API
   }
 
   if (environment === process.env) cachedConfig = config
@@ -163,7 +201,8 @@ export function requireRuntimeSecret(
     | 'CLIDECK_MCP_ADMIN_ACTOR_HMAC_SECRET'
     | 'RESEARCHER_TOKEN'
     | 'PLAYGROUND_TOKEN'
-    | 'VERIFICATION_SIGNING_KEY',
+    | 'VERIFICATION_SIGNING_KEY'
+    | 'ADMIN_UI_SESSION_SECRET',
   value: string,
 ): void {
   if (value.length < 32) {

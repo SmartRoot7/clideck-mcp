@@ -519,7 +519,8 @@ export async function getActiveSource(database: Database) {
       [source.rows[0].id],
     ),
     database.query(
-      `SELECT id, stage, event_type, message, metadata, created_at
+      `SELECT id, pipeline_task_id, source_candidate_id, stage,
+              event_type, message, metadata, created_at
        FROM pipeline_events
        WHERE source_candidate_id = $1
          AND event_type IN ('failed','retried','progress')
@@ -880,6 +881,7 @@ export async function actOnSource(
   sourceId: string,
   action: 'retry' | 'skip' | 'reject',
   actor: { id: string; role: AdminRole },
+  reason: string | null = null,
 ) {
   const result = await withTransaction(database, async (client) => {
     const source = await client.query<{ id: string; coverage_target_id: string }>(
@@ -998,8 +1000,11 @@ export async function actOnSource(
       `INSERT INTO admin_audit_events (
          actor_id, actor_role, action, target_type, target_id, metadata
        )
-       VALUES ($1, $2, $3, 'source_candidate', $4, '{}'::jsonb)`,
-      [actor.id, actor.role, `source.${action}`, sourceId],
+       VALUES (
+         $1, $2, $3, 'source_candidate', $4,
+         jsonb_build_object('reason', $5::text)
+       )`,
+      [actor.id, actor.role, `source.${action}`, sourceId, reason],
     )
     return { id: sourceId, action }
   })
@@ -1047,6 +1052,7 @@ export async function actOnExpertTask(
   publicId: string,
   action: 'requeue' | 'cancel',
   actor: { id: string; role: AdminRole },
+  reason: string | null = null,
 ) {
   const result = await withTransaction(database, async (client) => {
     const updated = await client.query(
@@ -1080,8 +1086,11 @@ export async function actOnExpertTask(
       `INSERT INTO admin_audit_events (
          actor_id, actor_role, action, target_type, target_id, metadata
        )
-       VALUES ($1, $2, $3, 'expert_task', $4, '{}'::jsonb)`,
-      [actor.id, actor.role, `expert_task.${action}`, publicId],
+       VALUES (
+         $1, $2, $3, 'expert_task', $4,
+         jsonb_build_object('reason', $5::text)
+       )`,
+      [actor.id, actor.role, `expert_task.${action}`, publicId, reason],
     )
     return updated.rows[0]
   })

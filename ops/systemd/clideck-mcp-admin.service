@@ -1,0 +1,37 @@
+[Unit]
+Description=CliDeck MCP local LAN admin
+After=network-online.target postgresql.service
+Wants=network-online.target
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=clideck_mcp_admin
+Group=clideck_mcp
+WorkingDirectory=/opt/clideck-mcp/current
+EnvironmentFile=/etc/clideck-mcp/api.env
+EnvironmentFile=/etc/clideck-mcp/admin-ui.env
+ExecStart=/usr/local/bin/node /opt/clideck-mcp/current/dist/entrypoints/admin.js
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=20
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+SystemCallArchitectures=native
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
