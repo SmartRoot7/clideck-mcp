@@ -128,20 +128,15 @@ export function materializeCandidateVerificationArtifact(
   const artifact = candidateVerificationAgentArtifactSchema.parse(
     unparsedArtifact,
   )
-  if (artifact.decisions.length !== candidateIds.length) {
-    throw new Error(
-      'Verification artifact must contain one decision per leased candidate.',
-    )
-  }
   const indexes = new Set(
     artifact.decisions.map((decision) => decision.candidate_index),
   )
   if (
-    indexes.size !== candidateIds.length ||
+    indexes.size !== artifact.decisions.length ||
     [...indexes].some((index) => index >= candidateIds.length)
   ) {
     throw new Error(
-      'Verification artifact candidate indexes must match the complete lease.',
+      'Verification artifact candidate indexes must be unique and leased.',
     )
   }
   return candidateVerificationArtifactSchema.parse({
