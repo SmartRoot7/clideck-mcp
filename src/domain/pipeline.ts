@@ -301,7 +301,7 @@ const mechanicalTaskTypes: PipelineTaskRow['task_type'][] = [
   'source_publication'
 ]
 const maxFragmentAnalysisBatchBytes = 30_000
-const maxFragmentAnalysisBatchSize = 1
+const maxFragmentAnalysisBatchSize = 8
 
 export function boundFragmentAnalysisBatch<
   T extends { content: string }
