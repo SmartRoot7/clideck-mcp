@@ -38,6 +38,28 @@ root-owned environment files outside the repository.
 Production uses separate API, admin, worker, researcher, and quarantine DB roles.
 The site and backend share their playground token only through secret stores.
 
+## CliDeck site admin
+
+The website reaches the admin API through explicit server-side BFF routes. Every
+admin request requires both `ADMIN_TOKEN` and a short-lived signed actor envelope
+using `CLIDECK_MCP_ADMIN_ACTOR_HMAC_SECRET`. The actor ID and role are included in
+the HMAC input; mutation audit columns store the verified actor ID.
+
+The backend accepts signatures within 120 seconds of its clock and rejects nonce
+replay in the running API process. Keep the website and backend clocks
+synchronized. Put Cloudflare Access in front of `/admin/*`; never make the admin
+bearer token or HMAC secret available to browser code.
+
+Enable the website feature flag only after testing all of these through the
+website BFF:
+
+1. `admin` can read overview, tasks, conflicts, releases, and approvals.
+2. `admin` cannot read provenance or perform mutations.
+3. `super_admin` can read provenance.
+4. A confirmed release switch returns the complete active release.
+5. A confirmed approval decision returns the complete updated approval.
+6. Reusing a signed request nonce fails.
+
 ## Backup
 
 Run daily `pg_dump --format=custom`, encrypt before offsite transfer, retain 14

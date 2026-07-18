@@ -13,8 +13,12 @@ export function createLogger(config: AppConfig) {
       paths: [
         'req.headers.authorization',
         'req.headers.cookie',
+        'req.headers.x-clideck-admin-signature',
+        'req.headers.cf-access-client-secret',
         'authorization',
         'cookie',
+        'x-clideck-admin-signature',
+        'cf-access-client-secret',
         'token',
         '*.token',
         'accessToken',

@@ -44,6 +44,10 @@ import type { Metrics } from '../metrics.js'
 import { createPublicMcpServer } from '../mcp/public-server.js'
 import { PostgresTaskStore } from '../mcp/postgres-task-store.js'
 import {
+  requireSignedAdminActor,
+  type AdminActor
+} from './admin-auth.js'
+import {
   consumeDailyRateLimit,
   consumeRateLimit,
   getClientAddress,
@@ -63,6 +67,7 @@ type ApiDependencies = {
 type ApiBindings = {
   Variables: {
     requestId: string
+    adminActor: AdminActor
   }
 }
 
@@ -524,6 +529,10 @@ export function createApiApp(dependencies: ApiDependencies) {
   })
 
   app.use('/admin/*', requireStaticBearer(config.adminToken))
+  app.use(
+    '/admin/*',
+    requireSignedAdminActor(config.adminActorHmacSecret),
+  )
   app.use('/admin/*', async (context, next) => {
     const rate = await consumeRateLimit(
       database,
@@ -565,7 +574,7 @@ export function createApiApp(dependencies: ApiDependencies) {
        ORDER BY created_at DESC
        LIMIT 100`,
     )
-    return context.json({ tasks: result.rows })
+    return context.json(result.rows)
   })
 
   app.get('/admin/v1/conflicts', async (context) => {
@@ -576,7 +585,7 @@ export function createApiApp(dependencies: ApiDependencies) {
        ORDER BY created_at DESC
        LIMIT 100`,
     )
-    return context.json({ conflicts: result.rows })
+    return context.json(result.rows)
   })
 
   app.get('/admin/v1/releases', async (context) => {
@@ -592,65 +601,90 @@ export function createApiApp(dependencies: ApiDependencies) {
        ORDER BY r.sequence DESC
        LIMIT 100`,
     )
-    return context.json({ releases: result.rows })
+    return context.json(result.rows)
   })
 
   app.post('/admin/v1/releases/:releaseId/activate', async (context) => {
+    const actor = context.get('adminActor')
+    if (actor.role !== 'super_admin') {
+      return context.json({ error: 'forbidden' }, 403)
+    }
     const releaseId = context.req.param('releaseId')
     if (!/^[0-9a-f-]{36}$/.test(releaseId)) {
       return context.json({ error: 'invalid_release_id' }, 400)
     }
     const result = await adminDatabase.query(
-      `INSERT INTO active_release (singleton, release_id, switched_by)
-       SELECT true, id, 'super_admin'
-       FROM releases
-       WHERE id = $1
-       ON CONFLICT (singleton)
-       DO UPDATE SET
-         release_id = excluded.release_id,
-         switched_at = now(),
-         switched_by = excluded.switched_by
-       RETURNING release_id, switched_at`,
-      [releaseId],
+      `WITH switched AS (
+         INSERT INTO active_release (singleton, release_id, switched_by)
+         SELECT true, id, $2
+         FROM releases
+         WHERE id = $1
+         ON CONFLICT (singleton)
+         DO UPDATE SET
+           release_id = excluded.release_id,
+           switched_at = now(),
+           switched_by = excluded.switched_by
+         RETURNING release_id
+       )
+       SELECT
+         r.id, r.sequence, r.status, r.reason, r.created_by, r.created_at,
+         true AS active,
+         count(ri.revision_id)::int AS revision_count
+       FROM switched s
+       JOIN releases r ON r.id = s.release_id
+       LEFT JOIN release_items ri ON ri.release_id = r.id
+       GROUP BY r.id`,
+      [releaseId, actor.id],
     )
     if (!result.rows[0]) return context.json({ error: 'not_found' }, 404)
     return context.json(result.rows[0])
   })
 
   app.get('/admin/v1/revisions/:revisionId/provenance', async (context) => {
+    const actor = context.get('adminActor')
+    if (actor.role !== 'super_admin') {
+      return context.json({ error: 'forbidden' }, 403)
+    }
     const revisionId = context.req.param('revisionId')
     if (!/^[0-9a-f-]{36}$/.test(revisionId)) {
       return context.json({ error: 'invalid_revision_id' }, 400)
     }
     const result = await adminDatabase.query(
       `SELECT
-         sd.id,
-         sd.canonical_url,
-         sd.document_type,
-         sd.title,
-         v.display_name AS vendor,
-         sd.document_version,
-         sd.document_date,
-         sd.verified_at,
-         sd.content_hash,
-         sd.evidence_fragment,
-         rs.evidence_role,
-         rs.confidence_reason
-       FROM revision_sources rs
-       JOIN source_documents sd ON sd.id = rs.source_document_id
-       JOIN vendors v ON v.id = sd.vendor_id
-       WHERE rs.revision_id = $1
-       ORDER BY rs.evidence_role, sd.verified_at DESC`,
+         kr.id::text AS revision_id,
+         CASE
+           WHEN count(sd.id) = 0 THEN NULL
+           ELSE string_agg(
+             concat_ws(
+               ' · ',
+               v.display_name,
+               sd.title,
+               sd.document_version,
+               sd.canonical_url
+             ),
+             E'\n'
+             ORDER BY rs.evidence_role, sd.verified_at DESC
+           )
+         END AS source,
+         kr.created_at,
+         kr.status
+       FROM knowledge_revisions kr
+       LEFT JOIN revision_sources rs ON rs.revision_id = kr.id
+       LEFT JOIN source_documents sd ON sd.id = rs.source_document_id
+       LEFT JOIN vendors v ON v.id = sd.vendor_id
+       WHERE kr.id = $1
+       GROUP BY kr.id`,
       [revisionId],
     )
-    return context.json({ provenance: result.rows })
+    if (!result.rows[0]) return context.json({ error: 'not_found' }, 404)
+    return context.json(result.rows[0])
   })
 
   app.get('/admin/v1/code-change-approvals', async (context) => {
     const result = await adminDatabase.query(
       `SELECT
          cca.id,
-         et.public_id AS task_id,
+         coalesce(et.public_id, cca.task_id::text, 'unlinked') AS task_id,
          cca.repository,
          cca.summary,
          cca.risk_assessment,
@@ -665,10 +699,14 @@ export function createApiApp(dependencies: ApiDependencies) {
        ORDER BY cca.created_at DESC
        LIMIT 100`,
     )
-    return context.json({ approvals: result.rows })
+    return context.json(result.rows)
   })
 
   app.post('/admin/v1/code-change-approvals/:approvalId/decision', async (context) => {
+    const actor = context.get('adminActor')
+    if (actor.role !== 'super_admin') {
+      return context.json({ error: 'forbidden' }, 403)
+    }
     const approvalId = context.req.param('approvalId')
     if (!/^[0-9a-f-]{36}$/.test(approvalId)) {
       return context.json({ error: 'invalid_approval_id' }, 400)
@@ -687,15 +725,31 @@ export function createApiApp(dependencies: ApiDependencies) {
       return context.json({ error: 'invalid_decision' }, 400)
     }
     const result = await adminDatabase.query(
-      `UPDATE code_change_approvals
-          SET status = $2,
-              decision_reason = $3,
-              decided_by = 'super_admin',
-              decided_at = now()
-        WHERE id = $1
-          AND status = 'approval_required'
-        RETURNING id, status, decided_at`,
-      [approvalId, String(body.decision), body.reason],
+      `WITH updated AS (
+         UPDATE code_change_approvals
+            SET status = $2,
+                decision_reason = $3,
+                decided_by = $4,
+                decided_at = now()
+          WHERE id = $1
+            AND status = 'approval_required'
+          RETURNING *
+       )
+       SELECT
+         updated.id,
+         coalesce(et.public_id, updated.task_id::text, 'unlinked') AS task_id,
+         updated.repository,
+         updated.summary,
+         updated.risk_assessment,
+         updated.status,
+         updated.requested_by,
+         updated.decided_by,
+         updated.decision_reason,
+         updated.created_at,
+         updated.decided_at
+       FROM updated
+       LEFT JOIN expert_tasks et ON et.id = updated.task_id`,
+      [approvalId, String(body.decision), body.reason, actor.id],
     )
     if (!result.rows[0]) {
       return context.json({ error: 'not_found_or_already_decided' }, 404)

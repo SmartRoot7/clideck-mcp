@@ -17,6 +17,8 @@ export function createTestConfig(
       integrationDatabaseUrl ??
       'postgresql://127.0.0.1:5432/clideck_mcp_test',
     ADMIN_TOKEN: 'test-admin-token-that-is-at-least-32-characters',
+    CLIDECK_MCP_ADMIN_ACTOR_HMAC_SECRET:
+      'test-admin-actor-hmac-secret-at-least-32-characters',
     RESEARCHER_TOKEN: 'test-researcher-token-at-least-32-characters',
     QUARANTINE_DATABASE_URL:
       integrationDatabaseUrl ??

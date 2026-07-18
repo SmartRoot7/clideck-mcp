@@ -21,6 +21,7 @@ const envSchema = z.object({
   DATABASE_MAX_CONNECTIONS: z.coerce.number().int().min(2).max(50).default(12),
   DATABASE_SSL_MODE: z.enum(['disable', 'verify-full']).default('disable'),
   ADMIN_TOKEN: z.string().min(32).optional(),
+  CLIDECK_MCP_ADMIN_ACTOR_HMAC_SECRET: z.string().min(32).optional(),
   RESEARCHER_TOKEN: z.string().min(32).optional(),
   PLAYGROUND_TOKEN: z.string().min(32).optional(),
   VERIFICATION_SIGNING_KEY: z.string().min(32).optional(),
@@ -54,6 +55,7 @@ export type AppConfig = {
   databaseMaxConnections: number
   databaseSslMode: 'disable' | 'verify-full'
   adminToken: string
+  adminActorHmacSecret: string
   researcherToken: string
   playgroundToken: string
   verificationSigningKey: string
@@ -100,6 +102,8 @@ export function getConfig(
     databaseMaxConnections: parsed.DATABASE_MAX_CONNECTIONS,
     databaseSslMode: parsed.DATABASE_SSL_MODE,
     adminToken: parsed.ADMIN_TOKEN ?? '',
+    adminActorHmacSecret:
+      parsed.CLIDECK_MCP_ADMIN_ACTOR_HMAC_SECRET ?? '',
     researcherToken: parsed.RESEARCHER_TOKEN ?? '',
     playgroundToken: parsed.PLAYGROUND_TOKEN ?? '',
     verificationSigningKey:
@@ -135,6 +139,7 @@ export function resetConfigForTests(): void {
 export function requireRuntimeSecret(
   name:
     | 'ADMIN_TOKEN'
+    | 'CLIDECK_MCP_ADMIN_ACTOR_HMAC_SECRET'
     | 'RESEARCHER_TOKEN'
     | 'PLAYGROUND_TOKEN'
     | 'VERIFICATION_SIGNING_KEY',

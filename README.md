@@ -148,4 +148,6 @@ API, or private dataset.
 
 This repository and `clideck-mcp.lan` are the only approved mutation targets.
 Integration into the existing CliDeck admin application requires separate
-approval.
+approval. The approved site integration uses a hidden `/admin/mcp` page and
+explicit BFF routes. Backend admin requests require a static bearer token plus a
+signed, short-lived CliDeck administrator identity; see `docs/OPERATIONS.md`.

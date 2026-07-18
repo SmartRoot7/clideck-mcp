@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import pg from 'pg'
 
 import { createPublicTaskId, sha256, sha256Label } from '../src/crypto.js'
+import { createAdminActorSignature } from '../src/http/admin-auth.js'
 import {
   resolveNetworkContext
 } from '../src/domain/context.js'
@@ -29,6 +30,42 @@ import { createMetrics } from '../src/metrics.js'
 
 const { Pool } = pg
 const describeIntegration = integrationDatabaseUrl ? describe : describe.skip
+const siteAdminActorId = '00000000-0000-4000-8000-000000000001'
+
+function signedAdminHeaders(
+  config: ReturnType<typeof createTestConfig>,
+  input: {
+    method: 'GET' | 'POST'
+    path: string
+    body?: string
+    role?: 'admin' | 'super_admin'
+  }
+): Record<string, string> {
+  const timestamp = String(Math.floor(Date.now() / 1000))
+  const nonce = randomUUID().replaceAll('-', '')
+  const body = input.body ?? ''
+  const role = input.role ?? 'super_admin'
+  return {
+    authorization: `Bearer ${config.adminToken}`,
+    ...(input.method === 'POST'
+      ? { 'content-type': 'application/json' }
+      : {}),
+    'x-clideck-admin-actor': siteAdminActorId,
+    'x-clideck-admin-role': role,
+    'x-clideck-admin-timestamp': timestamp,
+    'x-clideck-admin-nonce': nonce,
+    'x-clideck-admin-signature': createAdminActorSignature({
+      secret: config.adminActorHmacSecret,
+      timestamp,
+      nonce,
+      method: input.method,
+      pathWithQuery: input.path,
+      body,
+      actorId: siteAdminActorId,
+      role
+    })
+  }
+}
 
 describeIntegration('PostgreSQL integration', () => {
   const config = createTestConfig()
@@ -150,6 +187,114 @@ describeIntegration('PostgreSQL integration', () => {
       },
     )
     expect(oversized.status).toBe(413)
+  })
+
+  it('serves the signed website admin contract from PostgreSQL', async () => {
+    const app = createApiApp({
+      config,
+      database,
+      adminDatabase: database,
+      quarantineDatabase: database,
+      logger,
+      metrics: createMetrics()
+    })
+
+    const overviewPath = '/admin/v1/overview'
+    const overview = await app.request(overviewPath, {
+      headers: signedAdminHeaders(config, {
+        method: 'GET',
+        path: overviewPath,
+        role: 'admin'
+      })
+    })
+    expect(overview.status).toBe(200)
+    const overviewPayload = await overview.json() as {
+      published_revisions: number
+    }
+    expect(overviewPayload).toMatchObject({
+      queued_tasks: expect.any(Number),
+      open_conflicts: expect.any(Number),
+      feedback_24h: expect.any(Number)
+    })
+    expect(overviewPayload.published_revisions).toBeGreaterThanOrEqual(50)
+
+    for (const path of [
+      '/admin/v1/tasks',
+      '/admin/v1/conflicts',
+      '/admin/v1/releases',
+      '/admin/v1/code-change-approvals'
+    ]) {
+      const response = await app.request(path, {
+        headers: signedAdminHeaders(config, {
+          method: 'GET',
+          path,
+          role: 'admin'
+        })
+      })
+      expect(response.status).toBe(200)
+      expect(Array.isArray(await response.json())).toBe(true)
+    }
+
+    const revisionResult = await database.query<{ id: string }>(
+      `SELECT id::text
+       FROM knowledge_revisions
+       ORDER BY created_at
+       LIMIT 1`
+    )
+    const revisionId = revisionResult.rows[0]!.id
+    const provenancePath =
+      `/admin/v1/revisions/${revisionId}/provenance`
+    const forbidden = await app.request(provenancePath, {
+      headers: signedAdminHeaders(config, {
+        method: 'GET',
+        path: provenancePath,
+        role: 'admin'
+      })
+    })
+    expect(forbidden.status).toBe(403)
+
+    const provenance = await app.request(provenancePath, {
+      headers: signedAdminHeaders(config, {
+        method: 'GET',
+        path: provenancePath
+      })
+    })
+    expect(provenance.status).toBe(200)
+    expect(await provenance.json()).toMatchObject({
+      revision_id: revisionId,
+      status: 'validated'
+    })
+
+    const releaseResult = await database.query<{ id: string }>(
+      `SELECT id::text
+       FROM releases
+       ORDER BY sequence DESC
+       LIMIT 1`
+    )
+    const releaseId = releaseResult.rows[0]!.id
+    const activationPath =
+      `/admin/v1/releases/${releaseId}/activate`
+    const activationBody = '{}'
+    const activation = await app.request(activationPath, {
+      method: 'POST',
+      headers: signedAdminHeaders(config, {
+        method: 'POST',
+        path: activationPath,
+        body: activationBody
+      }),
+      body: activationBody
+    })
+    expect(activation.status).toBe(200)
+    const activationPayload = await activation.json() as {
+      id: string
+      active: boolean
+      revision_count: number
+    }
+    expect(activationPayload).toMatchObject({
+      id: releaseId,
+      active: true
+    })
+    expect(activationPayload.revision_count).toBeGreaterThanOrEqual(50)
   })
 
   it('enforces anonymous task access tokens and tenant isolation', async () => {

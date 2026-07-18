@@ -9,6 +9,10 @@ import { createMetrics } from '../metrics.js'
 const config = getConfig()
 requireRuntimeSecret('ADMIN_TOKEN', config.adminToken)
 requireRuntimeSecret(
+  'CLIDECK_MCP_ADMIN_ACTOR_HMAC_SECRET',
+  config.adminActorHmacSecret,
+)
+requireRuntimeSecret(
   'VERIFICATION_SIGNING_KEY',
   config.verificationSigningKey,
 )
