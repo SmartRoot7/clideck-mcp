@@ -153,6 +153,16 @@ describe('deterministic source processing', () => {
     ).toBeLessThan(30_000)
   })
 
+  it('keeps substantive sections in separate AI runs', () => {
+    const selected = boundFragmentAnalysisBatch([
+      { id: 'route-map', content: 'a'.repeat(13_112) },
+      { id: 'prefix-list', content: 'b'.repeat(9_280) },
+      { id: 'policy-routing', content: 'c'.repeat(2_782) }
+    ])
+
+    expect(selected.map((fragment) => fragment.id)).toEqual(['route-map'])
+  })
+
   it('emits OpenAI-strict object schemas for every AI artifact', () => {
     const unsupportedKeywords = new Set([
       '$schema',

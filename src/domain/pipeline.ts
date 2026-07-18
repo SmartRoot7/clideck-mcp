@@ -302,6 +302,7 @@ const mechanicalTaskTypes: PipelineTaskRow['task_type'][] = [
 ]
 const maxFragmentAnalysisBatchBytes = 30_000
 const maxFragmentAnalysisBatchSize = 8
+const maxCombinedFragmentBytes = 4_096
 
 export function boundFragmentAnalysisBatch<
   T extends { content: string }
@@ -314,6 +315,9 @@ export function boundFragmentAnalysisBatch<
   for (const fragment of fragments) {
     if (selected.length >= maxFragmentAnalysisBatchSize) break
     const fragmentBytes = Buffer.byteLength(fragment.content, 'utf8')
+    if (selected.length > 0 && fragmentBytes > maxCombinedFragmentBytes) {
+      break
+    }
     if (
       selected.length > 0 &&
       selectedBytes + fragmentBytes > maxBytes
@@ -322,6 +326,7 @@ export function boundFragmentAnalysisBatch<
     }
     selected.push(fragment)
     selectedBytes += fragmentBytes
+    if (fragmentBytes > maxCombinedFragmentBytes) break
   }
   return selected
 }
