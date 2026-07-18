@@ -177,7 +177,8 @@ GRANT SELECT ON
   platforms,
   operating_systems,
   knowledge_items,
-  knowledge_conflicts
+  knowledge_conflicts,
+  task_artifacts
 TO clideck_mcp_researcher;
 GRANT INSERT ON
   source_candidates,

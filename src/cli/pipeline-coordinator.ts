@@ -386,6 +386,7 @@ async function main(): Promise<void> {
     let runOutcome:
       | Awaited<ReturnType<typeof runCodex>>
       | undefined
+    let artifactSubmitted = false
     try {
       await Promise.all([
         unlink(agentOutputPath).catch(() => undefined),
@@ -395,6 +396,7 @@ async function main(): Promise<void> {
       runOutcome = run
       if (run.exitCode === 0 && !run.timedOut) {
         await submitAgentArtifact(task.task_type)
+        artifactSubmitted = true
       }
       const status = await runClient('status')
       const artifactRecorded = status['artifact_recorded'] === true
@@ -429,14 +431,16 @@ async function main(): Promise<void> {
       consecutiveLaunchFailures = 0
       if (environment.CLIDECK_PIPELINE_ONCE) break
     } catch {
-      consecutiveLaunchFailures += 1
-      await runClient(
-        'fail',
-        'AGENT_LAUNCH_FAILED',
-        'The ephemeral Codex process could not start or report its result.',
-      ).catch(() => undefined)
+      if (!artifactSubmitted) {
+        consecutiveLaunchFailures += 1
+        await runClient(
+          'fail',
+          'AGENT_LAUNCH_FAILED',
+          'The ephemeral Codex process could not start or report its result.',
+        ).catch(() => undefined)
+      }
       await finishRun(
-        'failed',
+        artifactSubmitted ? 'completed' : 'failed',
         runOutcome?.durationMs ?? 0,
         runOutcome?.usage ?? {
             input_tokens: 0,
@@ -444,13 +448,15 @@ async function main(): Promise<void> {
             output_tokens: 0,
             reasoning_output_tokens: 0
           },
-        'AGENT_LAUNCH_FAILED',
+        artifactSubmitted ? undefined : 'AGENT_LAUNCH_FAILED',
       ).catch(() => runClient('cleanup').then(() => undefined))
       await Promise.all([
         unlink(agentOutputPath).catch(() => undefined),
         unlink(submissionPath).catch(() => undefined)
       ])
-      if (consecutiveLaunchFailures >= 3) {
+      if (artifactSubmitted) {
+        consecutiveLaunchFailures = 0
+      } else if (consecutiveLaunchFailures >= 3) {
         await runClient(
           'system-failure',
           'COORDINATOR_REPEATED_FAILURE',
