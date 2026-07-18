@@ -7,6 +7,7 @@ import {
   verifyLabReport
 } from '../src/domain/lab.js'
 import {
+  bindCandidateAnalysisProvenanceHashes,
   boundFragmentAnalysisBatch,
   candidateAnalysisArtifactSchema,
   candidateVerificationAgentArtifactSchema,
@@ -326,6 +327,35 @@ describe('deterministic source processing', () => {
 
     expect(() => candidateAnalysisArtifactSchema.parse(normalized))
       .toThrow('stable_key')
+  })
+
+  it('binds provenance hashes to trusted leased fragments', () => {
+    const fragmentId = '00000000-0000-4000-8000-000000000001'
+    const trustedHash = `sha256:${'d'.repeat(64)}`
+    const artifact = bindCandidateAnalysisProvenanceHashes({
+      candidates: [{
+        fragment_id: fragmentId,
+        candidate: {
+          provenance: [{
+            content_hash: 'sha256:model-transcription-error'
+          }]
+        }
+      }],
+      rejected_fragments: []
+    }, [{
+      id: fragmentId,
+      content_hash: trustedHash
+    }]) as {
+      candidates: Array<{
+        candidate: {
+          provenance: Array<{ content_hash: string }>
+        }
+      }>
+    }
+
+    expect(
+      artifact.candidates[0]!.candidate.provenance[0]!.content_hash,
+    ).toBe(trustedHash)
   })
 
   it('models optional structured-output properties as nullable required fields', () => {
