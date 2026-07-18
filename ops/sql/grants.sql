@@ -18,9 +18,12 @@ GRANT SELECT ON
   public_active_release_summary,
   public_lab_validation_summary,
   public_latest_eval_result,
+  knowledge_items,
   knowledge_revisions,
+  knowledge_public_trust,
   knowledge_conflicts,
-  active_release
+  active_release,
+  release_items
 TO clideck_mcp_api;
 GRANT SELECT, UPDATE ON principals TO clideck_mcp_api;
 GRANT SELECT, INSERT, UPDATE ON expert_tasks TO clideck_mcp_api;
