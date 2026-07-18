@@ -1,3 +1,5 @@
+import { z } from 'zod'
+
 import {
   reviewNetworkChange,
   verifyNetworkChange
@@ -8,7 +10,11 @@ import {
 } from '../src/domain/lab.js'
 import {
   boundFragmentAnalysisBatch,
-  discoverySubmissionSchema
+  candidateAnalysisArtifactSchema,
+  candidateVerificationArtifactSchema,
+  discoveryArtifactSchema,
+  discoverySubmissionSchema,
+  expertResearchArtifactSchema
 } from '../src/domain/pipeline.js'
 import { chunkSourceText } from '../src/domain/pipeline-worker.js'
 import { enforceKnowledgeRisk } from '../src/domain/risk.js'
@@ -110,14 +116,30 @@ describe('deterministic source processing', () => {
       { id: 'three', content: 'c'.repeat(30_000) }
     ]
     const selected = boundFragmentAnalysisBatch(fragments)
-    expect(selected.map((fragment) => fragment.id)).toEqual(['one', 'two'])
+    expect(selected.map((fragment) => fragment.id)).toEqual(['one'])
     expect(
       selected.reduce(
         (bytes, fragment) =>
           bytes + Buffer.byteLength(fragment.content, 'utf8'),
         0,
       ),
-    ).toBe(60_000)
+    ).toBe(30_000)
+  })
+
+  it('emits Codex structured-output schemas for every AI artifact', () => {
+    for (const schema of [
+      discoveryArtifactSchema,
+      candidateAnalysisArtifactSchema,
+      candidateVerificationArtifactSchema,
+      expertResearchArtifactSchema
+    ]) {
+      expect(() =>
+        z.toJSONSchema(schema, {
+          target: 'draft-7',
+          unrepresentable: 'any'
+        }),
+      ).not.toThrow()
+    }
   })
 
   it('requires every discovery run to produce a source or rejection artifact', () => {

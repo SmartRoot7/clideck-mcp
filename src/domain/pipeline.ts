@@ -18,7 +18,7 @@ const pipelineLeaseSchema = z.object({
   lease_token: z.string().min(32).max(128)
 })
 
-const discoverySourceSchema = z.object({
+export const discoverySourceSchema = z.object({
   canonical_url: z.url().startsWith('https://'),
   document_type: z.string().trim().min(1).max(80),
   title: z.string().trim().min(1).max(500),
@@ -26,20 +26,32 @@ const discoverySourceSchema = z.object({
   document_date: z.iso.date().optional()
 })
 
-export const discoverySubmissionSchema = pipelineLeaseSchema.extend({
+const discoveryArtifactShape = {
   sources: z.array(discoverySourceSchema).max(10),
   rejection_reason: z.string().trim().min(12).max(1_000).optional()
-}).refine(
+}
+const hasDiscoveryResult = (
+  value: z.infer<z.ZodObject<typeof discoveryArtifactShape>>,
+) => value.sources.length > 0 || Boolean(value.rejection_reason)
+
+export const discoveryArtifactSchema = z.object(discoveryArtifactShape).refine(
+  hasDiscoveryResult,
+  'A discovery run must submit a source or an explicit rejection reason.',
+)
+
+export const discoverySubmissionSchema = pipelineLeaseSchema.extend(
+  discoveryArtifactShape,
+).refine(
   (value) => value.sources.length > 0 || Boolean(value.rejection_reason),
   'A discovery run must submit a source or an explicit rejection reason.',
 )
 
-const pipelineCandidatePayloadSchema = candidateRevisionSchema.omit({
+export const pipelineCandidatePayloadSchema = candidateRevisionSchema.omit({
   task_id: true,
   lease_token: true
 })
 
-export const candidateAnalysisSubmissionSchema = pipelineLeaseSchema.extend({
+const candidateAnalysisArtifactShape = {
   candidates: z.array(z.object({
     fragment_id: z.string().uuid(),
     candidate: pipelineCandidatePayloadSchema
@@ -48,7 +60,11 @@ export const candidateAnalysisSubmissionSchema = pipelineLeaseSchema.extend({
     fragment_id: z.string().uuid(),
     reason: z.string().trim().min(8).max(500)
   })).max(50).default([])
-}).superRefine((value, context) => {
+}
+const requireHandledAnalysisArtifact = (
+  value: z.infer<z.ZodObject<typeof candidateAnalysisArtifactShape>>,
+  context: z.RefinementCtx,
+) => {
   const handled = new Set([
     ...value.candidates.map((entry) => entry.fragment_id),
     ...value.rejected_fragments.map((entry) => entry.fragment_id)
@@ -60,25 +76,47 @@ export const candidateAnalysisSubmissionSchema = pipelineLeaseSchema.extend({
         'Every analysis run must create a candidate or explicitly reject a fragment.'
     })
   }
-})
+}
+
+export const candidateAnalysisArtifactSchema = z.object(
+  candidateAnalysisArtifactShape,
+).superRefine(requireHandledAnalysisArtifact)
+
+export const candidateAnalysisSubmissionSchema = pipelineLeaseSchema.extend(
+  candidateAnalysisArtifactShape,
+).superRefine(requireHandledAnalysisArtifact)
+
+const candidateVerificationArtifactShape = {
+  decisions: z.array(z.object({
+    candidate_id: z.string().uuid(),
+    decision: z.enum([
+      'verified',
+      'rejected',
+      'conflict',
+      'manual_review'
+    ]),
+    confidence: z.number().min(0).max(1),
+    quality_score: z.number().min(0).max(1),
+    findings: z.array(
+      z.string().trim().min(1).max(1_000),
+    ).max(30).default([])
+  })).min(1).max(100)
+}
+
+export const candidateVerificationArtifactSchema = z.object(
+  candidateVerificationArtifactShape,
+)
 
 export const candidateVerificationSubmissionSchema =
-  pipelineLeaseSchema.extend({
-    decisions: z.array(z.object({
-      candidate_id: z.string().uuid(),
-      decision: z.enum([
-        'verified',
-        'rejected',
-        'conflict',
-        'manual_review'
-      ]),
-      confidence: z.number().min(0).max(1),
-      quality_score: z.number().min(0).max(1),
-      findings: z.array(
-        z.string().trim().min(1).max(1_000),
-      ).max(30).default([])
-    })).min(1).max(100)
+  pipelineLeaseSchema.extend(candidateVerificationArtifactShape)
+
+export const expertResearchArtifactSchema = z.union([
+  pipelineCandidatePayloadSchema,
+  z.object({
+    rejected: z.literal(true),
+    reason: z.string().trim().min(12).max(1_000)
   })
+])
 
 export const pipelineFailureSchema = pipelineLeaseSchema.extend({
   failure_code: z.string().regex(/^[A-Z][A-Z0-9_]{2,63}$/),
@@ -142,7 +180,8 @@ const mechanicalTaskTypes: PipelineTaskRow['task_type'][] = [
   'source_chunking',
   'source_publication'
 ]
-const maxFragmentAnalysisBatchBytes = 60_000
+const maxFragmentAnalysisBatchBytes = 30_000
+const maxFragmentAnalysisBatchSize = 1
 
 export function boundFragmentAnalysisBatch<
   T extends { content: string }
@@ -153,6 +192,7 @@ export function boundFragmentAnalysisBatch<
   const selected: T[] = []
   let selectedBytes = 0
   for (const fragment of fragments) {
+    if (selected.length >= maxFragmentAnalysisBatchSize) break
     const fragmentBytes = Buffer.byteLength(fragment.content, 'utf8')
     if (
       selected.length > 0 &&
