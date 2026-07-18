@@ -80,11 +80,11 @@ async function replaceLaunchAgent(
 ): Promise<void> {
   await execFileAsync('launchctl', ['bootout', domain, path])
     .catch(() => undefined)
-  await execFileAsync('launchctl', ['bootstrap', domain, path])
   await execFileAsync('launchctl', [
     'enable',
     `${domain}/${serviceLabel}`
   ])
+  await execFileAsync('launchctl', ['bootstrap', domain, path])
   await execFileAsync('launchctl', [
     'kickstart',
     '-k',
