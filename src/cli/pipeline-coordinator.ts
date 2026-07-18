@@ -12,6 +12,7 @@ import { z } from 'zod'
 
 const environmentSchema = z.object({
   CLIDECK_PIPELINE_MODEL: z.string().min(1).default('gpt-5.6-luna'),
+  CLIDECK_PIPELINE_CODEX_BINARY: z.string().min(1).default('codex'),
   CLIDECK_PIPELINE_REASONING: z.enum([
     'minimal',
     'low',
@@ -229,7 +230,7 @@ async function runCodex(
   }
   return new Promise((resolvePromise, rejectPromise) => {
     const child = spawn(
-      'codex',
+      environment.CLIDECK_PIPELINE_CODEX_BINARY,
       [
         'exec',
         '--ephemeral',
@@ -362,12 +363,22 @@ async function main(): Promise<void> {
   await readFile(secretEnvPath, 'utf8')
   await mkdir(tempDirectory, { recursive: true, mode: 0o750 })
   let consecutiveLaunchFailures = 0
+  let consecutiveClaimFailures = 0
 
   while (!abortController.signal.aborted) {
     let claim: Record<string, unknown>
     try {
       claim = await runClient('claim')
-    } catch {
+      consecutiveClaimFailures = 0
+    } catch (error) {
+      consecutiveClaimFailures += 1
+      const message = error instanceof Error
+        ? error.message
+        : 'Unknown pipeline claim failure'
+      process.stderr.write(
+        `${new Date().toISOString()} pipeline claim failed ` +
+        `(attempt ${consecutiveClaimFailures}): ${message}\n`,
+      )
       await delay(10_000, undefined, {
         signal: abortController.signal
       }).catch(() => undefined)
