@@ -427,6 +427,12 @@ async function queueSourceWork(
     id: string
     status: string
     coverage_target_id: string
+    vendor_slug: string
+    product_family: string | null
+    model: string | null
+    operating_system_slug: string
+    version_branch: string | null
+    document_role: string
     canonical_url: string
     document_type: string
     title: string
@@ -434,17 +440,24 @@ async function queueSourceWork(
     document_date: string | null
   }>(
     `SELECT
-       id,
-       status,
-       coverage_target_id,
-       canonical_url,
-       document_type,
-       title,
-       document_version,
-       document_date
-     FROM source_candidates
-     WHERE id = $1
-     FOR UPDATE`,
+       sc.id,
+       sc.status,
+       sc.coverage_target_id,
+       ct.vendor_slug,
+       ct.product_family,
+       ct.model,
+       ct.operating_system_slug,
+       ct.version_branch,
+       ct.document_role,
+       sc.canonical_url,
+       sc.document_type,
+       sc.title,
+       sc.document_version,
+       sc.document_date
+     FROM source_candidates sc
+     JOIN coverage_targets ct ON ct.id = sc.coverage_target_id
+     WHERE sc.id = $1
+     FOR UPDATE OF sc`,
     [sourceId],
   )
   const source = sourceResult.rows[0]
@@ -476,7 +489,15 @@ async function queueSourceWork(
     document_type: source.document_type,
     title: source.title,
     document_version: source.document_version,
-    document_date: source.document_date
+    document_date: source.document_date,
+    coverage_target: {
+      vendor_slug: source.vendor_slug,
+      product_family: source.product_family,
+      model: source.model,
+      operating_system_slug: source.operating_system_slug,
+      version_branch: source.version_branch,
+      document_role: source.document_role
+    }
   }
 
   if (['discovered', 'approved', 'acquiring'].includes(source.status)) {
