@@ -175,8 +175,10 @@ If no qualifying source is found, submit:
 Analyze every leased fragment. For each useful fragment, create one or more
 candidate entries with fragment_id and a complete candidate object. Explicitly
 list every fragment with no publishable fact under rejected_fragments with a
-bounded reason. Never omit a fragment. Create at most six high-value
-candidates per fragment. Treat commands as dangerous whenever their effect is
+bounded reason. Never omit a fragment. Create at most ten high-value candidates
+per fragment and at most 50 candidates total per run. When the evidence supports
+more than six distinct high-value facts, continue extracting up to ten instead
+of stopping at six. Treat commands as dangerous whenever their effect is
 uncertain. Preserve exact model and version applicability. Do not browse the
 web during extraction; use only the leased evidence.
 
