@@ -9,10 +9,12 @@ import {
 import {
   boundFragmentAnalysisBatch,
   candidateAnalysisArtifactSchema,
+  candidateVerificationAgentArtifactSchema,
   candidateVerificationArtifactSchema,
   discoveryArtifactSchema,
   discoverySubmissionSchema,
-  expertResearchStructuredArtifactSchema
+  expertResearchStructuredArtifactSchema,
+  materializeCandidateVerificationArtifact
 } from '../src/domain/pipeline.js'
 import { chunkSourceText } from '../src/domain/pipeline-worker.js'
 import { enforceKnowledgeRisk } from '../src/domain/risk.js'
@@ -163,6 +165,7 @@ describe('deterministic source processing', () => {
     for (const schema of [
       discoveryArtifactSchema,
       candidateAnalysisArtifactSchema,
+      candidateVerificationAgentArtifactSchema,
       candidateVerificationArtifactSchema,
       expertResearchStructuredArtifactSchema
     ]) {
@@ -170,6 +173,56 @@ describe('deterministic source processing', () => {
       expect(generated['type']).toBe('object')
       inspect(generated)
     }
+  })
+
+  it('maps compact verification indexes to the leased candidate IDs', () => {
+    const candidateIds = [
+      '00000000-0000-4000-8000-000000000001',
+      '00000000-0000-4000-8000-000000000002'
+    ]
+    const result = materializeCandidateVerificationArtifact({
+      decisions: [
+        {
+          candidate_index: 1,
+          decision: 'verified',
+          confidence: 0.96,
+          quality_score: 0.94,
+          findings: ['Evidence supports the complete claim.']
+        },
+        {
+          candidate_index: 0,
+          decision: 'manual_review',
+          confidence: 0.89,
+          quality_score: 0.9,
+          findings: ['Applicability needs review.']
+        }
+      ]
+    }, candidateIds)
+
+    expect(result.decisions.map((decision) => decision.candidate_id)).toEqual([
+      candidateIds[1],
+      candidateIds[0]
+    ])
+    expect(() =>
+      materializeCandidateVerificationArtifact({
+        decisions: [
+          {
+            candidate_index: 0,
+            decision: 'verified',
+            confidence: 0.96,
+            quality_score: 0.94,
+            findings: []
+          },
+          {
+            candidate_index: 0,
+            decision: 'verified',
+            confidence: 0.96,
+            quality_score: 0.94,
+            findings: []
+          }
+        ]
+      }, candidateIds),
+    ).toThrow('candidate indexes must match the complete lease')
   })
 
   it('models optional structured-output properties as nullable required fields', () => {

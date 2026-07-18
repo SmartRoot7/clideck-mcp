@@ -12,10 +12,11 @@ import { z } from 'zod'
 
 import {
   candidateAnalysisArtifactSchema,
-  candidateVerificationArtifactSchema,
+  candidateVerificationAgentArtifactSchema,
   discoveryArtifactSchema,
   expertResearchArtifactSchema,
-  expertResearchStructuredArtifactSchema
+  expertResearchStructuredArtifactSchema,
+  materializeCandidateVerificationArtifact
 } from '../domain/pipeline.js'
 import {
   omitNullObjectProperties,
@@ -233,7 +234,9 @@ dangerous item needs confidence at least 0.95; other items need at least 0.90.
 Do not browse unless one exact critical ambiguity cannot be resolved from the
 leased evidence, and use at most one focused search in that case.
 Submit one decision per candidate:
-{"decisions":[{"candidate_id":"uuid","decision":"verified|rejected|conflict|manual_review",
+Use zero-based candidate_index from the exact order of the leased candidates
+array. Never copy or return candidate UUIDs. Return every index exactly once:
+{"decisions":[{"candidate_index":0,"decision":"verified|rejected|conflict|manual_review",
 "confidence":0.0,"quality_score":0.0,"findings":["..."]}]}
 `,
     expert_research: `
@@ -452,17 +455,17 @@ function artifactSchemaForTask(
     case 'fragment_analysis':
       return candidateAnalysisArtifactSchema
     case 'candidate_verification':
-      return candidateVerificationArtifactSchema
+      return candidateVerificationAgentArtifactSchema
     case 'expert_research':
       return expertResearchStructuredArtifactSchema
   }
 }
 
 function validateAgentArtifact(
-  taskType: z.infer<typeof claimedTaskSchema>['task_type'],
+  task: z.infer<typeof claimedTaskSchema>,
   parsed: Record<string, unknown>,
 ): Record<string, unknown> {
-  switch (taskType) {
+  switch (task.task_type) {
     case 'source_discovery':
     case 'source_refresh':
       return discoveryArtifactSchema.parse(
@@ -473,8 +476,20 @@ function validateAgentArtifact(
         omitNullObjectProperties(parsed),
       )
     case 'candidate_verification':
-      return candidateVerificationArtifactSchema.parse(
+      return materializeCandidateVerificationArtifact(
         omitNullObjectProperties(parsed),
+        (
+          Array.isArray(task.payload['candidates'])
+            ? task.payload['candidates']
+            : []
+        ).flatMap((candidate) =>
+          candidate &&
+          typeof candidate === 'object' &&
+          'id' in candidate &&
+          typeof candidate.id === 'string'
+            ? [candidate.id]
+            : [],
+        ),
       )
     case 'expert_research': {
       const candidateValue = parsed['candidate']
@@ -507,14 +522,23 @@ function safeErrorSummary(error: unknown): string {
   if (error instanceof SyntaxError) {
     return 'The AI run returned malformed JSON.'
   }
+  if (error instanceof Error) {
+    return error.message
+      .replace(/Bearer\s+\S+/gi, 'Bearer <redacted>')
+      .replace(
+        /\b(token|secret|password)=([^\s]+)/gi,
+        '$1=<redacted>',
+      )
+      .slice(0, 900)
+  }
   return 'The generated artifact could not be accepted by the researcher bridge.'
 }
 
 async function submitAgentArtifact(
-  taskType: z.infer<typeof claimedTaskSchema>['task_type'],
+  task: z.infer<typeof claimedTaskSchema>,
 ): Promise<void> {
   const parsed = validateAgentArtifact(
-    taskType,
+    task,
     parseAgentJson(await readFile(agentOutputPath, 'utf8')),
   )
   await writeFile(submissionPath, JSON.stringify(parsed), {
@@ -527,7 +551,7 @@ async function submitAgentArtifact(
     fragment_analysis: 'submit-analysis',
     candidate_verification: 'submit-verification',
     expert_research: 'submit-expert'
-  }[taskType]
+  }[task.task_type]
   await runClient(action, submissionPath)
 }
 
@@ -600,7 +624,7 @@ async function main(): Promise<void> {
       const run = await runCodex(task)
       runOutcome = run
       if (run.exitCode === 0 && !run.timedOut) {
-        await submitAgentArtifact(task.task_type)
+        await submitAgentArtifact(task)
         artifactSubmitted = true
       }
       const status = await runClient('status')
