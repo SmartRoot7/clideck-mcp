@@ -28,7 +28,8 @@ root-owned environment files outside the repository.
 3. Run isolated Batfish/containerlab CI and download its hashed report.
 4. Fetch the exact immutable Git commit on `clideck-mcp.lan`.
 5. Install `poppler-utils` and `tesseract-ocr`, install application
-   dependencies, build, and run migrations.
+   dependencies, build, run migrations, and reapply `ops/sql/grants.sql` with
+   the migrator role.
 6. Import only a lab report whose commit equals the deployed commit.
 7. Confirm the pre-import active release contains exactly 51 revisions.
 8. Verify the read-only legacy JSONL manifest and import all 56,747 records with

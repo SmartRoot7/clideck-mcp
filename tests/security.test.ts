@@ -1,3 +1,6 @@
+import { readFile } from 'node:fs/promises'
+import { resolve } from 'node:path'
+
 import {
   constantTimeTokenEquals,
   createPublicTaskId,
@@ -11,6 +14,36 @@ import {
 import { isTrustedProxy } from '../src/http/security.js'
 
 describe('security primitives', () => {
+  it('keeps continuous pipeline objects in the production grant matrix', async () => {
+    const grants = await readFile(
+      resolve(process.cwd(), 'ops/sql/grants.sql'),
+      'utf8',
+    )
+    for (const table of [
+      'coverage_targets',
+      'source_candidates',
+      'source_artifacts',
+      'source_fragments',
+      'pipeline_settings',
+      'pipeline_tasks',
+      'pipeline_events',
+      'knowledge_candidates',
+      'candidate_verifications',
+      'agent_runs',
+      'legacy_revision_metadata',
+      'admin_audit_events'
+    ]) {
+      expect(grants).toContain(table)
+    }
+    for (const role of [
+      'clideck_mcp_admin',
+      'clideck_mcp_worker',
+      'clideck_mcp_researcher'
+    ]) {
+      expect(grants).toContain(`TO ${role};`)
+    }
+  })
+
   it('creates non-enumerable public identifiers and hashes', () => {
     const first = createPublicTaskId()
     const second = createPublicTaskId()
