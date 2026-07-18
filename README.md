@@ -95,6 +95,55 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md),
 [docs/OPERATIONS.md](docs/OPERATIONS.md) for the system contract and production
 runbook.
 
+## OpenAI Build Week
+
+CliDeck MCP 0.2 was built with Codex and GPT-5.6 as the primary engineering
+workflow. Codex helped turn the initial product idea into the immutable revision
+model, process boundaries, MCP contracts, deterministic safety rules, database
+migrations, knowledge pack, tests, CI validation, and production runbook.
+
+GPT-5.6 was especially useful where the design needed careful judgment rather
+than code completion:
+
+- defining when a network change must fail closed instead of returning a
+  plausible answer;
+- separating the deterministic read path from the Codex knowledge-research
+  flywheel;
+- designing signed post-change verification contracts that never contain raw
+  commands;
+- threat-modeling snapshot redaction, task isolation, contribution quarantine,
+  and public telemetry;
+- building the 250-case product/security eval and commit-bound lab policy;
+- diagnosing production rollout failures without changing another project or
+  server.
+
+The main design decision was to use AI to grow and validate the knowledge base,
+not to place an LLM in front of every network answer. Known questions remain
+fast and repeatable. Unknown, unsupported, or dangerous inputs stop explicitly
+or enter the controlled expert-task workflow.
+
+### Judge test path
+
+The fastest hosted test path is:
+
+1. Connect an MCP client to `https://mcp.clideck.com/mcp`; no device
+   credentials are required.
+2. Ask for `show ip interface brief` on a Catalyst 9300 running IOS-XE 17.9.4
+   and confirm the version-scoped deterministic answer.
+3. Call `analyze_device_snapshot` with a sanitized `show version` sample and
+   inspect the fingerprint, redactions, and `retention: not_stored`.
+4. Send `reload` to `review_network_change` and confirm the critical change is
+   blocked.
+5. Review a safe description change, then call `verify_network_change` with
+   identical before/after output and confirm rollback is recommended.
+6. Pass CDP/LLDP or traceroute output to `analyze_network_path` and inspect the
+   normalized graph and probable fault domain.
+
+For a local test, follow **Quick start** above and use the same path at
+`http://127.0.0.1:8787/mcp`. The repository includes deterministic seed data,
+so judges do not need access to a network device, vendor image, external LLM
+API, or private dataset.
+
 ## Scope boundary
 
 This repository and `clideck-mcp.lan` are the only approved mutation targets.
