@@ -11,11 +11,11 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { z } from 'zod'
 
 import {
-  candidateAnalysisSubmissionSchema,
-  candidateVerificationSubmissionSchema,
-  discoverySubmissionSchema
+  candidateAnalysisArtifactSchema,
+  candidateVerificationArtifactSchema,
+  discoveryArtifactSchema,
+  expertResearchArtifactSchema
 } from '../domain/pipeline.js'
-import { candidateKnowledgeSchema } from '../domain/publication.js'
 
 const environmentSchema = z.object({
   CLIDECK_PIPELINE_MODEL: z.string().min(1).default('gpt-5.6-luna'),
@@ -61,6 +61,10 @@ const secretEnvPath = resolve(projectRoot, '.secrets/researcher-bridge.env')
 const tempDirectory = resolve(projectRoot, 'tmp/pipeline')
 const usagePath = resolve(tempDirectory, 'agent-usage.json')
 const agentOutputPath = resolve(tempDirectory, 'agent-output.json')
+const agentOutputSchemaPath = resolve(
+  tempDirectory,
+  'agent-output-schema.json',
+)
 const submissionPath = resolve(tempDirectory, 'submission.json')
 const abortController = new AbortController()
 
@@ -277,6 +281,17 @@ async function runCodex(
   usage: Usage
 }> {
   const startedAt = Date.now()
+  await writeFile(
+    agentOutputSchemaPath,
+    JSON.stringify(z.toJSONSchema(
+      artifactSchemaForTask(task.task_type),
+      {
+        target: 'draft-7',
+        unrepresentable: 'any'
+      },
+    )),
+    { encoding: 'utf8', mode: 0o600 },
+  )
   const usage: Usage = {
     input_tokens: 0,
     cached_input_tokens: 0,
@@ -305,6 +320,8 @@ async function runCodex(
         'tool_output_token_limit=4000',
         '-o',
         agentOutputPath,
+        '--output-schema',
+        agentOutputSchemaPath,
         '-C',
         tempDirectory,
         '-'
@@ -375,23 +392,20 @@ function parseAgentJson(value: string): Record<string, unknown> {
   return z.record(z.string(), z.unknown()).parse(parsed)
 }
 
-const validationLease = {
-  pipeline_task_id: '00000000-0000-4000-8000-000000000000',
-  lease_token: 'x'.repeat(32)
-}
-
-function withoutValidationLease<T extends {
-  pipeline_task_id: string
-  lease_token: string
-}>(
-  value: T,
-): Omit<T, 'pipeline_task_id' | 'lease_token'> {
-  const {
-    pipeline_task_id: _pipelineTaskId,
-    lease_token: _leaseToken,
-    ...artifact
-  } = value
-  return artifact
+function artifactSchemaForTask(
+  taskType: z.infer<typeof claimedTaskSchema>['task_type'],
+): z.ZodType {
+  switch (taskType) {
+    case 'source_discovery':
+    case 'source_refresh':
+      return discoveryArtifactSchema
+    case 'fragment_analysis':
+      return candidateAnalysisArtifactSchema
+    case 'candidate_verification':
+      return candidateVerificationArtifactSchema
+    case 'expert_research':
+      return expertResearchArtifactSchema
+  }
 }
 
 function validateAgentArtifact(
@@ -401,31 +415,13 @@ function validateAgentArtifact(
   switch (taskType) {
     case 'source_discovery':
     case 'source_refresh':
-      return withoutValidationLease(discoverySubmissionSchema.parse({
-        ...parsed,
-        ...validationLease
-      }))
+      return discoveryArtifactSchema.parse(parsed)
     case 'fragment_analysis':
-      return withoutValidationLease(candidateAnalysisSubmissionSchema.parse({
-        ...parsed,
-        ...validationLease
-      }))
+      return candidateAnalysisArtifactSchema.parse(parsed)
     case 'candidate_verification':
-      return withoutValidationLease(
-        candidateVerificationSubmissionSchema.parse({
-          ...parsed,
-          ...validationLease
-        }),
-      )
-    case 'expert_research': {
-      const rejection = z.object({
-        rejected: z.literal(true),
-        reason: z.string().trim().min(12).max(1_000)
-      }).safeParse(parsed)
-      return rejection.success
-        ? rejection.data
-        : candidateKnowledgeSchema.parse(parsed)
-    }
+      return candidateVerificationArtifactSchema.parse(parsed)
+    case 'expert_research':
+      return expertResearchArtifactSchema.parse(parsed)
   }
 }
 
@@ -529,6 +525,7 @@ async function main(): Promise<void> {
     try {
       await Promise.all([
         unlink(agentOutputPath).catch(() => undefined),
+        unlink(agentOutputSchemaPath).catch(() => undefined),
         unlink(submissionPath).catch(() => undefined)
       ])
       const run = await runCodex(task)
@@ -565,6 +562,7 @@ async function main(): Promise<void> {
       )
       await Promise.all([
         unlink(agentOutputPath).catch(() => undefined),
+        unlink(agentOutputSchemaPath).catch(() => undefined),
         unlink(submissionPath).catch(() => undefined)
       ])
       consecutiveLaunchFailures = 0
@@ -612,6 +610,7 @@ async function main(): Promise<void> {
       ).catch(() => runClient('cleanup').then(() => undefined))
       await Promise.all([
         unlink(agentOutputPath).catch(() => undefined),
+        unlink(agentOutputSchemaPath).catch(() => undefined),
         unlink(submissionPath).catch(() => undefined)
       ])
       if (artifactSubmitted || !launchFailed) {
