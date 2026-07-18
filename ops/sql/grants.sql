@@ -18,6 +18,7 @@ GRANT SELECT ON
   public_active_release_summary,
   public_lab_validation_summary,
   public_latest_eval_result,
+  knowledge_revisions,
   knowledge_conflicts,
   active_release
 TO clideck_mcp_api;
