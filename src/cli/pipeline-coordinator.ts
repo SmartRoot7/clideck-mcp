@@ -11,6 +11,7 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { z } from 'zod'
 
 import {
+  bindCandidateAnalysisProvenanceHashes,
   candidateAnalysisArtifactSchema,
   candidateVerificationAgentArtifactSchema,
   discoveryArtifactSchema,
@@ -475,7 +476,10 @@ function validateAgentArtifact(
     case 'fragment_analysis':
       return candidateAnalysisArtifactSchema.parse(
         omitNullObjectProperties(
-          normalizeCandidateAnalysisStableKeys(parsed),
+          bindCandidateAnalysisProvenanceHashes(
+            normalizeCandidateAnalysisStableKeys(parsed),
+            task.payload['fragments'],
+          ),
         ),
       )
     case 'candidate_verification':

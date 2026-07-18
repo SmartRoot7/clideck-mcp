@@ -138,6 +138,77 @@ export function normalizeCandidateAnalysisStableKeys(
   }
 }
 
+export function bindCandidateAnalysisProvenanceHashes(
+  unparsedArtifact: unknown,
+  unparsedFragments: unknown,
+): unknown {
+  if (
+    !unparsedArtifact ||
+    typeof unparsedArtifact !== 'object' ||
+    Array.isArray(unparsedArtifact) ||
+    !Array.isArray(unparsedFragments)
+  ) {
+    return unparsedArtifact
+  }
+
+  const fragmentHashes = new Map<string, string>()
+  for (const fragment of unparsedFragments) {
+    if (!fragment || typeof fragment !== 'object' || Array.isArray(fragment)) {
+      continue
+    }
+    const record = fragment as Record<string, unknown>
+    if (
+      typeof record['id'] === 'string' &&
+      typeof record['content_hash'] === 'string' &&
+      /^sha256:[0-9a-f]{64}$/.test(record['content_hash'])
+    ) {
+      fragmentHashes.set(record['id'], record['content_hash'])
+    }
+  }
+
+  const artifact = unparsedArtifact as Record<string, unknown>
+  if (!Array.isArray(artifact['candidates'])) return unparsedArtifact
+
+  return {
+    ...artifact,
+    candidates: artifact['candidates'].map((entry) => {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+        return entry
+      }
+      const candidateEntry = entry as Record<string, unknown>
+      const trustedHash = typeof candidateEntry['fragment_id'] === 'string'
+        ? fragmentHashes.get(candidateEntry['fragment_id'])
+        : undefined
+      const candidate = candidateEntry['candidate']
+      if (
+        !trustedHash ||
+        !candidate ||
+        typeof candidate !== 'object' ||
+        Array.isArray(candidate)
+      ) {
+        return entry
+      }
+      const candidateRecord = candidate as Record<string, unknown>
+      if (!Array.isArray(candidateRecord['provenance'])) return entry
+
+      return {
+        ...candidateEntry,
+        candidate: {
+          ...candidateRecord,
+          provenance: candidateRecord['provenance'].map((source) =>
+            source && typeof source === 'object' && !Array.isArray(source)
+              ? {
+                  ...(source as Record<string, unknown>),
+                  content_hash: trustedHash
+                }
+              : source,
+          )
+        }
+      }
+    })
+  }
+}
+
 export const candidateAnalysisSubmissionSchema = pipelineLeaseSchema.extend(
   candidateAnalysisArtifactShape,
 ).superRefine(requireHandledAnalysisArtifact)
