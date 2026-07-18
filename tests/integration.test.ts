@@ -6,7 +6,10 @@ import { join } from 'node:path'
 import pg from 'pg'
 
 import { createPublicTaskId, sha256, sha256Label } from '../src/crypto.js'
-import { actOnSource } from '../src/domain/admin.js'
+import {
+  actOnSource,
+  getAdminOverview
+} from '../src/domain/admin.js'
 import { createAdminActorSignature } from '../src/http/admin-auth.js'
 import {
   resolveNetworkContext
@@ -459,6 +462,21 @@ describeIntegration('PostgreSQL integration', () => {
     expect(overview.status).toBe(200)
     const overviewPayload = await overview.json() as {
       published_revisions: number
+      published_records_24h: number
+      pipeline_funnel: Array<{
+        stage: string
+        count: number
+        queued: number
+        running: number
+        completed: number
+        failed: number
+        cancelled: number
+        skipped: number
+      }>
+      published_hourly_24h: Array<{
+        hour: string
+        published: number
+      }>
     }
     expect(overviewPayload).toMatchObject({
       queued_tasks: expect.any(Number),
@@ -466,6 +484,27 @@ describeIntegration('PostgreSQL integration', () => {
       feedback_24h: expect.any(Number)
     })
     expect(overviewPayload.published_revisions).toBeGreaterThanOrEqual(50)
+    expect(overviewPayload.pipeline_funnel).toHaveLength(7)
+    expect(new Set(
+      overviewPayload.pipeline_funnel.map((stage) => stage.stage),
+    ).size).toBe(7)
+    for (const stage of overviewPayload.pipeline_funnel) {
+      expect(stage.count).toBe(
+        stage.queued +
+        stage.running +
+        stage.completed +
+        stage.failed +
+        stage.cancelled +
+        stage.skipped,
+      )
+    }
+    expect(overviewPayload.published_hourly_24h).toHaveLength(24)
+    expect(overviewPayload.published_records_24h).toBe(
+      overviewPayload.published_hourly_24h.reduce(
+        (total, hour) => total + hour.published,
+        0,
+      ),
+    )
 
     for (const path of [
       '/admin/v1/coverage',
@@ -1294,6 +1333,24 @@ describeIntegration('PostgreSQL integration', () => {
         active_revisions: expect.any(Number)
       })
       expect(completed.rows[0]!.release_sequence).toBeGreaterThan(1)
+
+      const publishedOverview = await getAdminOverview(
+        database,
+        'integration-commit',
+      )
+      const publishedHourly =
+        publishedOverview['published_hourly_24h'] as Array<{
+          published: number
+        }>
+      expect(publishedOverview['published_records_24h']).toBe(
+        publishedHourly.reduce(
+          (total, hour) => total + Number(hour.published),
+          0,
+        ),
+      )
+      expect(Number(publishedOverview['published_records_24h'])).toBeGreaterThan(
+        0,
+      )
 
       const runArtifacts = await database.query<{
         status: string
