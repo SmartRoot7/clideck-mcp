@@ -991,6 +991,13 @@ describeIntegration('PostgreSQL integration', () => {
         duration_ms: 60
       })
 
+      await database.query(
+        `UPDATE source_candidates
+            SET failure_code = 'AGENT_ARTIFACT_REJECTED',
+                failure_message = 'Synthetic recovered-stage diagnostic.'
+          WHERE id = $1`,
+        [sourceId],
+      )
       await expect(processNextPipelineTask(
         database,
         config,
@@ -1000,11 +1007,15 @@ describeIntegration('PostgreSQL integration', () => {
 
       const completed = await database.query<{
         source_status: string
+        failure_code: string | null
+        failure_message: string | null
         release_sequence: number
         active_revisions: number
       }>(
         `SELECT
            sc.status AS source_status,
+           sc.failure_code,
+           sc.failure_message,
            r.sequence::int AS release_sequence,
            count(ri.revision_id)::int AS active_revisions
          FROM source_candidates sc
@@ -1012,11 +1023,17 @@ describeIntegration('PostgreSQL integration', () => {
          JOIN releases r ON r.id = ar.release_id
          JOIN release_items ri ON ri.release_id = r.id
          WHERE sc.id = $1
-         GROUP BY sc.status, r.sequence`,
+         GROUP BY
+           sc.status,
+           sc.failure_code,
+           sc.failure_message,
+           r.sequence`,
         [sourceId],
       )
       expect(completed.rows[0]).toMatchObject({
         source_status: 'completed',
+        failure_code: null,
+        failure_message: null,
         active_revisions: expect.any(Number)
       })
       expect(completed.rows[0]!.release_sequence).toBeGreaterThan(1)

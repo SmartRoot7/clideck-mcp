@@ -712,6 +712,8 @@ async function publishSource(
     await client.query(
       `UPDATE source_candidates
           SET status = 'completed',
+              failure_code = NULL,
+              failure_message = NULL,
               completed_at = now(),
               updated_at = now()
         WHERE id = $1`,

@@ -10,6 +10,13 @@ import { setTimeout as delay } from 'node:timers/promises'
 
 import { z } from 'zod'
 
+import {
+  candidateAnalysisSubmissionSchema,
+  candidateVerificationSubmissionSchema,
+  discoverySubmissionSchema
+} from '../domain/pipeline.js'
+import { candidateKnowledgeSchema } from '../domain/publication.js'
+
 const environmentSchema = z.object({
   CLIDECK_PIPELINE_MODEL: z.string().min(1).default('gpt-5.6-luna'),
   CLIDECK_PIPELINE_CODEX_BINARY: z.string().min(1).default('codex'),
@@ -121,6 +128,7 @@ async function runClient(
 function researcherPrompt(
   task: z.infer<typeof claimedTaskSchema>,
 ): string {
+  const verifiedDate = new Date().toISOString().slice(0, 10)
   const common = `
 You are one ephemeral run in the restricted CliDeck MCP knowledge pipeline.
 Do not use the shell, inspect files, modify code/configuration/git/services, or
@@ -136,9 +144,14 @@ must remain inside the JSON.
     source_discovery: `
 Find 1-10 official, public, HTTPS vendor documents that exactly match the
 coverage target. Do not use authenticated, mirrored, forum, blog, or unofficial
-sources. Prefer the most current uncovered document. Use one focused web search
-and do not download or read full documents; the deterministic
-Acquire stage performs that work. Submit:
+sources. Prefer the most current uncovered document. Choose substantive leaf
+pages that contain command syntax, procedures, diagnostics, upgrade guidance,
+release details, or advisory facts. Never return a book landing page, table of
+contents, alphabetic command index, product list, search page, or document
+catalog. Use one focused web search and open at most three likely official
+results only far enough to confirm that each returned URL contains substantive
+knowledge. Do not download or read a full manual; the deterministic Acquire
+stage performs that work. Submit:
 {"sources":[{"canonical_url":"https://...","document_type":"...",
 "title":"...","document_version":"optional","document_date":"YYYY-MM-DD optional"}]}
 If no qualifying source is found, submit:
@@ -148,12 +161,54 @@ If no qualifying source is found, submit:
 Analyze every leased fragment. For each useful fragment, create one or more
 candidate entries with fragment_id and a complete candidate object. Explicitly
 list every fragment with no publishable fact under rejected_fragments with a
-bounded reason. Never omit a fragment. Treat commands as dangerous whenever
-their effect is uncertain. Preserve exact model and version applicability. Do
-not browse the web during extraction; use only the leased evidence.
-Submit:
-{"candidates":[{"fragment_id":"uuid","candidate":{...}}],
-"rejected_fragments":[{"fragment_id":"uuid","reason":"..."}]}
+bounded reason. Never omit a fragment. Create at most three high-value
+candidates per fragment. Treat commands as dangerous whenever their effect is
+uncertain. Preserve exact model and version applicability. Do not browse the
+web during extraction; use only the leased evidence.
+
+Every candidate MUST contain every required field in this exact contract:
+{
+  "stable_key": "lowercase.dotted-or-dashed-key",
+  "kind": "command|workflow|diagnostic|concept|change|upgrade",
+  "vendor_slug": "lowercase-vendor-slug",
+  "operating_system_slug": "lowercase-os-slug",
+  "title": "1-240 characters",
+  "summary": "1-4000 characters",
+  "question_patterns": ["at least one question, 3-300 characters"],
+  "procedure": [],
+  "prerequisites": [],
+  "risks": [],
+  "verification": ["at least one concrete verification step"],
+  "rollback": [],
+  "limitations": [],
+  "dangerous": false,
+  "risk_level": "safe_read_only|changes_config|credential_sensitive|service_disruptive|data_loss|storage_wipe|firmware_change|boot_change|factory_reset|unknown",
+  "confidence": 0.0,
+  "quality_score": 0.0,
+  "confidence_reason": "10-2000 characters grounded in the fragment",
+  "last_verified_at": "${verifiedDate}",
+  "provenance": [{
+    "url": "the exact leased canonical_url",
+    "document_type": "the exact leased document_type",
+    "title": "the leased title, at most 240 characters",
+    "verified_at": "${verifiedDate}",
+    "content_hash": "the exact sha256 content_hash of this fragment",
+    "evidence_fragment": "a minimal exact evidence excerpt, 1-600 characters",
+    "evidence_role": "primary"
+  }]
+}
+Optional string fields are "platform_slug", "version_min", "version_max",
+"cli_mode", and "command". Optional provenance fields are "document_version"
+and "document_date". Omit an optional field when unknown; never emit null.
+Dates MUST be YYYY-MM-DD, so convert a leased timestamp to its first 10
+characters. Slugs use lowercase letters, digits, and hyphens. Omit
+platform_slug unless its exact registered slug is known from the leased input.
+Use the fragment content_hash in provenance, not a newly invented hash.
+Confidence and quality_score are JSON numbers between 0 and 1.
+
+Return exactly:
+{"candidates":[{"fragment_id":"leased uuid","candidate":{"stable_key":"...","kind":"command","vendor_slug":"...","operating_system_slug":"...","title":"...","summary":"...","question_patterns":["..."],"procedure":[],"prerequisites":[],"risks":[],"verification":["..."],"rollback":[],"limitations":[],"dangerous":false,"risk_level":"safe_read_only","confidence":0.95,"quality_score":0.95,"confidence_reason":"...","last_verified_at":"${verifiedDate}","provenance":[{"url":"https://...","document_type":"...","title":"...","verified_at":"${verifiedDate}","content_hash":"sha256:...","evidence_fragment":"...","evidence_role":"primary"}]}}],
+"rejected_fragments":[{"fragment_id":"leased uuid","reason":"8-500 characters"}]}
 `,
     candidate_verification: `
 Independently verify every leased candidate against its evidence, applicability,
@@ -320,10 +375,83 @@ function parseAgentJson(value: string): Record<string, unknown> {
   return z.record(z.string(), z.unknown()).parse(parsed)
 }
 
+const validationLease = {
+  pipeline_task_id: '00000000-0000-4000-8000-000000000000',
+  lease_token: 'x'.repeat(32)
+}
+
+function withoutValidationLease<T extends {
+  pipeline_task_id: string
+  lease_token: string
+}>(
+  value: T,
+): Omit<T, 'pipeline_task_id' | 'lease_token'> {
+  const {
+    pipeline_task_id: _pipelineTaskId,
+    lease_token: _leaseToken,
+    ...artifact
+  } = value
+  return artifact
+}
+
+function validateAgentArtifact(
+  taskType: z.infer<typeof claimedTaskSchema>['task_type'],
+  parsed: Record<string, unknown>,
+): Record<string, unknown> {
+  switch (taskType) {
+    case 'source_discovery':
+    case 'source_refresh':
+      return withoutValidationLease(discoverySubmissionSchema.parse({
+        ...parsed,
+        ...validationLease
+      }))
+    case 'fragment_analysis':
+      return withoutValidationLease(candidateAnalysisSubmissionSchema.parse({
+        ...parsed,
+        ...validationLease
+      }))
+    case 'candidate_verification':
+      return withoutValidationLease(
+        candidateVerificationSubmissionSchema.parse({
+          ...parsed,
+          ...validationLease
+        }),
+      )
+    case 'expert_research': {
+      const rejection = z.object({
+        rejected: z.literal(true),
+        reason: z.string().trim().min(12).max(1_000)
+      }).safeParse(parsed)
+      return rejection.success
+        ? rejection.data
+        : candidateKnowledgeSchema.parse(parsed)
+    }
+  }
+}
+
+function safeErrorSummary(error: unknown): string {
+  if (error instanceof z.ZodError) {
+    return error.issues
+      .slice(0, 8)
+      .map((issue) =>
+        `${issue.path.join('.') || 'artifact'}: ${issue.message}`,
+      )
+      .join('; ')
+      .slice(0, 900)
+  }
+  if (error instanceof SyntaxError) {
+    return 'The AI run returned malformed JSON.'
+  }
+  return 'The generated artifact could not be accepted by the researcher bridge.'
+}
+
 async function submitAgentArtifact(
   taskType: z.infer<typeof claimedTaskSchema>['task_type'],
 ): Promise<void> {
-  const parsed = parseAgentJson(await readFile(agentOutputPath, 'utf8'))
+  const parsed = validateAgentArtifact(
+    taskType,
+    parseAgentJson(await readFile(agentOutputPath, 'utf8')),
+  )
   await writeFile(submissionPath, JSON.stringify(parsed), {
     encoding: 'utf8',
     mode: 0o600
@@ -441,13 +569,34 @@ async function main(): Promise<void> {
       ])
       consecutiveLaunchFailures = 0
       if (environment.CLIDECK_PIPELINE_ONCE) break
-    } catch {
+    } catch (error) {
+      const launchFailed = runOutcome === undefined
+      const artifactRejected =
+        runOutcome?.exitCode === 0 &&
+        !runOutcome.timedOut &&
+        !artifactSubmitted
+      const failureCode = launchFailed
+        ? 'AGENT_LAUNCH_FAILED'
+        : artifactRejected
+          ? 'AGENT_ARTIFACT_REJECTED'
+          : 'AGENT_REPORTING_FAILED'
+      const failureMessage = launchFailed
+        ? 'The ephemeral Codex process could not start.'
+        : artifactRejected
+          ? `The generated artifact failed validation or submission: ${
+            safeErrorSummary(error)
+          }`
+          : 'The ephemeral AI run could not report its result to the pipeline.'
+      process.stderr.write(
+        `${new Date().toISOString()} ${failureCode}: ${failureMessage}\n`,
+      )
       if (!artifactSubmitted) {
-        consecutiveLaunchFailures += 1
+        if (launchFailed) consecutiveLaunchFailures += 1
+        else consecutiveLaunchFailures = 0
         await runClient(
           'fail',
-          'AGENT_LAUNCH_FAILED',
-          'The ephemeral Codex process could not start or report its result.',
+          failureCode,
+          failureMessage,
         ).catch(() => undefined)
       }
       await finishRun(
@@ -459,13 +608,13 @@ async function main(): Promise<void> {
             output_tokens: 0,
             reasoning_output_tokens: 0
           },
-        artifactSubmitted ? undefined : 'AGENT_LAUNCH_FAILED',
+        artifactSubmitted ? undefined : failureCode,
       ).catch(() => runClient('cleanup').then(() => undefined))
       await Promise.all([
         unlink(agentOutputPath).catch(() => undefined),
         unlink(submissionPath).catch(() => undefined)
       ])
-      if (artifactSubmitted) {
+      if (artifactSubmitted || !launchFailed) {
         consecutiveLaunchFailures = 0
       } else if (consecutiveLaunchFailures >= 3) {
         await runClient(
@@ -476,7 +625,9 @@ async function main(): Promise<void> {
         break
       }
       await delay(
-        Math.min(60_000, consecutiveLaunchFailures * 10_000),
+        launchFailed
+          ? Math.min(60_000, consecutiveLaunchFailures * 10_000)
+          : 2_000,
         undefined,
         { signal: abortController.signal },
       ).catch(() => undefined)
