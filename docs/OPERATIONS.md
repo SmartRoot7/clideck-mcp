@@ -48,6 +48,13 @@ root-owned environment files outside the repository.
 Production uses separate API, admin, worker, researcher, and quarantine DB roles.
 The site and backend share their playground token only through secret stores.
 
+The worker stores temporary acquired documents under
+`/var/lib/clideck-mcp/source-artifacts`. Create that directory with owner
+`clideck_mcp_worker:clideck_mcp` and mode `0750`, set
+`SOURCE_STORAGE_DIR=/var/lib/clideck-mcp/source-artifacts` in `worker.env`, and
+keep the matching `ReadWritePaths=` allowlist in the worker systemd unit.
+`ProtectSystem=strict` remains enabled for every other path.
+
 ## CliDeck site admin
 
 The website reaches the admin API through explicit server-side BFF routes. Every
