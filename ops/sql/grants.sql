@@ -67,7 +67,8 @@ GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO clideck_mcp_worker;
 
 GRANT SELECT, UPDATE ON expert_tasks TO clideck_mcp_researcher;
 GRANT SELECT, INSERT ON task_messages TO clideck_mcp_researcher;
-GRANT INSERT ON task_artifacts, code_change_approvals TO clideck_mcp_researcher;
+GRANT INSERT ON task_artifacts TO clideck_mcp_researcher;
+GRANT SELECT, INSERT ON code_change_approvals TO clideck_mcp_researcher;
 GRANT USAGE, SELECT ON SEQUENCE task_messages_id_seq TO clideck_mcp_researcher;
 
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO clideck_mcp_backup;
