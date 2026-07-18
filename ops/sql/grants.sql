@@ -90,6 +90,7 @@ GRANT SELECT ON
   platforms,
   operating_systems,
   device_models,
+  public_active_knowledge,
   knowledge_conflicts
 TO clideck_mcp_worker;
 GRANT SELECT, UPDATE, DELETE ON snapshot_contributions TO clideck_mcp_worker;
