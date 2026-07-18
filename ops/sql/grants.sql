@@ -96,6 +96,7 @@ GRANT UPDATE ON
   pipeline_settings,
   coverage_targets,
   source_candidates,
+  source_fragments,
   pipeline_tasks,
   expert_tasks,
   knowledge_conflicts
