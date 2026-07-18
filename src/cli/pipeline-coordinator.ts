@@ -162,7 +162,8 @@ results only far enough to confirm that each returned URL contains substantive
 knowledge. Do not download or read a full manual; the deterministic Acquire
 stage performs that work. Submit:
 {"sources":[{"canonical_url":"https://...","document_type":"...",
-"title":"...","document_version":"optional","document_date":"YYYY-MM-DD optional"}]}
+"title":"...","document_version":"version or null","document_date":"YYYY-MM-DD or null"}],
+"rejection_reason":null}
 If no qualifying source is found, submit:
 {"sources":[],"rejection_reason":"bounded reason describing the search result"}
 `,
@@ -208,15 +209,16 @@ Every candidate MUST contain every required field in this exact contract:
 }
 Optional string fields are "platform_slug", "version_min", "version_max",
 "cli_mode", and "command". Optional provenance fields are "document_version"
-and "document_date". Omit an optional field when unknown; never emit null.
+and "document_date". Emit every optional field and use null when unknown; the
+wire schema requires all keys and the bridge removes nulls before validation.
 Dates MUST be YYYY-MM-DD, so convert a leased timestamp to its first 10
-characters. Slugs use lowercase letters, digits, and hyphens. Omit
-platform_slug unless its exact registered slug is known from the leased input.
+characters. Slugs use lowercase letters, digits, and hyphens. Set
+platform_slug to null unless its exact registered slug is known from the input.
 Use the fragment content_hash in provenance, not a newly invented hash.
 Confidence and quality_score are JSON numbers between 0 and 1.
 
 Return exactly:
-{"candidates":[{"fragment_id":"leased uuid","candidate":{"stable_key":"...","kind":"command","vendor_slug":"...","operating_system_slug":"...","title":"...","summary":"...","question_patterns":["..."],"procedure":[],"prerequisites":[],"risks":[],"verification":["..."],"rollback":[],"limitations":[],"dangerous":false,"risk_level":"safe_read_only","confidence":0.95,"quality_score":0.95,"confidence_reason":"...","last_verified_at":"${verifiedDate}","provenance":[{"url":"https://...","document_type":"...","title":"...","verified_at":"${verifiedDate}","content_hash":"sha256:...","evidence_fragment":"...","evidence_role":"primary"}]}}],
+{"candidates":[{"fragment_id":"leased uuid","candidate":{"stable_key":"...","kind":"command","vendor_slug":"...","platform_slug":null,"operating_system_slug":"...","version_min":null,"version_max":null,"title":"...","summary":"...","question_patterns":["..."],"cli_mode":null,"command":null,"procedure":[],"prerequisites":[],"risks":[],"verification":["..."],"rollback":[],"limitations":[],"dangerous":false,"risk_level":"safe_read_only","confidence":0.95,"quality_score":0.95,"confidence_reason":"...","last_verified_at":"${verifiedDate}","provenance":[{"url":"https://...","document_type":"...","title":"...","document_version":null,"document_date":null,"verified_at":"${verifiedDate}","content_hash":"sha256:...","evidence_fragment":"...","evidence_role":"primary"}]}}],
 "rejected_fragments":[{"fragment_id":"leased uuid","reason":"8-500 characters"}]}
 `,
     candidate_verification: `
