@@ -13,6 +13,8 @@ jobs:
   validate:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    env:
+      COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -74,7 +76,7 @@ jobs:
           --topo lab/containerlab/clideck-runtime.clab.yml || true
       - uses: actions/upload-artifact@v4
         with:
-          name: clideck-lab-report-${{ github.sha }}
+          name: clideck-lab-report-${{ env.COMMIT_SHA }}
           path: lab/results/report.json
           if-no-files-found: error
           retention-days: 30
