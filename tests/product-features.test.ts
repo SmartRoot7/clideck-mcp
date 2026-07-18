@@ -6,7 +6,10 @@ import {
   finalizeLabReport,
   verifyLabReport
 } from '../src/domain/lab.js'
-import { discoverySubmissionSchema } from '../src/domain/pipeline.js'
+import {
+  boundFragmentAnalysisBatch,
+  discoverySubmissionSchema
+} from '../src/domain/pipeline.js'
 import { chunkSourceText } from '../src/domain/pipeline-worker.js'
 import { enforceKnowledgeRisk } from '../src/domain/risk.js'
 import {
@@ -100,6 +103,23 @@ describe('knowledge safety classification', () => {
 })
 
 describe('deterministic source processing', () => {
+  it('bounds every AI analysis batch by evidence bytes', () => {
+    const fragments = [
+      { id: 'one', content: 'a'.repeat(30_000) },
+      { id: 'two', content: 'b'.repeat(30_000) },
+      { id: 'three', content: 'c'.repeat(30_000) }
+    ]
+    const selected = boundFragmentAnalysisBatch(fragments)
+    expect(selected.map((fragment) => fragment.id)).toEqual(['one', 'two'])
+    expect(
+      selected.reduce(
+        (bytes, fragment) =>
+          bytes + Buffer.byteLength(fragment.content, 'utf8'),
+        0,
+      ),
+    ).toBe(60_000)
+  })
+
   it('requires every discovery run to produce a source or rejection artifact', () => {
     const lease = {
       pipeline_task_id: '00000000-0000-4000-8000-000000000001',
