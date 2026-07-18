@@ -25,16 +25,24 @@ import {
   omitNullObjectProperties,
   openAiStrictJsonSchema
 } from '../domain/structured-output.js'
+import {
+  pipelineExecutorIds,
+  pipelineExecutorPaths,
+  pipelineModel,
+  pipelineReasoning
+} from './pipeline-runtime.js'
 
 const environmentSchema = z.object({
-  CLIDECK_PIPELINE_MODEL: z.string().min(1).default('gpt-5.6-luna'),
+  CLIDECK_PIPELINE_MODEL: z.literal(pipelineModel)
+    .default(pipelineModel),
   CLIDECK_PIPELINE_CODEX_BINARY: z.string().min(1).default('codex'),
-  CLIDECK_PIPELINE_REASONING: z.enum([
-    'minimal',
-    'low',
-    'medium',
-    'high'
-  ]).default('low'),
+  CLIDECK_PIPELINE_REASONING: z.literal(pipelineReasoning)
+    .default(pipelineReasoning),
+  CLIDECK_PIPELINE_EXECUTOR_ID: z.enum(pipelineExecutorIds)
+    .default(pipelineExecutorIds[0]),
+  CLIDECK_RESEARCHER_INSTANCE_ID: z.string().min(3).max(200)
+    .regex(/^[A-Za-z0-9][A-Za-z0-9_.:-]+$/)
+    .default('pipeline-executor-01:manual'),
   CLIDECK_PIPELINE_RUN_TIMEOUT_MS: z.coerce.number().int()
     .min(60_000).max(3_600_000).default(1_800_000),
   CLIDECK_PIPELINE_IDLE_POLL_MS: z.coerce.number().int()
@@ -67,7 +75,10 @@ type Usage = {
 const environment = environmentSchema.parse(process.env)
 const projectRoot = process.cwd()
 const secretEnvPath = resolve(projectRoot, '.secrets/researcher-bridge.env')
-const tempDirectory = resolve(projectRoot, 'tmp/pipeline')
+const { tempDirectory } = pipelineExecutorPaths(
+  projectRoot,
+  environment.CLIDECK_PIPELINE_EXECUTOR_ID,
+)
 const usagePath = resolve(tempDirectory, 'agent-usage.json')
 const agentOutputPath = resolve(tempDirectory, 'agent-output.json')
 const agentOutputSchemaPath = resolve(
@@ -101,6 +112,15 @@ async function runClient(
       clientArguments(action, ...args),
       {
         cwd: projectRoot,
+        env: {
+          ...process.env,
+          CLIDECK_RESEARCHER_ID:
+            environment.CLIDECK_PIPELINE_EXECUTOR_ID,
+          CLIDECK_RESEARCHER_INSTANCE_ID:
+            environment.CLIDECK_RESEARCHER_INSTANCE_ID,
+          CLIDECK_PIPELINE_EXECUTOR_ID:
+            environment.CLIDECK_PIPELINE_EXECUTOR_ID
+        },
         stdio: ['ignore', 'pipe', 'pipe']
       },
     )
@@ -297,6 +317,8 @@ async function runCodex(
 ): Promise<{
   exitCode: number
   timedOut: boolean
+  paused: boolean
+  cancelled: boolean
   durationMs: number
   usage: Usage
   diagnosticCode?: string
@@ -351,7 +373,22 @@ async function runCodex(
     let lineBuffer = ''
     let stderr = ''
     let timedOut = false
+    let paused = false
+    let cancelled = false
     let heartbeatRunning = false
+    let forceKillTimer: NodeJS.Timeout | undefined
+    const terminateChild = () => {
+      child.kill('SIGTERM')
+      forceKillTimer ??= setTimeout(() => child.kill('SIGKILL'), 10_000)
+      forceKillTimer.unref()
+    }
+    const abortListener = () => {
+      cancelled = true
+      terminateChild()
+    }
+    abortController.signal.addEventListener('abort', abortListener, {
+      once: true
+    })
     child.stdout.setEncoding('utf8')
     child.stdout.on('data', (chunk: string) => {
       lineBuffer += chunk
@@ -376,27 +413,38 @@ async function runCodex(
       if (heartbeatRunning) return
       heartbeatRunning = true
       void runClient('heartbeat')
+        .then((control) => {
+          if (control['should_stop'] === true) {
+            paused = true
+            terminateChild()
+          }
+        })
         .catch(() => undefined)
         .finally(() => {
           heartbeatRunning = false
         })
-    }, 45_000)
+    }, 5_000)
     const timeout = setTimeout(() => {
       timedOut = true
-      child.kill('SIGTERM')
-      setTimeout(() => child.kill('SIGKILL'), 10_000).unref()
+      terminateChild()
     }, environment.CLIDECK_PIPELINE_RUN_TIMEOUT_MS)
     child.once('error', (error) => {
       clearInterval(heartbeat)
       clearTimeout(timeout)
+      if (forceKillTimer) clearTimeout(forceKillTimer)
+      abortController.signal.removeEventListener('abort', abortListener)
       rejectPromise(error)
     })
     child.once('close', (code) => {
       clearInterval(heartbeat)
       clearTimeout(timeout)
+      if (forceKillTimer) clearTimeout(forceKillTimer)
+      abortController.signal.removeEventListener('abort', abortListener)
       resolvePromise({
         exitCode: code ?? 1,
         timedOut,
+        paused,
+        cancelled,
         durationMs: Date.now() - startedAt,
         usage,
         ...((code ?? 1) !== 0
@@ -615,7 +663,7 @@ async function main(): Promise<void> {
     }
     if (!claim['pipeline_task_id']) {
       await delay(
-        claim['enabled'] === false ? 30_000 : environment.CLIDECK_PIPELINE_IDLE_POLL_MS,
+        environment.CLIDECK_PIPELINE_IDLE_POLL_MS,
         undefined,
         { signal: abortController.signal },
       ).catch(() => undefined)
@@ -635,6 +683,37 @@ async function main(): Promise<void> {
       ])
       const run = await runCodex(task)
       runOutcome = run
+      let stoppedWithoutArtifact = run.paused || run.cancelled
+      if (
+        !stoppedWithoutArtifact &&
+        run.exitCode === 0 &&
+        !run.timedOut
+      ) {
+        const control = await runClient('heartbeat')
+        stoppedWithoutArtifact = control['should_stop'] === true
+      }
+      if (stoppedWithoutArtifact) {
+        if (!run.paused) {
+          await runClient(
+            'fail',
+            'EXECUTOR_STOPPED',
+            'The Luna executor stopped before its artifact was accepted.',
+          ).catch(() => undefined)
+        }
+        await finishRun(
+          'cancelled',
+          run.durationMs,
+          run.usage,
+          run.paused ? 'PIPELINE_PAUSED' : 'EXECUTOR_STOPPED',
+        )
+        await Promise.all([
+          unlink(agentOutputPath).catch(() => undefined),
+          unlink(agentOutputSchemaPath).catch(() => undefined),
+          unlink(submissionPath).catch(() => undefined)
+        ])
+        if (environment.CLIDECK_PIPELINE_ONCE || run.cancelled) break
+        continue
+      }
       if (run.exitCode === 0 && !run.timedOut) {
         await submitAgentArtifact(task)
         artifactSubmitted = true

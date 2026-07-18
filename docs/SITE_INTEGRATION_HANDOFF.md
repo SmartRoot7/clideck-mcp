@@ -48,3 +48,60 @@ support. Exact launch wording:
 
 Run the production build and deployment, then return the production URL, commit
 SHA, and test results.
+
+## MCP Admin 0.4 control handoff
+
+Work only in the existing hidden `/admin/mcp` console and its fixed BFF routes.
+Do not create a generic proxy.
+
+Add a prominent pipeline control group:
+
+- `Pause all Luna` / `Resume pipeline`;
+- concurrency selector with the exact values 1, 2, 3, and 4;
+- configured concurrency, active Luna count, queued expert/verify/analyze/
+  discover counts, and pause progress;
+- one status card per `pipeline-executor-01` through
+  `pipeline-executor-04`, using the `processes` heartbeat records returned by
+  overview;
+- explanatory text: pausing stops Luna within ten seconds, discards partial
+  output, and may allow the currently running deterministic worker step to
+  finish.
+
+Add only these server-side mutations:
+
+```text
+POST /api/admin/mcp/pipeline/state
+  -> POST /admin/v1/pipeline/state
+  body: { enabled: boolean, reason?: string }
+
+POST /api/admin/mcp/pipeline/concurrency
+  -> POST /admin/v1/pipeline/concurrency
+  body: { max_concurrent_ai_runs: 1 | 2 | 3 | 4 }
+```
+
+Both mutations are `super_admin` only. Preserve the existing signed actor HMAC,
+RBAC, response allowlist, timeout, `cache: no-store`, and audit behavior. An
+ordinary `admin` sees the state read-only and receives no controls.
+
+Overview now includes these safe fields:
+
+```text
+pipeline_enabled
+paused_reason
+pause_requested_at
+pause_pending
+max_concurrent_ai_runs
+active_luna_executors
+queued_expert
+queued_verify
+queued_analyze
+queued_discover
+processes[].worker_name
+processes[].instance_id
+processes[].heartbeat_at
+processes[].metadata
+processes[].healthy
+```
+
+Never pass through leases, source bodies, fragment content, bearer tokens,
+database configuration, or provenance in these controls.

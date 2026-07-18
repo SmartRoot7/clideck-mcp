@@ -415,6 +415,14 @@ const mechanicalTaskTypes: PipelineTaskRow['task_type'][] = [
   'source_chunking',
   'source_publication'
 ]
+const requiredPipelineModel = 'gpt-5.6-luna'
+const requiredPipelineReasoning = 'low'
+const aiPriorities = {
+  expert: 100,
+  verify: 90,
+  analyze: 80,
+  discover: 50
+} as const
 const maxFragmentAnalysisBatchBytes = 30_000
 const maxFragmentAnalysisBatchSize = 8
 const maxCombinedFragmentBytes = 4_096
@@ -490,6 +498,26 @@ async function recordEvent(
   )
 }
 
+async function recordExecutorHeartbeat(
+  client: DatabaseClient,
+  executorId: string,
+  instanceId: string,
+  metadata: Record<string, unknown>,
+): Promise<void> {
+  await client.query(
+    `INSERT INTO worker_heartbeats (
+       worker_name, instance_id, heartbeat_at, metadata
+     )
+     VALUES ($1, $2, now(), $3::jsonb)
+     ON CONFLICT (worker_name)
+     DO UPDATE SET
+       instance_id = excluded.instance_id,
+       heartbeat_at = excluded.heartbeat_at,
+       metadata = excluded.metadata`,
+    [executorId, instanceId, JSON.stringify(metadata)],
+  )
+}
+
 async function insertTask(
   client: DatabaseClient,
   input: {
@@ -548,9 +576,13 @@ async function reconcileExpiredAndCompletedWork(
 ): Promise<void> {
   const expired = await client.query<{
     id: string
+    task_type: PipelineTaskRow['task_type']
     stage: PipelineTaskRow['stage']
     source_candidate_id: string | null
+    expert_task_id: string | null
+    payload: Record<string, unknown>
     attempts: number
+    status: string
   }>(
     `UPDATE pipeline_tasks
         SET status = CASE WHEN attempts >= 5 THEN 'failed' ELSE 'queued' END,
@@ -570,16 +602,79 @@ async function reconcileExpiredAndCompletedWork(
             updated_at = now()
       WHERE status IN ('claimed', 'running')
         AND lease_until <= now()
-      RETURNING id, stage, source_candidate_id, attempts`,
+      RETURNING
+        id,
+        task_type,
+        stage,
+        source_candidate_id,
+        expert_task_id,
+        payload,
+        attempts,
+        status`,
   )
   for (const task of expired.rows) {
+    const exhausted = task.status === 'failed'
+    await client.query(
+      `UPDATE agent_runs
+          SET status = 'failed',
+              error_code = 'LEASE_EXPIRED',
+              completed_at = now()
+        WHERE pipeline_task_id = $1
+          AND status = 'running'`,
+      [task.id],
+    )
+    if (task.task_type === 'fragment_analysis') {
+      await client.query(
+        `UPDATE source_fragments
+            SET status = CASE WHEN $2 THEN 'failed' ELSE 'reserved' END,
+                reservation_task_id = CASE WHEN $2 THEN NULL ELSE $1 END,
+                updated_at = now()
+          WHERE reservation_task_id = $1
+            AND status IN ('reserved', 'analyzing')`,
+        [task.id, exhausted],
+      )
+    }
+    if (task.task_type === 'candidate_verification' && exhausted) {
+      await client.query(
+        `UPDATE knowledge_candidates
+            SET status = 'manual_review',
+                verification_task_id = NULL,
+                updated_at = now()
+          WHERE verification_task_id = $1
+            AND status = 'analyzed'`,
+        [task.id],
+      )
+    }
+    if (task.expert_task_id) {
+      await client.query(
+        `UPDATE expert_tasks
+            SET status = CASE WHEN $2 THEN 'failed' ELSE 'queued' END,
+                claim_owner = NULL,
+                lease_token_hash = NULL,
+                lease_until = NULL,
+                heartbeat_at = NULL,
+                failure_code = CASE
+                  WHEN $2 THEN 'LEASE_ATTEMPTS_EXHAUSTED'
+                  ELSE NULL
+                END,
+                failure_message = CASE
+                  WHEN $2 THEN 'Expert task lease expired too many times.'
+                  ELSE NULL
+                END,
+                completed_at = CASE WHEN $2 THEN now() ELSE NULL END,
+                updated_at = now()
+          WHERE id = $1
+            AND status IN ('claimed', 'researching')`,
+        [task.expert_task_id, exhausted],
+      )
+    }
     await recordEvent(client, {
       taskId: task.id,
       sourceId: task.source_candidate_id,
       stage: task.stage,
-      event: task.attempts >= 5 ? 'failed' : 'retried',
+      event: exhausted ? 'failed' : 'retried',
       message:
-        task.attempts >= 5
+        exhausted
           ? 'Pipeline lease attempts were exhausted.'
           : 'Expired pipeline lease returned to the queue.'
     })
@@ -617,6 +712,12 @@ async function queueExpertWork(client: DatabaseClient): Promise<boolean> {
     `SELECT id, public_id, question, network_context
        FROM expert_tasks
       WHERE status = 'queued'
+        AND NOT EXISTS (
+          SELECT 1
+          FROM pipeline_tasks pt
+          WHERE pt.expert_task_id = expert_tasks.id
+            AND pt.status IN ('queued', 'claimed', 'running')
+        )
       ORDER BY priority DESC, created_at
       LIMIT 1
       FOR UPDATE SKIP LOCKED`,
@@ -626,7 +727,7 @@ async function queueExpertWork(client: DatabaseClient): Promise<boolean> {
   const id = await insertTask(client, {
     type: 'expert_research',
     stage: 'analyze',
-    priority: 100,
+    priority: aiPriorities.expert,
     dedupeKey: `expert:${task.id}`,
     expertTaskId: task.id,
     payload: {
@@ -641,6 +742,7 @@ async function queueExpertWork(client: DatabaseClient): Promise<boolean> {
 async function queueSourceWork(
   client: DatabaseClient,
   sourceId: string,
+  mode: 'mechanical' | 'ai',
 ): Promise<boolean> {
   const sourceResult = await client.query<{
     id: string
@@ -720,6 +822,7 @@ async function queueSourceWork(
   }
 
   if (['discovered', 'approved', 'acquiring'].includes(source.status)) {
+    if (mode === 'ai') return false
     return Boolean(await insertTask(client, {
       type: 'source_acquisition',
       stage: 'acquire',
@@ -731,6 +834,7 @@ async function queueSourceWork(
     }))
   }
   if (['acquired', 'converting'].includes(source.status)) {
+    if (mode === 'ai') return false
     return Boolean(await insertTask(client, {
       type: 'source_conversion',
       stage: 'convert',
@@ -742,6 +846,7 @@ async function queueSourceWork(
     }))
   }
   if (['converted', 'chunking'].includes(source.status)) {
+    if (mode === 'ai') return false
     return Boolean(await insertTask(client, {
       type: 'source_chunking',
       stage: 'chunk',
@@ -753,92 +858,134 @@ async function queueSourceWork(
     }))
   }
 
-  const queuedFragments = await client.query<{
-    id: string
-    ordinal: number
-    section_title: string | null
-    source_locator: string | null
-    content: string
-    content_hash: string
-  }>(
-    `SELECT
-       sf.id,
-       sf.ordinal,
-       sf.section_title,
-       sf.source_locator,
-       sf.content,
-       sf.content_hash
-     FROM source_fragments sf
-     JOIN source_artifacts sa ON sa.id = sf.source_artifact_id
-     WHERE sa.source_candidate_id = $1
-       AND sf.status = 'queued'
-     ORDER BY sf.ordinal
-     LIMIT 8
-     FOR UPDATE OF sf SKIP LOCKED`,
-    [source.id],
-  )
-  const analysisFragments = boundFragmentAnalysisBatch(
-    queuedFragments.rows,
-  )
-  if (analysisFragments.length > 0) {
-    const fragmentIds = analysisFragments.map((row) => row.id)
-    return Boolean(await insertTask(client, {
-      type: 'fragment_analysis',
-      stage: 'analyze',
-      priority: 70,
-      dedupeKey: `source:${source.id}:analyze:${sha256Label(
-        fragmentIds.join(','),
-      )}`,
-      coverageTargetId: source.coverage_target_id,
-      sourceId: source.id,
-      payload: {
-        ...basePayload,
-        fragments: analysisFragments
-      }
-    }))
-  }
+  if (mode === 'ai') {
+    const analyzedCandidates = await client.query<{
+      id: string
+      stable_key: string
+      payload: Record<string, unknown>
+      dangerous: boolean
+      confidence: string
+      quality_score: string
+    }>(
+      `SELECT
+         id,
+         stable_key,
+         payload,
+         dangerous,
+         confidence,
+         quality_score
+       FROM knowledge_candidates
+       WHERE status = 'analyzed'
+         AND verification_task_id IS NULL
+         AND pipeline_task_id IN (
+           SELECT id FROM pipeline_tasks WHERE source_candidate_id = $1
+         )
+       ORDER BY created_at
+       LIMIT 50
+       FOR UPDATE SKIP LOCKED`,
+      [source.id],
+    )
+    if (analyzedCandidates.rows.length > 0) {
+      const candidateIds = analyzedCandidates.rows.map((row) => row.id)
+      const taskId = await insertTask(client, {
+        type: 'candidate_verification',
+        stage: 'verify',
+        priority: aiPriorities.verify,
+        dedupeKey: `source:${source.id}:verify:${sha256Label(
+          candidateIds.join(','),
+        )}`,
+        coverageTargetId: source.coverage_target_id,
+        sourceId: source.id,
+        payload: {
+          ...basePayload,
+          candidates: analyzedCandidates.rows
+        }
+      })
+      if (!taskId) return false
+      await client.query(
+        `UPDATE knowledge_candidates
+            SET verification_task_id = $1,
+                updated_at = now()
+          WHERE id = ANY($2::uuid[])
+            AND status = 'analyzed'
+            AND verification_task_id IS NULL`,
+        [taskId, candidateIds],
+      )
+      await client.query(
+        `UPDATE source_candidates
+            SET status = 'verifying',
+                updated_at = now()
+          WHERE id = $1`,
+        [source.id],
+      )
+      return true
+    }
 
-  const analyzedCandidates = await client.query<{
-    id: string
-    stable_key: string
-    payload: Record<string, unknown>
-    dangerous: boolean
-    confidence: string
-    quality_score: string
-  }>(
-    `SELECT
-       id,
-       stable_key,
-       payload,
-       dangerous,
-       confidence,
-       quality_score
-     FROM knowledge_candidates
-     WHERE status = 'analyzed'
-       AND pipeline_task_id IN (
-         SELECT id FROM pipeline_tasks WHERE source_candidate_id = $1
-       )
-     ORDER BY created_at
-     LIMIT 50
-     FOR UPDATE SKIP LOCKED`,
-    [source.id],
-  )
-  if (analyzedCandidates.rows.length > 0) {
-    const candidateIds = analyzedCandidates.rows.map((row) => row.id)
-    return Boolean(await insertTask(client, {
-      type: 'candidate_verification',
-      stage: 'verify',
-      priority: 72,
-      dedupeKey: `source:${source.id}:verify:${sha256Label(
-        candidateIds.join(','),
-      )}`,
-      coverageTargetId: source.coverage_target_id,
-      sourceId: source.id,
-      payload: {
-        ...basePayload,
-        candidates: analyzedCandidates.rows
-      }
-    }))
+    const queuedFragments = await client.query<{
+      id: string
+      ordinal: number
+      section_title: string | null
+      source_locator: string | null
+      content: string
+      content_hash: string
+    }>(
+      `SELECT
+         sf.id,
+         sf.ordinal,
+         sf.section_title,
+         sf.source_locator,
+         sf.content,
+         sf.content_hash
+       FROM source_fragments sf
+       JOIN source_artifacts sa ON sa.id = sf.source_artifact_id
+       WHERE sa.source_candidate_id = $1
+         AND sf.status = 'queued'
+         AND sf.reservation_task_id IS NULL
+       ORDER BY sf.ordinal
+       LIMIT 8
+       FOR UPDATE OF sf SKIP LOCKED`,
+      [source.id],
+    )
+    const analysisFragments = boundFragmentAnalysisBatch(
+      queuedFragments.rows,
+    )
+    if (analysisFragments.length > 0) {
+      const fragmentIds = analysisFragments.map((row) => row.id)
+      const taskId = await insertTask(client, {
+        type: 'fragment_analysis',
+        stage: 'analyze',
+        priority: aiPriorities.analyze,
+        dedupeKey: `source:${source.id}:analyze:${sha256Label(
+          fragmentIds.join(','),
+        )}`,
+        coverageTargetId: source.coverage_target_id,
+        sourceId: source.id,
+        payload: {
+          ...basePayload,
+          fragments: analysisFragments
+        }
+      })
+      if (!taskId) return false
+      await client.query(
+        `UPDATE source_fragments
+            SET status = 'reserved',
+                reservation_task_id = $1,
+                updated_at = now()
+          WHERE id = ANY($2::uuid[])
+            AND status = 'queued'
+            AND reservation_task_id IS NULL`,
+        [taskId, fragmentIds],
+      )
+      await client.query(
+        `UPDATE source_candidates
+            SET status = 'analyzing',
+                updated_at = now()
+          WHERE id = $1`,
+        [source.id],
+      )
+      return true
+    }
+    return false
   }
 
   const outstanding = await client.query<{ count: number }>(
@@ -846,12 +993,23 @@ async function queueSourceWork(
        (SELECT count(*) FROM source_fragments sf
         JOIN source_artifacts sa ON sa.id = sf.source_artifact_id
         WHERE sa.source_candidate_id = $1
-          AND sf.status IN ('queued', 'analyzing'))
+          AND sf.status IN ('queued', 'reserved', 'analyzing'))
        +
        (SELECT count(*) FROM knowledge_candidates kc
         JOIN pipeline_tasks pt ON pt.id = kc.pipeline_task_id
         WHERE pt.source_candidate_id = $1
-          AND kc.status = 'analyzed')
+          AND (
+            kc.status = 'analyzed'
+            OR kc.verification_task_id IS NOT NULL
+          ))
+       +
+       (SELECT count(*) FROM pipeline_tasks active
+        WHERE active.source_candidate_id = $1
+          AND active.task_type IN (
+            'fragment_analysis',
+            'candidate_verification'
+          )
+          AND active.status IN ('queued', 'claimed', 'running'))
      )::int AS count`,
     [source.id],
   )
@@ -893,7 +1051,10 @@ async function queueDiscoveryWork(client: DatabaseClient): Promise<boolean> {
      WHERE status <> 'paused'
        AND (
          status IN ('queued', 'failed')
-         OR next_check_at <= now()
+         OR (
+           status = 'covered'
+           AND next_check_at <= now()
+         )
        )
      ORDER BY priority DESC, next_check_at, updated_at
      LIMIT 1
@@ -928,7 +1089,10 @@ async function queueDiscoveryWork(client: DatabaseClient): Promise<boolean> {
   return Boolean(await insertTask(client, {
     type: 'source_discovery',
     stage: 'discover',
-    priority: Math.max(10, target.priority),
+    priority: Math.min(
+      aiPriorities.discover,
+      Math.max(1, target.priority),
+    ),
     dedupeKey: `coverage:${target.id}:discover`,
     coverageTargetId: target.id,
     payload: {
@@ -950,66 +1114,114 @@ async function ensureWorkInTransaction(
   const settings = await client.query<{
     enabled: boolean
     active_source_id: string | null
+    ai_model: string
+    reasoning_effort: string
+    max_concurrent_ai_runs: number
   }>(
-    `SELECT enabled, active_source_id
+    `SELECT
+       enabled,
+       active_source_id,
+       ai_model,
+       reasoning_effort,
+       max_concurrent_ai_runs
      FROM pipeline_settings
      WHERE singleton
      FOR UPDATE`,
   )
   const pipeline = settings.rows[0]
   if (!pipeline?.enabled) return
-
-  if (await queueExpertWork(client)) return
-
-  const alreadyQueued = await client.query<{ exists: boolean }>(
-    `SELECT EXISTS (
-       SELECT 1
-       FROM pipeline_tasks
-       WHERE status IN ('queued', 'claimed', 'running')
-     ) AS exists`,
-  )
-  if (alreadyQueued.rows[0]?.exists) return
-
   if (
-    pipeline.active_source_id &&
-    await queueSourceWork(client, pipeline.active_source_id)
+    pipeline.ai_model !== requiredPipelineModel ||
+    pipeline.reasoning_effort !== requiredPipelineReasoning
   ) {
-    return
+    throw new Error('PIPELINE_LUNA_CONFIGURATION_REQUIRED')
   }
 
-  const approvedSource = await client.query<{ id: string }>(
-    `SELECT id
-     FROM source_candidates
-     WHERE status IN (
-       'discovered',
-       'approved',
-       'acquired',
-       'converted',
-       'chunking',
-       'analyzing',
-       'verifying',
-       'publishing'
-     )
-     ORDER BY discovered_at
-     LIMIT 1
-     FOR UPDATE SKIP LOCKED`,
-  )
-  if (approvedSource.rows[0]) {
-    await client.query(
-      `UPDATE pipeline_settings
-          SET active_source_id = $1,
-              updated_at = now(),
-              updated_by = 'scheduler'
-        WHERE singleton`,
-      [approvedSource.rows[0].id],
+  // Always materialize a newly-arrived expert task, even when every Luna slot
+  // is occupied. Claim ordering then guarantees it receives the next free slot.
+  await queueExpertWork(client)
+
+  let activeSourceId = pipeline.active_source_id
+  if (activeSourceId) {
+    await queueSourceWork(client, activeSourceId, 'mechanical')
+    const refreshed = await client.query<{
+      active_source_id: string | null
+    }>(
+      `SELECT active_source_id
+       FROM pipeline_settings
+       WHERE singleton`,
     )
-    if (await queueSourceWork(client, approvedSource.rows[0].id)) return
+    activeSourceId = refreshed.rows[0]?.active_source_id ?? null
   }
 
-  if (await queueDiscoveryWork(client)) return
+  if (!activeSourceId) {
+    const approvedSource = await client.query<{ id: string }>(
+      `SELECT id
+       FROM source_candidates
+       WHERE status IN (
+         'discovered',
+         'approved',
+         'acquired',
+         'converted',
+         'chunking',
+         'analyzing',
+         'verifying',
+         'publishing'
+       )
+       ORDER BY discovered_at
+       LIMIT 1
+       FOR UPDATE SKIP LOCKED`,
+    )
+    activeSourceId = approvedSource.rows[0]?.id ?? null
+    if (activeSourceId) {
+      await client.query(
+        `UPDATE pipeline_settings
+            SET active_source_id = $1,
+                updated_at = now(),
+                updated_by = 'scheduler'
+          WHERE singleton`,
+        [activeSourceId],
+      )
+      await queueSourceWork(client, activeSourceId, 'mechanical')
+    }
+  }
 
-  if (await queueDiscoveryWork(client)) return
-  throw new Error('PIPELINE_NO_WORK_INVARIANT')
+  if (activeSourceId) {
+    const activeSourceAi = await client.query<{ count: number }>(
+      `SELECT count(*)::int AS count
+       FROM pipeline_tasks
+       WHERE source_candidate_id = $1
+         AND status IN ('queued', 'claimed', 'running')
+         AND task_type IN (
+           'fragment_analysis',
+           'candidate_verification'
+         )`,
+      [activeSourceId],
+    )
+    let sourceSlots = activeSourceAi.rows[0]?.count ?? 0
+    while (sourceSlots < pipeline.max_concurrent_ai_runs) {
+      if (!await queueSourceWork(client, activeSourceId, 'ai')) break
+      sourceSlots += 1
+    }
+  }
+
+  const activeAi = await client.query<{ count: number }>(
+    `SELECT count(*)::int AS count
+     FROM pipeline_tasks
+     WHERE status IN ('queued', 'claimed', 'running')
+       AND task_type = ANY($1::text[])`,
+    [aiTaskTypes],
+  )
+  let occupiedSlots = activeAi.rows[0]?.count ?? 0
+  while (occupiedSlots < pipeline.max_concurrent_ai_runs) {
+    let queued = await queueExpertWork(client)
+    if (!queued) {
+      queued = await queueDiscoveryWork(client)
+      if (!queued) queued = await queueDiscoveryWork(client)
+    }
+    if (!queued) break
+    occupiedSlots += 1
+  }
 }
 
 export async function ensurePipelineWork(
@@ -1022,14 +1234,67 @@ export async function claimPipelineTask(
   database: Database,
   config: AppConfig,
   researcherId: string,
+  researcherInstanceId = researcherId,
 ): Promise<Record<string, unknown>> {
   await ensurePipelineWork(database)
   return withTransaction(database, async (client) => {
-    const settings = await client.query<{ enabled: boolean }>(
-      `SELECT enabled FROM pipeline_settings WHERE singleton FOR UPDATE`,
+    const settings = await client.query<{
+      enabled: boolean
+      ai_model: string
+      reasoning_effort: string
+      max_concurrent_ai_runs: number
+    }>(
+      `SELECT
+         enabled,
+         ai_model,
+         reasoning_effort,
+         max_concurrent_ai_runs
+       FROM pipeline_settings
+       WHERE singleton
+       FOR UPDATE`,
     )
-    if (!settings.rows[0]?.enabled) {
+    const pipeline = settings.rows[0]
+    if (!pipeline?.enabled) {
+      await recordExecutorHeartbeat(
+        client,
+        researcherId,
+        researcherInstanceId,
+        { status: 'paused' },
+      )
       return { enabled: false, reason: 'pipeline_paused' }
+    }
+    if (
+      pipeline.ai_model !== requiredPipelineModel ||
+      pipeline.reasoning_effort !== requiredPipelineReasoning
+    ) {
+      throw new Error('PIPELINE_LUNA_CONFIGURATION_REQUIRED')
+    }
+    const runningAi = await client.query<{ count: number }>(
+      `SELECT count(*)::int AS count
+       FROM pipeline_tasks
+       WHERE status IN ('claimed', 'running')
+         AND task_type = ANY($1::text[])`,
+      [aiTaskTypes],
+    )
+    const activeRuns = runningAi.rows[0]?.count ?? 0
+    if (activeRuns >= pipeline.max_concurrent_ai_runs) {
+      await recordExecutorHeartbeat(
+        client,
+        researcherId,
+        researcherInstanceId,
+        {
+          status: 'standby',
+          reason: 'capacity_reached',
+          configured_concurrency: pipeline.max_concurrent_ai_runs,
+          active_luna_runs: activeRuns
+        },
+      )
+      return {
+        enabled: true,
+        pipeline_state: 'capacity_reached',
+        configured_concurrency: pipeline.max_concurrent_ai_runs,
+        active_luna_runs: activeRuns
+      }
     }
 
     const selected = await client.query<PipelineTaskRow>(
@@ -1062,39 +1327,33 @@ export async function claimPipelineTask(
          ORDER BY priority DESC, created_at
          LIMIT 1`,
       )
-      if (!activeMechanical.rows[0]) {
-        throw new Error('PIPELINE_NO_WORK_INVARIANT')
-      }
-      await client.query(
-        `INSERT INTO worker_heartbeats (
-           worker_name, instance_id, heartbeat_at, metadata
-         )
-         VALUES (
-           'pipeline-coordinator',
-           $1,
-           now(),
-           jsonb_build_object(
-             'status', 'deterministic_work_in_progress',
-             'stage', $2::text,
-             'task_type', $3::text
-           )
-         )
-         ON CONFLICT (worker_name)
-         DO UPDATE SET
-           instance_id = excluded.instance_id,
-           heartbeat_at = excluded.heartbeat_at,
-           metadata = excluded.metadata`,
-        [
-          researcherId,
-          activeMechanical.rows[0].stage,
-          activeMechanical.rows[0].task_type
-        ],
+      await recordExecutorHeartbeat(
+        client,
+        researcherId,
+        researcherInstanceId,
+        activeMechanical.rows[0]
+          ? {
+              status: 'standby',
+              reason: 'deterministic_work_in_progress',
+              stage: activeMechanical.rows[0].stage,
+              task_type: activeMechanical.rows[0].task_type
+            }
+          : {
+              status: 'standby',
+              reason: 'scheduler_refill'
+            },
       )
       return {
         enabled: true,
-        pipeline_state: 'pipeline_work_in_progress',
-        active_task_type: activeMechanical.rows[0].task_type,
-        active_stage: activeMechanical.rows[0].stage
+        pipeline_state: activeMechanical.rows[0]
+          ? 'pipeline_work_in_progress'
+          : 'scheduler_refill',
+        ...(activeMechanical.rows[0]
+          ? {
+              active_task_type: activeMechanical.rows[0].task_type,
+              active_stage: activeMechanical.rows[0].stage
+            }
+          : {})
       }
     }
 
@@ -1133,26 +1392,23 @@ export async function claimPipelineTask(
       [task.id],
     )
     await client.query(
-      `INSERT INTO worker_heartbeats (
-         worker_name, instance_id, heartbeat_at, metadata
-       )
-       VALUES (
-         'pipeline-coordinator',
-         $1,
-         now(),
-         jsonb_build_object(
-           'status', 'running',
-           'model', (
-             SELECT ai_model FROM pipeline_settings WHERE singleton
-           )
-         )
-       )
-       ON CONFLICT (worker_name)
-       DO UPDATE SET
-         instance_id = excluded.instance_id,
-         heartbeat_at = excluded.heartbeat_at,
-         metadata = excluded.metadata`,
-      [researcherId],
+      `UPDATE agent_runs
+          SET executor_id = $2
+        WHERE id = $1`,
+      [run.rows[0]!.id, researcherId],
+    )
+    await recordExecutorHeartbeat(
+      client,
+      researcherId,
+      researcherInstanceId,
+      {
+        status: 'running',
+        model: pipeline.ai_model,
+        reasoning_effort: pipeline.reasoning_effort,
+        task_id: task.id,
+        task_type: task.task_type,
+        stage: task.stage
+      },
     )
 
     let payload = task.payload
@@ -1209,8 +1465,9 @@ export async function claimPipelineTask(
                   attempts = attempts + 1,
                   updated_at = now()
             WHERE id = ANY($1::uuid[])
-              AND status = 'queued'`,
-          [fragmentIds],
+              AND status = 'reserved'
+              AND reservation_task_id = $2`,
+          [fragmentIds, task.id],
         )
       }
     }
@@ -1443,6 +1700,8 @@ export async function pausePipelineForSystemFailure(
       `UPDATE pipeline_settings
           SET enabled = false,
               paused_reason = $1,
+              pause_requested_at = now(),
+              control_generation = control_generation + 1,
               updated_at = now(),
               updated_by = $2
         WHERE singleton`,
@@ -1463,25 +1722,14 @@ export async function pausePipelineForSystemFailure(
        )`,
       [input.failure_message, input.failure_code],
     )
-    await client.query(
-      `INSERT INTO worker_heartbeats (
-         worker_name, instance_id, heartbeat_at, metadata
-       )
-       VALUES (
-         'pipeline-coordinator',
-         $1,
-         now(),
-         jsonb_build_object(
-           'status', 'failed',
-           'failure_code', $2
-         )
-       )
-       ON CONFLICT (worker_name)
-       DO UPDATE SET
-         instance_id = excluded.instance_id,
-         heartbeat_at = excluded.heartbeat_at,
-         metadata = excluded.metadata`,
-      [researcherId, input.failure_code],
+    await recordExecutorHeartbeat(
+      client,
+      researcherId,
+      researcherId,
+      {
+        status: 'failed',
+        failure_code: input.failure_code
+      },
     )
     return {
       enabled: false,
@@ -1523,9 +1771,86 @@ export async function heartbeatPipelineTask(
   config: AppConfig,
   taskId: string,
   leaseToken: string,
+  researcherId = 'pipeline-coordinator',
+  researcherInstanceId = researcherId,
 ): Promise<Record<string, unknown>> {
   return withTransaction(database, async (client) => {
     const task = await assertPipelineLease(client, taskId, leaseToken)
+    const settings = await client.query<{ enabled: boolean }>(
+      `SELECT enabled
+       FROM pipeline_settings
+       WHERE singleton
+       FOR UPDATE`,
+    )
+    if (!settings.rows[0]?.enabled) {
+      await client.query(
+        `UPDATE pipeline_tasks
+            SET status = 'queued',
+                claim_owner = NULL,
+                lease_token_hash = NULL,
+                lease_until = NULL,
+                heartbeat_at = NULL,
+                failure_code = 'PIPELINE_PAUSED',
+                failure_message =
+                  'The Luna run was stopped because the pipeline was paused.',
+                attempts = greatest(attempts - 1, 0),
+                updated_at = now()
+          WHERE id = $1`,
+        [task.id],
+      )
+      if (task.task_type === 'fragment_analysis') {
+        await client.query(
+          `UPDATE source_fragments
+              SET status = 'reserved',
+                  updated_at = now()
+            WHERE reservation_task_id = $1
+              AND status = 'analyzing'`,
+          [task.id],
+        )
+      }
+      if (task.expert_task_id) {
+        await client.query(
+          `UPDATE expert_tasks
+              SET status = 'queued',
+                  claim_owner = NULL,
+                  lease_token_hash = NULL,
+                  lease_until = NULL,
+                  heartbeat_at = NULL,
+                  failure_code = NULL,
+                  failure_message = NULL,
+                  attempts = greatest(attempts - 1, 0),
+                  completed_at = NULL,
+                  updated_at = now()
+            WHERE id = $1
+              AND status IN ('claimed', 'researching')`,
+          [task.expert_task_id],
+        )
+      }
+      await recordExecutorHeartbeat(
+        client,
+        researcherId,
+        researcherInstanceId,
+        {
+          status: 'paused',
+          previous_task_id: task.id,
+          previous_stage: task.stage
+        },
+      )
+      await recordEvent(client, {
+        taskId: task.id,
+        sourceId: task.source_candidate_id,
+        stage: task.stage,
+        event: 'paused',
+        message: 'The active Luna run was stopped and safely requeued.'
+      })
+      return {
+        enabled: false,
+        pipeline_task_id: taskId,
+        status: 'queued',
+        should_stop: true,
+        reason: 'pipeline_paused'
+      }
+    }
     const leaseUntil = new Date(
       Date.now() + config.taskLeaseSeconds * 1_000,
     )
@@ -1553,10 +1878,24 @@ export async function heartbeatPipelineTask(
         ],
       )
     }
+    await recordExecutorHeartbeat(
+      client,
+      researcherId,
+      researcherInstanceId,
+      {
+        status: 'running',
+        task_id: task.id,
+        task_type: task.task_type,
+        stage: task.stage,
+        lease_until: leaseUntil.toISOString()
+      },
+    )
     return {
+      enabled: true,
       pipeline_task_id: taskId,
       status: 'running',
-      lease_until: leaseUntil.toISOString()
+      lease_until: leaseUntil.toISOString(),
+      should_stop: false
     }
   })
 }
@@ -1665,14 +2004,22 @@ export async function submitSourceDiscovery(
             SET active_source_id = $1,
                 updated_at = now(),
                 updated_by = $2
-          WHERE singleton`,
+          WHERE singleton
+            AND active_source_id IS NULL`,
         [insertedIds[0], researcherId],
       )
     }
+    const activeSource = await client.query<{
+      active_source_id: string | null
+    }>(
+      `SELECT active_source_id
+       FROM pipeline_settings
+       WHERE singleton`,
+    )
     const completion = {
       inserted_sources: insertedIds.length,
       duplicate_sources: duplicates,
-      active_source_id: insertedIds[0] ?? null,
+      active_source_id: activeSource.rows[0]?.active_source_id ?? null,
       rejection_reason: input.rejection_reason ?? null
     }
     await completeTask(client, task, completion)
@@ -1707,8 +2054,21 @@ export async function submitCandidateAnalysis(
         typeof fragment.id === 'string'
           ? [fragment.id]
           : [],
-      ),
+        ),
     )
+    const reservedFragments = await client.query<{ count: number }>(
+      `SELECT count(*)::int AS count
+       FROM source_fragments
+       WHERE id = ANY($1::uuid[])
+         AND reservation_task_id = $2
+         AND status = 'analyzing'`,
+      [[...allowedFragmentIds], task.id],
+    )
+    if (
+      (reservedFragments.rows[0]?.count ?? 0) !== allowedFragmentIds.size
+    ) {
+      throw new Error('PIPELINE_FRAGMENT_RESERVATION_INVALID')
+    }
     const insertedIds: string[] = []
     for (const submission of input.candidates) {
       if (!allowedFragmentIds.has(submission.fragment_id)) {
@@ -1769,17 +2129,21 @@ export async function submitCandidateAnalysis(
     await client.query(
       `UPDATE source_fragments
           SET status = 'analyzed',
+              reservation_task_id = NULL,
               updated_at = now()
-        WHERE id = ANY($1::uuid[])`,
-      [submittedFragmentIds],
+        WHERE id = ANY($1::uuid[])
+          AND reservation_task_id = $2`,
+      [submittedFragmentIds, task.id],
     )
     if (rejectedFragmentIds.length > 0) {
       await client.query(
         `UPDATE source_fragments
             SET status = 'rejected',
+                reservation_task_id = NULL,
                 updated_at = now()
-          WHERE id = ANY($1::uuid[])`,
-        [rejectedFragmentIds],
+          WHERE id = ANY($1::uuid[])
+            AND reservation_task_id = $2`,
+        [rejectedFragmentIds, task.id],
       )
     }
     const completion = {
@@ -1933,10 +2297,14 @@ export async function submitCandidateVerification(
         `SELECT dangerous, payload
          FROM knowledge_candidates
          WHERE id = $1
+           AND verification_task_id = $2
+           AND status = 'analyzed'
          FOR UPDATE`,
-        [decision.candidate_id],
+        [decision.candidate_id, task.id],
       )
-      if (!candidate.rows[0]) throw new Error('PIPELINE_CANDIDATE_NOT_FOUND')
+      if (!candidate.rows[0]) {
+        throw new Error('PIPELINE_CANDIDATE_RESERVATION_INVALID')
+      }
       const threshold = candidate.rows[0].dangerous
         ? config.dangerousAutoPublishConfidence
         : config.autoPublishConfidence
@@ -1990,13 +2358,16 @@ export async function submitCandidateVerification(
             SET status = $2,
                 confidence = $3,
                 quality_score = $4,
+                verification_task_id = NULL,
                 updated_at = now()
-          WHERE id = $1`,
+          WHERE id = $1
+            AND verification_task_id = $5`,
         [
           decision.candidate_id,
           finalDecision,
           decision.confidence,
-          decision.quality_score
+          decision.quality_score,
+          task.id
         ],
       )
     }
@@ -2007,9 +2378,11 @@ export async function submitCandidateVerification(
       await client.query(
         `UPDATE knowledge_candidates
             SET status = 'manual_review',
+                verification_task_id = NULL,
                 updated_at = now()
-          WHERE id = ANY($1::uuid[])`,
-        [omitted],
+          WHERE id = ANY($1::uuid[])
+            AND verification_task_id = $2`,
+        [omitted, task.id],
       )
       counts.manual_review += omitted.length
     }
@@ -2105,7 +2478,47 @@ export async function failPipelineTask(
       )
     }
     if (task.source_candidate_id) {
-      if (retrying) {
+      const nonBlockingAiStage = [
+        'fragment_analysis',
+        'candidate_verification'
+      ].includes(task.task_type)
+      if (task.task_type === 'fragment_analysis') {
+        await client.query(
+          `UPDATE source_fragments
+              SET status = CASE WHEN $2 THEN 'reserved' ELSE 'failed' END,
+                  reservation_task_id = CASE WHEN $2 THEN $1 ELSE NULL END,
+                  updated_at = now()
+            WHERE reservation_task_id = $1
+              AND status IN ('reserved', 'analyzing')`,
+          [task.id, retrying],
+        )
+      }
+      if (task.task_type === 'candidate_verification' && !retrying) {
+        await client.query(
+          `UPDATE knowledge_candidates
+              SET status = 'manual_review',
+                  verification_task_id = NULL,
+                  updated_at = now()
+            WHERE verification_task_id = $1
+              AND status = 'analyzed'`,
+          [task.id],
+        )
+      }
+      if (nonBlockingAiStage) {
+        await client.query(
+          `UPDATE source_candidates
+              SET status = 'analyzing',
+                  failure_code = $2,
+                  failure_message = $3,
+                  updated_at = now()
+            WHERE id = $1`,
+          [
+            task.source_candidate_id,
+            input.failure_code,
+            input.failure_message
+          ],
+        )
+      } else if (retrying) {
         const retrySourceStatus: Partial<
           Record<PipelineTaskRow['task_type'], string>
         > = {
@@ -2131,30 +2544,6 @@ export async function failPipelineTask(
             input.failure_message
           ],
         )
-        if (task.task_type === 'fragment_analysis') {
-          const fragmentIds = (
-            Array.isArray(task.payload['fragments'])
-              ? task.payload['fragments']
-              : []
-          ).flatMap((fragment) =>
-            fragment &&
-            typeof fragment === 'object' &&
-            'id' in fragment &&
-            typeof fragment.id === 'string'
-              ? [fragment.id]
-              : [],
-          )
-          if (fragmentIds.length > 0) {
-            await client.query(
-              `UPDATE source_fragments
-                  SET status = 'queued',
-                      updated_at = now()
-                WHERE id = ANY($1::uuid[])
-                  AND status = 'analyzing'`,
-              [fragmentIds],
-            )
-          }
-        }
       } else {
         await client.query(
           `UPDATE source_candidates
@@ -2180,7 +2569,11 @@ export async function failPipelineTask(
         )
       }
     }
-    if (!retrying && task.coverage_target_id) {
+    if (
+      !retrying &&
+      task.coverage_target_id &&
+      !['fragment_analysis', 'candidate_verification'].includes(task.task_type)
+    ) {
       await client.query(
         `UPDATE coverage_targets
             SET status = 'failed',

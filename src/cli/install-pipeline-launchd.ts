@@ -28,7 +28,7 @@ const secretEnvPath = resolve(
   '.secrets',
   'researcher-bridge.env',
 )
-const errorLog = resolve(projectRoot, 'tmp/pipeline-coordinator.err.log')
+const errorLog = resolve(projectRoot, 'tmp/pipeline-pool.err.log')
 const tunnelErrorLog = resolve(projectRoot, 'tmp/pipeline-tunnel.err.log')
 
 function xml(value: string): string {
@@ -152,7 +152,7 @@ const command = [
   `'${pnpm.replaceAll("'", "'\\''")}'`,
   '--dir',
   `'${projectRoot.replaceAll("'", "'\\''")}'`,
-  'pipeline:coordinator'
+  'pipeline:pool'
 ].join(' ')
 const plist = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"

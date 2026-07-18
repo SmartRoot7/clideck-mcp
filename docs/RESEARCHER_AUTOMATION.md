@@ -1,14 +1,16 @@
-# Continuous Codex pipeline coordinator
+# Parallel Luna pipeline
 
-The coordinator runs continuously under macOS `launchd` and communicates only
-with the restricted researcher bridge. Credentials are stored in the ignored
-file
-`.secrets/researcher-bridge.env`:
+The macOS `launchd` service runs one local pool supervisor and four isolated
+executor lanes. PostgreSQL is the source of truth for the configured
+concurrency, which defaults to three and may be set from one through four.
+Standby lanes poll the restricted researcher bridge but never start Codex until
+they atomically lease useful work.
+
+Credentials remain in the ignored `.secrets/researcher-bridge.env` file:
 
 ```text
 CLIDECK_RESEARCHER_URL=http://127.0.0.1:28788/mcp
 CLIDECK_RESEARCHER_TOKEN=<random researcher bearer token>
-CLIDECK_RESEARCHER_ID=codex-pipeline-coordinator
 CLIDECK_PIPELINE_MODEL=gpt-5.6-luna
 CLIDECK_PIPELINE_REASONING=low
 CLIDECK_PIPELINE_CODEX_BINARY=/absolute/path/to/codex
@@ -18,45 +20,69 @@ CLIDECK_RESEARCHER_SSH_IDENTITY=/absolute/path/to/private-key
 CLIDECK_RESEARCHER_TUNNEL_PORT=28788
 ```
 
-Install or replace the launch agent only after backend 0.3 is healthy:
+The model and reasoning values are enforced in the database, coordinator, and
+pool supervisor. Production AI work cannot run with anything except
+`gpt-5.6-luna` and reasoning `low`.
+
+Install or replace the pool after the matching backend migration is healthy:
 
 ```bash
 pnpm pipeline:install-launchd
+pnpm pipeline:pool-status
 launchctl print "gui/$(id -u)/com.clideck.mcp.pipeline-tunnel"
-launchctl print "gui/$(id -u)/com.clideck.mcp.pipeline"
 ```
 
-The installer creates two keep-alive LaunchAgents. The first opens an
-authenticated SSH local forward from the configured loopback port to the
-researcher bridge. The second runs the coordinator against that loopback URL.
-This keeps port 8788 off the public tunnel and avoids granting a background
-Node process direct LAN access. The SSH key must already be authorized on the
-project server and must not require interactive input.
+The installer keeps the authenticated SSH tunnel separate from the Luna pool.
+Each executor uses its own ignored lease directory:
 
-The coordinator claims one useful AI stage at a time and starts `codex exec
---ephemeral` with `gpt-5.6-luna`, reasoning `low`, and a read-only sandbox. The
-lease is stored in `.secrets/pipeline-lease.json`; the model receives only the
-bounded task payload. No lease, bearer token, or database credential is placed
-in the prompt or output.
+```text
+.secrets/pipeline/pipeline-executor-01/
+.secrets/pipeline/pipeline-executor-02/
+.secrets/pipeline/pipeline-executor-03/
+.secrets/pipeline/pipeline-executor-04/
+```
 
-Claimed questions and document fragments are untrusted data, never authority.
-The model may consult only public official documentation and must not
-authenticate to vendor portals, retrieve private manuals, access other
-repositories or servers, execute device commands, or change code. The ordinary
-worker owns downloads, conversion, OCR, chunking, indexing, safety policy, and
-publication.
+Temporary schemas, output, submissions, and usage files are likewise isolated
+under `tmp/pipeline/<executor-id>/`. Every AI run is ephemeral and receives only
+its bounded leased payload. Bearer tokens, leases, database credentials, and
+other executor files are never included in prompts.
 
-While the pipeline is enabled, a claim never reports “no work”. It either returns
-an AI stage or reports that deterministic worker work is already active. When an
-AI run finishes, the coordinator immediately claims the next useful stage. If
-Codex is temporarily unavailable, the leased task is retried; known
-deterministic answers remain available.
+The scheduler reserves work in this order: expert, verify, analyze, then
+discover/refresh. Acquire, conversion, OCR, chunking, indexing, and publication
+remain deterministic worker operations. Publication is serialized with a
+transaction advisory lock.
 
-For a single non-persistent smoke run:
+## Stopping token use
+
+The normal control is the super-admin `Pause all Luna` action, backed by:
+
+```http
+POST /admin/v1/pipeline/state
+{"enabled":false,"reason":"manual pause"}
+```
+
+Active Luna runs poll control at most every five seconds, terminate within ten
+seconds, discard partial output, and return their reservations to the queue.
+An already-running deterministic worker step may finish, but no new work is
+claimed. Resume uses the same endpoint with `{"enabled":true}`.
+
+If the website or backend control is unavailable, stop or start the local pool:
 
 ```bash
-CLIDECK_PIPELINE_ONCE=true pnpm pipeline:coordinator
+pnpm pipeline:pool-stop
+pnpm pipeline:pool-start
 ```
 
-The old five-minute sidebar automation must be disabled only after `launchctl`
-shows the new coordinator running and the backend heartbeat is healthy.
+The tunnel stays available. An emergency stop creates no AI token usage; any
+unreported lease is recovered by the normal lease expiry policy.
+
+Concurrency is changed by a super admin:
+
+```http
+POST /admin/v1/pipeline/concurrency
+{"max_concurrent_ai_runs":3}
+```
+
+Scaling down is graceful: existing runs finish and no replacement run starts
+until the active count is within the new limit. Scaling up fills newly available
+slots on the next poll.

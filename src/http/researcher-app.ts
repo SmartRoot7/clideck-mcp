@@ -52,14 +52,26 @@ export function createResearcherApp(dependencies: {
     await next()
   })
   app.all('/mcp', async (context) => {
+    const requestedResearcherId =
+      context.req.header('x-researcher-id')?.slice(0, 120)
     const researcherId =
-      context.req.header('x-researcher-id')?.slice(0, 120) ??
-      `codex-${randomUUID()}`
+      requestedResearcherId &&
+      /^[A-Za-z0-9][A-Za-z0-9_.:-]{2,119}$/.test(requestedResearcherId)
+        ? requestedResearcherId
+        : `codex-${randomUUID()}`
+    const requestedInstanceId =
+      context.req.header('x-researcher-instance-id')?.slice(0, 200)
+    const researcherInstanceId =
+      requestedInstanceId &&
+      /^[A-Za-z0-9][A-Za-z0-9_.:-]{2,199}$/.test(requestedInstanceId)
+        ? requestedInstanceId
+        : researcherId
     const server = createResearcherMcpServer({
       config,
       database,
       logger,
-      researcherId
+      researcherId,
+      researcherInstanceId
     })
     const transport = new WebStandardStreamableHTTPServerTransport({
       enableJsonResponse: true

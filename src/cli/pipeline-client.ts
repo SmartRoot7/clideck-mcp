@@ -9,12 +9,22 @@ import { resolve } from 'node:path'
 import { z } from 'zod'
 
 import { candidateKnowledgeSchema } from '../domain/publication.js'
+import {
+  pipelineExecutorIds,
+  pipelineExecutorPaths
+} from './pipeline-runtime.js'
 
 const environmentSchema = z.object({
   CLIDECK_RESEARCHER_URL: z.string().url(),
   CLIDECK_RESEARCHER_TOKEN: z.string().min(32),
   CLIDECK_RESEARCHER_ID: z.string().min(3).max(120)
-    .default('codex-pipeline-coordinator')
+    .regex(/^[A-Za-z0-9][A-Za-z0-9_.:-]+$/)
+    .default('pipeline-executor-01'),
+  CLIDECK_RESEARCHER_INSTANCE_ID: z.string().min(3).max(200)
+    .regex(/^[A-Za-z0-9][A-Za-z0-9_.:-]+$/)
+    .default('pipeline-executor-01:manual'),
+  CLIDECK_PIPELINE_EXECUTOR_ID: z.enum(pipelineExecutorIds)
+    .default(pipelineExecutorIds[0])
 })
 
 const pipelineLeaseSchema = z.object({
@@ -37,7 +47,10 @@ const usageSchema = z.object({
 
 const environment = environmentSchema.parse(process.env)
 const action = process.argv[2]
-const secretDirectory = resolve(process.cwd(), '.secrets')
+const { secretDirectory } = pipelineExecutorPaths(
+  process.cwd(),
+  environment.CLIDECK_PIPELINE_EXECUTOR_ID,
+)
 const leasePath = resolve(secretDirectory, 'pipeline-lease.json')
 const taskPath = resolve(secretDirectory, 'pipeline-task.json')
 
@@ -50,6 +63,8 @@ async function callTool(
     headers: {
       authorization: `Bearer ${environment.CLIDECK_RESEARCHER_TOKEN}`,
       'x-researcher-id': environment.CLIDECK_RESEARCHER_ID,
+      'x-researcher-instance-id':
+        environment.CLIDECK_RESEARCHER_INSTANCE_ID,
       'content-type': 'application/json',
       accept: 'application/json, text/event-stream',
       'mcp-protocol-version': '2025-11-25'
