@@ -108,41 +108,102 @@ export async function searchKnowledge(
     .replace(/\s+/g, ' ')
     .trim()
   const result = await database.query<KnowledgeRow>(
-    `WITH candidate_revisions AS MATERIALIZED (
-       SELECT id
-       FROM knowledge_revisions
-       WHERE search_document @@ websearch_to_tsquery('simple', $1)
-       UNION
-       SELECT id
-       FROM knowledge_revisions
-       WHERE lower(title) % lower($1)
-         AND similarity(lower(title), lower($1)) >= 0.32
+    `WITH ranked_revisions AS MATERIALIZED (
+       SELECT
+         kr.id AS revision_id,
+         ri.knowledge_item_id,
+         (
+           ts_rank_cd(
+             kr.search_document,
+             websearch_to_tsquery('simple', $1),
+             32
+           )
+           + similarity(lower(kr.title), lower($1)) * 0.15
+           + kr.confidence::float8 * 0.10
+           + kr.quality_score::float8 * 0.10
+           + CASE
+               WHEN kr.platform_id IS NOT NULL AND kr.platform_id = $4
+                 THEN 0.15
+               ELSE 0
+             END
+         )::float8 AS rank
+       FROM knowledge_revisions kr
+       JOIN release_items ri ON ri.revision_id = kr.id
+       JOIN active_release ar ON ar.release_id = ri.release_id
+       JOIN knowledge_items ki ON ki.id = ri.knowledge_item_id
+       WHERE kr.vendor_id = $2
+         AND (
+           kr.operating_system_id IS NULL
+           OR kr.operating_system_id = $3
+         )
+         AND (
+           $4::uuid IS NULL
+           OR kr.platform_id IS NULL
+           OR kr.platform_id = $4
+         )
+         AND ($5::text IS NULL OR ki.kind = $5)
+         AND (
+           kr.search_document @@ websearch_to_tsquery('simple', $1)
+           OR (
+             lower(kr.title) % lower($1)
+             AND similarity(lower(kr.title), lower($1)) >= 0.32
+           )
+         )
+       ORDER BY rank DESC, kr.confidence DESC, kr.last_verified_at DESC
+       LIMIT 25
      )
      SELECT
-       pak.*,
-       (
-         ts_rank_cd(pak.search_document, websearch_to_tsquery('simple', $1), 32)
-         + similarity(lower(pak.title), lower($1)) * 0.15
-         + pak.confidence::float8 * 0.10
-         + pak.quality_score::float8 * 0.10
-         + CASE WHEN pak.platform_slug IS NOT NULL AND pak.platform_slug = $4 THEN 0.15 ELSE 0 END
-       )::float8 AS rank
-     FROM public_active_knowledge pak
-     JOIN candidate_revisions cr ON cr.id = pak.revision_id
-     WHERE pak.vendor_slug = $2
-       AND (
-         pak.operating_system_slug IS NULL
-         OR pak.operating_system_slug = $3
-       )
-       AND ($4::text IS NULL OR pak.platform_slug IS NULL OR pak.platform_slug = $4)
-       AND ($5::text IS NULL OR pak.kind = $5)
-     ORDER BY rank DESC, pak.confidence DESC, pak.last_verified_at DESC
-     LIMIT 25`,
+       rr.revision_id,
+       ki.kind,
+       v.display_name AS vendor_name,
+       p.display_name AS platform_name,
+       coalesce(os.display_name, 'Not specified') AS operating_system_name,
+       kr.version_min,
+       kr.version_max,
+       kr.version_normalized_min,
+       kr.version_normalized_max,
+       kr.title,
+       kr.summary,
+       kr.cli_mode,
+       kr.command_text,
+       kr.procedure_steps,
+       kr.prerequisites,
+       kr.risks,
+       kr.verification_steps,
+       kr.rollback_steps,
+       kr.limitations,
+       kr.dangerous,
+       kr.confidence,
+       kr.quality_score,
+       kr.last_verified_at,
+       coalesce(
+         kpt.validation_level,
+         'documentation_reviewed'
+       ) AS validation_level,
+       coalesce(kpt.independent_confirmations, 1) AS independent_confirmations,
+       coalesce(
+         kpt.confidence_explanation,
+         'Verified structured knowledge with bounded applicability.'
+       ) AS confidence_explanation,
+       coalesce(
+         kpt.next_review_at,
+         kr.last_verified_at + 180
+       ) AS next_review_at,
+       kpt.lab_validated_at,
+       rr.rank
+     FROM ranked_revisions rr
+     JOIN knowledge_revisions kr ON kr.id = rr.revision_id
+     JOIN knowledge_items ki ON ki.id = rr.knowledge_item_id
+     JOIN vendors v ON v.id = kr.vendor_id
+     LEFT JOIN platforms p ON p.id = kr.platform_id
+     LEFT JOIN operating_systems os ON os.id = kr.operating_system_id
+     LEFT JOIN knowledge_public_trust kpt ON kpt.revision_id = kr.id
+     ORDER BY rr.rank DESC, kr.confidence DESC, kr.last_verified_at DESC`,
     [
       normalizedQuestion,
-      context.vendor_slug,
-      context.operating_system_slug,
-      context.platform_slug,
+      context.vendorId,
+      context.operatingSystemId,
+      context.platformId,
       kind ?? null
     ],
   )
