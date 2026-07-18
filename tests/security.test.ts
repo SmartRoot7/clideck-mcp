@@ -42,6 +42,9 @@ describe('security primitives', () => {
     ]) {
       expect(grants).toContain(`TO ${role};`)
     }
+    expect(grants).toMatch(
+      /GRANT SELECT ON[\s\S]*knowledge_revisions,[\s\S]*TO clideck_mcp_api;/,
+    )
   })
 
   it('creates non-enumerable public identifiers and hashes', () => {
