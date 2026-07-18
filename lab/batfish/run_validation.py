@@ -53,7 +53,7 @@ validations = [{
     "stable_key": stable_key,
     "validation_type": "batfish_modeled",
     "fixture_key": "c9300-description-reachability",
-    "tool_version": "batfish-2025.07.07",
+    "tool_version": "batfish-2025.07.07.2423",
     "status": "passed" if validation_passed else "failed",
     "summary": (
         "Cisco syntax parsed and a bounded description-only change preserved "

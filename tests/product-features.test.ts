@@ -220,7 +220,7 @@ describe('commit-bound lab assurance', () => {
         stable_key: 'cisco.ios-xe.show-ip-route',
         validation_type: 'batfish_modeled',
         fixture_key: 'c9300-route-model',
-        tool_version: 'batfish-2025.07.07',
+        tool_version: 'batfish-2025.07.07.2423',
         status: 'passed',
         summary: 'The bounded Cisco configuration model parsed successfully.',
         executed_at: '2026-07-17T12:00:00.000Z',
