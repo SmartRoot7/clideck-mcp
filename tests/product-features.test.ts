@@ -16,6 +16,7 @@ import {
   discoverySubmissionSchema,
   expertResearchStructuredArtifactSchema,
   materializeCandidateVerificationArtifact,
+  normalizeCandidateAnalysisOptionalFields,
   normalizeCandidateAnalysisStableKeys
 } from '../src/domain/pipeline.js'
 import { chunkSourceText } from '../src/domain/pipeline-worker.js'
@@ -329,6 +330,29 @@ describe('deterministic source processing', () => {
       .toThrow('stable_key')
   })
 
+  it('drops overlong optional CLI mode prose before validation', () => {
+    const original = {
+      candidates: [{
+        fragment_id: '00000000-0000-4000-8000-000000000001',
+        candidate: {
+          cli_mode:
+            'Enter this mode after authenticating and then continue through ' +
+            'several context-dependent configuration levels described by the ' +
+            'surrounding procedure before issuing the command.'
+        }
+      }],
+      rejected_fragments: []
+    }
+
+    const normalized = normalizeCandidateAnalysisOptionalFields(original) as {
+      candidates: Array<{ candidate: { cli_mode?: string } }>
+    }
+
+    expect(normalized.candidates[0]!.candidate.cli_mode).toBeUndefined()
+    expect(original.candidates[0]!.candidate.cli_mode.length)
+      .toBeGreaterThan(120)
+  })
+
   it('binds provenance hashes to trusted leased fragments', () => {
     const fragmentId = '00000000-0000-4000-8000-000000000001'
     const trustedHash = `sha256:${'d'.repeat(64)}`
@@ -483,6 +507,47 @@ describe('deterministic source processing', () => {
       .toBe(fragments.length)
     expect(fragments.filter((fragment) => fragment.content === repeated))
       .toHaveLength(1)
+  })
+
+  it('removes dense PDF contents pages without dropping body commands', () => {
+    const contentsPage = [
+      'CONTENTS',
+      'Overview........................................................ 1',
+      'Initial configuration.......................................... 8',
+      'Interface commands............................................ 42',
+      'Routing commands.............................................. 87',
+      'Security policy.............................................. 131',
+      'Diagnostics.................................................. 205',
+      'Upgrade procedures........................................... 260',
+      'Appendix..................................................... 310'
+    ].join('\n')
+    const bodyPages = Array.from(
+      { length: 12 },
+      (_, index) => [
+        'INTERFACE DIAGNOSTICS',
+        '',
+        `Use show interface ethernet ${index} to inspect link state.`,
+        '',
+        `show interface ethernet ${index}`
+      ].join('\n'),
+    )
+    const source = [
+      'NETWORK OS CLI REFERENCE',
+      contentsPage,
+      ...bodyPages
+    ].join('\f')
+
+    const fragments = chunkSourceText(source)
+
+    for (let index = 0; index < bodyPages.length; index += 1) {
+      expect(fragments.some((fragment) =>
+        fragment.content.includes(`show interface ethernet ${index}`),
+      )).toBe(true)
+    }
+    expect(fragments.length).toBeLessThan(bodyPages.length)
+    expect(fragments.every((fragment) =>
+      !fragment.content.includes('Initial configuration........'),
+    )).toBe(true)
   })
 })
 

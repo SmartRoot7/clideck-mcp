@@ -341,10 +341,43 @@ function splitOversizedText(text: string, maxBytes: number): string[] {
   return pieces
 }
 
+function isLikelyTableOfContentsPage(page: string): boolean {
+  const lines = page
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+  if (lines.length < 4) return false
+
+  const dottedEntries = lines.filter((line) =>
+    /\.{5,}\s*(?:\d+|[ivxlcdm]+)\s*$/i.test(line),
+  ).length
+  const hasContentsHeading = lines
+    .slice(0, 20)
+    .some((line) => /^(?:table of )?contents?(?:\s|$)/i.test(line))
+
+  return (
+    (hasContentsHeading && dottedEntries >= 3) ||
+    (dottedEntries >= 6 && dottedEntries * 8 >= lines.length)
+  )
+}
+
+function normalizeSourcePages(text: string): string {
+  const normalized = text.replace(/\r/g, '')
+  if (!normalized.includes('\f')) return normalized
+
+  const pages = normalized.split('\f')
+  const retainedPages = pages.filter(
+    (page) => !isLikelyTableOfContentsPage(page),
+  )
+  return (retainedPages.length > 0 ? retainedPages : pages)
+    .map((page) => page.trim())
+    .filter(Boolean)
+    .join('\n')
+}
+
 export function chunkSourceText(text: string): TextFragment[] {
   const maxBytes = 30_000
-  const blocks = text
-    .replace(/\r/g, '')
+  const blocks = normalizeSourcePages(text)
     .split(/\n{2,}/)
     .map((block) => block.trim())
     .filter(Boolean)
