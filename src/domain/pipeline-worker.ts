@@ -13,6 +13,11 @@ import { tmpdir } from 'node:os'
 import { basename, extname, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import { execFile } from 'node:child_process'
+import {
+  createBrotliDecompress,
+  createGunzip,
+  createInflate
+} from 'node:zlib'
 
 import { z } from 'zod'
 
@@ -92,6 +97,8 @@ async function fetchPublicDocument(
           headers: {
             accept:
               'application/pdf,text/html,application/xhtml+xml,text/plain;q=0.9',
+            'accept-encoding': 'br, gzip, deflate',
+            'accept-language': 'en-US,en;q=0.8',
             'user-agent': 'CliDeck-MCP-Knowledge-Pipeline/0.3'
           }
         },
@@ -107,23 +114,50 @@ async function fetchPublicDocument(
             incoming.destroy(new Error('SOURCE_TOO_LARGE'))
             return
           }
+          const rawEncoding = incoming.headers['content-encoding']
+          const contentEncoding = (
+            Array.isArray(rawEncoding) ? rawEncoding[0] : rawEncoding
+          )?.trim().toLowerCase()
+          const decodedStream = contentEncoding === 'br'
+            ? incoming.pipe(createBrotliDecompress())
+            : contentEncoding === 'gzip'
+              ? incoming.pipe(createGunzip())
+              : contentEncoding === 'deflate'
+                ? incoming.pipe(createInflate())
+                : incoming
+          if (
+            contentEncoding &&
+            !['br', 'gzip', 'deflate', 'identity'].includes(contentEncoding)
+          ) {
+            incoming.destroy(new Error('SOURCE_ENCODING_NOT_SUPPORTED'))
+            return
+          }
           const chunks: Buffer[] = []
-          let received = 0
+          let rawReceived = 0
+          let decodedReceived = 0
           incoming.on('data', (chunk: Buffer) => {
-            received += chunk.byteLength
-            if (received > maxBytes) {
+            rawReceived += chunk.byteLength
+            if (rawReceived > maxBytes) {
               incoming.destroy(new Error('SOURCE_TOO_LARGE'))
+            }
+          })
+          decodedStream.on('data', (chunk: Buffer) => {
+            decodedReceived += chunk.byteLength
+            if (decodedReceived > maxBytes) {
+              decodedStream.destroy(new Error('SOURCE_TOO_LARGE'))
+              incoming.destroy()
               return
             }
             chunks.push(Buffer.from(chunk))
           })
-          incoming.once('end', () => {
+          decodedStream.once('end', () => {
             resolvePromise({
               status,
               headers: incoming.headers,
               body: Buffer.concat(chunks)
             })
           })
+          decodedStream.once('error', rejectPromise)
           incoming.once('error', rejectPromise)
           incoming.once('aborted', () => {
             rejectPromise(new Error('SOURCE_RESPONSE_ABORTED'))

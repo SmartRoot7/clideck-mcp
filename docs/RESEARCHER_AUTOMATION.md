@@ -6,17 +6,32 @@ file
 `.secrets/researcher-bridge.env`:
 
 ```text
-CLIDECK_RESEARCHER_URL=http://clideck-mcp.lan:8788/mcp
+CLIDECK_RESEARCHER_URL=http://127.0.0.1:28788/mcp
 CLIDECK_RESEARCHER_TOKEN=<random researcher bearer token>
 CLIDECK_RESEARCHER_ID=codex-pipeline-coordinator
+CLIDECK_PIPELINE_MODEL=gpt-5.6-luna
+CLIDECK_PIPELINE_REASONING=low
+CLIDECK_PIPELINE_CODEX_BINARY=/absolute/path/to/codex
+CLIDECK_RESEARCHER_SSH_HOST=<fixed server LAN address>
+CLIDECK_RESEARCHER_SSH_USER=<restricted SSH user>
+CLIDECK_RESEARCHER_SSH_IDENTITY=/absolute/path/to/private-key
+CLIDECK_RESEARCHER_TUNNEL_PORT=28788
 ```
 
 Install or replace the launch agent only after backend 0.3 is healthy:
 
 ```bash
 pnpm pipeline:install-launchd
+launchctl print "gui/$(id -u)/com.clideck.mcp.pipeline-tunnel"
 launchctl print "gui/$(id -u)/com.clideck.mcp.pipeline"
 ```
+
+The installer creates two keep-alive LaunchAgents. The first opens an
+authenticated SSH local forward from the configured loopback port to the
+researcher bridge. The second runs the coordinator against that loopback URL.
+This keeps port 8788 off the public tunnel and avoids granting a background
+Node process direct LAN access. The SSH key must already be authorized on the
+project server and must not require interactive input.
 
 The coordinator claims one useful AI stage at a time and starts `codex exec
 --ephemeral` with `gpt-5.6-luna`, reasoning `low`, and a read-only sandbox. The
