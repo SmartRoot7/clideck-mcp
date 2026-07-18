@@ -14,8 +14,13 @@ import {
   candidateAnalysisArtifactSchema,
   candidateVerificationArtifactSchema,
   discoveryArtifactSchema,
-  expertResearchArtifactSchema
+  expertResearchArtifactSchema,
+  expertResearchStructuredArtifactSchema
 } from '../domain/pipeline.js'
+import {
+  omitNullObjectProperties,
+  openAiStrictJsonSchema
+} from '../domain/structured-output.js'
 
 const environmentSchema = z.object({
   CLIDECK_PIPELINE_MODEL: z.string().min(1).default('gpt-5.6-luna'),
@@ -157,7 +162,8 @@ results only far enough to confirm that each returned URL contains substantive
 knowledge. Do not download or read a full manual; the deterministic Acquire
 stage performs that work. Submit:
 {"sources":[{"canonical_url":"https://...","document_type":"...",
-"title":"...","document_version":"optional","document_date":"YYYY-MM-DD optional"}]}
+"title":"...","document_version":"version or null","document_date":"YYYY-MM-DD or null"}],
+"rejection_reason":null}
 If no qualifying source is found, submit:
 {"sources":[],"rejection_reason":"bounded reason describing the search result"}
 `,
@@ -203,15 +209,16 @@ Every candidate MUST contain every required field in this exact contract:
 }
 Optional string fields are "platform_slug", "version_min", "version_max",
 "cli_mode", and "command". Optional provenance fields are "document_version"
-and "document_date". Omit an optional field when unknown; never emit null.
+and "document_date". Emit every optional field and use null when unknown; the
+wire schema requires all keys and the bridge removes nulls before validation.
 Dates MUST be YYYY-MM-DD, so convert a leased timestamp to its first 10
-characters. Slugs use lowercase letters, digits, and hyphens. Omit
-platform_slug unless its exact registered slug is known from the leased input.
+characters. Slugs use lowercase letters, digits, and hyphens. Set
+platform_slug to null unless its exact registered slug is known from the input.
 Use the fragment content_hash in provenance, not a newly invented hash.
 Confidence and quality_score are JSON numbers between 0 and 1.
 
 Return exactly:
-{"candidates":[{"fragment_id":"leased uuid","candidate":{"stable_key":"...","kind":"command","vendor_slug":"...","operating_system_slug":"...","title":"...","summary":"...","question_patterns":["..."],"procedure":[],"prerequisites":[],"risks":[],"verification":["..."],"rollback":[],"limitations":[],"dangerous":false,"risk_level":"safe_read_only","confidence":0.95,"quality_score":0.95,"confidence_reason":"...","last_verified_at":"${verifiedDate}","provenance":[{"url":"https://...","document_type":"...","title":"...","verified_at":"${verifiedDate}","content_hash":"sha256:...","evidence_fragment":"...","evidence_role":"primary"}]}}],
+{"candidates":[{"fragment_id":"leased uuid","candidate":{"stable_key":"...","kind":"command","vendor_slug":"...","platform_slug":null,"operating_system_slug":"...","version_min":null,"version_max":null,"title":"...","summary":"...","question_patterns":["..."],"cli_mode":null,"command":null,"procedure":[],"prerequisites":[],"risks":[],"verification":["..."],"rollback":[],"limitations":[],"dangerous":false,"risk_level":"safe_read_only","confidence":0.95,"quality_score":0.95,"confidence_reason":"...","last_verified_at":"${verifiedDate}","provenance":[{"url":"https://...","document_type":"...","title":"...","document_version":null,"document_date":null,"verified_at":"${verifiedDate}","content_hash":"sha256:...","evidence_fragment":"...","evidence_role":"primary"}]}}],
 "rejected_fragments":[{"fragment_id":"leased uuid","reason":"8-500 characters"}]}
 `,
     candidate_verification: `
@@ -228,9 +235,10 @@ Submit one decision per candidate:
     expert_research: `
 Research the bounded expert question using only public official sources. Create
 one complete, version-aware candidate. Do not guess unsupported commands or
-claim dangerous operations are safe. Use at most five focused searches. Return
-the candidate object itself. If no answer can be verified, return:
-{"rejected":true,"reason":"bounded reason explaining why no safe verified answer exists"}
+claim dangerous operations are safe. Use at most five focused searches. Return:
+{"outcome":"candidate","candidate":{"complete candidate object"},"reason":null}
+If no answer can be verified, return:
+{"outcome":"rejected","candidate":null,"reason":"bounded reason explaining why no safe verified answer exists"}
 `,
     source_refresh: `
 Find a newer official public revision for the supplied source and coverage
@@ -279,16 +287,13 @@ async function runCodex(
   timedOut: boolean
   durationMs: number
   usage: Usage
+  diagnosticCode?: string
 }> {
   const startedAt = Date.now()
   await writeFile(
     agentOutputSchemaPath,
-    JSON.stringify(z.toJSONSchema(
+    JSON.stringify(openAiStrictJsonSchema(
       artifactSchemaForTask(task.task_type),
-      {
-        target: 'draft-7',
-        unrepresentable: 'any'
-      },
     )),
     { encoding: 'utf8', mode: 0o600 },
   )
@@ -328,10 +333,11 @@ async function runCodex(
       ],
       {
         cwd: projectRoot,
-        stdio: ['pipe', 'pipe', 'ignore']
+        stdio: ['pipe', 'pipe', 'pipe']
       },
     )
     let lineBuffer = ''
+    let stderr = ''
     let timedOut = false
     let heartbeatRunning = false
     child.stdout.setEncoding('utf8')
@@ -349,6 +355,10 @@ async function runCodex(
         }
       }
       if (lineBuffer.length > 2_000_000) lineBuffer = ''
+    })
+    child.stderr.setEncoding('utf8')
+    child.stderr.on('data', (chunk: string) => {
+      if (stderr.length < 8_000) stderr += chunk
     })
     const heartbeat = setInterval(() => {
       if (heartbeatRunning) return
@@ -376,11 +386,47 @@ async function runCodex(
         exitCode: code ?? 1,
         timedOut,
         durationMs: Date.now() - startedAt,
-        usage
+        usage,
+        ...((code ?? 1) !== 0
+          ? { diagnosticCode: classifyCodexDiagnostic(stderr) }
+          : {})
       })
     })
     child.stdin.end(researcherPrompt(task))
   })
+}
+
+function classifyCodexDiagnostic(stderr: string): string {
+  const normalized = stderr.toLowerCase()
+  if (
+    normalized.includes('output schema') ||
+    normalized.includes('invalid schema')
+  ) {
+    return 'CODEX_OUTPUT_SCHEMA_REJECTED'
+  }
+  if (
+    normalized.includes('rate limit') ||
+    normalized.includes('too many requests')
+  ) {
+    return 'CODEX_RATE_LIMITED'
+  }
+  if (
+    normalized.includes('unauthorized') ||
+    normalized.includes('authentication')
+  ) {
+    return 'CODEX_AUTH_FAILED'
+  }
+  if (
+    normalized.includes('model') &&
+    (
+      normalized.includes('not found') ||
+      normalized.includes('unsupported') ||
+      normalized.includes('unavailable')
+    )
+  ) {
+    return 'CODEX_MODEL_UNAVAILABLE'
+  }
+  return 'CODEX_PROCESS_FAILED'
 }
 
 function parseAgentJson(value: string): Record<string, unknown> {
@@ -404,7 +450,7 @@ function artifactSchemaForTask(
     case 'candidate_verification':
       return candidateVerificationArtifactSchema
     case 'expert_research':
-      return expertResearchArtifactSchema
+      return expertResearchStructuredArtifactSchema
   }
 }
 
@@ -415,13 +461,32 @@ function validateAgentArtifact(
   switch (taskType) {
     case 'source_discovery':
     case 'source_refresh':
-      return discoveryArtifactSchema.parse(parsed)
+      return discoveryArtifactSchema.parse(
+        omitNullObjectProperties(parsed),
+      )
     case 'fragment_analysis':
-      return candidateAnalysisArtifactSchema.parse(parsed)
+      return candidateAnalysisArtifactSchema.parse(
+        omitNullObjectProperties(parsed),
+      )
     case 'candidate_verification':
-      return candidateVerificationArtifactSchema.parse(parsed)
-    case 'expert_research':
-      return expertResearchArtifactSchema.parse(parsed)
+      return candidateVerificationArtifactSchema.parse(
+        omitNullObjectProperties(parsed),
+      )
+    case 'expert_research': {
+      const candidateValue = parsed['candidate']
+      const artifact = expertResearchStructuredArtifactSchema.parse({
+        ...parsed,
+        candidate: candidateValue === null
+          ? null
+          : omitNullObjectProperties(candidateValue)
+      })
+      return artifact.outcome === 'candidate'
+        ? expertResearchArtifactSchema.parse(artifact.candidate)
+        : expertResearchArtifactSchema.parse({
+            rejected: true,
+            reason: artifact.reason
+          })
+    }
   }
 }
 
@@ -537,12 +602,19 @@ async function main(): Promise<void> {
       const status = await runClient('status')
       const artifactRecorded = status['artifact_recorded'] === true
       if (!artifactRecorded) {
+        const failureCode = run.timedOut
+          ? 'AGENT_RUN_TIMEOUT'
+          : run.exitCode !== 0
+            ? run.diagnosticCode ?? 'CODEX_PROCESS_FAILED'
+            : 'EMPTY_AGENT_RUN'
         await runClient(
           'fail',
-          run.timedOut ? 'AGENT_RUN_TIMEOUT' : 'EMPTY_AGENT_RUN',
+          failureCode,
           run.timedOut
             ? 'The ephemeral AI run timed out without a pipeline artifact.'
-            : 'The ephemeral AI run ended without an artifact or explicit rejection.',
+            : run.exitCode !== 0
+              ? 'The ephemeral Codex process failed before producing an artifact.'
+              : 'The ephemeral AI run ended without an artifact or explicit rejection.',
         )
       }
       const successful = run.exitCode === 0 && artifactRecorded
@@ -558,7 +630,9 @@ async function main(): Promise<void> {
           ? undefined
           : run.timedOut
             ? 'AGENT_RUN_TIMEOUT'
-            : 'AGENT_RUN_FAILED',
+            : run.exitCode !== 0
+              ? run.diagnosticCode ?? 'CODEX_PROCESS_FAILED'
+              : 'EMPTY_AGENT_RUN',
       )
       await Promise.all([
         unlink(agentOutputPath).catch(() => undefined),

@@ -1,5 +1,3 @@
-import { z } from 'zod'
-
 import {
   reviewNetworkChange,
   verifyNetworkChange
@@ -14,7 +12,7 @@ import {
   candidateVerificationArtifactSchema,
   discoveryArtifactSchema,
   discoverySubmissionSchema,
-  expertResearchArtifactSchema
+  expertResearchStructuredArtifactSchema
 } from '../src/domain/pipeline.js'
 import { chunkSourceText } from '../src/domain/pipeline-worker.js'
 import { enforceKnowledgeRisk } from '../src/domain/risk.js'
@@ -24,6 +22,10 @@ import {
 } from '../src/domain/snapshot.js'
 import { analyzeNetworkPath } from '../src/domain/topology.js'
 import { adviseNetworkUpgrade } from '../src/domain/upgrade.js'
+import {
+  omitNullObjectProperties,
+  openAiStrictJsonSchema
+} from '../src/domain/structured-output.js'
 import { createTestConfig } from './helpers.js'
 
 describe('knowledge safety classification', () => {
@@ -126,20 +128,107 @@ describe('deterministic source processing', () => {
     ).toBe(30_000)
   })
 
-  it('emits Codex structured-output schemas for every AI artifact', () => {
+  it('emits OpenAI-strict object schemas for every AI artifact', () => {
+    const unsupportedKeywords = new Set([
+      '$schema',
+      'default',
+      'format',
+      'pattern',
+      'minLength',
+      'maxLength',
+      'minimum',
+      'maximum',
+      'multipleOf',
+      'minItems',
+      'maxItems'
+    ])
+    const inspect = (value: unknown): void => {
+      if (Array.isArray(value)) {
+        value.forEach(inspect)
+        return
+      }
+      if (!value || typeof value !== 'object') return
+      const record = value as Record<string, unknown>
+      for (const key of Object.keys(record)) {
+        expect(unsupportedKeywords.has(key)).toBe(false)
+      }
+      if (record['type'] === 'object') {
+        const properties = record['properties'] as Record<string, unknown>
+        expect(record['additionalProperties']).toBe(false)
+        expect(record['required']).toEqual(Object.keys(properties))
+      }
+      Object.values(record).forEach(inspect)
+    }
+
     for (const schema of [
       discoveryArtifactSchema,
       candidateAnalysisArtifactSchema,
       candidateVerificationArtifactSchema,
-      expertResearchArtifactSchema
+      expertResearchStructuredArtifactSchema
     ]) {
-      expect(() =>
-        z.toJSONSchema(schema, {
-          target: 'draft-7',
-          unrepresentable: 'any'
-        }),
-      ).not.toThrow()
+      const generated = openAiStrictJsonSchema(schema)
+      expect(generated['type']).toBe('object')
+      inspect(generated)
     }
+  })
+
+  it('models optional structured-output properties as nullable required fields', () => {
+    const schema = openAiStrictJsonSchema(
+      candidateAnalysisArtifactSchema,
+    )
+    const candidates = (
+      schema['properties'] as Record<string, Record<string, unknown>>
+    )['candidates']!
+    const candidate = (
+      (
+        candidates['items'] as Record<string, unknown>
+      )['properties'] as Record<string, Record<string, unknown>>
+    )['candidate']!
+    const candidateProperties = candidate['properties'] as Record<
+      string,
+      Record<string, unknown>
+    >
+    expect(candidateProperties['platform_slug']!['anyOf']).toEqual(
+      expect.arrayContaining([{ type: 'null' }]),
+    )
+    expect(candidateProperties['command']!['anyOf']).toEqual(
+      expect.arrayContaining([{ type: 'null' }]),
+    )
+  })
+
+  it('removes wire nulls before applying the original Zod artifact contract', () => {
+    const wireArtifact = {
+      sources: [{
+        canonical_url: 'https://www.cisco.com/example',
+        document_type: 'command_reference',
+        title: 'Example command reference',
+        document_version: null,
+        document_date: null
+      }],
+      rejection_reason: null
+    }
+    expect(discoveryArtifactSchema.parse(
+      omitNullObjectProperties(wireArtifact),
+    )).toEqual({
+      sources: [{
+        canonical_url: 'https://www.cisco.com/example',
+        document_type: 'command_reference',
+        title: 'Example command reference'
+      }]
+    })
+  })
+
+  it('uses an object-root expert envelope instead of a root anyOf', () => {
+    const schema = openAiStrictJsonSchema(
+      expertResearchStructuredArtifactSchema,
+    )
+    expect(schema['type']).toBe('object')
+    expect(schema['anyOf']).toBeUndefined()
+    expect(expertResearchStructuredArtifactSchema.parse({
+      outcome: 'rejected',
+      candidate: null,
+      reason: 'Official evidence was not sufficient for a safe answer.'
+    }).outcome).toBe('rejected')
   })
 
   it('requires every discovery run to produce a source or rejection artifact', () => {
