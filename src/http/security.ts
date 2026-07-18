@@ -59,7 +59,13 @@ export function getClientAddress(
   context: Context,
   config: AppConfig,
 ): string {
-  const remoteAddress = getConnInfo(context).remote.address ?? 'unknown'
+  let remoteAddress = 'unknown'
+  try {
+    remoteAddress = getConnInfo(context).remote.address ?? 'unknown'
+  } catch {
+    // Hono's in-memory request helper and some edge adapters do not expose
+    // Node's IncomingMessage. Keep a stable, non-identifying fallback.
+  }
   if (!isTrustedProxy(remoteAddress, config.trustedProxyCidrs)) {
     return remoteAddress
   }
@@ -122,6 +128,29 @@ export async function consumeRateLimit(
        bucket_key, route_class, window_start, request_count
      )
      VALUES ($1, $2, date_trunc('minute', now()), 1)
+     ON CONFLICT (bucket_key, route_class, window_start)
+     DO UPDATE SET request_count = rate_limit_buckets.request_count + 1
+     RETURNING request_count`,
+    [sha256(clientKey), routeClass],
+  )
+  const count = result.rows[0]?.request_count ?? limit + 1
+  return {
+    allowed: count <= limit,
+    remaining: Math.max(0, limit - count)
+  }
+}
+
+export async function consumeDailyRateLimit(
+  database: Database,
+  clientKey: string,
+  routeClass: string,
+  limit: number,
+): Promise<{ allowed: boolean; remaining: number }> {
+  const result = await database.query<{ request_count: number }>(
+    `INSERT INTO rate_limit_buckets (
+       bucket_key, route_class, window_start, request_count
+     )
+     VALUES ($1, $2, date_trunc('day', now()), 1)
      ON CONFLICT (bucket_key, route_class, window_start)
      DO UPDATE SET request_count = rate_limit_buckets.request_count + 1
      RETURNING request_count`,

@@ -46,6 +46,15 @@ WHERE NOT EXISTS (
 \gexec
 
 SELECT format(
+  'CREATE ROLE clideck_mcp_quarantine LOGIN PASSWORD %L',
+  :'quarantine_password'
+)
+WHERE NOT EXISTS (
+  SELECT 1 FROM pg_roles WHERE rolname = 'clideck_mcp_quarantine'
+)
+\gexec
+
+SELECT format(
   'CREATE ROLE clideck_mcp_backup LOGIN PASSWORD %L',
   :'backup_password'
 )
@@ -74,6 +83,11 @@ SELECT format(
 )
 \gexec
 SELECT format(
+  'ALTER ROLE clideck_mcp_quarantine PASSWORD %L',
+  :'quarantine_password'
+)
+\gexec
+SELECT format(
   'ALTER ROLE clideck_mcp_backup PASSWORD %L',
   :'backup_password'
 )
@@ -84,6 +98,7 @@ ALTER ROLE clideck_mcp_api NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION;
 ALTER ROLE clideck_mcp_admin NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION;
 ALTER ROLE clideck_mcp_worker NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION;
 ALTER ROLE clideck_mcp_researcher NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION;
+ALTER ROLE clideck_mcp_quarantine NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION;
 ALTER ROLE clideck_mcp_backup NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION;
 
 SELECT 'CREATE DATABASE clideck_mcp OWNER clideck_mcp_migrator'
@@ -100,4 +115,5 @@ GRANT CONNECT ON DATABASE clideck_mcp TO
   clideck_mcp_admin,
   clideck_mcp_worker,
   clideck_mcp_researcher,
+  clideck_mcp_quarantine,
   clideck_mcp_backup;

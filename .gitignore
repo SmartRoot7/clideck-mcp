@@ -1,4 +1,6 @@
 .secrets/
+lab/results/*
+!lab/results/.gitkeep
 .env
 .env.*
 !.env.example

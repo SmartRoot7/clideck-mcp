@@ -18,6 +18,13 @@ export function createTestConfig(
       'postgresql://127.0.0.1:5432/clideck_mcp_test',
     ADMIN_TOKEN: 'test-admin-token-that-is-at-least-32-characters',
     RESEARCHER_TOKEN: 'test-researcher-token-at-least-32-characters',
+    QUARANTINE_DATABASE_URL:
+      integrationDatabaseUrl ??
+      'postgresql://127.0.0.1:5432/clideck_mcp_test',
+    PLAYGROUND_TOKEN: 'test-playground-token-at-least-32-characters',
+    VERIFICATION_SIGNING_KEY:
+      'test-verification-signing-key-at-least-32-characters',
+    ENABLE_PLAYGROUND: 'true',
     ENABLE_NATIVE_MCP_TASKS: 'true'
   })
   return { ...config, ...overrides }

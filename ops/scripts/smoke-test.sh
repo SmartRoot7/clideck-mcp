@@ -5,6 +5,28 @@ set -euo pipefail
 
 curl --fail --silent --show-error "$CLIDECK_MCP_BASE_URL/health" >/dev/null
 curl --fail --silent --show-error "$CLIDECK_MCP_BASE_URL/ready" >/dev/null
+stats="$(
+  curl --fail --silent --show-error \
+    "$CLIDECK_MCP_BASE_URL/public/v1/stats"
+)"
+if [[ "$(printf '%s\n' "$stats" | jq -r '.coverage.published_knowledge >= 50')" != 'true' ]]; then
+  printf 'Public statistics do not contain the 0.2 knowledge pack\n' >&2
+  exit 1
+fi
+
+tools="$(
+  curl --fail --silent --show-error \
+    --request POST \
+    --header 'content-type: application/json' \
+    --header 'accept: application/json, text/event-stream' \
+    --header 'mcp-protocol-version: 2025-11-25' \
+    --data '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' \
+    "$CLIDECK_MCP_BASE_URL/mcp"
+)"
+if [[ "$(printf '%s\n' "$tools" | jq -r '.result.tools | length')" -ne 13 ]]; then
+  printf 'Expected 13 public MCP tools\n' >&2
+  exit 1
+fi
 
 response="$(
   curl --fail --silent --show-error \
@@ -35,5 +57,92 @@ response="$(
 command="$(printf '%s\n' "$response" | jq -r '.result.structuredContent.answers[0].command')"
 if [[ "$command" != 'show ip interface brief' ]]; then
   printf 'Unexpected smoke-test result\n' >&2
+  exit 1
+fi
+
+snapshot="$(
+  curl --fail --silent --show-error \
+    --request POST \
+    --header 'content-type: application/json' \
+    --header 'accept: application/json, text/event-stream' \
+    --header 'mcp-protocol-version: 2025-11-25' \
+    --data '{
+      "jsonrpc":"2.0",
+      "id":2,
+      "method":"tools/call",
+      "params":{
+        "name":"analyze_device_snapshot",
+        "arguments":{
+          "snapshot":"Cisco IOS XE Software, Version 17.15.5\ncisco C9300-48P processor\nusername smoke secret 9 sentinel-smoke-secret",
+          "snapshot_type":"auto",
+          "redaction_profile":"strict"
+        }
+      }
+    }' \
+    "$CLIDECK_MCP_BASE_URL/mcp"
+)"
+if printf '%s\n' "$snapshot" | jq -e \
+  '.result.structuredContent.sanitized_snapshot | contains("sentinel-smoke-secret")' \
+  >/dev/null; then
+  printf 'Snapshot redaction smoke test failed\n' >&2
+  exit 1
+fi
+
+change="$(
+  curl --fail --silent --show-error \
+    --request POST \
+    --header 'content-type: application/json' \
+    --header 'accept: application/json, text/event-stream' \
+    --header 'mcp-protocol-version: 2025-11-25' \
+    --data '{
+      "jsonrpc":"2.0",
+      "id":3,
+      "method":"tools/call",
+      "params":{
+        "name":"review_network_change",
+        "arguments":{
+          "intent":"Reload device",
+          "context":{
+            "vendor":"Cisco",
+            "model":"C9300",
+            "operating_system":"IOS XE",
+            "version":"17.15.5"
+          },
+          "commands":["reload"]
+        }
+      }
+    }' \
+    "$CLIDECK_MCP_BASE_URL/mcp"
+)"
+if [[ "$(printf '%s\n' "$change" | jq -r '.result.structuredContent.decision')" != 'blocked' ]]; then
+  printf 'Dangerous change did not fail closed\n' >&2
+  exit 1
+fi
+
+upgrade="$(
+  curl --fail --silent --show-error \
+    --request POST \
+    --header 'content-type: application/json' \
+    --header 'accept: application/json, text/event-stream' \
+    --header 'mcp-protocol-version: 2025-11-25' \
+    --data '{
+      "jsonrpc":"2.0",
+      "id":4,
+      "method":"tools/call",
+      "params":{
+        "name":"advise_network_upgrade",
+        "arguments":{
+          "model":"C9300-48P",
+          "operating_system":"IOS XE",
+          "current_version":"17.12.4",
+          "target_version":"17.15.5",
+          "enabled_features":[]
+        }
+      }
+    }' \
+    "$CLIDECK_MCP_BASE_URL/mcp"
+)"
+if [[ "$(printf '%s\n' "$upgrade" | jq -r '.result.structuredContent.status')" != 'supported_with_checks' ]]; then
+  printf 'Upgrade applicability smoke test failed\n' >&2
   exit 1
 fi

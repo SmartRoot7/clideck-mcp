@@ -202,6 +202,30 @@ async function createRevision(
     )
   }
 
+  await client.query(
+    `INSERT INTO knowledge_public_trust (
+       revision_id,
+       validation_level,
+       independent_confirmations,
+       confidence_explanation,
+       next_review_at
+     )
+     VALUES (
+       $1,
+       'documentation_reviewed',
+       $2,
+       $3,
+       $4::date + CASE WHEN $5 THEN 90 ELSE 180 END
+     )`,
+    [
+      revisionId,
+      candidate.provenance.length,
+      candidate.confidence_reason,
+      candidate.last_verified_at,
+      candidate.dangerous
+    ],
+  )
+
   return { itemId: existingItem.id, revisionId }
 }
 
@@ -326,6 +350,18 @@ export async function processNextCandidate(
     }
 
     const publication = await withTransaction(database, async (client) => {
+      await client.query(
+        `INSERT INTO task_public_events (
+           task_id, stage, progress_percent, public_message
+         )
+         VALUES (
+           $1,
+           'conflict_check',
+           72,
+           'Candidate passed schema validation and entered conflict checks.'
+         )`,
+        [candidateTask.id],
+      )
       const blockingConflict = await client.query<{ exists: boolean }>(
         `SELECT EXISTS (
            SELECT 1
@@ -337,6 +373,18 @@ export async function processNextCandidate(
         throw new Error('BLOCKING_KNOWLEDGE_CONFLICT')
       }
 
+      await client.query(
+        `INSERT INTO task_public_events (
+           task_id, stage, progress_percent, public_message
+         )
+         VALUES (
+           $1,
+           'publishing',
+           88,
+           'Validated knowledge is being added to an immutable release.'
+         )`,
+        [candidateTask.id],
+      )
       const { itemId, revisionId } = await createRevision(client, candidate)
       const releaseId = await publishRevision(
         client,
@@ -378,6 +426,18 @@ export async function processNextCandidate(
           JSON.stringify({ release_id: releaseId })
         ],
       )
+      await client.query(
+        `INSERT INTO task_public_events (
+           task_id, stage, progress_percent, public_message
+         )
+         VALUES (
+           $1,
+           'completed',
+           100,
+           'Knowledge published and available for deterministic reuse.'
+         )`,
+        [candidateTask.id],
+      )
       return { releaseId, revisionId }
     })
     logger.info(
@@ -394,7 +454,18 @@ export async function processNextCandidate(
       'Candidate validation failed',
     )
     await database.query(
-      `UPDATE expert_tasks
+      `WITH inserted_event AS (
+         INSERT INTO task_public_events (
+           task_id, stage, progress_percent, public_message
+         )
+         VALUES (
+           $1,
+           'failed',
+           100,
+           'Candidate did not pass the publication policy gate.'
+         )
+       )
+       UPDATE expert_tasks
           SET status = 'failed',
               failure_code = 'VALIDATION_FAILED',
               failure_message = 'Candidate failed the structured validation or publication gate.',
@@ -452,7 +523,11 @@ export async function runWorkerMaintenance(
     )
     await client.query(
       `DELETE FROM rate_limit_buckets
-       WHERE window_start < now() - interval '15 minutes'`,
+       WHERE window_start < now() - interval '2 days'`,
+    )
+    await client.query(
+      `DELETE FROM snapshot_contributions
+       WHERE expires_at <= now()`,
     )
   })
 }

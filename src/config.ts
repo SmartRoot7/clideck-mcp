@@ -17,21 +17,28 @@ const envSchema = z.object({
   ADMIN_DATABASE_URL: z.string().url().startsWith('postgresql://').optional(),
   WORKER_DATABASE_URL: z.string().url().startsWith('postgresql://').optional(),
   RESEARCHER_DATABASE_URL: z.string().url().startsWith('postgresql://').optional(),
+  QUARANTINE_DATABASE_URL: z.string().url().startsWith('postgresql://').optional(),
   DATABASE_MAX_CONNECTIONS: z.coerce.number().int().min(2).max(50).default(12),
   DATABASE_SSL_MODE: z.enum(['disable', 'verify-full']).default('disable'),
   ADMIN_TOKEN: z.string().min(32).optional(),
   RESEARCHER_TOKEN: z.string().min(32).optional(),
+  PLAYGROUND_TOKEN: z.string().min(32).optional(),
+  VERIFICATION_SIGNING_KEY: z.string().min(32).optional(),
   PUBLIC_BASE_URL: z.string().url().default('http://127.0.0.1:8787'),
   TRUSTED_PROXY_CIDRS: z.string().default('127.0.0.1/32,::1/128'),
   ANONYMOUS_TASK_TTL_MINUTES: z.coerce.number().int().min(5).max(1440).default(60),
   TASK_LEASE_SECONDS: z.coerce.number().int().min(30).max(900).default(120),
   PUBLIC_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).max(10000).default(60),
+  HEAVY_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).max(1000).default(10),
+  EXPERT_RATE_LIMIT_PER_DAY: z.coerce.number().int().min(1).max(100).default(3),
+  CONTRIBUTION_RATE_LIMIT_PER_DAY: z.coerce.number().int().min(1).max(100).default(3),
   ADMIN_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).max(1000).default(30),
   MAX_REQUEST_BYTES: z.coerce.number().int().min(1024).max(1048576).default(65536),
   WORKER_POLL_MS: z.coerce.number().int().min(250).max(60000).default(2000),
   AUTO_PUBLISH_CONFIDENCE: z.coerce.number().min(0.5).max(1).default(0.9),
   DANGEROUS_AUTO_PUBLISH_CONFIDENCE: z.coerce.number().min(0.5).max(1).default(0.95),
-  ENABLE_NATIVE_MCP_TASKS: booleanString.default(false)
+  ENABLE_NATIVE_MCP_TASKS: booleanString.default(false),
+  ENABLE_PLAYGROUND: booleanString.default(false)
 })
 
 export type AppConfig = {
@@ -43,21 +50,28 @@ export type AppConfig = {
   adminDatabaseUrl: string
   workerDatabaseUrl: string
   researcherDatabaseUrl: string
+  quarantineDatabaseUrl: string
   databaseMaxConnections: number
   databaseSslMode: 'disable' | 'verify-full'
   adminToken: string
   researcherToken: string
+  playgroundToken: string
+  verificationSigningKey: string
   publicBaseUrl: string
   trustedProxyCidrs: string[]
   anonymousTaskTtlMinutes: number
   taskLeaseSeconds: number
   publicRateLimitPerMinute: number
+  heavyRateLimitPerMinute: number
+  expertRateLimitPerDay: number
+  contributionRateLimitPerDay: number
   adminRateLimitPerMinute: number
   maxRequestBytes: number
   workerPollMs: number
   autoPublishConfidence: number
   dangerousAutoPublishConfidence: number
   enableNativeMcpTasks: boolean
+  enablePlayground: boolean
 }
 
 let cachedConfig: AppConfig | undefined
@@ -81,10 +95,15 @@ export function getConfig(
     workerDatabaseUrl: parsed.WORKER_DATABASE_URL ?? parsed.DATABASE_URL,
     researcherDatabaseUrl:
       parsed.RESEARCHER_DATABASE_URL ?? parsed.DATABASE_URL,
+    quarantineDatabaseUrl:
+      parsed.QUARANTINE_DATABASE_URL ?? parsed.DATABASE_URL,
     databaseMaxConnections: parsed.DATABASE_MAX_CONNECTIONS,
     databaseSslMode: parsed.DATABASE_SSL_MODE,
     adminToken: parsed.ADMIN_TOKEN ?? '',
     researcherToken: parsed.RESEARCHER_TOKEN ?? '',
+    playgroundToken: parsed.PLAYGROUND_TOKEN ?? '',
+    verificationSigningKey:
+      parsed.VERIFICATION_SIGNING_KEY ?? parsed.ADMIN_TOKEN ?? '',
     publicBaseUrl: parsed.PUBLIC_BASE_URL,
     trustedProxyCidrs: parsed.TRUSTED_PROXY_CIDRS.split(',')
       .map((value) => value.trim())
@@ -92,13 +111,17 @@ export function getConfig(
     anonymousTaskTtlMinutes: parsed.ANONYMOUS_TASK_TTL_MINUTES,
     taskLeaseSeconds: parsed.TASK_LEASE_SECONDS,
     publicRateLimitPerMinute: parsed.PUBLIC_RATE_LIMIT_PER_MINUTE,
+    heavyRateLimitPerMinute: parsed.HEAVY_RATE_LIMIT_PER_MINUTE,
+    expertRateLimitPerDay: parsed.EXPERT_RATE_LIMIT_PER_DAY,
+    contributionRateLimitPerDay: parsed.CONTRIBUTION_RATE_LIMIT_PER_DAY,
     adminRateLimitPerMinute: parsed.ADMIN_RATE_LIMIT_PER_MINUTE,
     maxRequestBytes: parsed.MAX_REQUEST_BYTES,
     workerPollMs: parsed.WORKER_POLL_MS,
     autoPublishConfidence: parsed.AUTO_PUBLISH_CONFIDENCE,
     dangerousAutoPublishConfidence:
       parsed.DANGEROUS_AUTO_PUBLISH_CONFIDENCE,
-    enableNativeMcpTasks: parsed.ENABLE_NATIVE_MCP_TASKS
+    enableNativeMcpTasks: parsed.ENABLE_NATIVE_MCP_TASKS,
+    enablePlayground: parsed.ENABLE_PLAYGROUND
   }
 
   if (environment === process.env) cachedConfig = config
@@ -110,7 +133,11 @@ export function resetConfigForTests(): void {
 }
 
 export function requireRuntimeSecret(
-  name: 'ADMIN_TOKEN' | 'RESEARCHER_TOKEN',
+  name:
+    | 'ADMIN_TOKEN'
+    | 'RESEARCHER_TOKEN'
+    | 'PLAYGROUND_TOKEN'
+    | 'VERIFICATION_SIGNING_KEY',
   value: string,
 ): void {
   if (value.length < 32) {

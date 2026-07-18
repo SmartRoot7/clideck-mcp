@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
-import { Hono } from 'hono'
+import { Hono, type Context } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { secureHeaders } from 'hono/secure-headers'
 import { timeout } from 'hono/timeout'
@@ -10,11 +10,41 @@ import type { AppConfig } from '../config.js'
 import { constantTimeTokenEquals } from '../crypto.js'
 import type { Database } from '../db.js'
 import { resolvePublicActor } from '../domain/auth.js'
+import {
+  reviewNetworkChange,
+  verifyNetworkChange
+} from '../domain/change.js'
+import { resolveNetworkContext } from '../domain/context.js'
+import { searchKnowledge } from '../domain/knowledge.js'
+import {
+  changeReviewInputSchema,
+  changeVerificationInputSchema,
+  feedbackInputSchema,
+  networkPathInputSchema,
+  queryKnowledgeInputSchema,
+  requestExpertAnswerInputSchema,
+  snapshotAnalysisInputSchema,
+  taskCredentialsSchema,
+  upgradeAdvisorInputSchema
+} from '../domain/schemas.js'
+import { analyzeDeviceSnapshot } from '../domain/snapshot.js'
+import {
+  getPublicStats,
+  recordPublicUsage
+} from '../domain/telemetry.js'
+import {
+  createExpertTask,
+  getExpertTask,
+  submitFeedback
+} from '../domain/tasks.js'
+import { analyzeNetworkPath } from '../domain/topology.js'
+import { adviseNetworkUpgrade } from '../domain/upgrade.js'
 import type { Logger } from '../logger.js'
 import type { Metrics } from '../metrics.js'
 import { createPublicMcpServer } from '../mcp/public-server.js'
 import { PostgresTaskStore } from '../mcp/postgres-task-store.js'
 import {
+  consumeDailyRateLimit,
   consumeRateLimit,
   getClientAddress,
   requestPolicy,
@@ -25,6 +55,7 @@ type ApiDependencies = {
   config: AppConfig
   database: Database
   adminDatabase: Database
+  quarantineDatabase: Database
   logger: Logger
   metrics: Metrics
 }
@@ -36,7 +67,14 @@ type ApiBindings = {
 }
 
 export function createApiApp(dependencies: ApiDependencies) {
-  const { config, database, adminDatabase, logger, metrics } = dependencies
+  const {
+    config,
+    database,
+    adminDatabase,
+    quarantineDatabase,
+    logger,
+    metrics
+  } = dependencies
   const app = new Hono<ApiBindings>()
 
   app.use('*', secureHeaders())
@@ -78,7 +116,7 @@ export function createApiApp(dependencies: ApiDependencies) {
     context.json({
       status: 'ok',
       service: 'CliDeck MCP — Network Knowledge',
-      version: '0.1.0'
+      version: '0.2.0'
     }),
   )
 
@@ -140,9 +178,11 @@ export function createApiApp(dependencies: ApiDependencies) {
     const server = createPublicMcpServer({
       config,
       database,
+      quarantineDatabase,
       logger,
       metrics,
       actor,
+      clientKey: clientAddress,
       requestId,
       ...(taskStore ? { taskStore } : {})
     })
@@ -151,6 +191,336 @@ export function createApiApp(dependencies: ApiDependencies) {
     })
     await server.connect(transport)
     return transport.handleRequest(context.req.raw)
+  })
+
+  app.get('/public/v1/stats', async (context) => {
+    const rate = await consumeRateLimit(
+      database,
+      getClientAddress(context, config),
+      'public_stats',
+      Math.max(60, config.publicRateLimitPerMinute),
+    )
+    context.header('x-ratelimit-remaining', String(rate.remaining))
+    if (!rate.allowed) {
+      await recordPublicUsage(
+        database,
+        'public_stats',
+        'rate_limited',
+        0,
+      ).catch(() => undefined)
+      return context.json({ error: 'rate_limited' }, 429)
+    }
+    const stats = await getPublicStats(database)
+    context.header(
+      'cache-control',
+      'public, max-age=300, stale-while-revalidate=3600',
+    )
+    return context.json(stats)
+  })
+
+  app.use('/public/v1/playground/*', async (context, next) => {
+    if (!config.enablePlayground) {
+      return context.json({ error: 'not_found' }, 404)
+    }
+    const authorization = context.req.header('authorization')
+    const token = authorization?.startsWith('Bearer ')
+      ? authorization.slice('Bearer '.length)
+      : ''
+    if (
+      !token ||
+      !config.playgroundToken ||
+      !constantTimeTokenEquals(token, config.playgroundToken)
+    ) {
+      return context.json({ error: 'unauthorized' }, 401)
+    }
+    const clientKey = context.req.header('x-clideck-client-key') ?? ''
+    if (!/^[A-Za-z0-9_-]{16,128}$/.test(clientKey)) {
+      return context.json({ error: 'invalid_client_key' }, 400)
+    }
+    context.header('cache-control', 'no-store')
+    await next()
+  })
+
+  async function consumePlaygroundLimit(
+    context: Context<ApiBindings>,
+    routeClass: string,
+    limit: number,
+  ) {
+    const clientKey = context.req.header('x-clideck-client-key')!
+    const rate = await consumeRateLimit(
+      database,
+      clientKey,
+      routeClass,
+      limit,
+    )
+    context.header('x-ratelimit-remaining', String(rate.remaining))
+    return rate.allowed
+  }
+
+  app.post('/public/v1/playground/query', async (context) => {
+    if (
+      !(await consumePlaygroundLimit(
+        context,
+        'playground_query',
+        config.publicRateLimitPerMinute,
+      ))
+    ) {
+      return context.json({ error: 'rate_limited' }, 429)
+    }
+    const parsed = queryKnowledgeInputSchema.safeParse(
+      await context.req.json<unknown>(),
+    )
+    if (!parsed.success) return context.json({ error: 'invalid_input' }, 400)
+    const startedAt = performance.now()
+    const resolved = await resolveNetworkContext(database, parsed.data.context)
+    const answers = await searchKnowledge(
+      database,
+      parsed.data.question,
+      resolved,
+      parsed.data.limit,
+    )
+    const {
+      vendorId: _vendorId,
+      platformId: _platformId,
+      operatingSystemId: _operatingSystemId,
+      ...publicContext
+    } = resolved
+    await recordPublicUsage(
+      database,
+      'query_network_knowledge',
+      answers.length > 0 ? 'success' : 'unknown',
+      performance.now() - startedAt,
+    )
+    return context.json({
+      context: publicContext,
+      answers,
+      unknown: answers.length === 0,
+      next_action:
+        answers.length === 0 ? 'request_expert_answer' : 'use_answer'
+    })
+  })
+
+  app.post('/public/v1/playground/analyze-snapshot', async (context) => {
+    if (
+      !(await consumePlaygroundLimit(
+        context,
+        'playground_heavy',
+        config.heavyRateLimitPerMinute,
+      ))
+    ) {
+      return context.json({ error: 'rate_limited' }, 429)
+    }
+    const parsed = snapshotAnalysisInputSchema.safeParse(
+      await context.req.json<unknown>(),
+    )
+    if (!parsed.success) return context.json({ error: 'invalid_input' }, 400)
+    return context.json(analyzeDeviceSnapshot(parsed.data))
+  })
+
+  app.post('/public/v1/playground/review-change', async (context) => {
+    if (
+      !(await consumePlaygroundLimit(
+        context,
+        'playground_heavy',
+        config.heavyRateLimitPerMinute,
+      ))
+    ) {
+      return context.json({ error: 'rate_limited' }, 429)
+    }
+    const parsed = changeReviewInputSchema.safeParse(
+      await context.req.json<unknown>(),
+    )
+    if (!parsed.success) return context.json({ error: 'invalid_input' }, 400)
+    const resolved = await resolveNetworkContext(database, parsed.data.context)
+    if (
+      resolved.vendor_slug !== 'cisco' ||
+      resolved.operating_system_slug !== 'ios-xe'
+    ) {
+      return context.json({
+        decision: 'unknown',
+        risk_level: 'critical',
+        blast_radius: [],
+        matched_rules: [],
+        unknown_commands: parsed.data.commands ?? [],
+        prechecks: [],
+        stop_conditions: [
+          'Stop: deep change-review coverage is currently limited to Cisco IOS-XE.'
+        ],
+        verification_plan: [],
+        rollback: [],
+        approval_required: true,
+        verification_token: null,
+        verification_token_expires_at: null,
+        limitations: [
+          'Create an expert task instead of applying unreviewed commands.'
+        ]
+      })
+    }
+    return context.json(
+      reviewNetworkChange(config, {
+        ...parsed.data,
+        context: {
+          vendor: resolved.vendor,
+          model: resolved.model ?? undefined,
+          operating_system: resolved.operating_system,
+          version: resolved.version ?? undefined
+        }
+      }),
+    )
+  })
+
+  app.post('/public/v1/playground/verify-change', async (context) => {
+    if (
+      !(await consumePlaygroundLimit(
+        context,
+        'playground_heavy',
+        config.heavyRateLimitPerMinute,
+      ))
+    ) {
+      return context.json({ error: 'rate_limited' }, 429)
+    }
+    const parsed = changeVerificationInputSchema.safeParse(
+      await context.req.json<unknown>(),
+    )
+    if (!parsed.success) return context.json({ error: 'invalid_input' }, 400)
+    try {
+      return context.json(verifyNetworkChange(config, parsed.data))
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        [
+          'VERIFICATION_TOKEN_INVALID',
+          'VERIFICATION_TOKEN_EXPIRED'
+        ].includes(error.message)
+      ) {
+        return context.json(
+          { error: error.message.toLowerCase() },
+          400,
+        )
+      }
+      throw error
+    }
+  })
+
+  app.post('/public/v1/playground/upgrade', async (context) => {
+    if (
+      !(await consumePlaygroundLimit(
+        context,
+        'playground_heavy',
+        config.heavyRateLimitPerMinute,
+      ))
+    ) {
+      return context.json({ error: 'rate_limited' }, 429)
+    }
+    const parsed = upgradeAdvisorInputSchema.safeParse(
+      await context.req.json<unknown>(),
+    )
+    if (!parsed.success) return context.json({ error: 'invalid_input' }, 400)
+    return context.json(adviseNetworkUpgrade(parsed.data))
+  })
+
+  app.post('/public/v1/playground/topology', async (context) => {
+    if (
+      !(await consumePlaygroundLimit(
+        context,
+        'playground_heavy',
+        config.heavyRateLimitPerMinute,
+      ))
+    ) {
+      return context.json({ error: 'rate_limited' }, 429)
+    }
+    const parsed = networkPathInputSchema.safeParse(
+      await context.req.json<unknown>(),
+    )
+    if (!parsed.success) return context.json({ error: 'invalid_input' }, 400)
+    return context.json(analyzeNetworkPath(parsed.data))
+  })
+
+  app.post('/public/v1/playground/expert/request', async (context) => {
+    const clientKey = context.req.header('x-clideck-client-key')!
+    const rate = await consumeDailyRateLimit(
+      database,
+      clientKey,
+      'playground_expert',
+      config.expertRateLimitPerDay,
+    )
+    context.header('x-ratelimit-remaining', String(rate.remaining))
+    if (!rate.allowed) {
+      return context.json({ error: 'rate_limited' }, 429)
+    }
+    const parsed = requestExpertAnswerInputSchema.safeParse(
+      await context.req.json<unknown>(),
+    )
+    if (!parsed.success) return context.json({ error: 'invalid_input' }, 400)
+    return context.json(
+      await createExpertTask(
+        database,
+        config,
+        { kind: 'anonymous' },
+        parsed.data.question,
+        parsed.data.context,
+      ),
+    )
+  })
+
+  app.post('/public/v1/playground/expert/status', async (context) => {
+    if (
+      !(await consumePlaygroundLimit(
+        context,
+        'playground_query',
+        config.publicRateLimitPerMinute,
+      ))
+    ) {
+      return context.json({ error: 'rate_limited' }, 429)
+    }
+    const parsed = taskCredentialsSchema.safeParse(
+      await context.req.json<unknown>(),
+    )
+    if (!parsed.success) return context.json({ error: 'invalid_input' }, 400)
+    return context.json(
+      await getExpertTask(
+        database,
+        { kind: 'anonymous' },
+        parsed.data.task_id,
+        parsed.data.access_token,
+      ),
+    )
+  })
+
+  app.post('/public/v1/playground/feedback', async (context) => {
+    if (
+      !(await consumePlaygroundLimit(
+        context,
+        'playground_feedback',
+        config.publicRateLimitPerMinute,
+      ))
+    ) {
+      return context.json({ error: 'rate_limited' }, 429)
+    }
+    const parsed = feedbackInputSchema.safeParse(
+      await context.req.json<unknown>(),
+    )
+    if (!parsed.success) return context.json({ error: 'invalid_input' }, 400)
+    if (parsed.data.sample_contribution) {
+      const clientKey = context.req.header('x-clideck-client-key')!
+      const rate = await consumeDailyRateLimit(
+        database,
+        clientKey,
+        'playground_contribution',
+        config.contributionRateLimitPerDay,
+      )
+      if (!rate.allowed) {
+        return context.json({ error: 'rate_limited' }, 429)
+      }
+    }
+    return context.json(
+      await submitFeedback(
+        database,
+        quarantineDatabase,
+        { kind: 'anonymous' },
+        parsed.data,
+      ),
+    )
   })
 
   app.use('/admin/*', requireStaticBearer(config.adminToken))

@@ -1,6 +1,6 @@
 {
   "name": "clideck-mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "CliDeck MCP — deterministic network knowledge for any MCP client",
   "type": "module",
@@ -23,6 +23,9 @@
     "eval": "tsx src/cli/eval.ts",
     "legacy:export": "tsx src/cli/export-legacy.ts",
     "legacy:import": "tsx src/cli/import-legacy.ts",
+    "lab:check-runtime": "tsx src/cli/check-runtime-lab.ts",
+    "lab:build-report": "tsx src/cli/build-lab-report.ts",
+    "lab:import-report": "tsx src/cli/import-lab-report.ts",
     "researcher:claim": "node --env-file=.secrets/researcher-bridge.env --import tsx src/cli/researcher-client.ts claim",
     "researcher:heartbeat": "node --env-file=.secrets/researcher-bridge.env --import tsx src/cli/researcher-client.ts heartbeat",
     "researcher:submit": "node --env-file=.secrets/researcher-bridge.env --import tsx src/cli/researcher-client.ts submit",

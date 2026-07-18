@@ -30,6 +30,14 @@ type KnowledgeRow = {
   confidence: string
   quality_score: string
   last_verified_at: string | Date
+  validation_level:
+    | 'documentation_reviewed'
+    | 'batfish_modeled'
+    | 'runtime_lab_validated'
+  independent_confirmations: number
+  confidence_explanation: string
+  next_review_at: string | Date
+  lab_validated_at: string | Date | null
   rank: number
 }
 
@@ -70,6 +78,15 @@ function toPublicKnowledge(
     confidence: Number(row.confidence),
     quality_score: Number(row.quality_score),
     dangerous: row.dangerous,
+    assurance: {
+      validation_level: row.validation_level,
+      independent_confirmations: Number(row.independent_confirmations),
+      confidence_explanation: row.confidence_explanation,
+      next_review_at: new Date(row.next_review_at).toISOString().slice(0, 10),
+      lab_validated_at: row.lab_validated_at
+        ? new Date(row.lab_validated_at).toISOString()
+        : null
+    },
     conflicts: conflicts
       .filter((conflict) => conflict.revision_id === row.revision_id)
       .map(({ severity, description }) => ({ severity, description })),
@@ -84,6 +101,11 @@ export async function searchKnowledge(
   limit: number,
   kind?: PublicKnowledge['kind'],
 ): Promise<PublicKnowledge[]> {
+  const normalizedQuestion = question
+    .replace(/<[^>]{1,80}>/g, ' ')
+    .replace(/[<>{}[\]|]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
   const result = await database.query<KnowledgeRow>(
     `SELECT
        pak.*,
@@ -107,7 +129,7 @@ export async function searchKnowledge(
      ORDER BY rank DESC, pak.confidence DESC, pak.last_verified_at DESC
      LIMIT 25`,
     [
-      question,
+      normalizedQuestion,
       context.vendor_slug,
       context.operating_system_slug,
       context.platform_slug,

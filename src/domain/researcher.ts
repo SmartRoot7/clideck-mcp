@@ -54,6 +54,18 @@ export async function claimResearchTask(
         WHERE id = $1`,
       [task.id, researcherId, sha256(leaseToken), config.taskLeaseSeconds],
     )
+    await client.query(
+      `INSERT INTO task_public_events (
+         task_id, stage, progress_percent, public_message
+       )
+       VALUES (
+         $1,
+         'researching',
+         25,
+         'A restricted researcher is structuring a candidate answer.'
+       )`,
+      [task.id],
+    )
     const messages = await client.query<{ body: string; created_at: string }>(
       `SELECT body, created_at
        FROM task_messages
@@ -146,6 +158,18 @@ export async function requestResearchInput(
         WHERE id = $1`,
       [task.id, question],
     )
+    await client.query(
+      `INSERT INTO task_public_events (
+         task_id, stage, progress_percent, public_message
+       )
+       VALUES (
+         $1,
+         'researching',
+         35,
+         'Research paused until the requester supplies bounded clarification.'
+       )`,
+      [task.id],
+    )
   })
   return { task_id: publicId, status: 'input_required' }
 }
@@ -190,6 +214,18 @@ export async function submitCandidateRevision(
         WHERE id = $1`,
       [task.id],
     )
+    await client.query(
+      `INSERT INTO task_public_events (
+         task_id, stage, progress_percent, public_message
+       )
+       VALUES (
+         $1,
+         'validating',
+         60,
+         'Candidate knowledge submitted to the deterministic policy gate.'
+       )`,
+      [task.id],
+    )
   })
 
   return {
@@ -209,7 +245,13 @@ export async function failResearchTask(
 ): Promise<Record<string, unknown>> {
   const task = await loadLeasedTask(database, publicId, leaseToken)
   await database.query(
-    `UPDATE expert_tasks
+    `WITH inserted_event AS (
+       INSERT INTO task_public_events (
+         task_id, stage, progress_percent, public_message
+       )
+       VALUES ($1, 'failed', 100, 'Research ended without publishable knowledge.')
+     )
+     UPDATE expert_tasks
         SET status = 'failed',
             failure_code = $2,
             failure_message = $3,

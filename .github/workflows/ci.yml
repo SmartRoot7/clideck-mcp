@@ -30,6 +30,9 @@ jobs:
       DATABASE_URL: postgresql://clideck_test:clideck_test@127.0.0.1:5432/clideck_mcp_test
       ADMIN_TOKEN: ci-admin-token-that-is-at-least-32-chars
       RESEARCHER_TOKEN: ci-researcher-token-at-least-32-chars
+      PLAYGROUND_TOKEN: ci-playground-token-that-is-at-least-32-chars
+      VERIFICATION_SIGNING_KEY: ci-verification-key-that-is-at-least-32-chars
+      QUARANTINE_DATABASE_URL: postgresql://clideck_test:clideck_test@127.0.0.1:5432/clideck_mcp_test
       NODE_ENV: test
     steps:
       - uses: actions/checkout@v4
@@ -46,4 +49,13 @@ jobs:
       - run: pnpm db:migrate
       - run: pnpm db:seed
       - run: pnpm test
-      - run: pnpm eval
+      - name: Run product eval
+        run: |
+          mkdir -p artifacts
+          pnpm eval | tee artifacts/eval-report.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: clideck-eval-${{ github.sha }}
+          path: artifacts/eval-report.json
+          if-no-files-found: error
+          retention-days: 30

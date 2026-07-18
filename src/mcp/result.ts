@@ -15,7 +15,9 @@ const publicErrors: Record<string, string> = {
   EXPERT_TASK_NOT_WAITING_FOR_INPUT:
     'Expert task is not waiting for additional input.',
   KNOWLEDGE_REVISION_NOT_FOUND:
-    'The referenced active knowledge revision was not found.'
+    'The referenced active knowledge revision was not found.',
+  RATE_LIMITED:
+    'The privacy-preserving contribution limit has been reached.'
 }
 
 export function publicToolError(error: unknown) {

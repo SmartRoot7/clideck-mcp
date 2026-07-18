@@ -2,7 +2,8 @@ import type { AppConfig } from '../config.js'
 import {
   createPublicTaskId,
   randomUrlToken,
-  sha256
+  sha256,
+  sha256Label
 } from '../crypto.js'
 import type { Database } from '../db.js'
 import type { PublicActor } from './auth.js'
@@ -11,6 +12,7 @@ import type {
   NetworkContextInput,
   PublicKnowledge
 } from './schemas.js'
+import { sanitizeSnapshot } from './snapshot.js'
 
 type TaskRow = {
   id: string
@@ -43,6 +45,30 @@ export type PublicTaskStatus = {
   answer: PublicKnowledge | null
   failure: { code: string; message: string } | null
   poll_after_ms: number
+  stage:
+    | 'queued'
+    | 'researching'
+    | 'conflict_check'
+    | 'validating'
+    | 'publishing'
+    | 'completed'
+    | 'failed'
+    | 'cancelled'
+  progress_percent: number
+  milestones: Array<{
+    stage: string
+    progress_percent: number
+    message: string
+    created_at: string
+  }>
+  published_release_sequence: number | null
+}
+
+type PublicTaskEventRow = {
+  stage: PublicTaskStatus['stage']
+  progress_percent: number
+  public_message: string
+  created_at: string | Date
 }
 
 export async function createExpertTask(
@@ -86,6 +112,20 @@ export async function createExpertTask(
   )
 
   const task = toPublicTaskStatus(result.rows[0]!)
+  await database.query(
+    `INSERT INTO task_public_events (
+       task_id, stage, progress_percent, public_message
+     )
+     VALUES ($1, 'queued', 5, 'Research task queued for deterministic review.')`,
+    [result.rows[0]!.id],
+  )
+  task.milestones = [{
+    stage: 'queued',
+    progress_percent: 5,
+    message: 'Research task queued for deterministic review.',
+    created_at: task.created_at
+  }]
+  task.progress_percent = 5
   return accessToken ? { ...task, access_token: accessToken } : task
 }
 
@@ -122,7 +162,24 @@ async function loadAuthorizedTask(
 function toPublicTaskStatus(
   row: TaskRow,
   answer: PublicKnowledge | null = null,
+  events: PublicTaskEventRow[] = [],
+  releaseSequence: number | null = null,
 ): PublicTaskStatus {
+  const fallbackStage: PublicTaskStatus['stage'] =
+    row.status === 'claimed' || row.status === 'researching'
+      ? 'researching'
+      : row.status === 'input_required'
+        ? 'researching'
+        : row.status === 'validating'
+          ? 'validating'
+          : row.status === 'completed'
+            ? 'completed'
+            : row.status === 'cancelled'
+              ? 'cancelled'
+              : row.status === 'failed' || row.status === 'expired'
+                ? 'failed'
+                : 'queued'
+  const lastEvent = events.at(-1)
   return {
     task_id: row.public_id,
     status: row.status,
@@ -135,7 +192,51 @@ function toPublicTaskStatus(
         ? { code: row.failure_code, message: row.failure_message }
         : null,
     poll_after_ms:
-      row.status === 'queued' || row.status === 'claimed' ? 3_000 : 10_000
+      row.status === 'queued' || row.status === 'claimed' ? 3_000 : 10_000,
+    stage: lastEvent?.stage ?? fallbackStage,
+    progress_percent: lastEvent?.progress_percent ?? (
+      fallbackStage === 'completed' ? 100 : fallbackStage === 'queued' ? 5 : 50
+    ),
+    milestones: events.map((event) => ({
+      stage: event.stage,
+      progress_percent: event.progress_percent,
+      message: event.public_message,
+      created_at: new Date(event.created_at).toISOString()
+    })),
+    published_release_sequence: releaseSequence
+  }
+}
+
+async function loadTaskPresentation(
+  database: Database,
+  row: TaskRow,
+): Promise<{
+  events: PublicTaskEventRow[]
+  releaseSequence: number | null
+}> {
+  const [events, release] = await Promise.all([
+    database.query<PublicTaskEventRow>(
+      `SELECT stage, progress_percent, public_message, created_at
+       FROM task_public_events
+       WHERE task_id = $1
+       ORDER BY created_at, id`,
+      [row.id],
+    ),
+    row.result_revision_id
+      ? database.query<{ sequence: number }>(
+          `SELECT r.sequence::int AS sequence
+           FROM release_items ri
+           JOIN releases r ON r.id = ri.release_id
+           WHERE ri.revision_id = $1
+           ORDER BY r.sequence DESC
+           LIMIT 1`,
+          [row.result_revision_id],
+        )
+      : Promise.resolve({ rows: [] as Array<{ sequence: number }> })
+  ])
+  return {
+    events: events.rows,
+    releaseSequence: release.rows[0]?.sequence ?? null
   }
 }
 
@@ -151,7 +252,13 @@ export async function getExpertTask(
   const answer = row.result_revision_id
     ? await getPublicRevision(database, row.result_revision_id)
     : null
-  return toPublicTaskStatus(row, answer)
+  const presentation = await loadTaskPresentation(database, row)
+  return toPublicTaskStatus(
+    row,
+    answer,
+    presentation.events,
+    presentation.releaseSequence,
+  )
 }
 
 export async function continueExpertTask(
@@ -168,9 +275,14 @@ export async function continueExpertTask(
   }
 
   await database.query(
-    `WITH inserted AS (
+    `WITH inserted_message AS (
        INSERT INTO task_messages (task_id, direction, body)
        VALUES ($1, 'client_to_researcher', $2)
+     ), inserted_event AS (
+       INSERT INTO task_public_events (
+         task_id, stage, progress_percent, public_message
+       )
+       VALUES ($1, 'queued', 10, 'Additional input received; task returned to the queue.')
      )
      UPDATE expert_tasks
         SET status = 'queued',
@@ -195,7 +307,13 @@ export async function cancelExpertTask(
   }
 
   await database.query(
-    `UPDATE expert_tasks
+    `WITH inserted_event AS (
+       INSERT INTO task_public_events (
+         task_id, stage, progress_percent, public_message
+       )
+       VALUES ($1, 'cancelled', 100, 'Research task cancelled by the requester.')
+     )
+     UPDATE expert_tasks
         SET status = 'cancelled',
             lease_token_hash = NULL,
             lease_until = NULL,
@@ -209,6 +327,7 @@ export async function cancelExpertTask(
 
 export async function submitFeedback(
   database: Database,
+  quarantineDatabase: Database,
   actor: PublicActor,
   input: {
     revision_ref?: string | undefined
@@ -217,8 +336,19 @@ export async function submitFeedback(
     rating?: number | undefined
     category: 'correct' | 'incorrect' | 'outdated' | 'unsafe' | 'incomplete' | 'other'
     comment?: string | undefined
+    sample_contribution?: {
+      consent: true
+      consent_version: '2026-07-01'
+      snapshot_type: 'show_version' | 'config' | 'log' | 'topology' | 'other'
+      sanitized_payload: string
+      detected_context?: Record<string, string> | undefined
+    } | undefined
   },
-): Promise<{ accepted: true; feedback_id: string }> {
+): Promise<{
+  accepted: true
+  feedback_id: string
+  contribution_id?: string
+}> {
   let internalTaskId: string | null = null
   if (input.task_id) {
     const task = await loadAuthorizedTask(
@@ -252,5 +382,49 @@ export async function submitFeedback(
   )
   const row = result.rows[0]
   if (!row) throw new Error('KNOWLEDGE_REVISION_NOT_FOUND')
-  return { accepted: true, feedback_id: row.id }
+
+  let contributionId: string | undefined
+  if (input.sample_contribution) {
+    const strict = sanitizeSnapshot(
+      input.sample_contribution.sanitized_payload,
+      'strict',
+    ).sanitized
+    const detectedContext = Object.fromEntries(
+      Object.entries(input.sample_contribution.detected_context ?? {}).map(
+        ([key, value]) => [
+          key,
+          sanitizeSnapshot(value.slice(0, 240), 'strict').sanitized
+        ],
+      ),
+    )
+    const contribution = await quarantineDatabase.query<{ id: string }>(
+      `INSERT INTO snapshot_contributions (
+         consent_version,
+         snapshot_type,
+         detected_context,
+         sanitized_payload,
+         content_hash
+       )
+       VALUES ($1, $2, $3::jsonb, $4, $5)
+       ON CONFLICT (content_hash)
+       DO UPDATE SET expires_at = greatest(
+         snapshot_contributions.expires_at,
+         now() + interval '30 days'
+       )
+       RETURNING id`,
+      [
+        input.sample_contribution.consent_version,
+        input.sample_contribution.snapshot_type,
+        JSON.stringify(detectedContext),
+        strict,
+        sha256Label(strict)
+      ],
+    )
+    contributionId = contribution.rows[0]!.id
+  }
+  return {
+    accepted: true,
+    feedback_id: row.id,
+    ...(contributionId ? { contribution_id: contributionId } : {})
+  }
 }

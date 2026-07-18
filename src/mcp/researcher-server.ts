@@ -50,7 +50,7 @@ export function createResearcherMcpServer(
 ): McpServer {
   const server = new McpServer({
     name: 'CliDeck MCP — Restricted Researcher',
-    version: '0.1.0'
+    version: '0.2.0'
   })
 
   server.registerTool(

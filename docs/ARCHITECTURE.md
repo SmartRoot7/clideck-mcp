@@ -22,6 +22,11 @@ name is `CliDeck MCP — Network Knowledge`.
 PostgreSQL 16 is the only stateful dependency. The API and researcher processes
 are stateless.
 
+The browser playground is a BFF-only facade. A browser sends data to
+`clideck.com/api/mcp/*`; the site attaches its server-side bearer token and a
+daily HMAC client key. The backend exposes only named operations and has no
+generic proxy route.
+
 ## Knowledge model
 
 `knowledge_items` provides a stable identity. `knowledge_revisions` is append-only
@@ -42,6 +47,25 @@ Search ranking combines:
 
 No vector similarity or generative ranking is used.
 
+The first deep-support pack contains 50 Catalyst 9300 / IOS-XE revisions:
+20 commands, 15 change contracts, 10 verification contracts, and 5 bounded
+upgrade records. Cisco, Juniper, and Arista models are recognized, while only
+the C9300 family is marked deep.
+
+## Product intelligence
+
+- Device fingerprinting and redaction operate in memory and return
+  `retention: not_stored`.
+- Change Guard classifies commands deterministically and fails closed for
+  unknown or destructive input.
+- A signed, 30-minute verification token contains checks and a change digest,
+  never raw commands.
+- Upgrade advice is exact-model and exact-version; an unverified transition
+  returns `unknown`.
+- Topology analysis normalizes supplied CDP, LLDP, route, and traceroute output.
+- Opt-in samples are re-redacted through a dedicated quarantine DB role with a
+  30-day TTL.
+
 ## Task lifecycle
 
 The durable state machine is:
@@ -54,6 +78,13 @@ Terminal alternatives are `failed`, `cancelled`, and `expired`. Claims use
 Authenticated tasks are tied to a tenant. Anonymous tasks use 192-bit random
 public IDs, a separate 256-bit access token, short TTL, and lower rate limits.
 Only a hash of the access token is stored.
+
+The safe public flywheel is:
+
+`queued → researching → conflict_check → validating → publishing → completed`
+
+Public milestones never contain source names, URLs, researcher errors, user
+questions, or internal pipeline identifiers.
 
 ## Publication
 
@@ -68,6 +99,17 @@ Candidates require:
 Publication creates a new immutable release and switches `active_release` in the
 same transaction. Rollback switches it to an earlier release; revisions are never
 overwritten.
+
+## Lab assurance
+
+Batfish validates bounded Cisco configuration snapshots and differential
+reachability. Containerlab runs parser scenarios only with downloadable open
+network images. A Cisco revision can receive `batfish_modeled` from a model
+check, but cannot receive `runtime_lab_validated` unless a Cisco runtime image
+was actually tested.
+
+CI emits a hashed report tied to the Git commit. Production imports it only when
+the report commit equals the deployed commit and every check passed.
 
 ## Deliberate exclusions
 

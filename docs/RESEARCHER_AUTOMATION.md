@@ -25,5 +25,7 @@ private manuals, access other repositories or servers, execute device commands,
 or change code. It submits structured facts plus minimal internal provenance.
 The worker, not Codex, owns validation and publication.
 
-If no task is available, the automation exits successfully. If Codex is offline,
-tasks remain queued and known deterministic answers remain available.
+Run the automation every five minutes. It claims at most one lease at a time and
+publishes only through the worker policy gate. If no task is available, it exits
+successfully. If Codex is offline, tasks remain queued and known deterministic
+answers remain available.

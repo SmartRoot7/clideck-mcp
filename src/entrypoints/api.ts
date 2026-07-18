@@ -8,17 +8,37 @@ import { createMetrics } from '../metrics.js'
 
 const config = getConfig()
 requireRuntimeSecret('ADMIN_TOKEN', config.adminToken)
+requireRuntimeSecret(
+  'VERIFICATION_SIGNING_KEY',
+  config.verificationSigningKey,
+)
+if (config.enablePlayground) {
+  requireRuntimeSecret('PLAYGROUND_TOKEN', config.playgroundToken)
+}
 const logger = createLogger(config)
 const database = createDatabase(config, logger)
 const adminDatabase =
   config.adminDatabaseUrl === config.databaseUrl
     ? database
     : createDatabase(config, logger, config.adminDatabaseUrl)
+if (
+  config.nodeEnv === 'production' &&
+  config.quarantineDatabaseUrl === config.databaseUrl
+) {
+  throw new Error(
+    'QUARANTINE_DATABASE_URL must use a separate production database role',
+  )
+}
+const quarantineDatabase =
+  config.quarantineDatabaseUrl === config.databaseUrl
+    ? database
+    : createDatabase(config, logger, config.quarantineDatabaseUrl)
 const metrics = createMetrics()
 const app = createApiApp({
   config,
   database,
   adminDatabase,
+  quarantineDatabase,
   logger,
   metrics
 })
@@ -50,7 +70,10 @@ async function shutdown(signal: string): Promise<void> {
   server.close()
   await Promise.all([
     database.end(),
-    ...(adminDatabase === database ? [] : [adminDatabase.end()])
+    ...(adminDatabase === database ? [] : [adminDatabase.end()]),
+    ...(quarantineDatabase === database
+      ? []
+      : [quarantineDatabase.end()])
   ])
 }
 
