@@ -351,22 +351,26 @@ export function chunkSourceText(text: string): TextFragment[] {
     .flatMap((block) => splitOversizedText(block, maxBytes))
 
   const fragments: TextFragment[] = []
+  const seenContentHashes = new Set<string>()
   let sectionTitle: string | null = null
   let current: string[] = []
   let currentBytes = 0
 
   const flush = () => {
     const content = current.join('\n\n').trim()
+    current = []
+    currentBytes = 0
     if (!content) return
+    const contentHash = bufferHash(Buffer.from(content, 'utf8'))
+    if (seenContentHashes.has(contentHash)) return
+    seenContentHashes.add(contentHash)
     fragments.push({
       ordinal: fragments.length,
       sectionTitle,
       sourceLocator: sectionTitle,
       content,
-      contentHash: bufferHash(Buffer.from(content, 'utf8'))
+      contentHash
     })
-    current = []
-    currentBytes = 0
   }
 
   for (const block of blocks) {
@@ -592,8 +596,7 @@ async function chunkSource(
            content_hash
          )
          VALUES ($1, $2, $3, $4, $5, $6)
-         ON CONFLICT (source_artifact_id, ordinal)
-         DO NOTHING`,
+         ON CONFLICT DO NOTHING`,
         [
           row.id,
           fragment.ordinal,
