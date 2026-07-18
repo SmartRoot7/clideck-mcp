@@ -138,6 +138,50 @@ export function normalizeCandidateAnalysisStableKeys(
   }
 }
 
+export function normalizeCandidateAnalysisOptionalFields(
+  unparsedArtifact: unknown,
+): unknown {
+  if (
+    !unparsedArtifact ||
+    typeof unparsedArtifact !== 'object' ||
+    Array.isArray(unparsedArtifact)
+  ) {
+    return unparsedArtifact
+  }
+
+  const artifact = unparsedArtifact as Record<string, unknown>
+  if (!Array.isArray(artifact['candidates'])) return unparsedArtifact
+
+  return {
+    ...artifact,
+    candidates: artifact['candidates'].map((entry) => {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+        return entry
+      }
+      const candidateEntry = entry as Record<string, unknown>
+      const candidate = candidateEntry['candidate']
+      if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+        return entry
+      }
+      const candidateRecord = candidate as Record<string, unknown>
+      const cliMode = candidateRecord['cli_mode']
+      if (typeof cliMode !== 'string') return entry
+
+      const compactCliMode = cliMode.replace(/\s+/g, ' ').trim()
+      const normalizedCandidate = { ...candidateRecord }
+      if (compactCliMode.length === 0 || compactCliMode.length > 120) {
+        delete normalizedCandidate['cli_mode']
+      } else {
+        normalizedCandidate['cli_mode'] = compactCliMode
+      }
+      return {
+        ...candidateEntry,
+        candidate: normalizedCandidate
+      }
+    })
+  }
+}
+
 export function bindCandidateAnalysisProvenanceHashes(
   unparsedArtifact: unknown,
   unparsedFragments: unknown,

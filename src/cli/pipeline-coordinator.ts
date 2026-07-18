@@ -18,6 +18,7 @@ import {
   expertResearchArtifactSchema,
   expertResearchStructuredArtifactSchema,
   materializeCandidateVerificationArtifact,
+  normalizeCandidateAnalysisOptionalFields,
   normalizeCandidateAnalysisStableKeys
 } from '../domain/pipeline.js'
 import {
@@ -215,7 +216,7 @@ Every candidate MUST contain every required field in this exact contract:
   }]
 }
 Optional string fields are "platform_slug", "version_min", "version_max",
-"cli_mode", and "command". Optional provenance fields are "document_version"
+"cli_mode" (at most 120 characters), and "command". Optional provenance fields are "document_version"
 and "document_date". Emit every optional field and use null when unknown; the
 wire schema requires all keys and the bridge removes nulls before validation.
 Dates MUST be YYYY-MM-DD, so convert a leased timestamp to its first 10
@@ -477,7 +478,9 @@ function validateAgentArtifact(
       return candidateAnalysisArtifactSchema.parse(
         omitNullObjectProperties(
           bindCandidateAnalysisProvenanceHashes(
-            normalizeCandidateAnalysisStableKeys(parsed),
+            normalizeCandidateAnalysisOptionalFields(
+              normalizeCandidateAnalysisStableKeys(parsed),
+            ),
             task.payload['fragments'],
           ),
         ),
