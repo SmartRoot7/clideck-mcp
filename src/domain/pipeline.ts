@@ -118,6 +118,27 @@ export const expertResearchArtifactSchema = z.union([
   })
 ])
 
+export const expertResearchStructuredArtifactSchema = z.object({
+  outcome: z.enum(['candidate', 'rejected']),
+  candidate: pipelineCandidatePayloadSchema.nullable(),
+  reason: z.string().trim().min(12).max(1_000).nullable()
+}).superRefine((value, context) => {
+  if (value.outcome === 'candidate' && !value.candidate) {
+    context.addIssue({
+      code: 'custom',
+      path: ['candidate'],
+      message: 'A candidate outcome requires a candidate.'
+    })
+  }
+  if (value.outcome === 'rejected' && !value.reason) {
+    context.addIssue({
+      code: 'custom',
+      path: ['reason'],
+      message: 'A rejected outcome requires a reason.'
+    })
+  }
+})
+
 export const pipelineFailureSchema = pipelineLeaseSchema.extend({
   failure_code: z.string().regex(/^[A-Z][A-Z0-9_]{2,63}$/),
   failure_message: z.string().trim().min(8).max(1_000)
