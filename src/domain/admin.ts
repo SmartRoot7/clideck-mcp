@@ -780,6 +780,19 @@ export async function actOnSource(
           WHERE id = $1`,
         [sourceId, nextStatus],
       )
+      if (artifact.rows[0]?.status === 'chunked') {
+        await client.query(
+          `UPDATE source_fragments fragment
+              SET status = 'queued',
+                  attempts = 0,
+                  updated_at = now()
+             FROM source_artifacts artifact
+            WHERE fragment.source_artifact_id = artifact.id
+              AND artifact.source_candidate_id = $1
+              AND fragment.status IN ('queued','analyzing','failed')`,
+          [sourceId],
+        )
+      }
       await client.query(
         `UPDATE pipeline_settings
             SET active_source_id = $1,
