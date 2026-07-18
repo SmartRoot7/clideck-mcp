@@ -177,6 +177,61 @@ describeIntegration('PostgreSQL integration', () => {
     )
   })
 
+  it('reconciles stale agent runs without racing recent submissions', async () => {
+    const completedTask = await database.query<{ id: string }>(
+      `INSERT INTO pipeline_tasks (
+         task_type,
+         stage,
+         status,
+         dedupe_key,
+         payload,
+         completed_at
+       )
+       VALUES (
+         'source_discovery',
+         'discover',
+         'completed',
+         $1,
+         '{}'::jsonb,
+         now() - interval '20 minutes'
+       )
+       RETURNING id`,
+      [`orphan-run-test:${randomUUID()}`],
+    )
+    const run = await database.query<{ id: string }>(
+      `INSERT INTO agent_runs (
+         pipeline_task_id,
+         model,
+         reasoning_effort,
+         status,
+         started_at
+       )
+       VALUES (
+         $1,
+         'gpt-5.6-luna',
+         'low',
+         'running',
+         now() - interval '20 minutes'
+       )
+       RETURNING id`,
+      [completedTask.rows[0]!.id],
+    )
+    await ensurePipelineWork(database)
+    const reconciled = await database.query<{
+      status: string
+      error_code: string | null
+    }>(
+      `SELECT status, error_code
+       FROM agent_runs
+       WHERE id = $1`,
+      [run.rows[0]!.id],
+    )
+    expect(reconciled.rows[0]).toEqual({
+      status: 'failed',
+      error_code: 'ORPHANED_AGENT_RUN'
+    })
+  })
+
   it('resets exhausted fragment attempts on an audited source retry', async () => {
     const unique = randomUUID().replaceAll('-', '')
     const hash = sha256Label(`source-retry-${unique}`)
