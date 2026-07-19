@@ -278,6 +278,8 @@ function overviewFixture() {
     max_concurrent_ai_runs: 3,
     max_active_sources: 4,
     max_deep_review_runs: 1,
+    prepared_source_target: 8,
+    prepared_sources: 8,
     control_generation: 4,
     pause_requested_at: null,
     paused_reason: null,
@@ -327,6 +329,8 @@ function overviewFixture() {
     executors: [],
     active_work: null,
     pipeline_funnel: [],
+    source_intake: [],
+    record_pipeline: [],
     breakdowns: {
       vendor: [],
       operating_system: [],

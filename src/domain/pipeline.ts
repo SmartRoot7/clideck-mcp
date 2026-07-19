@@ -438,7 +438,12 @@ export const agentRunResultSchema = z.object({
   output_tokens: z.number().int().min(0),
   reasoning_output_tokens: z.number().int().min(0).default(0),
   duration_ms: z.number().int().min(0),
-  error_code: z.string().regex(/^[A-Z][A-Z0-9_]{2,63}$/).optional()
+  error_code: z.string().regex(/^[A-Z][A-Z0-9_]{2,63}$/).optional(),
+  process_exit_code: z.number().int().min(-1).max(255).optional(),
+  diagnostic_code: z.string()
+    .regex(/^[A-Z][A-Z0-9_]{2,63}$/).optional(),
+  diagnostic_fingerprint: z.string()
+    .regex(/^sha256:[0-9a-f]{64}$/).optional()
 })
 
 export const pipelineSystemFailureSchema = z.object({
@@ -457,6 +462,7 @@ export type PipelineTaskRow = {
     | 'fragment_analysis'
     | 'candidate_verification'
     | 'candidate_deep_review'
+    | 'candidate_publication'
     | 'source_publication'
     | 'source_refresh'
   stage:
@@ -489,14 +495,16 @@ const mechanicalTaskTypes: PipelineTaskRow['task_type'][] = [
   'source_acquisition',
   'source_conversion',
   'source_chunking',
+  'candidate_publication',
   'source_publication'
 ]
 const requiredPipelineModel = 'gpt-5.6-luna'
 const requiredPipelineReasoning = 'low'
 const aiPriorities = {
   expert: 100,
-  deepReview: 95,
+  deepMedium: 96,
   verify: 90,
+  deepLow: 85,
   analyze: 80,
   discover: 50
 } as const
@@ -736,6 +744,7 @@ async function reconcileExpiredAndCompletedWork(
         `UPDATE knowledge_candidates
             SET status = 'deep_review',
                 verification_task_id = NULL,
+                resolution_code = 'verification_lease_exhausted',
                 resolution_reason = 'Standard verification lease attempts were exhausted.',
                 next_review_at = now(),
                 updated_at = now()
@@ -758,6 +767,16 @@ async function reconcileExpiredAndCompletedWork(
           WHERE deep_review_task_id = $1
             AND status = 'deep_review'`,
         [task.id, exhausted],
+      )
+    }
+    if (task.task_type === 'candidate_publication' && exhausted) {
+      await client.query(
+        `UPDATE knowledge_candidates
+            SET publication_task_id = NULL,
+                updated_at = now()
+          WHERE publication_task_id = $1
+            AND status = 'verified'`,
+        [task.id],
       )
     }
     if (task.expert_task_id) {
@@ -871,6 +890,7 @@ async function queueExpertWork(client: DatabaseClient): Promise<boolean> {
 
 async function queueDeepReviewWork(
   client: DatabaseClient,
+  reviewPass: 'low' | 'medium',
 ): Promise<boolean> {
   const seed = await client.query<{
     id: string
@@ -878,13 +898,15 @@ async function queueDeepReviewWork(
     source_candidate_id: string | null
     resolution_attempts: number
     resolution_reason: string | null
+    resolution_code: string | null
   }>(
     `SELECT
        kc.id,
        kc.pipeline_task_id,
        pt.source_candidate_id,
        kc.resolution_attempts,
-       kc.resolution_reason
+       kc.resolution_reason,
+       kc.resolution_code
      FROM knowledge_candidates kc
      JOIN pipeline_tasks pt ON pt.id = kc.pipeline_task_id
      WHERE kc.status IN ('deep_review', 'quarantined')
@@ -894,18 +916,23 @@ async function queueDeepReviewWork(
          OR kc.next_review_at IS NULL
          OR kc.next_review_at <= now()
        )
+       AND (
+         CASE WHEN $1 = 'medium'
+           THEN kc.resolution_attempts > 0
+           ELSE kc.resolution_attempts = 0
+         END
+       )
      ORDER BY
        CASE WHEN kc.status = 'deep_review' THEN 0 ELSE 1 END,
        kc.next_review_at NULLS FIRST,
        kc.created_at
      LIMIT 1
      FOR UPDATE OF kc SKIP LOCKED`,
+    [reviewPass],
   )
   const first = seed.rows[0]
   if (!first) return false
 
-  const reviewPass: 'low' | 'medium' =
-    first.resolution_attempts > 0 ? 'medium' : 'low'
   const batch = await client.query<{
     id: string
     stable_key: string
@@ -915,6 +942,7 @@ async function queueDeepReviewWork(
     quality_score: string
     resolution_attempts: number
     resolution_reason: string | null
+    resolution_code: string | null
   }>(
     `SELECT
        kc.id,
@@ -924,7 +952,8 @@ async function queueDeepReviewWork(
        kc.confidence,
        kc.quality_score,
        kc.resolution_attempts,
-       kc.resolution_reason
+       kc.resolution_reason,
+       kc.resolution_code
      FROM knowledge_candidates kc
      JOIN pipeline_tasks pt ON pt.id = kc.pipeline_task_id
      WHERE kc.status IN ('deep_review', 'quarantined')
@@ -941,15 +970,15 @@ async function queueDeepReviewWork(
          OR kc.next_review_at IS NULL
          OR kc.next_review_at <= now()
        )
-       AND coalesce(kc.resolution_reason, '') =
-           coalesce($3::text, '')
+       AND coalesce(kc.resolution_code, 'unspecified') =
+           coalesce($3::text, 'unspecified')
      ORDER BY kc.created_at
      LIMIT 20
      FOR UPDATE OF kc SKIP LOCKED`,
     [
       first.source_candidate_id,
       reviewPass,
-      first.resolution_reason
+      first.resolution_code
     ],
   )
   if (batch.rows.length === 0) return false
@@ -957,7 +986,9 @@ async function queueDeepReviewWork(
   const taskId = await insertTask(client, {
     type: 'candidate_deep_review',
     stage: 'deep_review',
-    priority: aiPriorities.deepReview,
+    priority: reviewPass === 'medium'
+      ? aiPriorities.deepMedium
+      : aiPriorities.deepLow,
     dedupeKey: `deep-review:${reviewPass}:${sha256Label(
       candidateIds.join(','),
     )}`,
@@ -984,7 +1015,7 @@ async function queueDeepReviewWork(
 async function queueSourceWork(
   client: DatabaseClient,
   sourceId: string,
-  mode: 'mechanical' | 'ai' | 'analysis',
+  mode: 'mechanical' | 'ai' | 'verification' | 'analysis',
 ): Promise<boolean> {
   const sourceResult = await client.query<{
     id: string
@@ -1117,8 +1148,12 @@ async function queueSourceWork(
     }))
   }
 
-  if (mode === 'ai' || mode === 'analysis') {
-    if (mode === 'ai') {
+  if (
+    mode === 'ai' ||
+    mode === 'verification' ||
+    mode === 'analysis'
+  ) {
+    if (mode === 'ai' || mode === 'verification') {
     const verificationReadiness = await client.query<{
       ready: boolean
     }>(
@@ -1203,6 +1238,7 @@ async function queueSourceWork(
       return true
     }
     }
+    if (mode === 'verification') return false
 
     const queuedFragments = await client.query<{
       id: string
@@ -1402,7 +1438,364 @@ async function queueDiscoveryWork(client: DatabaseClient): Promise<boolean> {
   }))
 }
 
-async function ensureWorkInTransaction(
+async function queueCandidatePublication(
+  client: DatabaseClient,
+): Promise<boolean> {
+  const readiness = await client.query<{
+    count: number
+    oldest_waiting_at: string | Date | null
+  }>(
+    `SELECT
+       count(*)::int AS count,
+       min(updated_at) AS oldest_waiting_at
+     FROM knowledge_candidates
+     WHERE status = 'verified'
+       AND publication_task_id IS NULL`,
+  )
+  const count = readiness.rows[0]?.count ?? 0
+  const oldest = readiness.rows[0]?.oldest_waiting_at
+  if (
+    count === 0 ||
+    (
+      count < 50 &&
+      (
+        !oldest ||
+        new Date(oldest).getTime() > Date.now() - 30_000
+      )
+    )
+  ) {
+    return false
+  }
+
+  const batch = await client.query<{
+    id: string
+    pipeline_task_id: string
+    source_candidate_id: string | null
+  }>(
+    `SELECT
+       candidate.id,
+       candidate.pipeline_task_id,
+       task.source_candidate_id
+     FROM knowledge_candidates candidate
+     JOIN pipeline_tasks task ON task.id = candidate.pipeline_task_id
+     WHERE candidate.status = 'verified'
+       AND candidate.publication_task_id IS NULL
+     ORDER BY candidate.updated_at, candidate.created_at
+     LIMIT 50
+     FOR UPDATE OF candidate SKIP LOCKED`,
+  )
+  if (batch.rows.length === 0) return false
+  const candidateIds = batch.rows.map((candidate) => candidate.id)
+  const sourceIds = [
+    ...new Set(
+      batch.rows.flatMap((candidate) =>
+        candidate.source_candidate_id
+          ? [candidate.source_candidate_id]
+          : [],
+      ),
+    )
+  ]
+  const taskId = await insertTask(client, {
+    type: 'candidate_publication',
+    stage: 'publish',
+    priority: 98,
+    dedupeKey: `records:publish:${sha256Label(candidateIds.join(','))}`,
+    sourceId: sourceIds.length === 1 ? sourceIds[0]! : null,
+    payload: {
+      candidate_ids: candidateIds,
+      source_ids: sourceIds,
+      record_count: candidateIds.length
+    }
+  })
+  if (!taskId) return false
+  await client.query(
+    `UPDATE knowledge_candidates
+        SET publication_task_id = $1,
+            updated_at = now()
+      WHERE id = ANY($2::uuid[])
+        AND status = 'verified'
+        AND publication_task_id IS NULL`,
+    [taskId, candidateIds],
+  )
+  return true
+}
+
+async function maintainPreparedSourceBuffer(
+  client: DatabaseClient,
+  target: number,
+): Promise<void> {
+  const buffered = await client.query<{ count: number }>(
+    `SELECT count(*)::int AS count
+     FROM source_candidates
+     WHERE status IN (
+       'approved',
+       'acquiring',
+       'acquired',
+       'converting',
+       'converted',
+       'chunking',
+       'prepared'
+     )`,
+  )
+  let available = Math.max(
+    0,
+    target - (buffered.rows[0]?.count ?? 0),
+  )
+  const prepared = await client.query<{ count: number }>(
+    `SELECT count(*)::int AS count
+     FROM source_candidates
+     WHERE status = 'prepared'`,
+  )
+  const preparationLimit = Math.max(
+    0,
+    target - (prepared.rows[0]?.count ?? 0),
+  )
+  const preparationSources = await client.query<{ id: string }>(
+    `SELECT id
+     FROM source_candidates
+     WHERE status IN (
+       'approved',
+       'acquiring',
+       'acquired',
+       'converting',
+       'converted',
+       'chunking'
+     )
+     ORDER BY discovered_at
+     LIMIT $1
+     FOR UPDATE SKIP LOCKED`,
+    [preparationLimit],
+  )
+  for (const source of preparationSources.rows) {
+    await queueSourceWork(client, source.id, 'mechanical')
+  }
+  if (available === 0) return
+
+  const discovered = await client.query<{ id: string }>(
+    `SELECT id
+     FROM source_candidates
+     WHERE status = 'discovered'
+     ORDER BY discovered_at
+     LIMIT $1
+     FOR UPDATE SKIP LOCKED`,
+    [available],
+  )
+  for (const source of discovered.rows) {
+    await client.query(
+      `UPDATE source_candidates
+          SET status = 'approved',
+              updated_at = now()
+        WHERE id = $1
+          AND status = 'discovered'`,
+      [source.id],
+    )
+    await queueSourceWork(client, source.id, 'mechanical')
+    available -= 1
+    if (available <= 0) break
+  }
+}
+
+async function reconcileSourceLanes(
+  client: DatabaseClient,
+  maxActiveSources: number,
+): Promise<string[]> {
+  await client.query(
+    `UPDATE source_candidates source
+        SET status = 'verifying',
+            updated_at = now()
+      WHERE source.status IN ('prepared', 'analyzing')
+        AND NOT EXISTS (
+          SELECT 1
+          FROM source_artifacts artifact
+          JOIN source_fragments fragment
+            ON fragment.source_artifact_id = artifact.id
+          WHERE artifact.source_candidate_id = source.id
+            AND fragment.status IN ('queued', 'reserved', 'analyzing')
+        )`,
+  )
+  await client.query(
+    `DELETE FROM active_source_slots slot
+     WHERE slot.slot_number > $1
+        OR NOT EXISTS (
+          SELECT 1
+          FROM source_artifacts artifact
+          JOIN source_fragments fragment
+            ON fragment.source_artifact_id = artifact.id
+          WHERE artifact.source_candidate_id = slot.source_candidate_id
+            AND fragment.status IN ('queued', 'reserved', 'analyzing')
+        )`,
+    [maxActiveSources],
+  )
+
+  const occupied = await client.query<{
+    slot_number: number
+    source_candidate_id: string
+  }>(
+    `SELECT slot_number, source_candidate_id
+     FROM active_source_slots
+     WHERE slot_number <= $1
+     ORDER BY slot_number
+     FOR UPDATE`,
+    [maxActiveSources],
+  )
+  const used = new Set(occupied.rows.map((row) => row.slot_number))
+  for (let slot = 1; slot <= maxActiveSources; slot += 1) {
+    if (used.has(slot)) continue
+    const source = await client.query<{ id: string }>(
+      `SELECT source.id
+       FROM source_candidates source
+       WHERE source.status IN ('prepared', 'analyzing')
+         AND NOT EXISTS (
+           SELECT 1
+           FROM active_source_slots active
+           WHERE active.source_candidate_id = source.id
+         )
+         AND EXISTS (
+           SELECT 1
+           FROM source_artifacts artifact
+           JOIN source_fragments fragment
+             ON fragment.source_artifact_id = artifact.id
+           WHERE artifact.source_candidate_id = source.id
+             AND fragment.status = 'queued'
+             AND fragment.reservation_task_id IS NULL
+         )
+       ORDER BY
+         CASE source.status WHEN 'analyzing' THEN 0 ELSE 1 END,
+         source.updated_at
+       LIMIT 1
+       FOR UPDATE OF source SKIP LOCKED`,
+    )
+    if (!source.rows[0]) break
+    await client.query(
+      `INSERT INTO active_source_slots (
+         slot_number,
+         source_candidate_id
+       )
+       VALUES ($1, $2)`,
+      [slot, source.rows[0].id],
+    )
+    await client.query(
+      `UPDATE source_candidates
+          SET status = 'analyzing',
+              updated_at = now()
+        WHERE id = $1`,
+      [source.rows[0].id],
+    )
+  }
+
+  const active = await client.query<{ source_candidate_id: string }>(
+    `SELECT source_candidate_id
+     FROM active_source_slots
+     WHERE slot_number <= $1
+     ORDER BY slot_number`,
+    [maxActiveSources],
+  )
+  await client.query(
+    `UPDATE pipeline_settings
+        SET active_source_id = $1,
+            updated_at = now(),
+            updated_by = 'streaming-source-scheduler'
+      WHERE singleton`,
+    [active.rows[0]?.source_candidate_id ?? null],
+  )
+  return active.rows.map((row) => row.source_candidate_id)
+}
+
+async function reconcileCompletedSources(
+  client: DatabaseClient,
+): Promise<void> {
+  await client.query(
+    `UPDATE source_candidates source
+        SET status = CASE
+              WHEN EXISTS (
+                SELECT 1
+                FROM knowledge_candidates candidate
+                JOIN pipeline_tasks task
+                  ON task.id = candidate.pipeline_task_id
+                WHERE task.source_candidate_id = source.id
+                  AND candidate.status IN (
+                    'rejected',
+                    'conflict',
+                    'quarantined',
+                    'manual_exception'
+                  )
+              ) THEN 'completed_with_exceptions'
+              ELSE 'completed'
+            END,
+            failure_code = NULL,
+            failure_message = NULL,
+            completed_at = coalesce(completed_at, now()),
+            updated_at = now()
+      WHERE source.status IN (
+          'prepared',
+          'analyzing',
+          'verifying',
+          'publishing'
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM source_artifacts artifact
+          JOIN source_fragments fragment
+            ON fragment.source_artifact_id = artifact.id
+          WHERE artifact.source_candidate_id = source.id
+            AND fragment.status IN ('queued', 'reserved', 'analyzing')
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM knowledge_candidates candidate
+          JOIN pipeline_tasks task ON task.id = candidate.pipeline_task_id
+          WHERE task.source_candidate_id = source.id
+            AND candidate.status IN (
+              'analyzed',
+              'deep_review',
+              'verified'
+            )
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM pipeline_tasks task
+          WHERE task.source_candidate_id = source.id
+            AND task.status IN ('queued', 'claimed', 'running')
+            AND task.task_type IN (
+              'fragment_analysis',
+              'candidate_verification',
+              'candidate_deep_review',
+              'candidate_publication'
+            )
+        )`,
+  )
+}
+
+async function queueVerificationFromAnySource(
+  client: DatabaseClient,
+): Promise<boolean> {
+  const source = await client.query<{ id: string }>(
+    `SELECT task.source_candidate_id AS id
+     FROM knowledge_candidates candidate
+     JOIN pipeline_tasks task ON task.id = candidate.pipeline_task_id
+     WHERE candidate.status = 'analyzed'
+       AND candidate.verification_task_id IS NULL
+       AND task.source_candidate_id IS NOT NULL
+     GROUP BY task.source_candidate_id
+     ORDER BY min(candidate.created_at)
+     LIMIT 1`,
+  )
+  return source.rows[0]
+    ? queueSourceWork(client, source.rows[0].id, 'verification')
+    : false
+}
+
+async function queueAnalysisFromLanes(
+  client: DatabaseClient,
+  sourceIds: string[],
+): Promise<boolean> {
+  for (const sourceId of sourceIds) {
+    if (await queueSourceWork(client, sourceId, 'analysis')) return true
+  }
+  return false
+}
+
+async function ensureLegacyWorkInTransaction(
   client: DatabaseClient,
 ): Promise<void> {
   await reconcileExpiredAndCompletedWork(client)
@@ -1671,7 +2064,7 @@ async function ensureWorkInTransaction(
     occupiedSlots < pipeline.max_concurrent_ai_runs &&
     (activeDeep.rows[0]?.count ?? 0) <
       pipeline.max_deep_review_runs &&
-    await queueDeepReviewWork(client)
+    await queueDeepReviewWork(client, 'low')
   ) {
     occupiedSlots += 1
   }
@@ -1755,10 +2148,126 @@ async function ensureWorkInTransaction(
   }
 }
 
+async function ensureStreamingWorkInTransaction(
+  client: DatabaseClient,
+): Promise<void> {
+  await reconcileExpiredAndCompletedWork(client)
+  const settings = await client.query<{
+    enabled: boolean
+    ai_model: string
+    reasoning_effort: string
+    max_concurrent_ai_runs: number
+    max_active_sources: number
+    source_buffer_target: number
+    prepared_source_target: number
+  }>(
+    `SELECT
+       enabled,
+       ai_model,
+       reasoning_effort,
+       max_concurrent_ai_runs,
+       max_active_sources,
+       source_buffer_target,
+       prepared_source_target
+     FROM pipeline_settings
+     WHERE singleton
+     FOR UPDATE`,
+  )
+  const pipeline = settings.rows[0]
+  if (!pipeline?.enabled) return
+  if (
+    pipeline.ai_model !== requiredPipelineModel ||
+    pipeline.reasoning_effort !== requiredPipelineReasoning
+  ) {
+    throw new Error('PIPELINE_LUNA_CONFIGURATION_REQUIRED')
+  }
+
+  await reconcileCompletedSources(client)
+  await maintainPreparedSourceBuffer(
+    client,
+    pipeline.prepared_source_target,
+  )
+  const activeSourceIds = await reconcileSourceLanes(
+    client,
+    pipeline.max_active_sources,
+  )
+
+  // Publication is deterministic and independent from source completion.
+  // Reserve several batches so the mechanical worker can drain a large
+  // verified backlog without waiting for the next AI heartbeat.
+  for (let batch = 0; batch < 8; batch += 1) {
+    if (!(await queueCandidatePublication(client))) break
+  }
+
+  // Expert work is always materialized first so it owns the next free lane.
+  await queueExpertWork(client)
+  const activeAi = await client.query<{ count: number }>(
+    `SELECT count(*)::int AS count
+     FROM pipeline_tasks
+     WHERE status IN ('queued', 'claimed', 'running')
+       AND task_type = ANY($1::text[])
+       AND available_at <= now()`,
+    [aiTaskTypes],
+  )
+  let occupied = activeAi.rows[0]?.count ?? 0
+  const hasCapacity = () =>
+    occupied < pipeline.max_concurrent_ai_runs
+  const reserve = async (
+    queue: () => Promise<boolean>,
+  ): Promise<boolean> => {
+    if (!hasCapacity()) return false
+    const queued = await queue()
+    if (queued) occupied += 1
+    return queued
+  }
+
+  // Guarantee progress for medium, standard verification and extraction
+  // whenever all three backlogs are present.
+  await reserve(() => queueDeepReviewWork(client, 'medium'))
+  await reserve(() => queueVerificationFromAnySource(client))
+  await reserve(() => queueAnalysisFromLanes(client, activeSourceIds))
+
+  while (hasCapacity()) {
+    let queued = await reserve(() =>
+      queueDeepReviewWork(client, 'medium')
+    )
+    if (!queued) {
+      queued = await reserve(() =>
+        queueVerificationFromAnySource(client)
+      )
+    }
+    if (!queued) {
+      queued = await reserve(() =>
+        queueDeepReviewWork(client, 'low')
+      )
+    }
+    if (!queued) {
+      queued = await reserve(() =>
+        queueAnalysisFromLanes(client, activeSourceIds)
+      )
+    }
+    if (!queued) queued = await reserve(() => queueExpertWork(client))
+    if (!queued) {
+      const sourceBuffer = await client.query<{ count: number }>(
+        `SELECT count(*)::int AS count
+         FROM source_candidates
+         WHERE status IN ('discovered', 'approved')`,
+      )
+      if (
+        (sourceBuffer.rows[0]?.count ?? 0) <
+        pipeline.source_buffer_target
+      ) {
+        queued = await reserve(() => queueDiscoveryWork(client))
+      }
+    }
+    if (!queued) break
+  }
+}
+
 export async function ensurePipelineWork(
   database: Database,
 ): Promise<void> {
-  await withTransaction(database, ensureWorkInTransaction)
+  await withTransaction(database, ensureStreamingWorkInTransaction)
 }
 
 export async function claimPipelineTask(
@@ -1775,13 +2284,19 @@ export async function claimPipelineTask(
       reasoning_effort: string
       max_concurrent_ai_runs: number
       max_deep_review_runs: number
+      ai_circuit_open_until: string | Date | null
+      ai_circuit_reason: string | null
+      ai_circuit_probe_executor_id: string | null
     }>(
       `SELECT
          enabled,
          ai_model,
          reasoning_effort,
          max_concurrent_ai_runs,
-         max_deep_review_runs
+         max_deep_review_runs,
+         ai_circuit_open_until,
+         ai_circuit_reason,
+         ai_circuit_probe_executor_id
        FROM pipeline_settings
        WHERE singleton
        FOR UPDATE`,
@@ -1801,6 +2316,49 @@ export async function claimPipelineTask(
       pipeline.reasoning_effort !== requiredPipelineReasoning
     ) {
       throw new Error('PIPELINE_LUNA_CONFIGURATION_REQUIRED')
+    }
+    const circuitUntil = pipeline.ai_circuit_open_until
+      ? new Date(pipeline.ai_circuit_open_until)
+      : null
+    if (circuitUntil && circuitUntil.getTime() > Date.now()) {
+      await recordExecutorHeartbeat(
+        client,
+        researcherId,
+        researcherInstanceId,
+        {
+          status: 'standby',
+          reason: 'ai_circuit_open',
+          retry_at: circuitUntil.toISOString()
+        },
+      )
+      return {
+        enabled: true,
+        pipeline_state: 'ai_circuit_open',
+        retry_at: circuitUntil.toISOString()
+      }
+    }
+    if (pipeline.ai_circuit_reason) {
+      if (
+        pipeline.ai_circuit_probe_executor_id &&
+        pipeline.ai_circuit_probe_executor_id !== researcherId
+      ) {
+        return {
+          enabled: true,
+          pipeline_state: 'ai_circuit_probe_in_progress'
+        }
+      }
+      await client.query(
+        `UPDATE pipeline_settings
+            SET ai_circuit_probe_executor_id = $1,
+                updated_at = now(),
+                updated_by = 'ai-circuit-probe'
+          WHERE singleton
+            AND (
+              ai_circuit_probe_executor_id IS NULL
+              OR ai_circuit_probe_executor_id = $1
+            )`,
+        [researcherId],
+      )
     }
     const runningAi = await client.query<{ count: number }>(
       `SELECT count(*)::int AS count
@@ -1842,6 +2400,7 @@ export async function claimPipelineTask(
          requested_reasoning_effort
        FROM pipeline_tasks
        WHERE status = 'queued'
+         AND available_at <= now()
          AND task_type = ANY($1::text[])
          AND (
            task_type NOT IN ('source_discovery', 'source_refresh')
@@ -1855,20 +2414,10 @@ export async function claimPipelineTask(
                )
            )
          )
-         AND (
-           task_type <> 'candidate_deep_review'
-           OR (
-             SELECT count(*)
-             FROM pipeline_tasks active_deep_review
-             WHERE active_deep_review.status IN ('claimed', 'running')
-               AND active_deep_review.task_type =
-                 'candidate_deep_review'
-           ) < $2
-         )
        ORDER BY priority DESC, created_at
        FOR UPDATE SKIP LOCKED
        LIMIT 1`,
-      [aiTaskTypes, pipeline.max_deep_review_runs],
+      [aiTaskTypes],
     )
     const task = selected.rows[0]
     if (!task) {
@@ -2076,6 +2625,7 @@ export async function claimMechanicalPipelineTask(
          expert_task_id
        FROM pipeline_tasks
        WHERE status = 'queued'
+         AND available_at <= now()
          AND task_type = ANY($1::text[])
        ORDER BY priority DESC, created_at
        FOR UPDATE SKIP LOCKED
@@ -2208,7 +2758,10 @@ export async function recordAgentRunResult(
   database: Database,
   input: z.infer<typeof agentRunResultSchema>,
 ): Promise<Record<string, unknown>> {
-  const result = await database.query<{ id: string }>(
+  const result = await database.query<{
+    id: string
+    executor_id: string | null
+  }>(
     `UPDATE agent_runs
         SET status = $2,
             input_tokens = $3,
@@ -2217,6 +2770,9 @@ export async function recordAgentRunResult(
             reasoning_output_tokens = $6,
             duration_ms = $7,
             error_code = $8,
+            process_exit_code = $9,
+            diagnostic_code = $10,
+            diagnostic_fingerprint = $11,
             published_revisions = coalesce((
               SELECT (pt.result->>'revisions_published')::int
               FROM pipeline_tasks pt
@@ -2225,7 +2781,7 @@ export async function recordAgentRunResult(
             completed_at = now()
       WHERE id = $1
         AND status = 'running'
-      RETURNING id`,
+      RETURNING id, executor_id`,
     [
       input.agent_run_id,
       input.status,
@@ -2234,10 +2790,53 @@ export async function recordAgentRunResult(
       input.output_tokens,
       input.reasoning_output_tokens,
       input.duration_ms,
-      input.error_code ?? null
+      input.error_code ?? null,
+      input.process_exit_code ?? null,
+      input.diagnostic_code ?? null,
+      input.diagnostic_fingerprint ?? null
     ],
   )
   if (!result.rows[0]) throw new Error('AGENT_RUN_NOT_RUNNING')
+  const executorId = result.rows[0].executor_id
+  if (input.status === 'completed' && executorId) {
+    await database.query(
+      `UPDATE pipeline_settings
+          SET ai_circuit_open_until = NULL,
+              ai_circuit_reason = NULL,
+              ai_circuit_probe_executor_id = NULL,
+              updated_at = now(),
+              updated_by = 'ai-circuit-recovered'
+        WHERE singleton
+          AND ai_circuit_probe_executor_id = $1`,
+      [executorId],
+    )
+  } else if (
+    input.status === 'failed' &&
+    input.diagnostic_code === 'CODEX_PROCESS_FAILED' &&
+    input.diagnostic_fingerprint
+  ) {
+    await database.query(
+      `UPDATE pipeline_settings settings
+          SET ai_circuit_open_until = now() + interval '30 seconds',
+              ai_circuit_reason = $1,
+              ai_circuit_probe_executor_id = NULL,
+              updated_at = now(),
+              updated_by = 'ai-circuit-breaker'
+        WHERE settings.singleton
+          AND (
+            settings.ai_circuit_probe_executor_id = $2
+            OR 4 <= (
+              SELECT count(*)
+              FROM agent_runs run
+              WHERE run.status = 'failed'
+                AND run.diagnostic_code = 'CODEX_PROCESS_FAILED'
+                AND run.diagnostic_fingerprint = $1
+                AND run.completed_at >= now() - interval '2 minutes'
+            )
+          )`,
+      [input.diagnostic_fingerprint, executorId],
+    )
+  }
   return {
     agent_run_id: result.rows[0].id,
     status: input.status,
@@ -2971,6 +3570,14 @@ export async function submitCandidateVerification(
                   THEN $6
                   ELSE resolution_reason
                 END,
+                resolution_code = CASE
+                  WHEN $2 = 'deep_review'
+                  THEN CASE
+                    WHEN $7::boolean THEN 'context_validation'
+                    ELSE 'standard_unresolved'
+                  END
+                  ELSE resolution_code
+                END,
                 next_review_at = CASE
                   WHEN $2 = 'deep_review' THEN now()
                   ELSE next_review_at
@@ -2986,7 +3593,8 @@ export async function submitCandidateVerification(
           task.id,
           deterministicDisposition?.finding ??
             decision.findings.join('; ').slice(0, 2_000) ??
-            'Standard verification requested automatic deep review.'
+            'Standard verification requested automatic deep review.',
+          Boolean(deterministicDisposition)
         ],
       )
     }
@@ -2998,6 +3606,7 @@ export async function submitCandidateVerification(
         `UPDATE knowledge_candidates
             SET status = 'deep_review',
                 verification_task_id = NULL,
+                resolution_code = 'verifier_omitted',
                 resolution_reason = 'Standard verifier omitted the leased candidate.',
                 next_review_at = now(),
                 updated_at = now()
@@ -3229,6 +3838,10 @@ export async function submitCandidateDeepReview(
                 deep_review_task_id = NULL,
                 resolution_attempts = resolution_attempts + 1,
                 resolution_reason = $7,
+                resolution_code = coalesce(
+                  resolution_code,
+                  'deep_unresolved'
+                ),
                 next_review_at = CASE
                   WHEN $2 = 'quarantined'
                   THEN now() + interval '7 days'
@@ -3275,6 +3888,7 @@ export async function submitCandidateDeepReview(
                 resolution_attempts = resolution_attempts + 1,
                 resolution_reason =
                   'Deep reviewer omitted the leased candidate.',
+                resolution_code = 'deep_reviewer_omitted',
                 next_review_at = CASE
                   WHEN $3 = 'low' THEN now()
                   ELSE now() + interval '7 days'
@@ -3339,6 +3953,13 @@ export async function failPipelineTask(
                 WHEN $4 = 'failed' THEN now()
                 ELSE NULL
               END,
+              available_at = CASE
+                WHEN $4 = 'queued'
+                  THEN now() + make_interval(
+                    secs => least(60, greatest(2, attempts * attempts))
+                  )
+                ELSE available_at
+              END,
               updated_at = now()
         WHERE id = $1`,
       [
@@ -3348,6 +3969,16 @@ export async function failPipelineTask(
         retrying ? 'queued' : 'failed'
       ],
     )
+    if (task.task_type === 'candidate_publication' && !retrying) {
+      await client.query(
+        `UPDATE knowledge_candidates
+            SET publication_task_id = NULL,
+                updated_at = now()
+          WHERE publication_task_id = $1
+            AND status = 'verified'`,
+        [task.id],
+      )
+    }
     if (task.expert_task_id) {
       await client.query(
         `UPDATE expert_tasks
@@ -3395,6 +4026,7 @@ export async function failPipelineTask(
           `UPDATE knowledge_candidates
               SET status = 'deep_review',
                   verification_task_id = NULL,
+                  resolution_code = 'verification_attempts_exhausted',
                   resolution_reason =
                     'Standard verification exhausted automatic retries.',
                   next_review_at = now(),
@@ -3415,6 +4047,10 @@ export async function failPipelineTask(
                     WHEN $2 THEN $1
                     ELSE NULL
                   END,
+                  resolution_code = coalesce(
+                    resolution_code,
+                    'deep_process_failure'
+                  ),
                   resolution_reason = $3,
                   next_review_at = CASE
                     WHEN $2 THEN now()

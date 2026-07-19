@@ -13,7 +13,7 @@ Branch policy: `main` only; completed stages are committed and pushed directly.
 
 ## Current focus
 
-`0.7.1 — honest queue telemetry and synchronized Pipeline UI`
+`0.7.2 — streaming publication and fully utilized Luna lanes`
 
 ## Baseline
 
@@ -538,6 +538,59 @@ Verification:
   pipeline state was changed.
 
 Completed: 2026-07-19
+
+## 0.7.2 — Streaming publication and saturated Luna lanes
+
+### [~] P0.7.2.1 — Prepared source buffer and dynamic AI scheduling
+
+Goal: keep eight converted/chunked sources ready while four independent Luna
+lanes perform useful expert, medium-review, verification, low-review, analysis,
+or discovery work.
+
+Delivered:
+
+- `prepared` separates mechanical intake from the four active analysis lanes;
+- the scheduler maintains a target of eight prepared sources and twenty
+  discovered sources;
+- medium Deep Review is selected before low review and is no longer starved;
+- fixed Deep Review concurrency was removed; the common 1–4 Luna setting now
+  controls every AI stage;
+- identical Codex process failures open a 30-second circuit breaker followed
+  by one probe lane instead of creating a token-consuming failure storm.
+
+Verification pending production rollout.
+
+### [~] P0.7.2.2 — Incremental releases and streaming publication
+
+Goal: publish verified records within 30 seconds or in batches of 50 without
+waiting for sibling records or copying the full active knowledge snapshot.
+
+Delivered:
+
+- atomic `candidate_publication` reservations;
+- delta `release_changes` and indexed `active_knowledge_state`;
+- a full checkpoint every 120 releases;
+- exact arbitrary-release restoration from the closest checkpoint plus deltas;
+- per-record publication preflight that sends only invalid records back to
+  Deep Review while publishing the rest of the batch.
+
+Verification pending production rollout.
+
+### [~] P0.7.2.3 — Result-oriented operations UI
+
+Goal: make throughput and conservation understandable without exposing task
+batch counts as product output.
+
+Delivered:
+
+- Source Intake uses native source/document/fragment units;
+- Knowledge Records uses records only for Verify, Deep Low, Deep Medium, Ready,
+  and Published;
+- executor cards show batch size and unit;
+- Agent Runs retains process diagnostics, retries, tokens, and fingerprints;
+- `/admin` and `/demo` continue to share the same `OperationsApp`.
+
+Verification pending browser QA and production rollout.
 
 ## Final day — release and submission
 

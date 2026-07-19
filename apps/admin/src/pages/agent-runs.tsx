@@ -79,6 +79,7 @@ const RUN_COLUMNS: Array<TableColumn<AgentRun>> = [
   { key: 'output', label: 'Published', render: (row) => formatNumber(row.published_revisions, 0) },
   { key: 'efficiency', label: 'Tokens / revision', render: (row) => row.tokens_per_revision === null ? '—' : compactNumber(row.tokens_per_revision) },
   { key: 'duration', label: 'Duration', render: (row) => duration(row.duration_ms) },
+  { key: 'diagnostic', label: 'Diagnostic', render: (row) => row.diagnostic_code ? <code title={row.diagnostic_fingerprint ?? row.diagnostic_code}>{row.diagnostic_code}</code> : '—' },
   { key: 'id', label: 'Run ID', render: (row) => <code title={row.id}>{shortId(row.id)}</code> }
 ]
 

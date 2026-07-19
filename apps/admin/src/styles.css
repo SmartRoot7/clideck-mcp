@@ -146,6 +146,7 @@ code { font-size: .78rem; color: #344054; }
 .button--quiet:hover:not(:disabled) { background: #f2f4f7; transform: none; }
 
 .pipeline-rail { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 1px; border: 1px solid #e3e7ee; border-radius: 9px; overflow: hidden; background: #e8ebf0; }
+.pipeline-rail--five { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .pipeline-stage { position: relative; min-width: 0; min-height: 118px; padding: 13px 11px 12px; background: #fff; }
 .pipeline-stage.is-bottleneck { background: #fff8ec; box-shadow: inset 0 3px #f5a524; }
 .pipeline-stage.is-running:not(.is-bottleneck) { box-shadow: inset 0 3px var(--blue); }
@@ -362,9 +363,11 @@ code { font-size: .78rem; color: #344054; }
 
 @media (max-width: 1600px) {
   .pipeline-rail { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .pipeline-rail--five { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 }
 
 @media (max-width: 1180px) {
+  .pipeline-rail--five { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .hero-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .overview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .overview-grid--wide { grid-template-columns: 1fr; }
@@ -388,6 +391,7 @@ code { font-size: .78rem; color: #344054; }
   .command-bar__status > i { display: none; }
   .executor-grid, .source-lanes, .metric-grid--four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .pipeline-rail { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pipeline-rail--five { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .hero-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .login-page { grid-template-columns: 1fr; }
   .login-context { display: none; }
@@ -407,6 +411,7 @@ code { font-size: .78rem; color: #344054; }
   .metric-grid--four, .hero-metrics, .executor-grid, .source-lanes, .overview-grid { grid-template-columns: 1fr; }
   .metric { min-height: 97px; }
   .pipeline-rail { grid-template-columns: 1fr; }
+  .pipeline-rail--five { grid-template-columns: 1fr; }
   .source-progress { grid-template-columns: 1fr; }
   .source-progress__ring { margin: 0 auto; }
   .active-source-hero { align-items: flex-start; flex-direction: column; }

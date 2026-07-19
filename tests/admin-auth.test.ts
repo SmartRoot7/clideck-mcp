@@ -57,6 +57,46 @@ function createAdminTestApp() {
   const config = createTestConfig({ adminActorHmacSecret: secret })
   const query = vi.fn(async (sqlValue: unknown, params?: unknown[]) => {
     const sql = String(sqlValue)
+    if (['BEGIN', 'COMMIT', 'ROLLBACK'].includes(sql)) {
+      return { rows: [] }
+    }
+    if (sql.includes('pg_advisory_xact_lock')) return { rows: [{}] }
+    if (
+      sql.includes('FROM releases') &&
+      sql.includes('WHERE id = $1') &&
+      sql.includes('FOR UPDATE')
+    ) {
+      return {
+        rows: [{
+          id: '11111111-1111-4111-8111-111111111111',
+          sequence: 2,
+          status: 'published',
+          reason: 'Validated release',
+          created_by: 'worker',
+          created_at: '2026-07-17T00:00:00.000Z'
+        }]
+      }
+    }
+    if (sql.includes('WITH RECURSIVE ancestry')) {
+      return {
+        rows: [{
+          id: '11111111-1111-4111-8111-111111111111',
+          release_mode: 'snapshot',
+          depth: 0
+        }]
+      }
+    }
+    if (
+      sql.includes('desired_active_knowledge_state') ||
+      sql.includes('DELETE FROM active_knowledge_state') ||
+      sql.includes('UPDATE releases') ||
+      sql.includes('INSERT INTO active_release')
+    ) {
+      return { rows: [] }
+    }
+    if (sql.includes('count(*)::int AS count FROM active_knowledge_state')) {
+      return { rows: [{ count: 50 }] }
+    }
     if (sql.includes('rate_limit_buckets')) {
       return { rows: [{ request_count: 1 }] }
     }
@@ -103,7 +143,10 @@ function createAdminTestApp() {
           created_by: 'worker',
           created_at: '2026-07-17T00:00:00.000Z',
           active: true,
-          revision_count: 50
+          revision_count: 50,
+          release_mode: 'snapshot',
+          changed_records: 0,
+          parent_release_id: null
         }]
       }
     }
@@ -134,24 +177,15 @@ function createAdminTestApp() {
         }]
       }
     }
-    if (sql.includes('WITH switched AS')) {
-      expect(params?.[1]).toBe(actorId)
-      return {
-        rows: [{
-          id: '11111111-1111-4111-8111-111111111111',
-          sequence: 2,
-          status: 'published',
-          reason: 'Validated release',
-          created_by: 'worker',
-          created_at: '2026-07-17T00:00:00.000Z',
-          active: true,
-          revision_count: 50
-        }]
-      }
-    }
     throw new Error(`Unexpected query: ${sql.slice(0, 80)}`)
   })
-  const database = { query } as unknown as Database
+  const database = {
+    query,
+    connect: async () => ({
+      query,
+      release: () => undefined
+    })
+  } as unknown as Database
   return {
     app: createApiApp({
       config,

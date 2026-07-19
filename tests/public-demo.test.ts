@@ -205,7 +205,10 @@ describe('public demo security projections', () => {
       created_by: 'pipeline-worker',
       created_at: '2026-07-19T12:00:00.000Z',
       active: true,
-      revision_count: 60_000
+      revision_count: 60_000,
+      release_mode: 'delta',
+      changed_records: 50,
+      parent_release_id: 'parent-release-id'
     }])
     const [source] = sanitizeDemoSources([{
       id: 'source-id',

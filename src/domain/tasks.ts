@@ -228,9 +228,14 @@ async function loadTaskPresentation(
     row.result_revision_id
       ? database.query<{ sequence: number }>(
           `SELECT r.sequence::int AS sequence
-           FROM release_items ri
-           JOIN releases r ON r.id = ri.release_id
-           WHERE ri.revision_id = $1
+           FROM release_changes change
+           JOIN releases r ON r.id = change.release_id
+           WHERE change.new_revision_id = $1
+           UNION ALL
+           SELECT r.sequence::int AS sequence
+           FROM release_items item
+           JOIN releases r ON r.id = item.release_id
+           WHERE item.revision_id = $1
            ORDER BY r.sequence DESC
            LIMIT 1`,
           [row.result_revision_id],
@@ -372,11 +377,9 @@ export async function submitFeedback(
        FROM (SELECT $2::uuid AS public_ref) requested
        LEFT JOIN knowledge_revisions kr
          ON kr.public_ref = requested.public_ref
-       LEFT JOIN release_items ri
-         ON ri.revision_id = kr.id
-       LEFT JOIN active_release ar
-         ON ar.release_id = ri.release_id
-      WHERE $2::uuid IS NULL OR ar.release_id IS NOT NULL
+       LEFT JOIN active_knowledge_state active
+         ON active.revision_id = kr.id
+      WHERE $2::uuid IS NULL OR active.revision_id IS NOT NULL
      RETURNING public_ref`,
     [
       actor.kind === 'tenant' ? actor.tenantId : null,

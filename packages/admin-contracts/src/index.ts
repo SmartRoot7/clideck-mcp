@@ -38,8 +38,42 @@ export const pipelineExecutorSchema = z.object({
   stage: nullableStringSchema,
   task_id: nullableStringSchema,
   task_type: nullableStringSchema,
+  work_units: scalarNumberSchema,
+  work_unit: z.string(),
   heartbeat_at: nullableStringSchema,
   lease_until: nullableStringSchema
+})
+
+export const sourceIntakeStageSchema = z.object({
+  stage: z.string(),
+  unit: z.string(),
+  waiting: scalarNumberSchema,
+  in_flight: scalarNumberSchema,
+  processed_24h: scalarNumberSchema,
+  output_24h: scalarNumberSchema,
+  failed_24h: scalarNumberSchema,
+  oldest_waiting_at: nullableStringSchema,
+  active_executor_ids: z.array(z.string()),
+  active_worker_count: scalarNumberSchema
+})
+
+export const recordPipelineStageSchema = z.object({
+  stage: z.enum([
+    'verify',
+    'deep_low',
+    'deep_medium',
+    'ready',
+    'publish'
+  ]),
+  unit: z.literal('records'),
+  waiting: scalarNumberSchema,
+  in_flight: scalarNumberSchema,
+  processed_24h: scalarNumberSchema,
+  passed_24h: scalarNumberSchema,
+  escalated_24h: scalarNumberSchema,
+  rejected_24h: scalarNumberSchema,
+  oldest_waiting_at: nullableStringSchema,
+  active_executor_ids: z.array(z.string())
 })
 
 export const funnelStageSchema = z.object({
@@ -117,6 +151,8 @@ export const overviewSchema = z.object({
   max_concurrent_ai_runs: scalarNumberSchema,
   max_active_sources: scalarNumberSchema,
   max_deep_review_runs: scalarNumberSchema,
+  prepared_source_target: scalarNumberSchema,
+  prepared_sources: scalarNumberSchema,
   control_generation: scalarNumberSchema,
   pause_requested_at: nullableStringSchema,
   paused_reason: nullableStringSchema,
@@ -166,6 +202,8 @@ export const overviewSchema = z.object({
   executors: z.array(pipelineExecutorSchema),
   active_work: activeWorkSchema.nullable(),
   pipeline_funnel: z.array(funnelStageSchema),
+  source_intake: z.array(sourceIntakeStageSchema),
+  record_pipeline: z.array(recordPipelineStageSchema),
   breakdowns: z.object({
     vendor: z.array(breakdownRowSchema),
     operating_system: z.array(breakdownRowSchema),
@@ -234,6 +272,7 @@ export const pipelineSettingsSchema = z.object({
   max_active_sources: scalarNumberSchema,
   max_deep_review_runs: scalarNumberSchema,
   source_buffer_target: scalarNumberSchema,
+  prepared_source_target: scalarNumberSchema,
   manual_exception_daily_cap: scalarNumberSchema,
   active_source_id: nullableStringSchema,
   active_coverage_target_id: nullableStringSchema.optional(),
@@ -461,6 +500,9 @@ export const agentRunSchema = z.object({
   tokens_per_revision: nullableScalarNumberSchema,
   duration_ms: nullableScalarNumberSchema,
   error_code: nullableStringSchema,
+  process_exit_code: nullableScalarNumberSchema,
+  diagnostic_code: nullableStringSchema,
+  diagnostic_fingerprint: nullableStringSchema,
   started_at: timestampSchema,
   completed_at: nullableStringSchema
 })
@@ -505,7 +547,10 @@ export const releaseSchema = z.object({
   created_by: z.string(),
   created_at: timestampSchema,
   active: z.boolean(),
-  revision_count: scalarNumberSchema
+  revision_count: scalarNumberSchema,
+  release_mode: z.enum(['snapshot', 'delta', 'checkpoint']),
+  changed_records: scalarNumberSchema,
+  parent_release_id: nullableStringSchema
 })
 
 export const approvalSchema = z.object({

@@ -25,7 +25,9 @@ GRANT SELECT ON
   knowledge_public_trust,
   knowledge_conflicts,
   active_release,
-  release_items
+  release_items,
+  release_changes,
+  active_knowledge_state
 TO clideck_mcp_api;
 GRANT SELECT, UPDATE ON principals TO clideck_mcp_api;
 GRANT SELECT, INSERT, UPDATE ON expert_tasks TO clideck_mcp_api;
@@ -52,6 +54,8 @@ GRANT SELECT ON
   knowledge_conflicts,
   releases,
   release_items,
+  release_changes,
+  active_knowledge_state,
   feedback,
   source_documents,
   revision_sources,
@@ -100,6 +104,7 @@ GRANT USAGE, SELECT ON SEQUENCE
   admin_audit_events_id_seq
 TO clideck_mcp_admin;
 GRANT INSERT, UPDATE ON active_release TO clideck_mcp_admin;
+GRANT INSERT, UPDATE, DELETE ON active_knowledge_state TO clideck_mcp_admin;
 GRANT INSERT, UPDATE, DELETE ON active_source_slots
 TO clideck_mcp_admin;
 GRANT UPDATE ON
@@ -127,11 +132,13 @@ GRANT SELECT, INSERT, UPDATE ON
   source_documents,
   releases,
   active_release,
+  active_knowledge_state,
   worker_heartbeats
 TO clideck_mcp_worker;
 GRANT SELECT, INSERT ON
   revision_sources,
   release_items,
+  release_changes,
   task_artifacts,
   knowledge_revision_contracts,
   knowledge_validations,
@@ -166,7 +173,8 @@ GRANT INSERT, UPDATE ON
   source_fragments,
   source_candidates,
   pipeline_tasks,
-  pipeline_events
+  pipeline_events,
+  knowledge_candidates
 TO clideck_mcp_worker;
 GRANT INSERT ON candidate_verifications TO clideck_mcp_worker;
 GRANT UPDATE ON

@@ -54,6 +54,7 @@ import {
 } from '../src/domain/knowledge.js'
 import { labRevisionHash } from '../src/domain/lab.js'
 import {
+  activateKnowledgeRelease,
   createKnowledgeRevision,
   publishKnowledgeBatch,
   processNextCandidate,
@@ -799,13 +800,11 @@ describeIntegration('PostgreSQL integration', () => {
       revision_count: number
     }>(
       `SELECT
-         ri.knowledge_item_id AS item_id,
-         ri.revision_id,
+         active.knowledge_item_id AS item_id,
+         active.revision_id,
          count(*) OVER ()::int AS revision_count
-       FROM active_release ar
-       JOIN release_items ri ON ri.release_id = ar.release_id
-       WHERE ar.singleton
-       ORDER BY ri.knowledge_item_id
+       FROM active_knowledge_state active
+       ORDER BY active.knowledge_item_id
        LIMIT 2`,
     )
     expect(baseline.rows).toHaveLength(2)
@@ -842,13 +841,147 @@ describeIntegration('PostgreSQL integration', () => {
       revision_count: number
     }>(
       `SELECT count(*)::int AS revision_count
-       FROM active_release ar
-       JOIN release_items ri ON ri.release_id = ar.release_id
-       WHERE ar.singleton`,
+       FROM active_knowledge_state`,
     )
     expect(active.rows[0]?.revision_count).toBe(
       baseline.rows[0]!.revision_count,
     )
+  })
+
+  it('publishes deltas without copying the active snapshot and rolls back exactly', async () => {
+    const unique = randomUUID()
+    const before = await database.query<{
+      release_id: string
+      revision_count: number
+      state_digest: string
+    }>(
+      `SELECT
+         active.release_id,
+         count(state.knowledge_item_id)::int AS revision_count,
+         md5(
+           string_agg(
+             state.knowledge_item_id::text || ':' || state.revision_id::text,
+             ',' ORDER BY state.knowledge_item_id
+           )
+         ) AS state_digest
+       FROM active_release active
+       JOIN active_knowledge_state state ON true
+       WHERE active.singleton
+       GROUP BY active.release_id`,
+    )
+    const baseline = before.rows[0]!
+    const client = await database.connect()
+    let deltaReleaseId = ''
+    try {
+      await client.query('BEGIN')
+      const candidate = {
+        stable_key: `cisco.ios-xe.delta-release-${unique}`,
+        kind: 'command' as const,
+        vendor_slug: 'cisco',
+        platform_slug: 'catalyst-9000',
+        operating_system_slug: 'ios-xe',
+        version_min: '17.9.1',
+        version_max: '17.15.5',
+        title: 'Inspect the clock for delta release validation',
+        summary:
+          'Displays the device clock without changing configuration.',
+        question_patterns: ['How do I inspect the switch clock?'],
+        cli_mode: 'privileged EXEC',
+        command: 'show clock',
+        procedure: [],
+        prerequisites: ['Use read-only CLI access.'],
+        risks: [],
+        verification: ['Confirm the device returns its current clock.'],
+        rollback: [],
+        limitations: ['Integration-test fixture only.'],
+        dangerous: false,
+        risk_level: 'safe_read_only' as const,
+        confidence: 0.98,
+        quality_score: 0.96,
+        confidence_reason:
+          'The evidence directly supports this read-only command.',
+        last_verified_at: '2026-07-19',
+        provenance: [{
+          url: `https://www.cisco.com/integration/delta-${unique}`,
+          document_type: 'command_reference',
+          title: 'Delta release integration fixture',
+          verified_at: '2026-07-19',
+          content_hash: sha256Label(`delta-${unique}`),
+          evidence_fragment: 'show clock',
+          evidence_role: 'primary' as const
+        }]
+      }
+      const revision = await createKnowledgeRevision(client, candidate)
+      const release = await publishKnowledgeBatch(
+        client,
+        [revision],
+        'Validate incremental release storage.',
+        'integration-test',
+      )
+      deltaReleaseId = release.releaseId
+      await client.query('COMMIT')
+    } catch (error) {
+      await client.query('ROLLBACK')
+      throw error
+    } finally {
+      client.release()
+    }
+
+    const delta = await database.query<{
+      release_mode: string
+      item_count: number
+      snapshot_items: number
+      changed_records: number
+      active_count: number
+    }>(
+      `SELECT
+         release.release_mode,
+         release.item_count,
+         (SELECT count(*)::int
+          FROM release_items item
+          WHERE item.release_id = release.id) AS snapshot_items,
+         (SELECT count(*)::int
+          FROM release_changes change
+          WHERE change.release_id = release.id) AS changed_records,
+         (SELECT count(*)::int
+          FROM active_knowledge_state) AS active_count
+       FROM releases release
+       WHERE release.id = $1`,
+      [deltaReleaseId],
+    )
+    expect(delta.rows[0]).toMatchObject({
+      release_mode: 'delta',
+      snapshot_items: 0,
+      changed_records: 1,
+      active_count: baseline.revision_count + 1,
+      item_count: baseline.revision_count + 1
+    })
+
+    await activateKnowledgeRelease(
+      database,
+      baseline.release_id,
+      'integration-test-rollback',
+    )
+    const rolledBack = await database.query<{
+      release_id: string
+      revision_count: number
+      state_digest: string
+    }>(
+      `SELECT
+         active.release_id,
+         count(state.knowledge_item_id)::int AS revision_count,
+         md5(
+           string_agg(
+             state.knowledge_item_id::text || ':' || state.revision_id::text,
+             ',' ORDER BY state.knowledge_item_id
+           )
+         ) AS state_digest
+       FROM active_release active
+       JOIN active_knowledge_state state ON true
+       WHERE active.singleton
+       GROUP BY active.release_id`,
+    )
+    expect(rolledBack.rows[0]).toEqual(baseline)
   })
 
   it('reconciles stale agent runs without racing recent submissions', async () => {
@@ -1466,13 +1599,11 @@ describeIntegration('PostgreSQL integration', () => {
       revision_id: string
       vendor_id: string
     }>(
-      `SELECT ri.revision_id, kr.vendor_id
-       FROM active_release ar
-       JOIN release_items ri ON ri.release_id = ar.release_id
-       JOIN knowledge_revisions kr ON kr.id = ri.revision_id
+      `SELECT active.revision_id, kr.vendor_id
+       FROM active_knowledge_state active
+       JOIN knowledge_revisions kr ON kr.id = active.revision_id
        JOIN knowledge_items ki ON ki.id = kr.knowledge_item_id
-       WHERE ar.singleton
-         AND ki.domain_id = 'network'
+       WHERE ki.domain_id = 'network'
          AND kr.vendor_id IS NOT NULL
        ORDER BY kr.created_at
        LIMIT 1`,
@@ -1523,15 +1654,13 @@ describeIntegration('PostgreSQL integration', () => {
       [revisionId, sourceDocumentId, 'Public demo redaction integration test.'],
     )
     const legacyRevision = await database.query<{ revision_id: string }>(
-      `SELECT ri.revision_id
-       FROM active_release ar
-       JOIN release_items ri ON ri.release_id = ar.release_id
+      `SELECT active.revision_id
+       FROM active_knowledge_state active
        LEFT JOIN legacy_revision_metadata lrm
-         ON lrm.revision_id = ri.revision_id
-       WHERE ar.singleton
-         AND ri.revision_id <> $1
+         ON lrm.revision_id = active.revision_id
+       WHERE active.revision_id <> $1
          AND lrm.revision_id IS NULL
-       ORDER BY ri.revision_id
+       ORDER BY active.revision_id
        LIMIT 1`,
       [revisionId],
     )
@@ -2679,6 +2808,12 @@ describeIntegration('PostgreSQL integration', () => {
       duration_ms: 10,
       error_code: 'AGENT_RUN_FAILED'
     })
+    await database.query(
+      `UPDATE pipeline_tasks
+          SET available_at = now()
+        WHERE id = $1`,
+      [String(retryableDiscovery['pipeline_task_id'])],
+    )
 
     const discovery = await claimPipelineTask(
       database,
@@ -3092,6 +3227,18 @@ describeIntegration('PostgreSQL integration', () => {
           WHERE id = $1`,
         [sourceId],
       )
+      await database.query(
+        `UPDATE knowledge_candidates candidate
+            SET updated_at = now() - interval '31 seconds'
+          WHERE candidate.status = 'verified'
+            AND candidate.pipeline_task_id IN (
+              SELECT id
+              FROM pipeline_tasks
+              WHERE source_candidate_id = $1
+            )`,
+        [sourceId],
+      )
+      await ensurePipelineWork(database)
       await expect(processNextPipelineTask(
         database,
         config,
@@ -3111,11 +3258,11 @@ describeIntegration('PostgreSQL integration', () => {
            sc.failure_code,
            sc.failure_message,
            r.sequence::int AS release_sequence,
-           count(ri.revision_id)::int AS active_revisions
+           (SELECT count(*)::int FROM active_knowledge_state)
+             AS active_revisions
          FROM source_candidates sc
          CROSS JOIN active_release ar
          JOIN releases r ON r.id = ar.release_id
-         JOIN release_items ri ON ri.release_id = r.id
          WHERE sc.id = $1
          GROUP BY
            sc.status,
@@ -3125,7 +3272,7 @@ describeIntegration('PostgreSQL integration', () => {
         [sourceId],
       )
       expect(completed.rows[0]).toMatchObject({
-        source_status: 'completed',
+        source_status: 'completed_with_exceptions',
         failure_code: null,
         failure_message: null,
         active_revisions: expect.any(Number)
@@ -3401,7 +3548,7 @@ describeIntegration('PostgreSQL integration', () => {
     } finally {
       await rm(scratch, { recursive: true, force: true })
     }
-  })
+  }, 30_000)
 
   it('leases three Luna tasks, blocks a fourth, and pauses safely', async () => {
     await database.query(

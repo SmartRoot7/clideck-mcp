@@ -42,7 +42,11 @@ const usageSchema = z.object({
   output_tokens: z.number().int().min(0).default(0),
   reasoning_output_tokens: z.number().int().min(0).default(0),
   duration_ms: z.number().int().min(0),
-  error_code: z.string().optional()
+  error_code: z.string().optional(),
+  process_exit_code: z.number().int().min(-1).max(255).optional(),
+  diagnostic_code: z.string().optional(),
+  diagnostic_fingerprint: z.string()
+    .regex(/^sha256:[0-9a-f]{64}$/).optional()
 })
 
 const environment = environmentSchema.parse(process.env)

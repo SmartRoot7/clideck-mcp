@@ -98,6 +98,7 @@ import {
   taskCredentialsSchema,
   upgradeAdvisorInputSchema
 } from '../domain/schemas.js'
+import { activateKnowledgeRelease } from '../domain/publication.js'
 import {
   analyzeDeviceSnapshot,
   sanitizeSnapshot
@@ -213,7 +214,7 @@ export function createApiApp(dependencies: ApiDependencies) {
     context.json({
       status: 'ok',
       service: 'CliDeck MCP — Network Knowledge',
-      version: '0.7.1'
+      version: '0.7.2'
     }),
   )
 
@@ -1197,30 +1198,22 @@ export function createApiApp(dependencies: ApiDependencies) {
     if (!parsed.success) {
       return context.json({ error: 'invalid_release_activation' }, 400)
     }
-    const result = await adminDatabase.query(
-      `WITH switched AS (
-         INSERT INTO active_release (singleton, release_id, switched_by)
-         SELECT true, id, $2
-         FROM releases
-         WHERE id = $1
-         ON CONFLICT (singleton)
-         DO UPDATE SET
-           release_id = excluded.release_id,
-           switched_at = now(),
-           switched_by = excluded.switched_by
-         RETURNING release_id
-       )
-       SELECT
-         r.id, r.sequence, r.status, r.reason, r.created_by, r.created_at,
-         true AS active,
-         count(ri.revision_id)::int AS revision_count
-       FROM switched s
-       JOIN releases r ON r.id = s.release_id
-       LEFT JOIN release_items ri ON ri.release_id = r.id
-       GROUP BY r.id`,
-      [releaseId, actor.id],
-    )
-    if (!result.rows[0]) return context.json({ error: 'not_found' }, 404)
+    let activated
+    try {
+      activated = await activateKnowledgeRelease(
+        adminDatabase,
+        releaseId,
+        actor.id,
+      )
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message === 'RELEASE_NOT_FOUND'
+      ) {
+        return context.json({ error: 'not_found' }, 404)
+      }
+      throw error
+    }
     await recordAdminAudit(
       adminDatabase,
       actor,
@@ -1228,11 +1221,11 @@ export function createApiApp(dependencies: ApiDependencies) {
       'release',
       releaseId,
       {
-        sequence: result.rows[0].sequence,
+        sequence: activated.sequence,
         reason: parsed.data.reason ?? null
       },
     )
-    return context.json(result.rows[0])
+    return context.json(activated)
   })
 
   app.get('/admin/v1/revisions/:revisionId/provenance', async (context) => {

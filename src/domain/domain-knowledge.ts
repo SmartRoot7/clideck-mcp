@@ -437,9 +437,7 @@ export async function searchDomainKnowledge(
          similarity(lower(kr.title), lower($2)) * 2 +
          similarity(lower(kr.summary), lower($2))
        ) AS relevance
-     FROM active_release active
-     JOIN release_items release_item
-       ON release_item.release_id = active.release_id
+     FROM active_knowledge_state release_item
      JOIN knowledge_items ki
        ON ki.id = release_item.knowledge_item_id
      JOIN knowledge_revisions kr

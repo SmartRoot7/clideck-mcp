@@ -112,11 +112,11 @@ export function OverviewPage({ overview }: { overview: Overview }) {
   const tokensOption = useTokenOption(overview)
   const activeTotal = numberOf(overview.published_revisions)
   const activeExecutors = executorRows(overview)
-  const deepReviewWaiting = numberOf(
-    overview.pipeline_funnel.find(
-      (stage) => stage.stage === 'deep_review'
-    )?.waiting,
-  )
+  const deepReviewWaiting = overview.record_pipeline
+    .filter((stage) =>
+      stage.stage === 'deep_low' || stage.stage === 'deep_medium'
+    )
+    .reduce((total, stage) => total + numberOf(stage.waiting), 0)
 
   return (
     <div className="dashboard-stack">
@@ -195,7 +195,7 @@ export function OverviewPage({ overview }: { overview: Overview }) {
           value={`${formatNumber(overview.executor_utilization, 1)}%`}
           icon={Gauge}
           help="Share of available Luna execution time spent on useful claimed work during the last 24 hours."
-          detail={`${overview.active_source_count} / ${overview.max_active_sources} source lanes`}
+          detail={`${overview.active_source_count}/${overview.max_active_sources} active · ${overview.prepared_sources}/${overview.prepared_source_target} prepared`}
           tone={numberOf(overview.executor_utilization) >= 85 ? 'good' : 'warning'}
         />
         <Metric
@@ -447,9 +447,48 @@ function useTokenOption(overview: Overview) {
   }), [overview])
 }
 
+const RECORD_PIPELINE_STAGES: Record<string, {
+  label: string
+  icon: LucideIcon
+  help: string
+}> = {
+  verify: {
+    label: 'Verify',
+    icon: ShieldCheck,
+    help: 'Records waiting for the independent standard verification pass.'
+  },
+  deep_low: {
+    label: 'Deep Low',
+    icon: Bot,
+    help: 'Unresolved records receiving a low-reasoning Luna review.'
+  },
+  deep_medium: {
+    label: 'Deep Medium',
+    icon: Bot,
+    help: 'Records escalated to an independent medium-reasoning Luna review.'
+  },
+  ready: {
+    label: 'Ready',
+    icon: FileCheck2,
+    help: 'Verified records ready for deterministic publication.'
+  },
+  publish: {
+    label: 'Published',
+    icon: Tag,
+    help: 'Revisions actually added to active knowledge.'
+  }
+}
+
 export function PipelineRail({ overview }: { overview: Overview }) {
-  const stages = overview.pipeline_funnel
-  const bottleneck = [...stages]
+  const sourceBottleneck = [...overview.source_intake]
+    .filter((stage) =>
+      numberOf(stage.waiting) > 0 && stage.oldest_waiting_at
+    )
+    .sort((left, right) =>
+      new Date(left.oldest_waiting_at ?? 0).getTime() -
+      new Date(right.oldest_waiting_at ?? 0).getTime()
+    )[0]?.stage
+  const recordBottleneck = [...overview.record_pipeline]
     .filter((stage) =>
       numberOf(stage.waiting) > 0 && stage.oldest_waiting_at
     )
@@ -458,65 +497,127 @@ export function PipelineRail({ overview }: { overview: Overview }) {
       new Date(right.oldest_waiting_at ?? 0).getTime()
     )[0]?.stage
   return (
-    <Panel
-      title="Knowledge pipeline"
-      icon={Network}
-      help="Waiting and Running are a synchronized live snapshot. Done and Failed are stage outcomes from the rolling last 24 hours."
-      className="pipeline-rail-panel"
-      action={bottleneck ? <Status tone="warning">Bottleneck · {titleCase(bottleneck)}</Status> : null}
-    >
-      <div className="pipeline-rail">
-        {stages.map((stage, index) => {
-          const metadata = PIPELINE_STAGES[stage.stage] ?? {
-            label: titleCase(stage.stage),
-            icon: Layers3,
-            waitingHelp: `${stage.waiting_unit} waiting for this stage`
-          }
-          const Icon = metadata.icon
-          const waiting = numberOf(stage.waiting)
-          const running = numberOf(stage.running)
-          const executors = stage.active_executor_ids
-          const workerCount = numberOf(stage.active_worker_count)
-          const activeRunners = [
-            ...executors,
-            ...(workerCount > 0
-              ? [`${workerCount} mechanical worker${
-                workerCount === 1 ? '' : 's'
-              }`]
-              : [])
-          ]
-          const isBottleneck = stage.stage === bottleneck && waiting > 0
-          return (
-            <article
+    <>
+      <Panel
+        title="Source intake"
+        icon={Network}
+        help="Documents move from discovery to prepared fragments. Each stage keeps its natural unit, shown directly on the card."
+        className="pipeline-rail-panel"
+        action={sourceBottleneck ? <Status tone="warning">Bottleneck · {titleCase(sourceBottleneck)}</Status> : null}
+      >
+        <div className="pipeline-rail pipeline-rail--five">
+          {overview.source_intake.map((stage, index) => {
+            const metadata = PIPELINE_STAGES[stage.stage] ?? {
+              label: titleCase(stage.stage),
+              icon: Layers3,
+              waitingHelp: `${stage.unit} waiting`
+            }
+            return (
+              <SourceStageCard
+                key={stage.stage}
+                stage={stage}
+                index={index}
+                metadata={metadata}
+                bottleneck={stage.stage === sourceBottleneck}
+              />
+            )
+          })}
+        </div>
+      </Panel>
+      <Panel
+        title="Knowledge records"
+        icon={ShieldCheck}
+        help="Every value in this flow counts records. Published is the real number of revisions added to active knowledge, never the number of agent runs or batches."
+        className="pipeline-rail-panel"
+        action={recordBottleneck ? <Status tone="warning">Bottleneck · {titleCase(recordBottleneck)}</Status> : null}
+      >
+        <div className="pipeline-rail pipeline-rail--five">
+          {overview.record_pipeline.map((stage, index) => (
+            <RecordStageCard
               key={stage.stage}
-              className={`pipeline-stage ${running ? 'is-running' : ''} ${isBottleneck ? 'is-bottleneck' : ''}`}
-            >
-              <div className="pipeline-stage__top">
-                <span>{index + 1}</span>
-                <IconTooltip
-                  icon={Icon}
-                  label={`${metadata.label} stage`}
-                >
-                  Waiting counts {metadata.waitingHelp}. Running is the
-                  live number of tasks; Done and Failed cover the last 24
-                  hours. {activeRunners.length > 0
-                    ? `Active: ${activeRunners.join(', ')}.`
-                    : 'No active runner.'}
-                </IconTooltip>
-                <strong>{metadata.label}</strong>
-              </div>
-              <dl>
-                <div><dt>Waiting</dt><dd>{formatNumber(stage.waiting, 0)}</dd></div>
-                <div><dt>Running</dt><dd>{formatNumber(stage.running, 0)}</dd></div>
-                <div><dt>Done</dt><dd>{formatNumber(stage.completed, 0)}</dd></div>
-                <div><dt>Failed</dt><dd>{formatNumber(stage.failed, 0)}</dd></div>
-              </dl>
-              <span className="pipeline-stage__flow" aria-hidden="true" />
-            </article>
-          )
-        })}
+              stage={stage}
+              index={index}
+              bottleneck={stage.stage === recordBottleneck}
+            />
+          ))}
+        </div>
+      </Panel>
+    </>
+  )
+}
+
+function SourceStageCard({
+  stage,
+  index,
+  metadata,
+  bottleneck
+}: {
+  stage: Overview['source_intake'][number]
+  index: number
+  metadata: (typeof PIPELINE_STAGES)[string]
+  bottleneck: boolean
+}) {
+  const Icon = metadata?.icon ?? Layers3
+  const inFlight = numberOf(stage.in_flight)
+  const runners = [
+    ...stage.active_executor_ids,
+    ...(numberOf(stage.active_worker_count) > 0
+      ? [`${stage.active_worker_count} mechanical`]
+      : [])
+  ]
+  return (
+    <article className={`pipeline-stage ${inFlight ? 'is-running' : ''} ${bottleneck ? 'is-bottleneck' : ''}`}>
+      <div className="pipeline-stage__top">
+        <span>{index + 1}</span>
+        <IconTooltip icon={Icon} label={`${metadata?.label ?? stage.stage} stage`}>
+          {metadata?.waitingHelp}. Output shows newly created {stage.unit}
+          during the rolling last 24 hours. {runners.length
+            ? `Active: ${runners.join(', ')}.`
+            : 'No active runner.'}
+        </IconTooltip>
+        <strong>{metadata?.label ?? titleCase(stage.stage)}</strong>
       </div>
-    </Panel>
+      <dl>
+        <div><dt>Waiting</dt><dd>{formatNumber(stage.waiting, 0)}</dd></div>
+        <div><dt>In flight</dt><dd>{formatNumber(stage.in_flight, 0)}</dd></div>
+        <div><dt>Output</dt><dd>{formatNumber(stage.output_24h, 0)}</dd></div>
+        <div><dt>Failed</dt><dd>{formatNumber(stage.failed_24h, 0)}</dd></div>
+      </dl>
+    </article>
+  )
+}
+
+function RecordStageCard({
+  stage,
+  index,
+  bottleneck
+}: {
+  stage: Overview['record_pipeline'][number]
+  index: number
+  bottleneck: boolean
+}) {
+  const metadata = RECORD_PIPELINE_STAGES[stage.stage]!
+  const Icon = metadata.icon
+  const inFlight = numberOf(stage.in_flight)
+  return (
+    <article className={`pipeline-stage ${inFlight ? 'is-running' : ''} ${bottleneck ? 'is-bottleneck' : ''}`}>
+      <div className="pipeline-stage__top">
+        <span>{index + 1}</span>
+        <IconTooltip icon={Icon} label={`${metadata.label} stage`}>
+          {metadata.help} Processed, passed, escalated and rejected cover
+          the rolling last 24 hours. {stage.active_executor_ids.length
+            ? `Active: ${stage.active_executor_ids.join(', ')}.`
+            : 'No Luna currently assigned.'}
+        </IconTooltip>
+        <strong>{metadata.label}</strong>
+      </div>
+      <dl>
+        <div><dt>Waiting</dt><dd>{formatNumber(stage.waiting, 0)}</dd></div>
+        <div><dt>In flight</dt><dd>{formatNumber(stage.in_flight, 0)}</dd></div>
+        <div><dt>{stage.stage === 'publish' ? 'Published' : 'Passed'}</dt><dd>{formatNumber(stage.passed_24h, 0)}</dd></div>
+        <div><dt>{numberOf(stage.escalated_24h) ? 'Escalated' : 'Rejected'}</dt><dd>{formatNumber(numberOf(stage.escalated_24h) || numberOf(stage.rejected_24h), 0)}</dd></div>
+      </dl>
+    </article>
   )
 }
 
@@ -528,6 +629,7 @@ type ExecutorView = {
   instance: string
   stage: string
   task: string | null
+  work: string
 }
 
 export function executorRows(overview: Overview): ExecutorView[] {
@@ -538,7 +640,8 @@ export function executorRows(overview: Overview): ExecutorView[] {
     heartbeat: executor.heartbeat_at,
     instance: executor.instance_id ?? 'No heartbeat record',
     stage: executor.stage ?? '—',
-    task: executor.task_id
+    task: executor.task_id,
+    work: `${formatNumber(executor.work_units, 0)} ${executor.work_unit}`
   }))
 }
 
@@ -570,6 +673,7 @@ function ExecutorCard(executor: ExecutorView) {
         <dl>
           <div><dt>Stage</dt><dd>{titleCase(executor.stage)}</dd></div>
           <div><dt>State</dt><dd>{titleCase(executor.state)}</dd></div>
+          <div><dt>Batch</dt><dd>{executor.work}</dd></div>
           <div><dt>Heartbeat</dt><dd>{formatDate(executor.heartbeat, false)}</dd></div>
           <div>
             <dt>Task</dt>

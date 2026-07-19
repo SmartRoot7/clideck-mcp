@@ -1,6 +1,7 @@
 import { sha256Label } from '../crypto.js'
 import type { DatabaseClient } from '../db.js'
 import { withTransaction } from '../db.js'
+import { publishKnowledgeBatch } from '../domain/publication.js'
 import {
   IOS_XE_SEED_KNOWLEDGE,
   type SeedKnowledge
@@ -450,65 +451,21 @@ try {
       seeded.push(await seedKnowledgeItem(client, context, fact))
     }
 
-    const current = await client.query<{ release_id: string }>(
-      'SELECT release_id FROM active_release WHERE singleton FOR UPDATE',
-    )
-    const release = await client.query<{ id: string; sequence: number }>(
-      `INSERT INTO releases (status, reason, created_by)
-       VALUES (
-         'published',
-         'CliDeck MCP 0.2 verified IOS-XE product knowledge pack',
-         'seed'
-       )
-       RETURNING id, sequence`,
-    )
-    const releaseId = release.rows[0]!.id
-    const seededItemIds = seeded.map((entry) => entry.itemId)
-    if (current.rows[0]) {
-      await client.query(
-        `INSERT INTO release_items (
-           release_id, knowledge_item_id, revision_id
-         )
-         SELECT $1, knowledge_item_id, revision_id
-         FROM release_items
-         WHERE release_id = $2
-           AND NOT (knowledge_item_id = ANY($3::uuid[]))`,
-        [releaseId, current.rows[0].release_id, seededItemIds],
-      )
-    }
-    for (const entry of seeded) {
-      await client.query(
-        `INSERT INTO release_items (
-           release_id, knowledge_item_id, revision_id
-         )
-         VALUES ($1, $2, $3)`,
-        [releaseId, entry.itemId, entry.revisionId],
-      )
-    }
-    if (current.rows[0]) {
-      await client.query(
-        `UPDATE releases
-         SET status = 'superseded'
-         WHERE id = $1 AND status = 'published'`,
-        [current.rows[0].release_id],
-      )
-    }
-    await client.query(
-      `INSERT INTO active_release (singleton, release_id, switched_by)
-       VALUES (true, $1, 'seed')
-       ON CONFLICT (singleton)
-       DO UPDATE SET
-         release_id = excluded.release_id,
-         switched_at = now(),
-         switched_by = excluded.switched_by`,
-      [releaseId],
+    const release = await publishKnowledgeBatch(
+      client,
+      seeded.map((entry) => ({
+        itemId: entry.itemId,
+        revisionId: entry.revisionId
+      })),
+      'CliDeck MCP 0.2 verified IOS-XE product knowledge pack',
+      'seed',
     )
 
     return {
       seeded: true,
       knowledgeItems: seeded.length,
       createdRevisions: seeded.filter((entry) => entry.created).length,
-      releaseSequence: release.rows[0]!.sequence
+      releaseSequence: release.sequence
     }
   })
   logger.info(result, 'Seed complete')

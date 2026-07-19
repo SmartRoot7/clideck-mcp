@@ -39,6 +39,8 @@ export async function getAdminOverview(
   const [
     summary,
     runtime,
+    sourceIntake,
+    recordPipeline,
     breakdown,
     activity,
     publishedHourly,
@@ -50,8 +52,7 @@ export async function getAdminOverview(
          ar.release_id::text AS active_release,
          r.sequence::int AS active_release_sequence,
          r.created_at AS active_release_created_at,
-         (SELECT count(*)::int
-          FROM release_items WHERE release_id = ar.release_id)
+         (SELECT count(*)::int FROM active_knowledge_state)
            AS published_revisions,
          ps.enabled AS pipeline_enabled,
          ps.ai_model,
@@ -59,6 +60,9 @@ export async function getAdminOverview(
          ps.max_concurrent_ai_runs,
          ps.max_active_sources,
          ps.max_deep_review_runs,
+         ps.prepared_source_target,
+         (SELECT count(*)::int FROM source_candidates
+          WHERE status = 'prepared') AS prepared_sources,
          ps.control_generation,
          ps.pause_requested_at,
          ps.paused_reason,
@@ -454,6 +458,7 @@ export async function getAdminOverview(
                'source_acquisition',
                'source_conversion',
                'source_chunking',
+               'candidate_publication',
                'source_publication'
              )
            )::int AS active_worker_count
@@ -502,6 +507,22 @@ export async function getAdminOverview(
            task.stage,
            task.id AS task_id,
            task.task_type,
+           coalesce(
+             jsonb_array_length(task.payload->'candidates'),
+             jsonb_array_length(task.payload->'fragments'),
+             (task.payload->>'record_count')::int,
+             0
+           )::int AS work_units,
+           CASE
+             WHEN task.task_type = 'fragment_analysis'
+               THEN 'fragments'
+             WHEN task.task_type IN (
+               'candidate_verification',
+               'candidate_deep_review',
+               'candidate_publication'
+             ) THEN 'records'
+             ELSE 'tasks'
+           END AS work_unit,
            heartbeat.heartbeat_at,
            task.lease_until
          FROM executor_ids executor
@@ -554,6 +575,8 @@ export async function getAdminOverview(
                'stage', stage,
                'task_id', task_id,
                'task_type', task_type,
+               'work_units', work_units,
+               'work_unit', work_unit,
                'heartbeat_at', heartbeat_at,
                'lease_until', lease_until
              )
@@ -579,6 +602,327 @@ export async function getAdminOverview(
        FROM snapshot`,
     ),
     database.query(
+      `WITH live AS (
+         SELECT *
+         FROM pipeline_tasks
+         WHERE status IN ('claimed', 'running')
+           AND lease_until > now()
+       ),
+       stages AS (
+         SELECT
+           'discover'::text AS stage,
+           'sources'::text AS unit,
+           (SELECT count(*)::int
+            FROM coverage_targets target
+            WHERE target.status <> 'paused'
+              AND (
+                target.status IN ('queued', 'failed')
+                OR (
+                  target.status = 'covered'
+                  AND target.next_check_at <= now()
+                )
+              )) AS waiting,
+           (SELECT count(*)::int FROM live
+            WHERE task_type IN ('source_discovery','source_refresh'))
+             AS in_flight,
+           (SELECT count(*)::int FROM source_candidates
+            WHERE discovered_at >= now() - interval '24 hours')
+             AS processed_24h,
+           (SELECT count(*)::int FROM source_candidates
+            WHERE discovered_at >= now() - interval '24 hours')
+             AS output_24h,
+           (SELECT count(*)::int FROM pipeline_tasks
+            WHERE task_type IN ('source_discovery','source_refresh')
+              AND status = 'failed'
+              AND completed_at >= now() - interval '24 hours')
+             AS failed_24h,
+           (SELECT min(next_check_at) FROM coverage_targets
+            WHERE status IN ('queued','failed')) AS oldest_waiting_at,
+           ARRAY(
+             SELECT DISTINCT claim_owner FROM live
+             WHERE task_type IN ('source_discovery','source_refresh')
+               AND claim_owner IS NOT NULL
+           ) AS active_executor_ids,
+           0::int AS active_worker_count
+         UNION ALL
+         SELECT
+           'acquire', 'sources',
+           (SELECT count(*)::int FROM source_candidates
+            WHERE status IN ('discovered','approved')),
+           (SELECT count(*)::int FROM live
+            WHERE task_type = 'source_acquisition'),
+           (SELECT count(*)::int FROM source_artifacts
+            WHERE acquired_at >= now() - interval '24 hours'),
+           (SELECT count(*)::int FROM source_artifacts
+            WHERE acquired_at >= now() - interval '24 hours'),
+           (SELECT count(*)::int FROM pipeline_tasks
+            WHERE task_type = 'source_acquisition'
+              AND status = 'failed'
+              AND completed_at >= now() - interval '24 hours'),
+           (SELECT min(updated_at) FROM source_candidates
+            WHERE status IN ('discovered','approved')),
+           ARRAY[]::text[],
+           (SELECT count(*)::int FROM live
+            WHERE task_type = 'source_acquisition')
+         UNION ALL
+         SELECT
+           'convert', 'documents',
+           (SELECT count(*)::int FROM source_candidates
+            WHERE status = 'acquired'),
+           (SELECT count(*)::int FROM live
+            WHERE task_type = 'source_conversion'),
+           (SELECT count(*)::int FROM source_artifacts
+            WHERE converted_at >= now() - interval '24 hours'),
+           (SELECT count(*)::int FROM source_artifacts
+            WHERE converted_at >= now() - interval '24 hours'),
+           (SELECT count(*)::int FROM pipeline_tasks
+            WHERE task_type = 'source_conversion'
+              AND status = 'failed'
+              AND completed_at >= now() - interval '24 hours'),
+           (SELECT min(updated_at) FROM source_candidates
+            WHERE status = 'acquired'),
+           ARRAY[]::text[],
+           (SELECT count(*)::int FROM live
+            WHERE task_type = 'source_conversion')
+         UNION ALL
+         SELECT
+           'chunk', 'documents',
+           (SELECT count(*)::int FROM source_candidates
+            WHERE status = 'converted'),
+           (SELECT count(*)::int FROM live
+            WHERE task_type = 'source_chunking'),
+           (SELECT count(*)::int FROM pipeline_tasks
+            WHERE task_type = 'source_chunking'
+              AND status = 'completed'
+              AND completed_at >= now() - interval '24 hours'),
+           (SELECT count(*)::int FROM source_fragments
+            WHERE created_at >= now() - interval '24 hours'),
+           (SELECT count(*)::int FROM pipeline_tasks
+            WHERE task_type = 'source_chunking'
+              AND status = 'failed'
+              AND completed_at >= now() - interval '24 hours'),
+           (SELECT min(updated_at) FROM source_candidates
+            WHERE status = 'converted'),
+           ARRAY[]::text[],
+           (SELECT count(*)::int FROM live
+            WHERE task_type = 'source_chunking')
+         UNION ALL
+         SELECT
+           'analyze', 'fragments',
+           (SELECT count(*)::int FROM source_fragments
+            WHERE status = 'queued'
+              AND reservation_task_id IS NULL),
+           (SELECT count(*)::int
+            FROM source_fragments fragment
+            JOIN live task ON task.id = fragment.reservation_task_id
+            WHERE fragment.status IN ('reserved','analyzing')
+              AND task.task_type = 'fragment_analysis'),
+           (SELECT count(*)::int FROM source_fragments
+            WHERE status IN ('analyzed','verified','published','rejected')
+              AND updated_at >= now() - interval '24 hours'),
+           (SELECT count(*)::int FROM knowledge_candidates
+            WHERE created_at >= now() - interval '24 hours'),
+           (SELECT count(*)::int FROM source_fragments
+            WHERE status = 'failed'
+              AND updated_at >= now() - interval '24 hours'),
+           (SELECT min(updated_at) FROM source_fragments
+            WHERE status = 'queued'
+              AND reservation_task_id IS NULL),
+           ARRAY(
+             SELECT DISTINCT claim_owner FROM live
+             WHERE task_type = 'fragment_analysis'
+               AND claim_owner IS NOT NULL
+           ),
+           0::int
+       )
+       SELECT * FROM stages
+       ORDER BY CASE stage
+         WHEN 'discover' THEN 1
+         WHEN 'acquire' THEN 2
+         WHEN 'convert' THEN 3
+         WHEN 'chunk' THEN 4
+         ELSE 5
+       END`,
+    ),
+    database.query(
+      `WITH live AS (
+         SELECT *
+         FROM pipeline_tasks
+         WHERE status IN ('claimed', 'running')
+           AND lease_until > now()
+       ),
+       stages AS (
+         SELECT
+           'verify'::text AS stage,
+           'records'::text AS unit,
+           (SELECT count(*)::int FROM knowledge_candidates
+            WHERE status = 'analyzed'
+              AND verification_task_id IS NULL) AS waiting,
+           (SELECT count(*)::int
+            FROM knowledge_candidates candidate
+            JOIN live task ON task.id = candidate.verification_task_id
+            WHERE candidate.status = 'analyzed') AS in_flight,
+           (SELECT count(*)::int FROM candidate_verifications
+            WHERE review_type = 'standard'
+              AND created_at >= now() - interval '24 hours')
+             AS processed_24h,
+           (SELECT count(*)::int FROM candidate_verifications
+            WHERE review_type = 'standard'
+              AND decision = 'verified'
+              AND created_at >= now() - interval '24 hours')
+             AS passed_24h,
+           (SELECT count(*)::int FROM candidate_verifications
+            WHERE review_type = 'standard'
+              AND decision = 'deep_review'
+              AND created_at >= now() - interval '24 hours')
+             AS escalated_24h,
+           (SELECT count(*)::int FROM candidate_verifications
+            WHERE review_type = 'standard'
+              AND decision IN ('rejected','conflict','quarantined')
+              AND created_at >= now() - interval '24 hours')
+             AS rejected_24h,
+           (SELECT min(updated_at) FROM knowledge_candidates
+            WHERE status = 'analyzed'
+              AND verification_task_id IS NULL)
+             AS oldest_waiting_at,
+           ARRAY(
+             SELECT DISTINCT claim_owner FROM live
+             WHERE task_type = 'candidate_verification'
+               AND claim_owner IS NOT NULL
+           ) AS active_executor_ids
+         UNION ALL
+         SELECT
+           'deep_low', 'records',
+           (SELECT count(*)::int FROM knowledge_candidates
+            WHERE status IN ('deep_review','quarantined')
+              AND resolution_attempts = 0
+              AND deep_review_task_id IS NULL
+              AND (
+                status = 'deep_review'
+                OR next_review_at IS NULL
+                OR next_review_at <= now()
+              )),
+           (SELECT count(*)::int
+            FROM knowledge_candidates candidate
+            JOIN live task ON task.id = candidate.deep_review_task_id
+            WHERE task.requested_reasoning_effort = 'low'),
+           (SELECT count(*)::int FROM candidate_verifications
+            WHERE review_type = 'deep_low'
+              AND created_at >= now() - interval '24 hours'),
+           (SELECT count(*)::int FROM candidate_verifications
+            WHERE review_type = 'deep_low'
+              AND decision = 'verified'
+              AND created_at >= now() - interval '24 hours'),
+           (SELECT count(*)::int FROM candidate_verifications
+            WHERE review_type = 'deep_low'
+              AND decision = 'deep_review'
+              AND created_at >= now() - interval '24 hours'),
+           (SELECT count(*)::int FROM candidate_verifications
+            WHERE review_type = 'deep_low'
+              AND decision IN ('rejected','conflict','quarantined')
+              AND created_at >= now() - interval '24 hours'),
+           (SELECT min(updated_at) FROM knowledge_candidates
+            WHERE status IN ('deep_review','quarantined')
+              AND resolution_attempts = 0
+              AND deep_review_task_id IS NULL),
+           ARRAY(
+             SELECT DISTINCT claim_owner FROM live
+             WHERE task_type = 'candidate_deep_review'
+               AND requested_reasoning_effort = 'low'
+               AND claim_owner IS NOT NULL
+           )
+         UNION ALL
+         SELECT
+           'deep_medium', 'records',
+           (SELECT count(*)::int FROM knowledge_candidates
+            WHERE status IN ('deep_review','quarantined')
+              AND resolution_attempts > 0
+              AND deep_review_task_id IS NULL
+              AND (
+                status = 'deep_review'
+                OR next_review_at IS NULL
+                OR next_review_at <= now()
+              )),
+           (SELECT count(*)::int
+            FROM knowledge_candidates candidate
+            JOIN live task ON task.id = candidate.deep_review_task_id
+            WHERE task.requested_reasoning_effort = 'medium'),
+           (SELECT count(*)::int FROM candidate_verifications
+            WHERE review_type = 'deep_medium'
+              AND created_at >= now() - interval '24 hours'),
+           (SELECT count(*)::int FROM candidate_verifications
+            WHERE review_type = 'deep_medium'
+              AND decision = 'verified'
+              AND created_at >= now() - interval '24 hours'),
+           0::int,
+           (SELECT count(*)::int FROM candidate_verifications
+            WHERE review_type = 'deep_medium'
+              AND decision IN (
+                'rejected','conflict','quarantined','manual_exception'
+              )
+              AND created_at >= now() - interval '24 hours'),
+           (SELECT min(updated_at) FROM knowledge_candidates
+            WHERE status IN ('deep_review','quarantined')
+              AND resolution_attempts > 0
+              AND deep_review_task_id IS NULL),
+           ARRAY(
+             SELECT DISTINCT claim_owner FROM live
+             WHERE task_type = 'candidate_deep_review'
+               AND requested_reasoning_effort = 'medium'
+               AND claim_owner IS NOT NULL
+           )
+         UNION ALL
+         SELECT
+           'ready', 'records',
+           (SELECT count(*)::int FROM knowledge_candidates
+            WHERE status = 'verified'
+              AND publication_task_id IS NULL),
+           0::int,
+           (SELECT count(*)::int FROM knowledge_candidates
+            WHERE status = 'verified'
+              AND updated_at >= now() - interval '24 hours'),
+           (SELECT count(*)::int FROM knowledge_candidates
+            WHERE status = 'verified'
+              AND updated_at >= now() - interval '24 hours'),
+           0::int,
+           0::int,
+           (SELECT min(updated_at) FROM knowledge_candidates
+            WHERE status = 'verified'),
+           ARRAY[]::text[]
+         UNION ALL
+         SELECT
+           'publish', 'records',
+           (SELECT count(*)::int FROM knowledge_candidates
+            WHERE status = 'verified'),
+           (SELECT count(*)::int
+            FROM knowledge_candidates candidate
+            JOIN live task ON task.id = candidate.publication_task_id
+            WHERE candidate.status = 'verified'),
+           (SELECT count(*)::int FROM knowledge_candidates
+            WHERE status = 'published'
+              AND updated_at >= now() - interval '24 hours'),
+           (SELECT count(*)::int FROM knowledge_candidates
+            WHERE status = 'published'
+              AND updated_at >= now() - interval '24 hours'),
+           (SELECT count(*)::int FROM knowledge_candidates
+            WHERE status = 'deep_review'
+              AND resolution_code = 'publication_preflight'
+              AND updated_at >= now() - interval '24 hours'),
+           0::int,
+           (SELECT min(updated_at) FROM knowledge_candidates
+            WHERE status = 'verified'),
+           ARRAY[]::text[]
+       )
+       SELECT * FROM stages
+       ORDER BY CASE stage
+         WHEN 'verify' THEN 1
+         WHEN 'deep_low' THEN 2
+         WHEN 'deep_medium' THEN 3
+         WHEN 'ready' THEN 4
+         ELSE 5
+       END`,
+    ),
+    database.query(
       `SELECT
          CASE
            WHEN grouping(v.slug) = 0 THEN 'vendor'
@@ -594,14 +938,12 @@ export async function getAdminOverview(
            ELSE kr.created_by
          END AS key,
          count(*)::int AS count
-       FROM active_release ar
-       JOIN release_items ri ON ri.release_id = ar.release_id
-       JOIN knowledge_items ki ON ki.id = ri.knowledge_item_id
-       JOIN knowledge_revisions kr ON kr.id = ri.revision_id
+       FROM active_knowledge_state active
+       JOIN knowledge_items ki ON ki.id = active.knowledge_item_id
+       JOIN knowledge_revisions kr ON kr.id = active.revision_id
        JOIN vendors v ON v.id = kr.vendor_id
        LEFT JOIN operating_systems os ON os.id = kr.operating_system_id
-       WHERE ar.singleton
-         AND ki.domain_id = 'network'
+       WHERE ki.domain_id = 'network'
          AND kr.domain_id = 'network'
        GROUP BY GROUPING SETS (
          (v.slug),
@@ -754,6 +1096,8 @@ export async function getAdminOverview(
       Array.isArray(runtimeData['pipeline_funnel'])
         ? runtimeData['pipeline_funnel']
         : [],
+    source_intake: sourceIntake.rows,
+    record_pipeline: recordPipeline.rows,
     breakdowns: {
       vendor: breakdown.rows.filter((row) => row.dimension === 'vendor')
         .slice(0, 20),
@@ -1365,6 +1709,9 @@ export async function listAgentRuns(database: Database, limit: number) {
        ) ELSE NULL END AS tokens_per_revision,
        ar.duration_ms,
        ar.error_code,
+       ar.process_exit_code,
+       ar.diagnostic_code,
+       ar.diagnostic_fingerprint,
        ar.started_at,
        ar.completed_at
      FROM agent_runs ar
@@ -1497,11 +1844,19 @@ export async function listExpertTasks(database: Database) {
        LIMIT 1
      ) latest_event ON true
      LEFT JOIN LATERAL (
-       SELECT r.sequence
-       FROM release_items ri
-       JOIN releases r ON r.id = ri.release_id
-       WHERE ri.revision_id = et.result_revision_id
-       ORDER BY r.sequence DESC
+       SELECT history.sequence
+       FROM (
+         SELECT r.sequence
+         FROM release_changes change
+         JOIN releases r ON r.id = change.release_id
+         WHERE change.new_revision_id = et.result_revision_id
+         UNION ALL
+         SELECT r.sequence
+         FROM release_items item
+         JOIN releases r ON r.id = item.release_id
+         WHERE item.revision_id = et.result_revision_id
+       ) history
+       ORDER BY history.sequence DESC
        LIMIT 1
      ) release ON true
      ORDER BY et.created_at DESC
@@ -1526,11 +1881,13 @@ export async function listReleases(database: Database) {
     `SELECT
        r.id, r.sequence, r.status, r.reason, r.created_by, r.created_at,
        (ar.release_id IS NOT NULL) AS active,
-       count(ri.revision_id)::int AS revision_count
+       r.item_count::int AS revision_count,
+       r.release_mode,
+       (SELECT count(*)::int FROM release_changes change
+        WHERE change.release_id = r.id) AS changed_records,
+       r.parent_release_id
      FROM releases r
      LEFT JOIN active_release ar ON ar.release_id = r.id
-     LEFT JOIN release_items ri ON ri.release_id = r.id
-     GROUP BY r.id, ar.release_id
      ORDER BY r.sequence DESC
      LIMIT 100`,
   )
@@ -1677,6 +2034,7 @@ export async function setPipelineConcurrency(
     const updated = await client.query(
       `UPDATE pipeline_settings
           SET max_concurrent_ai_runs = $1,
+              max_deep_review_runs = $1,
               control_generation = control_generation + 1,
               updated_at = now(),
               updated_by = $2

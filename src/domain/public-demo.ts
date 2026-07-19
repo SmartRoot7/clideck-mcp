@@ -82,6 +82,8 @@ export function sanitizeDemoOverview(overview: Overview): Overview {
     max_concurrent_ai_runs: overview.max_concurrent_ai_runs,
     max_active_sources: overview.max_active_sources,
     max_deep_review_runs: overview.max_deep_review_runs,
+    prepared_source_target: overview.prepared_source_target,
+    prepared_sources: overview.prepared_sources,
     control_generation: overview.control_generation,
     pause_requested_at: overview.pause_requested_at,
     paused_reason: redactNullable(overview.paused_reason),
@@ -145,6 +147,8 @@ export function sanitizeDemoOverview(overview: Overview): Overview {
       stage: executor.stage,
       task_id: executor.task_id,
       task_type: executor.task_type,
+      work_units: executor.work_units,
+      work_unit: executor.work_unit,
       heartbeat_at: executor.heartbeat_at,
       lease_until: executor.lease_until
     })),
@@ -181,6 +185,30 @@ export function sanitizeDemoOverview(overview: Overview): Overview {
       oldest_waiting_at: stage.oldest_waiting_at,
       active_executor_ids: stage.active_executor_ids,
       active_worker_count: stage.active_worker_count
+    })),
+    source_intake: overview.source_intake.map((stage) => ({
+      stage: stage.stage,
+      unit: stage.unit,
+      waiting: stage.waiting,
+      in_flight: stage.in_flight,
+      processed_24h: stage.processed_24h,
+      output_24h: stage.output_24h,
+      failed_24h: stage.failed_24h,
+      oldest_waiting_at: stage.oldest_waiting_at,
+      active_executor_ids: stage.active_executor_ids,
+      active_worker_count: stage.active_worker_count
+    })),
+    record_pipeline: overview.record_pipeline.map((stage) => ({
+      stage: stage.stage,
+      unit: stage.unit,
+      waiting: stage.waiting,
+      in_flight: stage.in_flight,
+      processed_24h: stage.processed_24h,
+      passed_24h: stage.passed_24h,
+      escalated_24h: stage.escalated_24h,
+      rejected_24h: stage.rejected_24h,
+      oldest_waiting_at: stage.oldest_waiting_at,
+      active_executor_ids: stage.active_executor_ids
     })),
     breakdowns: {
       vendor: overview.breakdowns.vendor.map((row) => ({
@@ -270,6 +298,8 @@ export function sanitizeDemoPipeline(
       max_active_sources: pipeline.settings.max_active_sources,
       max_deep_review_runs: pipeline.settings.max_deep_review_runs,
       source_buffer_target: pipeline.settings.source_buffer_target,
+      prepared_source_target:
+        pipeline.settings.prepared_source_target,
       manual_exception_daily_cap:
         pipeline.settings.manual_exception_daily_cap,
       active_source_id: pipeline.settings.active_source_id,
@@ -486,7 +516,10 @@ export function sanitizeDemoReleases(releases: Release[]): Release[] {
     created_by: release.created_by,
     created_at: release.created_at,
     active: release.active,
-    revision_count: release.revision_count
+    revision_count: release.revision_count,
+    release_mode: release.release_mode,
+    changed_records: release.changed_records,
+    parent_release_id: release.parent_release_id
   }))
 }
 

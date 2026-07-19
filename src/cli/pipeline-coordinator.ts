@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import {
   mkdir,
   readFile,
@@ -347,6 +348,7 @@ async function runCodex(
   durationMs: number
   usage: Usage
   diagnosticCode?: string
+  diagnosticFingerprint?: string
 }> {
   if (
     task.requested_reasoning_effort === 'medium' &&
@@ -463,7 +465,13 @@ async function runCodex(
         durationMs: Date.now() - startedAt,
         usage,
         ...((code ?? 1) !== 0
-          ? { diagnosticCode: classifyCodexDiagnostic(stderr) }
+          ? {
+              diagnosticCode: classifyCodexDiagnostic(stderr),
+              diagnosticFingerprint:
+                `sha256:${createHash('sha256')
+                  .update(stderr.trim().toLowerCase().slice(0, 8_000))
+                  .digest('hex')}`
+            }
           : {})
       })
     })
@@ -664,6 +672,11 @@ async function finishRun(
   durationMs: number,
   usage: Usage,
   errorCode?: string,
+  process?: {
+    exitCode?: number
+    diagnosticCode?: string
+    diagnosticFingerprint?: string
+  },
 ): Promise<void> {
   await mkdir(tempDirectory, { recursive: true, mode: 0o750 })
   await writeFile(
@@ -672,7 +685,19 @@ async function finishRun(
       status,
       ...usage,
       duration_ms: durationMs,
-      ...(errorCode ? { error_code: errorCode } : {})
+      ...(errorCode ? { error_code: errorCode } : {}),
+      ...(process?.exitCode !== undefined
+        ? { process_exit_code: process.exitCode }
+        : {}),
+      ...(process?.diagnosticCode
+        ? { diagnostic_code: process.diagnosticCode }
+        : {}),
+      ...(process?.diagnosticFingerprint
+        ? {
+            diagnostic_fingerprint:
+              process.diagnosticFingerprint
+          }
+        : {})
     }),
     { encoding: 'utf8', mode: 0o600 },
   )
@@ -749,6 +774,18 @@ async function main(): Promise<void> {
           run.durationMs,
           run.usage,
           run.paused ? 'PIPELINE_PAUSED' : 'EXECUTOR_STOPPED',
+          {
+            exitCode: run.exitCode,
+            ...(run.diagnosticCode
+              ? { diagnosticCode: run.diagnosticCode }
+              : {}),
+            ...(run.diagnosticFingerprint
+              ? {
+                  diagnosticFingerprint:
+                    run.diagnosticFingerprint
+                }
+              : {})
+          },
         )
         await Promise.all([
           unlink(agentOutputPath).catch(() => undefined),
@@ -796,6 +833,18 @@ async function main(): Promise<void> {
             : run.exitCode !== 0
               ? run.diagnosticCode ?? 'CODEX_PROCESS_FAILED'
               : 'EMPTY_AGENT_RUN',
+        {
+          exitCode: run.exitCode,
+          ...(run.diagnosticCode
+            ? { diagnosticCode: run.diagnosticCode }
+            : {}),
+          ...(run.diagnosticFingerprint
+            ? {
+                diagnosticFingerprint:
+                  run.diagnosticFingerprint
+              }
+            : {})
+        },
       )
       await Promise.all([
         unlink(agentOutputPath).catch(() => undefined),
@@ -842,8 +891,22 @@ async function main(): Promise<void> {
             cached_input_tokens: 0,
             output_tokens: 0,
             reasoning_output_tokens: 0
-          },
+        },
         artifactSubmitted ? undefined : failureCode,
+        runOutcome
+          ? {
+              exitCode: runOutcome.exitCode,
+              ...(runOutcome.diagnosticCode
+                ? { diagnosticCode: runOutcome.diagnosticCode }
+                : {}),
+              ...(runOutcome.diagnosticFingerprint
+                ? {
+                    diagnosticFingerprint:
+                      runOutcome.diagnosticFingerprint
+                  }
+                : {})
+            }
+          : undefined,
       ).catch(() => runClient('cleanup').then(() => undefined))
       await Promise.all([
         unlink(agentOutputPath).catch(() => undefined),
@@ -852,13 +915,6 @@ async function main(): Promise<void> {
       ])
       if (artifactSubmitted || !launchFailed) {
         consecutiveLaunchFailures = 0
-      } else if (consecutiveLaunchFailures >= 3) {
-        await runClient(
-          'system-failure',
-          'COORDINATOR_REPEATED_FAILURE',
-          'Three consecutive ephemeral Codex runs could not start or report a result.',
-        ).catch(() => undefined)
-        break
       }
       await delay(
         launchFailed

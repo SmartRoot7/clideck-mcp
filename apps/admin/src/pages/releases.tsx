@@ -56,6 +56,8 @@ const RELEASE_COLUMNS: Array<TableColumn<Release>> = [
   { key: 'sequence', label: 'Release', render: (row) => <div className="release-sequence"><strong>#{row.sequence}</strong>{row.active && <Status tone="good">Active</Status>}</div> },
   { key: 'reason', label: 'Package reason', render: (row) => <div className="primary-cell"><strong>{row.reason}</strong><span>Created by {row.created_by}</span></div> },
   { key: 'status', label: 'Status', render: (row) => <Status>{titleCase(row.status)}</Status> },
+  { key: 'mode', label: 'Storage', render: (row) => <Status>{titleCase(row.release_mode)}</Status> },
+  { key: 'changes', label: 'Changed', render: (row) => row.changed_records },
   { key: 'revisions', label: 'Revisions', render: (row) => row.revision_count },
   { key: 'created', label: 'Created', render: (row) => formatDate(row.created_at) },
   { key: 'id', label: 'Release ID', render: (row) => <code title={row.id}>{shortId(row.id)}</code> }

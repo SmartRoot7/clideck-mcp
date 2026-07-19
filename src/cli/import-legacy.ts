@@ -678,10 +678,7 @@ try {
     const publication = await withTransaction(database, async (client) => {
       const current = await client.query<{ count: number }>(
         `SELECT count(*)::int AS count
-         FROM release_items
-         WHERE release_id = (
-           SELECT release_id FROM active_release WHERE singleton
-         )`,
+         FROM active_knowledge_state`,
       )
       const expectedExisting =
         environment.LEGACY_EXPECTED_ACTIVE_TOTAL -
@@ -709,9 +706,7 @@ try {
       )
       const active = await client.query<{ count: number }>(
         `SELECT count(*)::int AS count
-         FROM release_items
-         WHERE release_id = $1`,
-        [release.releaseId],
+         FROM active_knowledge_state`,
       )
       if (
         (active.rows[0]?.count ?? 0) !==

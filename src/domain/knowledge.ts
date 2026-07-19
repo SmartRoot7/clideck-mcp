@@ -112,7 +112,7 @@ export async function searchKnowledge(
     `WITH ranked_revisions AS MATERIALIZED (
        SELECT
          kr.id AS revision_id,
-         ri.knowledge_item_id,
+         active.knowledge_item_id,
          (
            ts_rank_cd(
              kr.search_document,
@@ -129,9 +129,8 @@ export async function searchKnowledge(
              END
          )::float8 AS rank
        FROM knowledge_revisions kr
-       JOIN release_items ri ON ri.revision_id = kr.id
-       JOIN active_release ar ON ar.release_id = ri.release_id
-       JOIN knowledge_items ki ON ki.id = ri.knowledge_item_id
+       JOIN active_knowledge_state active ON active.revision_id = kr.id
+       JOIN knowledge_items ki ON ki.id = active.knowledge_item_id
        WHERE ki.domain_id = 'network'
          AND kr.domain_id = 'network'
          AND kr.vendor_id = $2

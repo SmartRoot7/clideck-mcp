@@ -962,19 +962,22 @@ async function chunkSource(
         WHERE id = $1`,
       [row.id],
     )
-    await client.query(
-      `UPDATE source_candidates
-          SET status = 'analyzing',
-              updated_at = now()
-        WHERE id = $1`,
-      [payload.source_id],
-    )
   })
   const fastPath = await runDeterministicFastPath(
     database,
     claimed.task,
     row.id,
     payload,
+  )
+  await database.query(
+    `UPDATE source_candidates
+        SET status = 'prepared',
+            failure_code = NULL,
+            failure_message = NULL,
+            updated_at = now()
+      WHERE id = $1
+        AND status = 'chunking'`,
+    [payload.source_id],
   )
   return {
     fragments_created: fragments.length,
@@ -1384,6 +1387,191 @@ async function publishSource(
   })
 }
 
+const candidatePublicationPayloadSchema = z.object({
+  candidate_ids: z.array(z.string().uuid()).min(1).max(50),
+  source_ids: z.array(z.string().uuid()).max(50).default([]),
+  record_count: z.number().int().min(1).max(50)
+})
+
+async function publishCandidateBatch(
+  database: Database,
+  claimed: ClaimedMechanicalTask,
+): Promise<Record<string, unknown>> {
+  const payload = candidatePublicationPayloadSchema.parse(
+    claimed.task.payload,
+  )
+  const candidates = await database.query<{
+    id: string
+    payload: unknown
+    revision_id: string | null
+  }>(
+    `SELECT id, payload, revision_id
+     FROM knowledge_candidates
+     WHERE id = ANY($1::uuid[])
+       AND publication_task_id = $2
+       AND status = 'verified'
+     ORDER BY updated_at, created_at`,
+    [payload.candidate_ids, claimed.task.id],
+  )
+
+  const revisions: Array<{
+    candidateId: string
+    itemId: string
+    revisionId: string
+  }> = []
+  let deferred = 0
+  for (const candidate of candidates.rows) {
+    try {
+      const created = await withTransaction(database, async (client) => {
+        const locked = await client.query<{
+          revision_id: string | null
+        }>(
+          `SELECT revision_id
+           FROM knowledge_candidates
+           WHERE id = $1
+             AND status = 'verified'
+             AND publication_task_id = $2
+           FOR UPDATE`,
+          [candidate.id, claimed.task.id],
+        )
+        if (!locked.rows[0]) {
+          throw new Error('CANDIDATE_ALREADY_PROCESSED')
+        }
+        if (locked.rows[0].revision_id) {
+          const existing = await client.query<{
+            item_id: string
+            revision_id: string
+          }>(
+            `SELECT
+               knowledge_item_id AS item_id,
+               id AS revision_id
+             FROM knowledge_revisions
+             WHERE id = $1`,
+            [locked.rows[0].revision_id],
+          )
+          if (existing.rows[0]) {
+            return {
+              itemId: existing.rows[0].item_id,
+              revisionId: existing.rows[0].revision_id
+            }
+          }
+        }
+        const createdRevision = await createKnowledgeRevision(
+          client,
+          candidate.payload,
+        )
+        await client.query(
+          `UPDATE knowledge_candidates
+              SET revision_id = $2,
+                  updated_at = now()
+            WHERE id = $1
+              AND publication_task_id = $3`,
+          [candidate.id, createdRevision.revisionId, claimed.task.id],
+        )
+        return createdRevision
+      })
+      revisions.push({
+        candidateId: candidate.id,
+        ...created
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : ''
+      if (message === 'CANDIDATE_ALREADY_PROCESSED') continue
+      if (!isCandidatePublicationValidationError(error)) throw error
+      deferred += 1
+      const policyCode =
+        error instanceof CorePolicyError ? `${error.code}: ` : ''
+      await database.query(
+        `UPDATE knowledge_candidates
+            SET status = 'deep_review',
+                publication_task_id = NULL,
+                deep_review_task_id = NULL,
+                resolution_code = 'publication_preflight',
+                resolution_reason = $3,
+                next_review_at = now(),
+                updated_at = now()
+          WHERE id = $1
+            AND publication_task_id = $2`,
+        [
+          candidate.id,
+          claimed.task.id,
+          `Publication preflight rejected candidate: ${policyCode}${message}`
+            .slice(0, 4_000)
+        ],
+      )
+    }
+  }
+
+  return withTransaction(database, async (client) => {
+    const release = revisions.length > 0
+      ? await publishKnowledgeBatch(
+          client,
+          revisions.map(({ itemId, revisionId }) => ({
+            itemId,
+            revisionId
+          })),
+          `Streaming publication of ${revisions.length} verified records.`,
+        )
+      : null
+    if (revisions.length > 0) {
+      await client.query(
+        `UPDATE knowledge_candidates candidate
+            SET status = 'published',
+                revision_id = published.revision_id,
+                publication_task_id = NULL,
+                updated_at = now()
+          FROM unnest($1::uuid[], $2::uuid[])
+            AS published(candidate_id, revision_id)
+          WHERE candidate.id = published.candidate_id
+            AND candidate.publication_task_id = $3`,
+        [
+          revisions.map((revision) => revision.candidateId),
+          revisions.map((revision) => revision.revisionId),
+          claimed.task.id
+        ],
+      )
+      await client.query(
+        `UPDATE source_fragments fragment
+            SET status = 'published',
+                updated_at = now()
+          WHERE EXISTS (
+            SELECT 1
+            FROM knowledge_candidates candidate
+            WHERE candidate.source_fragment_id = fragment.id
+              AND candidate.id = ANY($1::uuid[])
+              AND candidate.status = 'published'
+          )`,
+        [revisions.map((revision) => revision.candidateId)],
+      )
+      await client.query(
+        `UPDATE agent_runs run
+            SET published_revisions = coalesce(
+              (
+                SELECT count(*)::int
+                FROM knowledge_candidates candidate
+                WHERE candidate.pipeline_task_id = run.pipeline_task_id
+                  AND candidate.status = 'published'
+              ),
+              0
+            )
+          WHERE run.pipeline_task_id IN (
+            SELECT candidate.pipeline_task_id
+            FROM knowledge_candidates candidate
+            WHERE candidate.id = ANY($1::uuid[])
+          )`,
+        [revisions.map((revision) => revision.candidateId)],
+      )
+    }
+    return {
+      records_reserved: payload.candidate_ids.length,
+      records_published: revisions.length,
+      records_deferred_to_deep_review: deferred,
+      release_id: release?.releaseId ?? null,
+      release_sequence: release?.sequence ?? null
+    }
+  })
+}
+
 async function executeMechanicalTask(
   database: Database,
   config: AppConfig,
@@ -1396,6 +1584,8 @@ async function executeMechanicalTask(
       return convertSource(database, claimed)
     case 'source_chunking':
       return chunkSource(database, claimed)
+    case 'candidate_publication':
+      return publishCandidateBatch(database, claimed)
     case 'source_publication':
       return publishSource(database, claimed)
     default:

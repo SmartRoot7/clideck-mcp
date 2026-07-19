@@ -34,6 +34,44 @@ function overviewFixture(): Overview {
         active_worker_count: 0
       }),
     ),
+    source_intake: [
+      'discover',
+      'acquire',
+      'convert',
+      'chunk',
+      'analyze'
+    ].map((stage, index) => ({
+      stage,
+      unit: stage === 'analyze' ? 'fragments' : 'sources',
+      waiting: index,
+      in_flight: stage === 'analyze' ? 2 : 0,
+      processed_24h: 20 + index,
+      output_24h: 10 + index,
+      failed_24h: 0,
+      oldest_waiting_at: index ? now : null,
+      active_executor_ids:
+        stage === 'analyze' ? ['pipeline-executor-01'] : [],
+      active_worker_count: 0
+    })),
+    record_pipeline: [
+      'verify',
+      'deep_low',
+      'deep_medium',
+      'ready',
+      'publish'
+    ].map((stage, index) => ({
+      stage,
+      unit: 'records',
+      waiting: stage === 'deep_medium' ? 5_149 : index,
+      in_flight: stage === 'deep_medium' ? 20 : 0,
+      processed_24h: 40 + index,
+      passed_24h: 30 + index,
+      escalated_24h: stage === 'deep_low' ? 5 : 0,
+      rejected_24h: 1,
+      oldest_waiting_at: index ? now : null,
+      active_executor_ids:
+        stage === 'deep_medium' ? ['pipeline-executor-02'] : []
+    })) as Overview['record_pipeline'],
     executors: [
       {
         executor_id: 'pipeline-executor-01',
@@ -43,6 +81,8 @@ function overviewFixture(): Overview {
         stage: null,
         task_id: null,
         task_type: null,
+        work_units: 0,
+        work_unit: 'tasks',
         heartbeat_at: now,
         lease_until: null
       },
@@ -54,6 +94,8 @@ function overviewFixture(): Overview {
         stage: 'deep_review',
         task_id: '00000000-0000-4000-8000-000000000002',
         task_type: 'candidate_deep_review',
+        work_units: 20,
+        work_unit: 'records',
         heartbeat_at: now,
         lease_until: now
       }
@@ -69,17 +111,17 @@ function overviewFixture(): Overview {
 }
 
 describe('overview pipeline snapshot', () => {
-  it('renders all eight stages with concise metric labels', () => {
+  it('renders source intake and record flow using result units', () => {
     render(<PipelineRail overview={overviewFixture()} />)
 
-    expect(screen.getByText('Deep Review')).toBeInTheDocument()
-    expect(screen.getByText('Publish')).toBeInTheDocument()
-    expect(screen.getAllByText('Waiting')).toHaveLength(8)
-    expect(screen.getAllByText('Running')).toHaveLength(8)
-    expect(screen.getAllByText('Done')).toHaveLength(8)
-    expect(screen.getAllByText('Failed')).toHaveLength(8)
+    expect(screen.getByText('Deep Medium')).toBeInTheDocument()
+    expect(screen.getAllByText('Published')).toHaveLength(2)
+    expect(screen.getAllByText('Waiting')).toHaveLength(10)
+    expect(screen.getAllByText('In flight')).toHaveLength(10)
+    expect(screen.getAllByText('Output')).toHaveLength(5)
+    expect(screen.getAllByText('Failed')).toHaveLength(5)
     expect(screen.queryByText('Queued')).not.toBeInTheDocument()
-    expect(screen.queryByText('Completed')).not.toBeInTheDocument()
+    expect(screen.queryByText('Done')).not.toBeInTheDocument()
     expect(screen.getByText('5,149')).toBeInTheDocument()
   })
 
