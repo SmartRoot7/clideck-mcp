@@ -169,6 +169,12 @@ GRANT SELECT, INSERT, UPDATE ON public_usage_daily TO clideck_mcp_worker;
 GRANT SELECT, DELETE ON rate_limit_buckets TO clideck_mcp_worker;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO clideck_mcp_worker;
 
+GRANT EXECUTE ON FUNCTION current_knowledge_validation(uuid) TO
+  clideck_mcp_api,
+  clideck_mcp_admin,
+  clideck_mcp_worker,
+  clideck_mcp_researcher;
+
 GRANT SELECT, UPDATE ON expert_tasks TO clideck_mcp_researcher;
 GRANT SELECT, INSERT ON task_messages TO clideck_mcp_researcher;
 GRANT SELECT, INSERT ON task_public_events TO clideck_mcp_researcher;
