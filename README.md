@@ -107,12 +107,25 @@ for HTTPS installation, validation, remote-admin cutover and rollback.
 ```bash
 pnpm check
 pnpm test
+pnpm build
 pnpm eval
 ```
 
 `pnpm eval` runs 250 deterministic product and safety scenarios and records only
 the safe aggregate result for public statistics. Lab reports are commit-bound
 and imported separately with `pnpm lab:import-report`.
+
+PostgreSQL integration tests require an isolated migrated database. They are
+included in `pnpm test` when `DATABASE_URL` is set and are reported as skipped
+when it is absent:
+
+```bash
+DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/clideck_mcp_test \
+  pnpm test
+```
+
+The Build Week implementation stages and their verification evidence are tracked
+in [docs/BUILD_WEEK_EXECUTION_PLAN.md](docs/BUILD_WEEK_EXECUTION_PLAN.md).
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md),
 [docs/SECURITY.md](docs/SECURITY.md), and
@@ -180,3 +193,9 @@ LAN-console production soak. It is maintained in another repository and is not
 modified here. After the soak, the public API's old signed remote-admin routes
 can be disabled with `ENABLE_REMOTE_ADMIN_API=false`; the public MCP endpoint
 is unaffected.
+
+## License
+
+The source code is licensed under the
+[Apache License 2.0](LICENSE). Production knowledge data and private source
+material are not distributed with this repository.
