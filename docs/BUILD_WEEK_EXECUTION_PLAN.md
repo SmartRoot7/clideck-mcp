@@ -13,7 +13,7 @@ Branch policy: `main` only; completed stages are committed and pushed directly.
 
 ## Current focus
 
-`D3.1 — Security and release gate`
+`D3.2 — Build Week submission`
 
 ## Baseline
 
@@ -371,9 +371,8 @@ Verification:
 - architecture and security documents describe Domain Pack isolation and the
   truthful public-demo boundary;
 - project, admin UI, and admin-contract versions are aligned at 0.6.0;
-- the static README screenshot is deliberately deferred until D3 after the real
-  production route is deployed, so the repository cannot contain a staged or
-  invented dashboard image;
+- the README screenshot was captured from the deployed production `/demo`
+  route, not a staged or invented dashboard image;
 - 66/66 backend/PostgreSQL tests, 13 Domain Pack tests, 7 admin UI tests,
   typecheck, and both admin/demo production builds passed.
 
@@ -381,7 +380,7 @@ Completed: 2026-07-19
 
 ## Final day — release and submission
 
-### [~] D3.1 — Security and release gate
+### [x] D3.1 — Security and release gate
 
 - scan repository contents and full Git history for secrets and provenance;
 - back up production PostgreSQL and deployment configuration;
@@ -410,10 +409,22 @@ Completed so far:
   PostgreSQL tests, 13 Domain Pack tests, and 7 UI tests passed without skip;
 - product eval passed 250/250 with dangerous false-safe 0 and known-query
   p95 3.61 ms; typecheck, production build, and diff checks passed.
+- production applied migrations 010–013 and published 16 authored Engineering
+  records in immutable release #53 alongside existing Network knowledge;
+- production smoke tests passed for health, readiness, all 16 MCP tools, known
+  Network search, generic domain discovery, exact Engineering conversion, and
+  fail-closed multiline change review;
+- `/admin` and `/demo` serve byte-identical HTML and frontend asset bytes; the
+  deployed public route displayed 60,052 active revisions, real hourly
+  publications, real pipeline stages, and four active Luna executors;
+- browser QA exercised Overview and Pipeline navigation plus the existing
+  contextual-help trigger against the real production snapshot;
+- the README screenshot was captured from the deployed production route after
+  those checks;
+- the repository was published only after this gate and tagged
+  `v0.6.0-build-week`.
 
-Remaining before completion: commit and deploy the exact release, run production
-smoke tests, capture the real deployed demo screenshot, publish the repository,
-and create the release tag.
+Completed: 2026-07-19
 
 ### [ ] D3.2 — Build Week submission
 

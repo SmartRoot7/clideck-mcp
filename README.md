@@ -104,6 +104,8 @@ browser. Values are not hidden with CSS blur. Public and LAN routes expose
 different permissions and fields, but there is only one visual implementation
 and one production frontend artifact.
 
+![The real CliDeck MCP production operations dashboard](docs/assets/clideck-mcp-demo.jpg)
+
 ## Architecture
 
 ```text
