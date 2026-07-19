@@ -6,7 +6,7 @@ import {
   Gauge,
   Layers3
 } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 
 import { Chart } from '../components/chart'
 import {
@@ -40,7 +40,7 @@ export function AgentRunsPage({ overview }: { overview: Overview }) {
   const averageDuration = query.data.length
     ? query.data.reduce((sum, row) => sum + numberOf(row.duration_ms), 0) / query.data.length
     : 0
-  const option = useRunChart(query.data)
+  const option = runChart(query.data)
   return (
     <div className="dashboard-stack">
       <section className="metric-grid metric-grid--four">
@@ -82,27 +82,25 @@ const RUN_COLUMNS: Array<TableColumn<AgentRun>> = [
   { key: 'id', label: 'Run ID', render: (row) => <code title={row.id}>{shortId(row.id)}</code> }
 ]
 
-function useRunChart(rows: AgentRun[]) {
-  return useMemo(() => {
-    const latest = [...rows].reverse().slice(-30)
-    return {
-      tooltip: { trigger: 'axis' },
-      grid: { left: 52, right: 48, top: 32, bottom: 48 },
-      xAxis: {
-        type: 'category',
-        data: latest.map((row) => formatDate(row.started_at, false)),
-        axisTick: { show: false },
-        axisLine: { lineStyle: { color: '#d8dee9' } },
-        axisLabel: { color: '#667085', interval: 4 }
-      },
-      yAxis: [
-        { type: 'value', splitLine: { lineStyle: { color: '#edf0f5' } }, axisLabel: { formatter: compactNumber, color: '#667085' } },
-        { type: 'value', splitLine: { show: false }, axisLabel: { color: '#667085' } }
-      ],
-      series: [
-        { name: 'Tokens', type: 'bar', data: latest.map((row) => numberOf(row.total_tokens)), itemStyle: { color: '#0f5fff', borderRadius: [3, 3, 0, 0] }, barMaxWidth: 14 },
-        { name: 'Published', type: 'line', yAxisIndex: 1, data: latest.map((row) => numberOf(row.published_revisions)), smooth: 0.25, lineStyle: { color: '#22a06b', width: 2 }, itemStyle: { color: '#22a06b' } }
-      ]
-    }
-  }, [rows])
+function runChart(rows: AgentRun[]) {
+  const latest = [...rows].reverse().slice(-30)
+  return {
+    tooltip: { trigger: 'axis' },
+    grid: { left: 52, right: 48, top: 32, bottom: 48 },
+    xAxis: {
+      type: 'category',
+      data: latest.map((row) => formatDate(row.started_at, false)),
+      axisTick: { show: false },
+      axisLine: { lineStyle: { color: '#d8dee9' } },
+      axisLabel: { color: '#667085', interval: 4 }
+    },
+    yAxis: [
+      { type: 'value', splitLine: { lineStyle: { color: '#edf0f5' } }, axisLabel: { formatter: compactNumber, color: '#667085' } },
+      { type: 'value', splitLine: { show: false }, axisLabel: { color: '#667085' } }
+    ],
+    series: [
+      { name: 'Tokens', type: 'bar', data: latest.map((row) => numberOf(row.total_tokens)), itemStyle: { color: '#0f5fff', borderRadius: [3, 3, 0, 0] }, barMaxWidth: 14 },
+      { name: 'Published', type: 'line', yAxisIndex: 1, data: latest.map((row) => numberOf(row.published_revisions)), smooth: 0.25, lineStyle: { color: '#22a06b', width: 2 }, itemStyle: { color: '#22a06b' } }
+    ]
+  }
 }

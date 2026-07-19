@@ -41,7 +41,8 @@ export function IconTooltip({
         aria-label={`${label} help`}
         aria-describedby={open ? id : undefined}
         aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
+        onClick={() => setOpen(true)}
+        onFocus={() => setOpen(true)}
         onBlur={() => setOpen(false)}
         onMouseEnter={() => setOpen(true)}
         onMouseLeave={() => setOpen(false)}
