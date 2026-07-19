@@ -13,7 +13,7 @@ Branch policy: `main` only; completed stages are committed and pushed directly.
 
 ## Current focus
 
-`D1.5 — Day-one quality gate`
+`D2.1 — Engineering Measurements pack`
 
 ## Baseline
 
@@ -187,7 +187,7 @@ Verification:
 
 Completed: 2026-07-19
 
-### [~] D1.5 — Day-one quality gate
+### [x] D1.5 — Day-one quality gate
 
 Goal: prove that the abstraction is additive and production-safe.
 
@@ -199,9 +199,21 @@ Acceptance:
 - `pnpm check`, `pnpm test`, and `pnpm build` pass;
 - this tracker is updated and all completed stages are pushed to `main`.
 
+Verification:
+
+- a PostgreSQL database was seeded under migrations 001–009 and then upgraded
+  with migration 010; all 50 revisions remained available as Network records;
+- 64/64 backend and PostgreSQL integration tests ran without skip;
+- Domain Kit 6/6, Network pack 3/3, and admin UI 5/5 tests passed;
+- product eval: 250/250 passed, dangerous false-safe 0, p95 16.03 ms;
+- typecheck and production build passed;
+- every Day-one stage was committed and pushed directly to `main`.
+
+Completed: 2026-07-19
+
 ## Day 2 — second domain and public proof
 
-### [ ] D2.1 — Engineering Measurements pack
+### [~] D2.1 — Engineering Measurements pack
 
 Goal: prove that the framework is not network-specific.
 
