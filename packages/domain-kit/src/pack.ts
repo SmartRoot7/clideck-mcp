@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 import type {
   CoreKnowledgeCandidate,
-  CoreKnowledgeRevision
+  CorePublicKnowledgeRevision
 } from './core.js'
 import type { DomainPackManifestV1 } from './manifest.js'
 
@@ -29,5 +29,5 @@ export interface DomainPack<
   normalizeContext(input: unknown): Context
   validateCandidate(candidate: Candidate): DomainValidationResult
   toCoreCandidate(candidate: Candidate): CoreKnowledgeCandidate
-  fromCoreRevision(revision: CoreKnowledgeRevision): PublicRecord
+  fromCoreRevision(revision: CorePublicKnowledgeRevision): PublicRecord
 }

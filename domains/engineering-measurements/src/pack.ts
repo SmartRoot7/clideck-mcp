@@ -1,5 +1,5 @@
 import type {
-  CoreKnowledgeRevision,
+  CorePublicKnowledgeRevision,
   DomainPack,
   DomainValidationIssue
 } from '@clideck/domain-kit'
@@ -221,7 +221,7 @@ export const engineeringMeasurementsPack: DomainPack<
       provenance: candidate.provenance
     }
   },
-  fromCoreRevision(revision: CoreKnowledgeRevision) {
+  fromCoreRevision(revision: CorePublicKnowledgeRevision) {
     return engineeringPublicRecordSchema.parse({
       record_type: revision.record_type,
       title: revision.title,

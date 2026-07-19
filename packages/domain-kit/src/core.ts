@@ -89,6 +89,13 @@ export type CoreKnowledgeRevision = z.infer<
   typeof coreKnowledgeRevisionSchema
 >
 
+export const corePublicKnowledgeRevisionSchema =
+  coreKnowledgeRevisionSchema.omit({ provenance: true })
+
+export type CorePublicKnowledgeRevision = z.infer<
+  typeof corePublicKnowledgeRevisionSchema
+>
+
 export class CorePolicyError extends Error {
   readonly code: string
 

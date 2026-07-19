@@ -1,9 +1,9 @@
 import {
-  coreKnowledgeRevisionSchema,
+  corePublicKnowledgeRevisionSchema,
   enforceCoreCandidatePolicy,
   exportDomainPackJsonSchemas,
   jsonObjectSchema,
-  type CoreKnowledgeRevision,
+  type CorePublicKnowledgeRevision,
   type DomainPackJsonSchemas,
   type DomainPackManifestV1
 } from '@clideck/domain-kit'
@@ -45,7 +45,7 @@ type DomainKnowledgeRow = {
   rollback_steps: string[]
   limitations: string[]
   dangerous: boolean
-  risk_level: CoreKnowledgeRevision['risk_level']
+  risk_level: CorePublicKnowledgeRevision['risk_level']
   confidence: string | number
   quality_score: string | number
   confidence_reason: string
@@ -53,7 +53,6 @@ type DomainKnowledgeRow = {
   validation_level: string
   independent_confirmations: number
   next_review_at: string
-  provenance: unknown
   conflicts: unknown
   relevance: string | number
 }
@@ -337,8 +336,8 @@ function normalizeDate(value: unknown): string {
   return String(value).slice(0, 10)
 }
 
-function toCoreRevision(row: DomainKnowledgeRow): CoreKnowledgeRevision {
-  return coreKnowledgeRevisionSchema.parse({
+function toCoreRevision(row: DomainKnowledgeRow): CorePublicKnowledgeRevision {
+  return corePublicKnowledgeRevisionSchema.parse({
     domain_id: row.domain_id,
     schema_version: row.domain_schema_version,
     stable_key: row.stable_key,
@@ -359,7 +358,6 @@ function toCoreRevision(row: DomainKnowledgeRow): CoreKnowledgeRevision {
     quality_score: Number(row.quality_score),
     confidence_reason: row.confidence_reason,
     last_verified_at: normalizeDate(row.last_verified_at),
-    provenance: row.provenance,
     revision_ref: row.public_ref,
     revision_number: Number(row.revision_number),
     release_sequence: Number(row.release_sequence),
@@ -390,7 +388,10 @@ export async function searchDomainKnowledge(
        kr.id AS revision_id,
        kr.public_ref,
        kr.revision_number,
-       release.sequence AS release_sequence,
+       (
+         SELECT sequence
+         FROM public_active_release_summary
+       ) AS release_sequence,
        ki.domain_id,
        kr.domain_schema_version,
        ki.stable_key,
@@ -427,7 +428,6 @@ export async function searchDomainKnowledge(
          AS independent_confirmations,
        coalesce(trust.next_review_at, kr.last_verified_at + 180)
          AS next_review_at,
-       coalesce(provenance.items, '[]'::json) AS provenance,
        coalesce(conflicts.items, '[]'::json) AS conflicts,
        (
          ts_rank_cd(
@@ -438,7 +438,6 @@ export async function searchDomainKnowledge(
          similarity(lower(kr.summary), lower($2))
        ) AS relevance
      FROM active_release active
-     JOIN releases release ON release.id = active.release_id
      JOIN release_items release_item
        ON release_item.release_id = active.release_id
      JOIN knowledge_items ki
@@ -448,23 +447,6 @@ export async function searchDomainKnowledge(
      LEFT JOIN knowledge_public_trust trust ON trust.revision_id = kr.id
      LEFT JOIN LATERAL current_knowledge_validation(kr.id)
        current_validation ON true
-     LEFT JOIN LATERAL (
-       SELECT json_agg(json_strip_nulls(json_build_object(
-         'url', document.canonical_url,
-         'document_type', document.document_type,
-         'title', document.title,
-         'document_version', document.document_version,
-         'document_date', document.document_date,
-         'verified_at', document.verified_at,
-         'content_hash', document.content_hash,
-         'evidence_fragment', document.evidence_fragment,
-         'evidence_role', revision_source.evidence_role
-       )) ORDER BY document.id) AS items
-       FROM revision_sources revision_source
-       JOIN source_documents document
-         ON document.id = revision_source.source_document_id
-       WHERE revision_source.revision_id = kr.id
-     ) provenance ON true
      LEFT JOIN LATERAL (
        SELECT json_agg(json_build_object(
          'severity', conflict.severity,

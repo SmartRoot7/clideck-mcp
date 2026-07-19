@@ -1,5 +1,5 @@
 import type {
-  CoreKnowledgeRevision,
+  CorePublicKnowledgeRevision,
   CoreRiskLevel,
   DomainPack,
   DomainValidationResult
@@ -173,7 +173,7 @@ export const networkDomainPack: DomainPack<
       provenance: candidate.provenance
     }
   },
-  fromCoreRevision(revision: CoreKnowledgeRevision) {
+  fromCoreRevision(revision: CorePublicKnowledgeRevision) {
     const context = revision.context
     const payload = revision.payload
     return networkPublicRecordSchema.parse({

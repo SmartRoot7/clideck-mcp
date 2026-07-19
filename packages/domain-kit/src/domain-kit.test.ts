@@ -10,7 +10,7 @@ import {
   exportDomainPackJsonSchemas,
   runDomainPackConformance,
   type CoreKnowledgeCandidate,
-  type CoreKnowledgeRevision,
+  type CorePublicKnowledgeRevision,
   type DomainPack
 } from './index.js'
 
@@ -110,7 +110,7 @@ const pack: DomainPack<
   toCoreCandidate() {
     return coreCandidate()
   },
-  fromCoreRevision(revision: CoreKnowledgeRevision) {
+  fromCoreRevision(revision: CorePublicKnowledgeRevision) {
     return publicRecordSchema.parse({ title: revision.title })
   }
 }
