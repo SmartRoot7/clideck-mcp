@@ -80,6 +80,8 @@ GRANT SELECT ON
   knowledge_candidates,
   candidate_verifications,
   agent_runs,
+  active_source_slots,
+  source_collections,
   import_runs,
   import_items,
   legacy_revision_metadata,
@@ -98,6 +100,8 @@ GRANT USAGE, SELECT ON SEQUENCE
   admin_audit_events_id_seq
 TO clideck_mcp_admin;
 GRANT INSERT, UPDATE ON active_release TO clideck_mcp_admin;
+GRANT INSERT, UPDATE, DELETE ON active_source_slots
+TO clideck_mcp_admin;
 GRANT UPDATE ON
   code_change_approvals,
   pipeline_settings,
@@ -105,6 +109,7 @@ GRANT UPDATE ON
   source_candidates,
   source_fragments,
   pipeline_tasks,
+  knowledge_candidates,
   expert_tasks,
   knowledge_conflicts,
   agent_runs
@@ -150,11 +155,16 @@ GRANT SELECT ON
   pipeline_events,
   knowledge_candidates,
   candidate_verifications,
-  agent_runs
+  agent_runs,
+  active_source_slots,
+  source_collections
+TO clideck_mcp_worker;
+GRANT INSERT, UPDATE, DELETE ON active_source_slots
 TO clideck_mcp_worker;
 GRANT INSERT, UPDATE ON
   source_artifacts,
   source_fragments,
+  source_candidates,
   pipeline_tasks,
   pipeline_events
 TO clideck_mcp_worker;
@@ -164,7 +174,8 @@ GRANT UPDATE ON
   source_candidates,
   pipeline_settings,
   knowledge_candidates,
-  agent_runs
+  agent_runs,
+  source_collections
 TO clideck_mcp_worker;
 GRANT SELECT, UPDATE, DELETE ON snapshot_contributions TO clideck_mcp_worker;
 GRANT UPDATE ON knowledge_public_trust TO clideck_mcp_worker;
@@ -194,6 +205,8 @@ GRANT SELECT ON
   knowledge_candidates,
   candidate_verifications,
   agent_runs,
+  active_source_slots,
+  source_collections,
   worker_heartbeats,
   vendors,
   platforms,
@@ -209,6 +222,7 @@ GRANT INSERT ON
   knowledge_candidates,
   candidate_verifications,
   agent_runs,
+  active_source_slots,
   worker_heartbeats
 TO clideck_mcp_researcher;
 GRANT UPDATE ON
@@ -218,9 +232,11 @@ GRANT UPDATE ON
   pipeline_settings,
   pipeline_tasks,
   knowledge_candidates,
+  active_source_slots,
   agent_runs,
   worker_heartbeats
 TO clideck_mcp_researcher;
+GRANT DELETE ON active_source_slots TO clideck_mcp_researcher;
 GRANT USAGE, SELECT ON SEQUENCE
   task_messages_id_seq,
   task_public_events_id_seq,
