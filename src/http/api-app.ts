@@ -279,7 +279,7 @@ export function createApiApp(dependencies: ApiDependencies) {
     if (!rate.allowed) {
       return context.json({ error: 'rate_limited' }, 429)
     }
-    const snapshot = await getPublicDemoSnapshot(database)
+    const snapshot = await getPublicDemoSnapshot(adminDatabase)
     context.header(
       'cache-control',
       'public, max-age=30, stale-while-revalidate=120',
