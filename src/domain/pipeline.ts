@@ -1742,18 +1742,7 @@ async function ensureWorkInTransaction(
       const sourceBuffer = await client.query<{ count: number }>(
         `SELECT count(*)::int AS count
          FROM source_candidates
-         WHERE status IN (
-           'discovered',
-           'approved',
-           'acquiring',
-           'acquired',
-           'converting',
-           'converted',
-           'chunking',
-           'analyzing',
-           'verifying',
-           'publishing'
-         )`,
+         WHERE status IN ('discovered', 'approved')`,
       )
       queued =
         (sourceBuffer.rows[0]?.count ?? 0) <
