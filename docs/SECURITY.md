@@ -25,6 +25,12 @@ Internal provenance is minimal and mandatory:
 
 Full manuals, private documents, and user logs are prohibited.
 
+The public operations demo follows the same rule. It is the real admin frontend,
+not a screenshot or mock, but it receives a separate strict server contract.
+Sensitive fields are omitted from JSON rather than blurred or hidden in CSS.
+The public mode creates no admin session, cannot call local admin routes, and
+contains no mutation surface.
+
 ## Application controls
 
 - Zod validates every external boundary.
@@ -42,6 +48,8 @@ Full manuals, private documents, and user logs are prohibited.
 - Error responses are generic and carry a correlation ID.
 - The application performs no outbound fetch from public input, preventing SSRF
   in the public path.
+- The public demo is feature-gated, rate-limited, cached briefly, and exposes
+  only `GET /public/v1/demo/snapshot`; unknown or mutation routes return 404.
 - The playground requires a site-only BFF token, explicit route allowlisting,
   a 64 KiB body ceiling, and a privacy-preserving daily client key.
 - Heavy analyses are limited to 10/minute, expert tasks to 3/day, and opted-in

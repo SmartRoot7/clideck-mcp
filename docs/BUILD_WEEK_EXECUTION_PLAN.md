@@ -13,7 +13,7 @@ Branch policy: `main` only; completed stages are committed and pushed directly.
 
 ## Current focus
 
-`D2.4 — Open-source documentation`
+`D3.1 — Security and release gate`
 
 ## Baseline
 
@@ -342,7 +342,7 @@ Verification:
 
 Completed: 2026-07-19
 
-### [ ] D2.4 — Open-source documentation
+### [x] D2.4 — Open-source documentation
 
 Deliverables:
 
@@ -356,6 +356,28 @@ Deliverables:
   model API integration is required. Subject to your Codex plan and usage
   limits.”
 
+Verification:
+
+- README now leads with the framework positioning and explains the core/pack
+  boundary, Network production pack, Engineering proof pack, generic MCP tools,
+  architecture, local install, Codex MCP connection, LAN admin, and tests;
+- the README states that `/demo` is the same `apps/admin` code with a strict
+  read-only server contract, not a separate marketing dashboard;
+- current Codex CLI documentation was checked for ChatGPT login and
+  `codex mcp add <name> --url <url>` syntax;
+- `DATA-NOTICE.md` separates Apache-2.0 code/fixture rights from production
+  knowledge, documents, user data, provenance, and operator-imported datasets;
+- architecture and security documents describe Domain Pack isolation and the
+  truthful public-demo boundary;
+- project, admin UI, and admin-contract versions are aligned at 0.6.0;
+- the static README screenshot is deliberately deferred until D3 after the real
+  production route is deployed, so the repository cannot contain a staged or
+  invented dashboard image;
+- 66/66 backend/PostgreSQL tests, 13 Domain Pack tests, 7 admin UI tests,
+  typecheck, and both admin/demo production builds passed.
+
+Completed: 2026-07-19
+
 ## Final day — release and submission
 
 ### [ ] D3.1 — Security and release gate
@@ -364,6 +386,8 @@ Deliverables:
 - back up production PostgreSQL and deployment configuration;
 - apply the additive migration;
 - run network, generic MCP, demo, performance, and dangerous-safety smoke tests;
+- capture the deployed real `/demo` UI and add that exact production screenshot
+  to the README;
 - make the repository public only after the gate passes;
 - tag the verified release `v0.6.0-build-week`.
 

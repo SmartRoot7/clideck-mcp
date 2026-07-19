@@ -99,7 +99,7 @@ async function fetchPublicDocument(
               'application/pdf,text/html,application/xhtml+xml,text/plain;q=0.9',
             'accept-encoding': 'br, gzip, deflate',
             'accept-language': 'en-US,en;q=0.8',
-            'user-agent': 'CliDeck-MCP-Knowledge-Pipeline/0.3'
+            'user-agent': 'CliDeck-MCP-Knowledge-Pipeline/0.6'
           }
         },
         (incoming) => {

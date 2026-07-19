@@ -2,12 +2,13 @@
 
 ## Product contract
 
-CliDeck MCP is a universal MCP server. It resolves network-device context and
-returns deterministic, version-scoped operational knowledge without calling an
-AI model in the read path.
+CliDeck MCP is an agent-native framework for verified, continuously updated MCP
+knowledge systems. It returns deterministic, domain-validated knowledge without
+calling an AI model in the read path.
 
 The production MCP URL is `https://mcp.clideck.com/mcp`. The displayed server
-name is `CliDeck MCP — Network Knowledge`.
+name remains `CliDeck MCP — Network Knowledge` because Network Knowledge is the
+first production Domain Pack and public product instance.
 
 ## Process boundaries
 
@@ -32,11 +33,41 @@ The browser playground is a BFF-only facade. A browser sends data to
 daily HMAC client key. The backend exposes only named operations and has no
 generic proxy route.
 
+## Domain Pack boundary
+
+`@clideck/domain-kit` defines a versioned contract between core and a subject:
+
+- a strict manifest and core compatibility range;
+- context, candidate, and public-record schemas;
+- deterministic normalization and validation;
+- mapping to and from the universal core revision envelope;
+- a conformance suite and JSON Schema export.
+
+Core retains exclusive ownership of immutable revisions, releases, provenance,
+confidence/risk thresholds, conflicts, audit, and activation. A pack cannot
+lower or bypass those policies. Built-in packs are registered explicitly from
+local code; the runtime never downloads and executes a pack from the internet.
+
+Network Knowledge owns vendor/model/OS/version and operational record semantics.
+Engineering Measurements owns discipline/quantity/material/conditions, exact
+decimal strings, units, and tolerance semantics. Both publish through the same
+release engine.
+
+Type-only provider boundaries allow forks to add content-addressed artifacts,
+PostGIS-backed spatial data, typed relationship projections, or reproducible
+labs without adding speculative infrastructure to core.
+
 ## Knowledge model
 
 `knowledge_items` provides a stable identity. `knowledge_revisions` is append-only
 and contains structured facts. `releases` and `release_items` form immutable
 snapshots. `active_release` contains one row and is switched in a transaction.
+
+Every item has a `domain_id`. Every revision can carry versioned
+`domain_context` and `domain_payload`. Existing Network records default to
+`network`, so enabling Domain Packs does not reprocess or duplicate them.
+Network views are explicitly scoped to `domain_id = 'network'`; generic records
+cannot leak into network search.
 
 Every revision must have internal provenance. The public query selects only
 explicitly allowlisted response columns; no provenance table is joined by public
@@ -109,6 +140,18 @@ planner to discovery; a failed source cannot reach publication.
 - Topology analysis normalizes supplied CDP, LLDP, route, and traceroute output.
 - Opt-in samples are re-redacted through a dedicated quarantine DB role with a
   30-day TTL.
+
+## Public demo
+
+The public `/demo` and LAN `/admin` are two builds of the same `apps/admin`
+source. The public build uses the same pages, charts, components, responsive
+rules, and formatters but receives only a strict read-only snapshot.
+
+The snapshot contains real production aggregates and sanitized operational
+records. Source identity, provenance, document content, internal UUIDs,
+questions, errors, hostnames, and audit records are removed on the server.
+Public mode has no session and no mutation endpoint. `ENABLE_PUBLIC_DEMO=false`
+removes both the snapshot and static route.
 
 ## Expert task lifecycle
 

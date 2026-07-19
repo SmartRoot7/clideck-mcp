@@ -203,7 +203,7 @@ export function createAdminUiApp(dependencies: AdminUiDependencies) {
   app.get('/admin/health', (context) => context.json({
     status: 'ok',
     service: 'clideck-mcp-admin',
-    version: '0.5.0'
+    version: '0.6.0'
   }))
 
   function sessionFor(context: {
