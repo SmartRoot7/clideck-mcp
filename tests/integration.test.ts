@@ -4,6 +4,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import pg from 'pg'
+import {
+  ENGINEERING_MEASUREMENT_SAMPLES,
+  engineeringPublicRecordSchema
+} from '@clideck/domain-engineering-measurements'
 
 import { createPublicTaskId, sha256, sha256Label } from '../src/crypto.js'
 import {
@@ -15,6 +19,10 @@ import { createAdminActorSignature } from '../src/http/admin-auth.js'
 import {
   resolveNetworkContext
 } from '../src/domain/context.js'
+import {
+  createDomainKnowledgeRevision,
+  searchDomainKnowledge
+} from '../src/domain/domain-knowledge.js'
 import {
   getPublicRevision,
   searchKnowledge
@@ -227,6 +235,89 @@ describeIntegration('PostgreSQL integration', () => {
         network_records: baseline.rows[0]!.count,
         all_domain_records: baseline.rows[0]!.count + 1,
         indexed: true
+      })
+    } finally {
+      await client.query('ROLLBACK')
+      client.release()
+    }
+  })
+
+  it('publishes and queries exact Engineering Measurements records', async () => {
+    const client = await database.connect()
+    try {
+      await client.query('BEGIN')
+      const baseline = await client.query<{
+        network_records: number
+        all_domain_records: number
+      }>(
+        `SELECT
+           (SELECT count(*)::int FROM public_active_knowledge)
+             AS network_records,
+           (SELECT count(*)::int FROM public_active_domain_knowledge)
+             AS all_domain_records`,
+      )
+      const revisions = []
+      for (const sample of ENGINEERING_MEASUREMENT_SAMPLES) {
+        revisions.push(await createDomainKnowledgeRevision(
+          client,
+          'engineering-measurements',
+          sample,
+        ))
+      }
+      expect(revisions).toHaveLength(16)
+      expect(revisions.every((revision) => revision.created)).toBe(true)
+
+      const release = await publishKnowledgeBatch(
+        client,
+        revisions.map(({ itemId, revisionId }) => ({
+          itemId,
+          revisionId
+        })),
+        'Engineering Measurements integration release',
+        'integration-test',
+      )
+      expect(release.sequence).toBeGreaterThan(0)
+
+      const search = await searchDomainKnowledge(client, {
+        domainId: 'engineering-measurements',
+        question: 'What is the Demo block A reference length?',
+        context: {
+          discipline: 'metrology',
+          quantity: 'reference block length',
+          system: 'Demo block A',
+          conditions: ['Reference demo environment']
+        }
+      })
+      const record = engineeringPublicRecordSchema.parse(search.records[0])
+      expect(record.record_type).toBe('measurement')
+      if (record.payload.type !== 'measurement') {
+        throw new Error('EXPECTED_MEASUREMENT_RECORD')
+      }
+      expect(record.payload.measured).toEqual({
+        value: '100.000',
+        unit: 'mm'
+      })
+      expect(record.payload.tolerance).toEqual({
+        type: 'plus_minus',
+        minus: '0.010',
+        plus: '0.010',
+        unit: 'mm'
+      })
+
+      const counts = await client.query<{
+        network_records: number
+        all_domain_records: number
+      }>(
+        `SELECT
+           (SELECT count(*)::int FROM public_active_knowledge)
+             AS network_records,
+           (SELECT count(*)::int FROM public_active_domain_knowledge)
+             AS all_domain_records`,
+      )
+      expect(counts.rows[0]).toEqual({
+        network_records: baseline.rows[0]!.network_records,
+        all_domain_records:
+          baseline.rows[0]!.all_domain_records + 16
       })
     } finally {
       await client.query('ROLLBACK')

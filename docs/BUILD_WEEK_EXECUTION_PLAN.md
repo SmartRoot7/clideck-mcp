@@ -13,7 +13,7 @@ Branch policy: `main` only; completed stages are committed and pushed directly.
 
 ## Current focus
 
-`D2.1 — Engineering Measurements pack`
+`D2.2 — Generic MCP tools`
 
 ## Baseline
 
@@ -213,7 +213,7 @@ Completed: 2026-07-19
 
 ## Day 2 — second domain and public proof
 
-### [~] D2.1 — Engineering Measurements pack
+### [x] D2.1 — Engineering Measurements pack
 
 Goal: prove that the framework is not network-specific.
 
@@ -232,7 +232,26 @@ Acceptance:
 - exact values survive round-trips without JavaScript number precision loss;
 - fixtures contain no copied vendor/manual text.
 
-### [ ] D2.2 — Generic MCP tools
+Verification:
+
+- 16 project-authored records cover measurements, tolerances, procedures, and
+  conversions;
+- decimal comparison and storage use strings throughout; a PostgreSQL
+  round-trip preserved `100.000` and the `0.010` tolerance exactly;
+- deterministic validation rejects reversed bounds, negative plus/minus
+  magnitudes, unit/dimension mismatches, false-safe risk, and non-positive
+  conversion factors;
+- the integration test published all 16 records through the existing immutable
+  release engine and found the expected record through deterministic FTS,
+  context containment, and pack-specific output validation;
+- the active Network view did not change when the Engineering release became
+  active;
+- 65/65 backend and PostgreSQL tests, 13 built-in pack tests, and 5 admin UI
+  tests passed without skip; typecheck and production build passed.
+
+Completed: 2026-07-19
+
+### [~] D2.2 — Generic MCP tools
 
 Deliverables:
 

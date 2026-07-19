@@ -16,6 +16,7 @@
     "domain:check": "pnpm domain:build && pnpm -r --filter '@clideck/domain-*' check",
     "domain:create": "tsx src/cli/create-domain.ts",
     "domain:validate": "tsx src/cli/validate-domain.ts",
+    "domain:seed-engineering": "tsx src/cli/seed-engineering-measurements.ts",
     "contracts:build": "pnpm --filter @clideck/admin-contracts build",
     "admin:build": "pnpm --filter @clideck/admin-ui build",
     "admin:check": "pnpm --filter @clideck/admin-ui check",
@@ -58,6 +59,7 @@
   },
   "dependencies": {
     "@clideck/domain-kit": "workspace:*",
+    "@clideck/domain-engineering-measurements": "workspace:*",
     "@clideck/domain-network": "workspace:*",
     "@clideck/admin-contracts": "workspace:*",
     "@hono/node-server": "2.0.10",

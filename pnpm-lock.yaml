@@ -11,6 +11,9 @@ importers:
       '@clideck/admin-contracts':
         specifier: workspace:*
         version: link:packages/admin-contracts
+      '@clideck/domain-engineering-measurements':
+        specifier: workspace:*
+        version: link:domains/engineering-measurements
       '@clideck/domain-kit':
         specifier: workspace:*
         version: link:packages/domain-kit
@@ -106,6 +109,25 @@ importers:
       vite:
         specifier: 8.1.5
         version: 8.1.5(@types/node@24.10.4)(esbuild@0.27.7)(tsx@4.21.0)
+      vitest:
+        specifier: 4.1.10
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.10.4)(jsdom@29.1.1)(vite@8.1.5(@types/node@24.10.4)(esbuild@0.27.7)(tsx@4.21.0))
+
+  domains/engineering-measurements:
+    dependencies:
+      '@clideck/domain-kit':
+        specifier: workspace:*
+        version: link:../../packages/domain-kit
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@types/node':
+        specifier: 24.10.4
+        version: 24.10.4
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
       vitest:
         specifier: 4.1.10
         version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.10.4)(jsdom@29.1.1)(vite@8.1.5(@types/node@24.10.4)(esbuild@0.27.7)(tsx@4.21.0))
