@@ -99,7 +99,8 @@ GRANT UPDATE ON
   source_fragments,
   pipeline_tasks,
   expert_tasks,
-  knowledge_conflicts
+  knowledge_conflicts,
+  agent_runs
 TO clideck_mcp_admin;
 
 GRANT SELECT, INSERT ON

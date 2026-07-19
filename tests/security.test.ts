@@ -51,6 +51,9 @@ describe('security primitives', () => {
     expect(grants).toMatch(
       /GRANT UPDATE ON[\s\S]*source_fragments,[\s\S]*TO clideck_mcp_admin;/,
     )
+    expect(grants).toMatch(
+      /GRANT UPDATE ON[\s\S]*agent_runs[\s\S]*TO clideck_mcp_admin;/,
+    )
   })
 
   it('creates non-enumerable public identifiers and hashes', () => {
