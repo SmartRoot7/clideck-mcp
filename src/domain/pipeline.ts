@@ -1685,12 +1685,14 @@ export async function claimPipelineTask(
       ai_model: string
       reasoning_effort: string
       max_concurrent_ai_runs: number
+      max_deep_review_runs: number
     }>(
       `SELECT
          enabled,
          ai_model,
          reasoning_effort,
-         max_concurrent_ai_runs
+         max_concurrent_ai_runs,
+         max_deep_review_runs
        FROM pipeline_settings
        WHERE singleton
        FOR UPDATE`,
@@ -1752,10 +1754,32 @@ export async function claimPipelineTask(
        FROM pipeline_tasks
        WHERE status = 'queued'
          AND task_type = ANY($1::text[])
+         AND (
+           task_type NOT IN ('source_discovery', 'source_refresh')
+           OR NOT EXISTS (
+             SELECT 1
+             FROM pipeline_tasks active_discovery
+             WHERE active_discovery.status IN ('claimed', 'running')
+               AND active_discovery.task_type IN (
+                 'source_discovery',
+                 'source_refresh'
+               )
+           )
+         )
+         AND (
+           task_type <> 'candidate_deep_review'
+           OR (
+             SELECT count(*)
+             FROM pipeline_tasks active_deep_review
+             WHERE active_deep_review.status IN ('claimed', 'running')
+               AND active_deep_review.task_type =
+                 'candidate_deep_review'
+           ) < $2
+         )
        ORDER BY priority DESC, created_at
        FOR UPDATE SKIP LOCKED
        LIMIT 1`,
-      [aiTaskTypes],
+      [aiTaskTypes, pipeline.max_deep_review_runs],
     )
     const task = selected.rows[0]
     if (!task) {

@@ -3169,6 +3169,42 @@ describeIntegration('PostgreSQL integration', () => {
         config,
         'integration-pipeline-coordinator',
       )
+      await database.query(
+        `INSERT INTO pipeline_tasks (
+           task_type,
+           stage,
+           status,
+           priority,
+           dedupe_key,
+           payload
+         )
+         VALUES (
+           'source_discovery',
+           'discover',
+           'queued',
+           50,
+           $1,
+           '{}'::jsonb
+         )`,
+        [`integration:parallel-discovery:${unique}`],
+      )
+      const blockedParallelDiscovery = await claimPipelineTask(
+        database,
+        config,
+        'integration-parallel-discovery-coordinator',
+      )
+      expect(blockedParallelDiscovery).toMatchObject({
+        pipeline_state: 'pipeline_work_in_progress',
+        active_task_type: 'source_discovery',
+        active_stage: 'discover'
+      })
+      expect(blockedParallelDiscovery).not.toHaveProperty(
+        'pipeline_task_id',
+      )
+      await database.query(
+        `DELETE FROM pipeline_tasks WHERE dedupe_key = $1`,
+        [`integration:parallel-discovery:${unique}`],
+      )
       const duplicateResult = await submitSourceDiscovery(
         database,
         {
