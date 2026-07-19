@@ -187,9 +187,13 @@ export function AppShell({
             </span>
           </div>
           <div className="command-bar__actions">
-            <Button variant={enabled ? 'secondary' : 'primary'} onClick={onPause}>
+            <Button
+              variant={enabled ? 'secondary' : 'primary'}
+              aria-label={enabled ? 'Pause all Luna' : 'Resume pipeline'}
+              onClick={onPause}
+            >
               {enabled ? <Pause size={16} /> : <Play size={16} />}
-              {enabled ? 'Pause all Luna' : 'Resume pipeline'}
+              <span>{enabled ? 'Pause all Luna' : 'Resume pipeline'}</span>
             </Button>
             <label className="executor-select">
               <Boxes size={17} />
