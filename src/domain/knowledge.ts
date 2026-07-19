@@ -131,7 +131,9 @@ export async function searchKnowledge(
        JOIN release_items ri ON ri.revision_id = kr.id
        JOIN active_release ar ON ar.release_id = ri.release_id
        JOIN knowledge_items ki ON ki.id = ri.knowledge_item_id
-       WHERE kr.vendor_id = $2
+       WHERE ki.domain_id = 'network'
+         AND kr.domain_id = 'network'
+         AND kr.vendor_id = $2
          AND (
            kr.operating_system_id IS NULL
            OR kr.operating_system_id = $3

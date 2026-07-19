@@ -13,7 +13,7 @@ Branch policy: `main` only; completed stages are committed and pushed directly.
 
 ## Current focus
 
-`D1.2 — PostgreSQL domain compatibility layer`
+`D1.3 — Network Domain Pack`
 
 ## Baseline
 
@@ -87,7 +87,7 @@ Verification:
 
 Completed: 2026-07-19
 
-### [~] D1.2 — PostgreSQL domain compatibility layer
+### [x] D1.2 — PostgreSQL domain compatibility layer
 
 Goal: extend the existing immutable storage and release engine without
 reprocessing network data.
@@ -109,7 +109,19 @@ Acceptance:
 - existing network queries cannot return generic records;
 - previous application code can safely ignore the additive columns.
 
-### [ ] D1.3 — Network Domain Pack
+Verification:
+
+- all migrations applied to a clean PostgreSQL 16 test database;
+- the database seeded 50/50 records as `network` without reprocessing;
+- a transactional generic revision produced 51 records in the domain view while
+  the network view remained at 50;
+- domain context and payload were included in the FTS document;
+- 61/61 backend and PostgreSQL integration tests passed without skip;
+- typecheck and production build passed.
+
+Completed: 2026-07-19
+
+### [~] D1.3 — Network Domain Pack
 
 Goal: make the production network implementation the first built-in domain pack
 without changing its public tools or deterministic behavior.

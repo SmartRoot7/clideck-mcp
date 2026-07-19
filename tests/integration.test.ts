@@ -102,6 +102,138 @@ describeIntegration('PostgreSQL integration', () => {
     await database.end()
   }, 30_000)
 
+  it('keeps generic domain records out of network search views', async () => {
+    const client = await database.connect()
+    try {
+      await client.query('BEGIN')
+      await client.query(
+        `INSERT INTO domain_packs (
+           id,
+           manifest_schema_version,
+           pack_version,
+           display_name,
+           description,
+           manifest
+         )
+         VALUES (
+           'integration-domain',
+           '1',
+           '1.0.0',
+           'Integration Domain',
+           'A project-authored domain used only for integration testing.',
+           '{"schema_version":"1"}'::jsonb
+         )`,
+      )
+      const item = await client.query<{ id: string }>(
+        `INSERT INTO knowledge_items (domain_id, stable_key, kind)
+         VALUES (
+           'integration-domain',
+           $1,
+           'measurement'
+         )
+         RETURNING id`,
+        [`integration-domain.measurement.${randomUUID()}`],
+      )
+      const revision = await client.query<{ id: string }>(
+        `INSERT INTO knowledge_revisions (
+           knowledge_item_id,
+           domain_id,
+           domain_schema_version,
+           revision_number,
+           status,
+           title,
+           summary,
+           question_patterns,
+           domain_context,
+           domain_payload,
+           verification_steps,
+           confidence,
+           quality_score,
+           confidence_reason,
+           last_verified_at,
+           created_by,
+           risk_level
+         )
+         VALUES (
+           $1,
+           'integration-domain',
+           '1',
+           1,
+           'validated',
+           'Exact integration length',
+           'A deterministic migration compatibility record.',
+           ARRAY['What is the exact integration length?'],
+           '{"quantity":"length"}'::jsonb,
+           '{"value":"10.00","unit":"mm"}'::jsonb,
+           '["Compare the exact decimal string."]'::jsonb,
+           0.95,
+           0.95,
+           'Project-authored integration validation fixture.',
+           current_date,
+           'super_admin',
+           'safe_read_only'
+         )
+         RETURNING id`,
+        [item.rows[0]!.id],
+      )
+      await client.query(
+        `INSERT INTO knowledge_public_trust (
+           revision_id,
+           validation_level,
+           independent_confirmations,
+           confidence_explanation,
+           next_review_at
+         )
+         VALUES (
+           $1,
+           'documentation_reviewed',
+           1,
+           'Project-authored integration validation fixture.',
+           current_date + 180
+         )`,
+        [revision.rows[0]!.id],
+      )
+      const baseline = await client.query<{ count: number }>(
+        'SELECT count(*)::int AS count FROM public_active_knowledge',
+      )
+      const release = await publishKnowledgeBatch(
+        client,
+        [{
+          itemId: item.rows[0]!.id,
+          revisionId: revision.rows[0]!.id
+        }],
+        'Generic domain isolation integration test',
+        'integration-test',
+      )
+      expect(release.sequence).toBeGreaterThan(0)
+      const counts = await client.query<{
+        network_records: number
+        all_domain_records: number
+        indexed: boolean
+      }>(
+        `SELECT
+           (SELECT count(*)::int FROM public_active_knowledge)
+             AS network_records,
+           (SELECT count(*)::int FROM public_active_domain_knowledge)
+             AS all_domain_records,
+           (
+             SELECT search_document <> ''::tsvector
+             FROM knowledge_revisions
+             WHERE id = $1
+           ) AS indexed`,
+        [revision.rows[0]!.id],
+      )
+      expect(counts.rows[0]).toEqual({
+        network_records: baseline.rows[0]!.count,
+        all_domain_records: baseline.rows[0]!.count + 1,
+        indexed: true
+      })
+    } finally {
+      await client.query('ROLLBACK')
+      client.release()
+    }
+  })
+
   it('resolves every coverage target to a catalog operating system', async () => {
     const gaps = await database.query<{ missing: number }>(
       `SELECT count(*)::int AS missing
