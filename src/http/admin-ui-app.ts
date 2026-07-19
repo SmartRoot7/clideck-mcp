@@ -433,9 +433,10 @@ export function createAdminUiApp(dependencies: AdminUiDependencies) {
       const value = context.req.query(name)
       if (value && /^\d{1,6}$/.test(value)) query.set(name, value)
     }
+    const suffix = query.size ? `?${query.toString()}` : ''
     return readEndpoint(
       context,
-      `/admin/v1/knowledge?${query.toString()}`,
+      `/admin/v1/knowledge${suffix}`,
       knowledgePageSchema,
     )
   })

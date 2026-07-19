@@ -30,6 +30,7 @@ async function testApp() {
     }
   })
   const internalFetch = async (request: Request) => {
+    const url = new URL(request.url)
     expect(request.headers.get('authorization')).toBe(
       `Bearer ${config.adminToken}`,
     )
@@ -37,6 +38,10 @@ async function testApp() {
       `127.0.0.1:${config.api.port}`,
     )
     expect(request.headers.get('x-clideck-admin-role')).toBe('super_admin')
+    if (url.pathname === '/admin/v1/knowledge') {
+      expect(url.search).toBe('')
+      return Response.json({ items: [], total: 0, limit: 50, offset: 0 })
+    }
     return Response.json(overviewFixture())
   }
   return createAdminUiApp({
@@ -124,6 +129,12 @@ describe('local admin HTTP boundary', () => {
       active_release_sequence: 7,
       published_revisions: 56_798
     })
+
+    const knowledge = await app.request('/admin/api/v1/knowledge', {
+      headers: { host, cookie: cookie.split(';')[0]! }
+    })
+    expect(knowledge.status).toBe(200)
+    expect(await knowledge.json()).toMatchObject({ items: [], total: 0 })
   })
 
   it('rejects cross-origin login and invalid host headers', async () => {
