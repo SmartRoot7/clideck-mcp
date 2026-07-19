@@ -1444,11 +1444,62 @@ async function ensureWorkInTransaction(
     `DELETE FROM active_source_slots slots
      USING source_candidates source
      WHERE source.id = slots.source_candidate_id
-       AND source.status IN (
-         'completed',
-         'completed_with_exceptions',
-         'duplicate',
-         'rejected'
+       AND (
+         source.status IN (
+           'completed',
+           'completed_with_exceptions',
+           'duplicate',
+           'rejected'
+         )
+         OR (
+           source.status IN ('verifying', 'failed')
+           AND EXISTS (
+             SELECT 1
+             FROM pipeline_tasks deep_source_task
+             JOIN knowledge_candidates deep_candidate
+               ON deep_candidate.pipeline_task_id =
+                  deep_source_task.id
+             WHERE deep_source_task.source_candidate_id = source.id
+               AND deep_candidate.status = 'deep_review'
+           )
+           AND NOT EXISTS (
+             SELECT 1
+             FROM pipeline_tasks active_source_task
+             WHERE active_source_task.source_candidate_id = source.id
+               AND active_source_task.status IN (
+                 'queued',
+                 'claimed',
+                 'running'
+               )
+               AND active_source_task.task_type <>
+                 'candidate_deep_review'
+           )
+           AND NOT EXISTS (
+             SELECT 1
+             FROM source_artifacts active_artifact
+             JOIN source_fragments active_fragment
+               ON active_fragment.source_artifact_id =
+                  active_artifact.id
+             WHERE active_artifact.source_candidate_id = source.id
+               AND active_fragment.status IN (
+                 'queued',
+                 'reserved',
+                 'analyzing'
+               )
+           )
+           AND NOT EXISTS (
+             SELECT 1
+             FROM pipeline_tasks pending_source_task
+             JOIN knowledge_candidates pending_candidate
+               ON pending_candidate.pipeline_task_id =
+                  pending_source_task.id
+             WHERE pending_source_task.source_candidate_id = source.id
+               AND pending_candidate.status IN (
+                 'analyzed',
+                 'verifying'
+               )
+           )
+         )
        )`,
   )
 
@@ -1498,6 +1549,55 @@ async function ensureWorkInTransaction(
            SELECT 1
            FROM active_source_slots active
            WHERE active.source_candidate_id = sc.id
+         )
+         AND NOT (
+           sc.status IN ('verifying', 'failed')
+           AND EXISTS (
+             SELECT 1
+             FROM pipeline_tasks deep_source_task
+             JOIN knowledge_candidates deep_candidate
+               ON deep_candidate.pipeline_task_id =
+                  deep_source_task.id
+             WHERE deep_source_task.source_candidate_id = sc.id
+               AND deep_candidate.status = 'deep_review'
+           )
+           AND NOT EXISTS (
+             SELECT 1
+             FROM pipeline_tasks active_source_task
+             WHERE active_source_task.source_candidate_id = sc.id
+               AND active_source_task.status IN (
+                 'queued',
+                 'claimed',
+                 'running'
+               )
+               AND active_source_task.task_type <>
+                 'candidate_deep_review'
+           )
+           AND NOT EXISTS (
+             SELECT 1
+             FROM source_artifacts active_artifact
+             JOIN source_fragments active_fragment
+               ON active_fragment.source_artifact_id =
+                  active_artifact.id
+             WHERE active_artifact.source_candidate_id = sc.id
+               AND active_fragment.status IN (
+                 'queued',
+                 'reserved',
+                 'analyzing'
+               )
+           )
+           AND NOT EXISTS (
+             SELECT 1
+             FROM pipeline_tasks pending_source_task
+             JOIN knowledge_candidates pending_candidate
+               ON pending_candidate.pipeline_task_id =
+                  pending_source_task.id
+             WHERE pending_source_task.source_candidate_id = sc.id
+               AND pending_candidate.status IN (
+                 'analyzed',
+                 'verifying'
+               )
+           )
          )
        ORDER BY
          CASE sc.status

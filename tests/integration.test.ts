@@ -3296,6 +3296,81 @@ describeIntegration('PostgreSQL integration', () => {
         task_type: 'source_discovery',
         status: 'queued'
       })
+
+      const publishedCandidate = await database.query<{
+        id: string
+      }>(
+        `SELECT kc.id
+         FROM knowledge_candidates kc
+         JOIN pipeline_tasks pt ON pt.id = kc.pipeline_task_id
+         WHERE pt.source_candidate_id = $1
+           AND kc.status = 'published'
+         ORDER BY kc.created_at
+         LIMIT 1`,
+        [sourceId],
+      )
+      expect(publishedCandidate.rows[0]?.id).toBeTruthy()
+      await database.query(
+        `UPDATE knowledge_candidates
+            SET status = 'deep_review',
+                deep_review_task_id = NULL,
+                next_review_at = now(),
+                updated_at = now()
+          WHERE id = $1`,
+        [publishedCandidate.rows[0]!.id],
+      )
+      await database.query(
+        `UPDATE source_candidates
+            SET status = 'verifying',
+                updated_at = now()
+          WHERE id = $1`,
+        [sourceId],
+      )
+      await database.query(
+        `INSERT INTO active_source_slots (
+           slot_number,
+           source_candidate_id
+         )
+         VALUES (1, $1)
+         ON CONFLICT (slot_number) DO UPDATE
+           SET source_candidate_id = EXCLUDED.source_candidate_id,
+               assigned_at = now(),
+               heartbeat_at = now()`,
+        [sourceId],
+      )
+      await ensurePipelineWork(database)
+      const parkedSource = await database.query<{ count: number }>(
+        `SELECT count(*)::int AS count
+         FROM active_source_slots
+         WHERE source_candidate_id = $1`,
+        [sourceId],
+      )
+      expect(parkedSource.rows[0]?.count).toBe(0)
+      await database.query(
+        `UPDATE knowledge_candidates
+            SET status = 'published',
+                deep_review_task_id = NULL,
+                next_review_at = NULL,
+                updated_at = now()
+          WHERE id = $1`,
+        [publishedCandidate.rows[0]!.id],
+      )
+      await database.query(
+        `UPDATE pipeline_tasks
+            SET status = 'cancelled',
+                completed_at = now(),
+                updated_at = now()
+          WHERE source_candidate_id = $1
+            AND task_type = 'candidate_deep_review'`,
+        [sourceId],
+      )
+      await database.query(
+        `UPDATE source_candidates
+            SET status = 'completed',
+                updated_at = now()
+          WHERE id = $1`,
+        [sourceId],
+      )
     } finally {
       await rm(scratch, { recursive: true, force: true })
     }
