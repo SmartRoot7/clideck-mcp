@@ -6,6 +6,7 @@ import { resolve } from 'node:path'
 import { serveStatic } from '@hono/node-server/serve-static'
 import {
   activeSourceDetailSchema,
+  activeSourceLanesSchema,
   agentRunsSchema,
   approvalsSchema,
   conflictsSchema,
@@ -22,6 +23,8 @@ import {
   provenanceSchema,
   qualitySchema,
   releasesSchema,
+  reviewExceptionDetailSchema,
+  reviewExceptionsSchema,
   sessionSchema,
   sourcesSchema
 } from '@clideck/admin-contracts'
@@ -419,6 +422,39 @@ export function createAdminUiApp(dependencies: AdminUiDependencies) {
       activeSourceDetailSchema,
     ),
   )
+  app.get('/admin/api/v1/active-sources', (context) =>
+    readEndpoint(
+      context,
+      '/admin/v1/active-sources',
+      activeSourceLanesSchema,
+    ),
+  )
+  app.get('/admin/api/v1/review-exceptions', (context) => {
+    const status = context.req.query('status')
+    const suffix =
+      status === 'manual_exception' || status === 'quarantined'
+        ? `?status=${status}`
+        : ''
+    return readEndpoint(
+      context,
+      `/admin/v1/review-exceptions${suffix}`,
+      reviewExceptionsSchema,
+    )
+  })
+  app.get(
+    '/admin/api/v1/review-exceptions/:candidateId',
+    async (context) => {
+      const candidateId = context.req.param('candidateId')
+      if (!UUID_SCHEMA.safeParse(candidateId).success) {
+        return context.json({ error: 'invalid_candidate_id' }, 400)
+      }
+      return await readEndpoint(
+        context,
+        `/admin/v1/review-exceptions/${candidateId}`,
+        reviewExceptionDetailSchema,
+      )
+    },
+  )
   app.get('/admin/api/v1/knowledge', (context) => {
     const query = new URLSearchParams()
     for (const name of [
@@ -567,6 +603,26 @@ export function createAdminUiApp(dependencies: AdminUiDependencies) {
       parsed.data.coverage_target_id,
     )
   })
+  app.post(
+    '/admin/api/v1/review-exceptions/:candidateId/action',
+    async (context) => {
+      const candidateId = context.req.param('candidateId')
+      const parsed = z.object({
+        action: z.enum(['retry_deep', 'publish', 'reject']),
+        reason: z.string().trim().min(5).max(2_000)
+      }).strict().safeParse(await context.req.json<unknown>())
+      if (!UUID_SCHEMA.safeParse(candidateId).success || !parsed.success) {
+        return context.json({ error: 'invalid_input' }, 400)
+      }
+      return mutationEndpoint(
+        context,
+        `/admin/v1/review-exceptions/${candidateId}/action`,
+        parsed.data,
+        `Review exception ${parsed.data.action} accepted.`,
+        candidateId,
+      )
+    },
+  )
   app.post('/admin/api/v1/tasks/:taskId/action', async (context) => {
     const taskId = context.req.param('taskId')
     const parsed = z.object({

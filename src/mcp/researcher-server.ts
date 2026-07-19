@@ -6,6 +6,7 @@ import type { Database } from '../db.js'
 import type { Logger } from '../logger.js'
 import {
   candidateAnalysisSubmissionSchema,
+  candidateDeepReviewSubmissionSchema,
   candidateVerificationSubmissionSchema,
   claimPipelineTask,
   discoverySubmissionSchema,
@@ -18,6 +19,7 @@ import {
   agentRunResultSchema,
   recordAgentRunResult,
   submitCandidateAnalysis,
+  submitCandidateDeepReview,
   submitCandidateVerification,
   submitSourceDiscovery
 } from '../domain/pipeline.js'
@@ -188,6 +190,32 @@ export function createResearcherMcpServer(
       'submit_candidate_verification',
       async (input) =>
         submitCandidateVerification(
+          dependencies.database,
+          dependencies.config,
+          input,
+          dependencies.researcherId,
+        ),
+    ),
+  )
+
+  server.registerTool(
+    'submit_candidate_deep_review',
+    {
+      description:
+        'Submit the independent automatic deep-review result for every leased candidate. Medium reasoning is accepted only for a scheduler-authorized retry.',
+      inputSchema: candidateDeepReviewSubmissionSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false
+      }
+    },
+    wrapResearcherTool(
+      dependencies,
+      'submit_candidate_deep_review',
+      async (input) =>
+        submitCandidateDeepReview(
           dependencies.database,
           dependencies.config,
           input,

@@ -13,7 +13,7 @@ Branch policy: `main` only; completed stages are committed and pushed directly.
 
 ## Current focus
 
-`D2.3 / 0.6.1 — exact read-only copy of the production admin`
+`0.7 — production rollout and initial throughput observation`
 
 ## Baseline
 
@@ -55,6 +55,112 @@ Verification:
 - local check, tests, and build passed as recorded above.
 
 Completed: 2026-07-19
+
+## 0.7 — High-performance autonomous pipeline
+
+### [x] P0.7.1 — Automatic candidate resolution
+
+Goal: remove the operator from the normal verification path without weakening
+the publication policy.
+
+Delivered:
+
+- the normal path is `analyzed → verified → published`;
+- unresolved candidates enter batched `deep_review` instead of
+  `manual_review`;
+- an independent Luna low pass can repair evidence-backed structure and a
+  medium pass is allowed only after an unresolved low pass;
+- unresolved low-value cases enter timed quarantine; at most three dangerous
+  or high-value root causes per day become `manual_exception`;
+- lease expiry and retry exhaustion return work to automatic resolution;
+- a publication preflight failure isolates one candidate and never rolls back
+  the valid source package.
+
+Verification:
+
+- model policy rejects every non-Luna AI run and rejects medium reasoning
+  outside `candidate_deep_review`;
+- dangerous candidates cannot pass without rollback and deterministic risk
+  classification;
+- repaired payload hashes are recorded in verification receipts without
+  changing candidate identity or creating duplicates.
+
+Completed: 2026-07-19
+
+### [x] P0.7.2 — Fast extraction and work-conserving scheduling
+
+Goal: make executor count translate into published knowledge rather than
+additional discovery and per-fragment AI overhead.
+
+Delivered:
+
+- Domain Kit exposes an optional pack-owned `DeterministicExtractor`;
+- Network Pack mechanically extracts structured command-reference sections in
+  batches of 100 and sends only ambiguous sections to Luna;
+- analysis batches accept 16 fragments / 64 KiB / up to 50 candidates;
+- verification batches accept 50 candidates and start at 32 candidates,
+  15 seconds, or source-analysis completion;
+- four independent active-source slots keep analysis, verification, and deep
+  review supplied concurrently;
+- source discovery maintains a 20-document buffer and official collections
+  expand mechanically with HTTPS, vendor-domain, redirect, DNS/IP SSRF,
+  depth, page, and link limits;
+- repeated discovery queries are cooled down and collection metrics track
+  unique yield and avoided duplicates.
+
+Completed: 2026-07-19
+
+### [x] P0.7.3 — Non-blocking publication and reconciliation
+
+Goal: recover existing throughput and reduce release overhead without changing
+immutable revision semantics.
+
+Delivered:
+
+- ready packages coalesce into release windows of up to 1,000 revisions;
+- candidate revision creation and content identity are idempotent;
+- release activation remains serialized with PostgreSQL transaction advisory
+  locking while extraction continues;
+- source completion distinguishes clean completion from automatic exceptions;
+- legacy `manual_review` rows migrate to deep review, recoverable failed
+  sources return to verification, and failed publication tasks receive
+  reconciliation receipts;
+- valid candidates from recovered sources publish without duplicating existing
+  revisions.
+
+Completed: 2026-07-19
+
+### [x] P0.7.4 — Shared admin/demo observability
+
+Delivered:
+
+- Overview reports projected publications/day, automatic resolution,
+  executor utilization, batch sizes, discovery yield, publication failures,
+  and deep-review throughput;
+- Active Sources shows four real source lanes;
+- Pipeline includes Deep review;
+- Review Exceptions exposes rare manual exceptions and quarantined records,
+  with policy-gated retry, publish, and reject actions for `super_admin`;
+- `/admin` and `/demo` still use the same 17-page `OperationsApp`; demo reads
+  the same production contracts, redacts source identity server-side, and
+  cannot issue mutations.
+
+Completed: 2026-07-19
+
+### [~] P0.7.5 — Quality gate, deployment, and observation
+
+Acceptance:
+
+- migration 014 applies both to a clean database and a restored production
+  snapshot;
+- PostgreSQL integration tests run without skip;
+- typecheck, all tests, production build, product eval, and security checks
+  pass;
+- backup precedes rollout, pipeline Pause stops Luna, production SHA matches
+  `main`, and Resume restores four unique executor lanes;
+- initial source-to-release smoke test passes without a package-wide rollback;
+- rolling throughput is observed after deployment; 2-hour and 24-hour figures
+  are reported only after those windows actually elapse.
 
 ### [x] D1.1 — `@clideck/domain-kit`
 

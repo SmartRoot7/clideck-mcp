@@ -19,9 +19,12 @@ import {
   createInflate
 } from 'node:zlib'
 
+import { networkDomainPack } from '@clideck/domain-network'
+import { CorePolicyError } from '@clideck/domain-kit'
 import { z } from 'zod'
 
 import type { AppConfig } from '../config.js'
+import { sha256Label } from '../crypto.js'
 import type { Database } from '../db.js'
 import { withTransaction } from '../db.js'
 import type { Logger } from '../logger.js'
@@ -31,12 +34,14 @@ import {
   claimMechanicalPipelineTask,
   completeMechanicalPipelineTask,
   failPipelineTask,
+  pipelineCandidatePayloadSchema,
   type PipelineTaskRow
 } from './pipeline.js'
 import {
   createKnowledgeRevision,
   publishKnowledgeBatch
 } from './publication.js'
+import { enforceKnowledgeRisk } from './risk.js'
 
 const execFileAsync = promisify(execFile)
 const maxOcrPages = 100
@@ -73,6 +78,18 @@ function extensionForMediaType(mediaType: string): string {
   return '.html'
 }
 
+export function isCandidatePublicationValidationError(
+  error: unknown,
+): boolean {
+  const message = error instanceof Error ? error.message : ''
+  return (
+    error instanceof CorePolicyError ||
+    error instanceof z.ZodError ||
+    message.startsWith('CANDIDATE_') ||
+    message.startsWith('NETWORK_DOMAIN_CANDIDATE_INVALID')
+  )
+}
+
 async function fetchPublicDocument(
   initialUrl: string,
   maxBytes: number,
@@ -101,7 +118,7 @@ async function fetchPublicDocument(
               'application/pdf,text/html,application/xhtml+xml,text/plain;q=0.9',
             'accept-encoding': 'br, gzip, deflate',
             'accept-language': 'en-US,en;q=0.8',
-            'user-agent': 'CliDeck-MCP-Knowledge-Pipeline/0.6'
+            'user-agent': 'CliDeck-MCP-Knowledge-Pipeline/0.7'
           }
         },
         (incoming) => {
@@ -222,6 +239,273 @@ function htmlToText(html: string): string {
     .replace(/[ \t]{2,}/g, ' ')
     .replace(/\n{4,}/g, '\n\n\n')
     .trim()
+}
+
+function canonicalCollectionUrl(value: string, base: string): string | null {
+  try {
+    const url = new URL(value, base)
+    if (url.protocol !== 'https:') return null
+    url.hash = ''
+    for (const name of [...url.searchParams.keys()]) {
+      if (/^(?:utm_|ref$|source$|campaign$)/i.test(name)) {
+        url.searchParams.delete(name)
+      }
+    }
+    url.pathname = url.pathname.replace(/\/{2,}/g, '/')
+    return url.toString()
+  } catch {
+    return null
+  }
+}
+
+function collectionLinks(html: string, base: string): string[] {
+  const links = new Set<string>()
+  const pattern = /<a\b[^>]*\bhref\s*=\s*["']([^"'#]+)["']/gi
+  for (const match of html.matchAll(pattern)) {
+    const canonical = canonicalCollectionUrl(match[1] ?? '', base)
+    if (canonical) links.add(canonical)
+  }
+  return [...links]
+}
+
+function isVendorCollectionHost(
+  hostname: string,
+  vendorDomain: string,
+): boolean {
+  const host = hostname.toLowerCase()
+  return host === vendorDomain || host.endsWith(`.${vendorDomain}`)
+}
+
+function collectionSourceTitle(url: string): string {
+  const segment =
+    new URL(url).pathname.split('/').filter(Boolean).at(-1) ??
+    'Official vendor document'
+  try {
+    return decodeURIComponent(segment).slice(0, 500)
+  } catch {
+    return segment.slice(0, 500)
+  }
+}
+
+function collectionDocumentType(url: string): string {
+  const value = new URL(url).pathname.toLowerCase()
+  if (/(?:command|cli)[_-]?(?:reference|ref|guide)/.test(value)) {
+    return 'command_reference'
+  }
+  if (/(?:release|rn)[_-]?(?:note|notes)?/.test(value)) {
+    return 'release_notes'
+  }
+  if (/(?:security|advisory|psirt|cve)/.test(value)) {
+    return 'security_advisory'
+  }
+  if (/(?:upgrade|install)/.test(value)) return 'upgrade_guide'
+  if (/(?:configuration|config)[_-]?(?:guide|reference)?/.test(value)) {
+    return 'configuration_guide'
+  }
+  return 'official_vendor_document'
+}
+
+async function expandNextSourceCollection(
+  database: Database,
+  logger: Logger,
+): Promise<boolean> {
+  const collection = await withTransaction(database, async (client) => {
+    const selected = await client.query<{
+      id: string
+      coverage_target_id: string
+      canonical_url: string
+      vendor_domain: string
+      crawl_depth: number
+      link_limit: number
+      cursor: { queue?: Array<{ url: string; depth: number }> }
+    }>(
+      `SELECT
+         id,
+         coverage_target_id,
+         canonical_url,
+         vendor_domain,
+         crawl_depth,
+         link_limit,
+         cursor
+       FROM source_collections
+       WHERE (
+         status = 'active' AND next_scan_at <= now()
+       ) OR (
+         status = 'refreshing'
+         AND updated_at <= now() - interval '10 minutes'
+       )
+       ORDER BY next_scan_at, updated_at
+       LIMIT 1
+       FOR UPDATE SKIP LOCKED`,
+    )
+    if (!selected.rows[0]) return null
+    await client.query(
+      `UPDATE source_collections
+          SET status = 'refreshing',
+              updated_at = now()
+        WHERE id = $1`,
+      [selected.rows[0].id],
+    )
+    return selected.rows[0]
+  })
+  if (!collection) return false
+
+  const initialQueue = collection.cursor.queue?.length
+    ? collection.cursor.queue
+    : [{ url: collection.canonical_url, depth: 0 }]
+  const queue = [...initialQueue]
+  const seen = new Set<string>()
+  const discovered = new Set<string>()
+  let pages = 0
+  try {
+    while (
+      queue.length > 0 &&
+      pages < 20 &&
+      discovered.size < collection.link_limit
+    ) {
+      const current = queue.shift()!
+      if (seen.has(current.url)) continue
+      seen.add(current.url)
+      const host = new URL(current.url).hostname.toLowerCase()
+      if (!isVendorCollectionHost(host, collection.vendor_domain)) {
+        continue
+      }
+      const response = await fetchPublicDocument(
+        current.url,
+        2 * 1024 * 1024,
+      )
+      pages += 1
+      if (
+        !isVendorCollectionHost(
+          new URL(response.finalUrl).hostname,
+          collection.vendor_domain,
+        )
+      ) {
+        continue
+      }
+      if (
+        response.mediaType !== 'text/html' &&
+        response.mediaType !== 'application/xhtml+xml'
+      ) {
+        discovered.add(response.finalUrl)
+        continue
+      }
+      for (const link of collectionLinks(
+        response.body.toString('utf8'),
+        response.finalUrl,
+      )) {
+        const linkHost = new URL(link).hostname.toLowerCase()
+        if (!isVendorCollectionHost(
+          linkHost,
+          collection.vendor_domain,
+        )) {
+          continue
+        }
+        if (
+          /\.(?:pdf|txt)(?:\?|$)/i.test(link) ||
+          /(?:command|configuration|diagnostic|manual|reference|release|advisory|upgrade)/i.test(
+            link,
+          )
+        ) {
+          discovered.add(link)
+        }
+        if (
+          current.depth < collection.crawl_depth &&
+          !seen.has(link) &&
+          queue.length < collection.link_limit
+        ) {
+          queue.push({ url: link, depth: current.depth + 1 })
+        }
+        if (discovered.size >= collection.link_limit) break
+      }
+    }
+
+    let inserted = 0
+    let duplicates = 0
+    await withTransaction(database, async (client) => {
+      for (const url of discovered) {
+        const result = await client.query<{ id: string }>(
+          `INSERT INTO source_candidates (
+             coverage_target_id,
+             canonical_url,
+             document_type,
+             title,
+             status,
+             discovered_by
+           )
+           VALUES (
+             $1, $2, $3, $4, 'approved',
+             'deterministic-source-collection'
+           )
+           ON CONFLICT (canonical_url) DO NOTHING
+           RETURNING id`,
+          [
+            collection.coverage_target_id,
+            url,
+            collectionDocumentType(url),
+            collectionSourceTitle(url)
+          ],
+        )
+        if (result.rows[0]) inserted += 1
+        else duplicates += 1
+      }
+      const remaining = queue.slice(0, collection.link_limit)
+      await client.query(
+        `UPDATE source_collections
+            SET status = 'active',
+                cursor = $2::jsonb,
+                last_scanned_at = now(),
+                next_scan_at = CASE
+                  WHEN jsonb_array_length($2::jsonb->'queue') > 0
+                  THEN now()
+                  WHEN $3 > 0 THEN now() + interval '7 days'
+                  WHEN consecutive_empty_scans = 0
+                  THEN now() + interval '24 hours'
+                  ELSE now() + interval '3 days'
+                END,
+                consecutive_empty_scans = CASE
+                  WHEN $3 > 0 THEN 0
+                  ELSE least(100, consecutive_empty_scans + 1)
+                END,
+                unique_yield = unique_yield + $3,
+                duplicates_avoided = duplicates_avoided + $4,
+                updated_at = now()
+          WHERE id = $1`,
+        [
+          collection.id,
+          JSON.stringify({ queue: remaining }),
+          inserted,
+          duplicates
+        ],
+      )
+    })
+    logger.info(
+      {
+        collectionId: collection.id,
+        pages,
+        inserted,
+        duplicates
+      },
+      'Expanded official source collection deterministically',
+    )
+    return true
+  } catch (error) {
+    await database.query(
+      `UPDATE source_collections
+          SET status = 'active',
+              next_scan_at = now() + interval '24 hours',
+              consecutive_empty_scans =
+                least(100, consecutive_empty_scans + 1),
+              updated_at = now()
+        WHERE id = $1`,
+      [collection.id],
+    )
+    logger.warn(
+      { err: error, collectionId: collection.id },
+      'Official source collection expansion was deferred',
+    )
+    return true
+  }
 }
 
 async function ocrPdfPages(
@@ -686,13 +970,166 @@ async function chunkSource(
       [payload.source_id],
     )
   })
+  const fastPath = await runDeterministicFastPath(
+    database,
+    claimed.task,
+    row.id,
+    payload,
+  )
   return {
     fragments_created: fragments.length,
     fragment_bytes: fragments.reduce(
       (total, fragment) =>
         total + Buffer.byteLength(fragment.content, 'utf8'),
       0,
+    ),
+    deterministic_candidates_created: fastPath.candidatesCreated,
+    deterministic_fragments_handled: fastPath.fragmentsHandled
+  }
+}
+
+async function runDeterministicFastPath(
+  database: Database,
+  task: PipelineTaskRow,
+  artifactId: string,
+  source: z.infer<typeof sourcePayloadSchema>,
+): Promise<{ candidatesCreated: number; fragmentsHandled: number }> {
+  const extractor = networkDomainPack.deterministicExtractor
+  if (!extractor) return { candidatesCreated: 0, fragmentsHandled: 0 }
+
+  const context = await database.query<{
+    vendor_slug: string
+    operating_system_slug: string
+    model: string | null
+    version_branch: string | null
+  }>(
+    `SELECT
+       ct.vendor_slug,
+       ct.operating_system_slug,
+       ct.model,
+       ct.version_branch
+     FROM coverage_targets ct
+     WHERE ct.id = $1`,
+    [task.coverage_target_id],
+  )
+  const target = context.rows[0]
+  if (!target) return { candidatesCreated: 0, fragmentsHandled: 0 }
+
+  const inputSource = {
+    canonical_url: source.canonical_url,
+    document_type: source.document_type,
+    title: source.title,
+    document_version: source.document_version ?? null,
+    document_date: source.document_date ?? null
+  }
+  const extractionContext = {
+    vendor_slug: target.vendor_slug,
+    operating_system_slug: target.operating_system_slug,
+    platform_slug:
+      target.model && /^[a-z0-9][a-z0-9-]{1,62}$/.test(target.model)
+        ? target.model
+        : null,
+    version_min: target.version_branch,
+    version_max: target.version_branch
+  }
+  const verifiedAt = new Date().toISOString().slice(0, 10)
+  const supportProbe = {
+    fragments: [],
+    source: inputSource,
+    context: extractionContext,
+    verified_at: verifiedAt
+  }
+  if (!extractor.supports(supportProbe)) {
+    return { candidatesCreated: 0, fragmentsHandled: 0 }
+  }
+
+  let candidatesCreated = 0
+  const handled = new Set<string>()
+  let lastOrdinal = -1
+  for (;;) {
+    const fragments = await database.query<{
+      id: string
+      ordinal: number
+      section_title: string | null
+      source_locator: string | null
+      content: string
+      content_hash: string
+    }>(
+      `SELECT
+         id, ordinal, section_title, source_locator, content, content_hash
+       FROM source_fragments
+       WHERE source_artifact_id = $1
+         AND status = 'queued'
+         AND ordinal > $2
+       ORDER BY ordinal
+       LIMIT $3`,
+      [artifactId, lastOrdinal, extractor.max_fragments_per_batch],
     )
+    if (fragments.rows.length === 0) break
+    lastOrdinal = fragments.rows.at(-1)?.ordinal ?? lastOrdinal
+    const result = extractor.extract({
+      fragments: fragments.rows,
+      source: inputSource,
+      context: extractionContext,
+      verified_at: verifiedAt
+    })
+    await withTransaction(database, async (client) => {
+      for (const entry of result.candidates) {
+        const parsed = networkDomainPack.candidateSchema.parse(
+          entry.candidate,
+        )
+        const validation = networkDomainPack.validateCandidate(parsed)
+        if (!validation.valid) continue
+        const candidate = enforceKnowledgeRisk(
+          pipelineCandidatePayloadSchema.parse(parsed),
+        )
+        const serialized = JSON.stringify(candidate)
+        const inserted = await client.query<{ id: string }>(
+          `INSERT INTO knowledge_candidates (
+             pipeline_task_id,
+             source_fragment_id,
+             stable_key,
+             payload,
+             content_hash,
+             dangerous,
+             confidence,
+             quality_score
+           )
+           VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8)
+           ON CONFLICT (content_hash) DO NOTHING
+           RETURNING id`,
+          [
+            task.id,
+            entry.fragment_id,
+            candidate.stable_key,
+            serialized,
+            sha256Label(serialized),
+            candidate.dangerous,
+            candidate.confidence,
+            candidate.quality_score
+          ],
+        )
+        if (inserted.rows[0]) candidatesCreated += 1
+      }
+      if (result.handled_fragment_ids.length > 0) {
+        await client.query(
+          `UPDATE source_fragments
+              SET status = 'analyzed',
+                  updated_at = now()
+            WHERE id = ANY($1::uuid[])
+              AND source_artifact_id = $2
+              AND status = 'queued'`,
+          [result.handled_fragment_ids, artifactId],
+        )
+      }
+    })
+    for (const fragmentId of result.handled_fragment_ids) {
+      handled.add(fragmentId)
+    }
+  }
+  return {
+    candidatesCreated,
+    fragmentsHandled: handled.size
   }
 }
 
@@ -701,39 +1138,141 @@ async function publishSource(
   claimed: ClaimedMechanicalTask,
 ): Promise<Record<string, unknown>> {
   const payload = sourcePayloadSchema.parse(claimed.task.payload)
-  return withTransaction(database, async (client) => {
-    const candidates = await client.query<{
-      id: string
-      payload: unknown
-    }>(
-      `SELECT DISTINCT ON (kc.stable_key) kc.id, kc.payload
+  const readySources = await database.query<{ source_candidate_id: string }>(
+    `SELECT DISTINCT source_candidate_id
+     FROM pipeline_tasks
+     WHERE task_type = 'source_publication'
+       AND status = 'queued'
+       AND source_candidate_id IS NOT NULL
+     ORDER BY source_candidate_id
+     LIMIT 32`,
+  )
+  const sourceIds = [
+    payload.source_id,
+    ...readySources.rows.map((row) => row.source_candidate_id)
+  ].filter((value, index, values) => values.indexOf(value) === index)
+  const candidates = await database.query<{
+    id: string
+    payload: unknown
+    revision_id: string | null
+  }>(
+      `SELECT DISTINCT ON (kc.stable_key)
+         kc.id,
+         kc.payload,
+         kc.revision_id
        FROM knowledge_candidates kc
        JOIN pipeline_tasks pt ON pt.id = kc.pipeline_task_id
-       WHERE pt.source_candidate_id = $1
+       WHERE pt.source_candidate_id = ANY($1::uuid[])
          AND kc.status = 'verified'
-       ORDER BY kc.stable_key, kc.quality_score DESC, kc.created_at DESC`,
-      [payload.source_id],
-    )
+       ORDER BY kc.stable_key, kc.quality_score DESC, kc.created_at DESC
+       LIMIT 1000`,
+    [sourceIds],
+  )
 
-    const revisions: {
-      candidateId: string
-      itemId: string
-      revisionId: string
-    }[] = []
-    for (const candidate of candidates.rows) {
-      const created = await createKnowledgeRevision(client, candidate.payload)
+  const revisions: Array<{
+    candidateId: string
+    itemId: string
+    revisionId: string
+  }> = []
+  let exceptions = 0
+  for (const candidate of candidates.rows) {
+    try {
+      const created = await withTransaction(database, async (client) => {
+        await client.query(
+          `SELECT pg_advisory_xact_lock(
+             hashtext('clideck-mcp-candidate-publication')
+           )`,
+        )
+        const current = await client.query<{
+          revision_id: string | null
+          status: string
+        }>(
+          `SELECT revision_id, status
+           FROM knowledge_candidates
+           WHERE id = $1
+           FOR UPDATE`,
+          [candidate.id],
+        )
+        if (!current.rows[0] || current.rows[0].status !== 'verified') {
+          throw new Error('CANDIDATE_ALREADY_PROCESSED')
+        }
+        if (current.rows[0].revision_id) {
+          const existing = await client.query<{
+            item_id: string
+            revision_id: string
+          }>(
+            `SELECT
+               knowledge_item_id AS item_id,
+               id AS revision_id
+             FROM knowledge_revisions
+             WHERE id = $1`,
+            [current.rows[0].revision_id],
+          )
+          if (existing.rows[0]) {
+            return {
+              itemId: existing.rows[0].item_id,
+              revisionId: existing.rows[0].revision_id
+            }
+          }
+        }
+        const createdRevision = await createKnowledgeRevision(
+          client,
+          candidate.payload,
+        )
+        await client.query(
+          `UPDATE knowledge_candidates
+              SET revision_id = $2,
+                  updated_at = now()
+            WHERE id = $1
+              AND status = 'verified'`,
+          [candidate.id, createdRevision.revisionId],
+        )
+        return createdRevision
+      })
       revisions.push({
         candidateId: candidate.id,
         ...created
       })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : ''
+      if (
+        message === 'CANDIDATE_ALREADY_PROCESSED'
+      ) {
+        continue
+      }
+      if (!isCandidatePublicationValidationError(error)) {
+        throw error
+      }
+      exceptions += 1
+      const policyCode =
+        error instanceof CorePolicyError ? `${error.code}: ` : ''
+      await database.query(
+        `UPDATE knowledge_candidates
+            SET status = 'deep_review',
+                deep_review_task_id = NULL,
+                resolution_reason = $2,
+                next_review_at = now(),
+                updated_at = now()
+          WHERE id = $1
+            AND status = 'verified'`,
+        [
+          candidate.id,
+          `Publication preflight rejected candidate: ${policyCode}${message}`
+            .slice(0, 4_000)
+        ],
+      )
     }
+  }
 
+  return withTransaction(database, async (client) => {
     let release: { releaseId: string; sequence: number } | null = null
     if (revisions.length > 0) {
       release = await publishKnowledgeBatch(
         client,
         revisions.map(({ itemId, revisionId }) => ({ itemId, revisionId })),
-        `Published source package: ${payload.title}`,
+        sourceIds.length > 1
+          ? `Published ${sourceIds.length} ready source packages in one release window.`
+          : `Published source package: ${payload.title}`,
       )
       for (const revision of revisions) {
         await client.query(
@@ -755,9 +1294,9 @@ async function publishSource(
             JOIN pipeline_tasks pt ON pt.id = kc.pipeline_task_id
             WHERE kc.source_fragment_id = sf.id
               AND kc.status = 'published'
-              AND pt.source_candidate_id = $1
+              AND pt.source_candidate_id = ANY($1::uuid[])
           )`,
-        [payload.source_id],
+        [sourceIds],
       )
       await client.query(
         `UPDATE agent_runs ar
@@ -770,21 +1309,34 @@ async function publishSource(
           WHERE ar.pipeline_task_id IN (
             SELECT pt.id
             FROM pipeline_tasks pt
-            WHERE pt.source_candidate_id = $1
+            WHERE pt.source_candidate_id = ANY($1::uuid[])
           )`,
-        [payload.source_id],
+        [sourceIds],
       )
     }
 
+    const remaining = await client.query<{ count: number }>(
+      `SELECT count(*)::int AS count
+       FROM knowledge_candidates candidate
+       JOIN pipeline_tasks task ON task.id = candidate.pipeline_task_id
+       WHERE task.source_candidate_id = $1
+         AND candidate.status = 'verified'`,
+      [payload.source_id],
+    )
+    const remainingVerified = remaining.rows[0]?.count ?? 0
     await client.query(
       `UPDATE source_candidates
-          SET status = 'completed',
+          SET status = CASE
+                WHEN $3 > 0 THEN 'verifying'
+                WHEN $2 > 0 THEN 'completed_with_exceptions'
+                ELSE 'completed'
+              END,
               failure_code = NULL,
               failure_message = NULL,
-              completed_at = now(),
+              completed_at = CASE WHEN $3 > 0 THEN NULL ELSE now() END,
               updated_at = now()
         WHERE id = $1`,
-      [payload.source_id],
+      [payload.source_id, exceptions, remainingVerified],
     )
     await client.query(
       `UPDATE coverage_targets ct
@@ -802,16 +1354,30 @@ async function publishSource(
         WHERE id = $1`,
       [claimed.task.coverage_target_id, revisions.length],
     )
-    await client.query(
-      `UPDATE pipeline_settings
-          SET active_source_id = NULL,
-              updated_at = now(),
-              updated_by = 'source-publisher'
-        WHERE singleton AND active_source_id = $1`,
-      [payload.source_id],
-    )
+    if (remainingVerified === 0) {
+      await client.query(
+        `DELETE FROM active_source_slots
+         WHERE source_candidate_id = $1`,
+        [payload.source_id],
+      )
+      await client.query(
+        `UPDATE pipeline_settings
+            SET active_source_id = (
+                  SELECT source_candidate_id
+                  FROM active_source_slots
+                  ORDER BY slot_number
+                  LIMIT 1
+                ),
+                updated_at = now(),
+                updated_by = 'source-publisher'
+          WHERE singleton AND active_source_id = $1`,
+        [payload.source_id],
+      )
+    }
     return {
       revisions_published: revisions.length,
+      candidates_deferred_to_deep_review: exceptions,
+      candidates_remaining_for_supplemental_package: remainingVerified,
       release_id: release?.releaseId ?? null,
       release_sequence: release?.sequence ?? null
     }
@@ -855,7 +1421,7 @@ export async function processNextPipelineTask(
     config,
     workerId,
   )
-  if (!claimed) return false
+  if (!claimed) return expandNextSourceCollection(database, logger)
 
   try {
     const result = await executeMechanicalTask(database, config, claimed)

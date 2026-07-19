@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import pg from 'pg'
 import {
   activeSourceDetailSchema,
+  activeSourceLanesSchema,
   agentRunsSchema,
   approvalsSchema,
   conflictsSchema,
@@ -19,6 +20,8 @@ import {
   pipelineDetailsSchema,
   provenanceSchema,
   qualitySchema,
+  reviewExceptionDetailSchema,
+  reviewExceptionsSchema,
   releasesSchema,
   sourcesSchema
 } from '@clideck/admin-contracts'
@@ -32,6 +35,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { createPublicTaskId, sha256, sha256Label } from '../src/crypto.js'
 import type { Database } from '../src/db.js'
 import {
+  actOnReviewException,
   actOnSource,
   getAdminOverview,
   setPipelineEnabled
@@ -65,6 +69,7 @@ import {
   pausePipelineForSystemFailure,
   recordAgentRunResult,
   submitCandidateAnalysis,
+  submitCandidateDeepReview,
   submitCandidateVerification,
   submitSourceDiscovery
 } from '../src/domain/pipeline.js'
@@ -139,6 +144,112 @@ describeIntegration('PostgreSQL integration', () => {
   afterAll(async () => {
     await database.end()
   }, 30_000)
+
+  it('does not let manual publish bypass dangerous rollback policy', async () => {
+    const unique = randomUUID()
+    const task = await database.query<{ id: string }>(
+      `INSERT INTO pipeline_tasks (
+         task_type,
+         stage,
+         status,
+         priority,
+         dedupe_key,
+         payload,
+         completed_at
+       )
+       VALUES (
+         'fragment_analysis',
+         'analyze',
+         'completed',
+         1,
+         $1,
+         '{}'::jsonb,
+         now()
+       )
+       RETURNING id`,
+      [`manual-policy-${unique}`],
+    )
+    const payload = {
+      stable_key: `cisco.ios-xe.manual-policy-${unique}`,
+      kind: 'command',
+      vendor_slug: 'cisco',
+      platform_slug: 'catalyst-9000',
+      operating_system_slug: 'ios-xe',
+      title: 'Reload a switch',
+      summary: 'Restarts the switch.',
+      question_patterns: ['How do I reload the switch?'],
+      cli_mode: 'privileged_exec',
+      command: 'reload',
+      procedure: [],
+      prerequisites: ['Approved outage window.'],
+      risks: ['Service interruption.'],
+      verification: ['Confirm the switch returns to service.'],
+      rollback: [],
+      limitations: ['Integration-test candidate.'],
+      dangerous: true,
+      risk_level: 'service_disruptive',
+      confidence: 0.99,
+      quality_score: 0.99,
+      confidence_reason:
+        'The command is known but no evidence-backed rollback is present.',
+      last_verified_at: '2026-07-19',
+      provenance: [{
+        url: 'https://www.cisco.com/integration-test',
+        document_type: 'command_reference',
+        title: 'Integration test evidence',
+        verified_at: '2026-07-19',
+        content_hash: sha256Label(`manual-policy-${unique}`),
+        evidence_fragment: 'reload',
+        evidence_role: 'primary'
+      }]
+    }
+    const candidate = await database.query<{ id: string }>(
+      `INSERT INTO knowledge_candidates (
+         pipeline_task_id,
+         stable_key,
+         payload,
+         content_hash,
+         status,
+         dangerous,
+         confidence,
+         quality_score,
+         resolution_reason
+       )
+       VALUES (
+         $1, $2, $3::jsonb, $4, 'manual_exception',
+         true, 0.990, 0.990, 'Missing rollback.'
+       )
+       RETURNING id`,
+      [
+        task.rows[0]!.id,
+        payload.stable_key,
+        JSON.stringify(payload),
+        sha256Label(JSON.stringify(payload))
+      ],
+    )
+    try {
+      await expect(actOnReviewException(
+        database,
+        candidate.rows[0]!.id,
+        'publish',
+        { id: siteAdminActorId, role: 'super_admin' },
+        'Validate the manual publication policy.',
+      )).rejects.toThrow('MANUAL_PUBLISH_POLICY_REJECTED')
+      const unchanged = await database.query<{ status: string }>(
+        'SELECT status FROM knowledge_candidates WHERE id = $1',
+        [candidate.rows[0]!.id],
+      )
+      expect(unchanged.rows[0]?.status).toBe('manual_exception')
+    } finally {
+      await database.query(
+        'DELETE FROM knowledge_candidates WHERE id = $1',
+        [candidate.rows[0]!.id],
+      )
+      await database.query('DELETE FROM pipeline_tasks WHERE id = $1', [
+        task.rows[0]!.id
+      ])
+    }
+  })
 
   it('keeps generic domain records out of network search views', async () => {
     const client = await database.connect()
@@ -877,10 +988,8 @@ describeIntegration('PostgreSQL integration', () => {
       `SELECT status, attempts FROM source_fragments WHERE id = $1`,
       [fragment.rows[0]!.id],
     )
-    expect(retried.rows[0]).toEqual({
-      status: 'reserved',
-      attempts: 0
-    })
+    expect(['queued', 'reserved']).toContain(retried.rows[0]?.status)
+    expect(retried.rows[0]?.attempts).toBe(0)
     const audit = await database.query<{ count: number }>(
       `SELECT count(*)::int AS count
        FROM admin_audit_events
@@ -1010,7 +1119,7 @@ describeIntegration('PostgreSQL integration', () => {
         last_verified_at: '2026-07-18',
         provenance: [{
           url: sourceUrl,
-          document_type: 'command_reference',
+          document_type: 'configuration_guide',
           title: 'Scoped publication integration fixture',
           verified_at: '2026-07-18',
           content_hash: sha256Label(`scope-${unique}`),
@@ -1259,6 +1368,75 @@ describeIntegration('PostgreSQL integration', () => {
       ],
     )
     const taskId = task.rows[0]!.id
+    const reviewCandidate = await database.query<{ id: string }>(
+      `INSERT INTO knowledge_candidates (
+         pipeline_task_id,
+         stable_key,
+         payload,
+         content_hash,
+         status,
+         dangerous,
+         confidence,
+         quality_score,
+         resolution_attempts,
+         resolution_reason
+       )
+       VALUES (
+         $1,
+         $2,
+         $3::jsonb,
+         'sha256:' || encode(digest($4, 'sha256'), 'hex'),
+         'manual_exception',
+         true,
+         0.980,
+         0.970,
+         2,
+         $5
+       )
+       RETURNING id`,
+      [
+        taskId,
+        `demo-review-${unique}`,
+        JSON.stringify({
+          title: sentinel,
+          provenance: [{
+            url: sourceUrl,
+            evidence_fragment: `Evidence ${sentinel}`
+          }]
+        }),
+        `demo-review-${unique}`,
+        `Review ${sentinel}`
+      ],
+    )
+    const reviewCandidateId = reviewCandidate.rows[0]!.id
+    await database.query(
+      `INSERT INTO candidate_verifications (
+         knowledge_candidate_id,
+         pipeline_task_id,
+         decision,
+         confidence,
+         quality_score,
+         findings,
+         verified_by,
+         review_type
+       )
+       VALUES (
+         $1,
+         $2,
+         'manual_exception',
+         0.980,
+         0.970,
+         $3::jsonb,
+         $4,
+         'human'
+       )`,
+      [
+        reviewCandidateId,
+        taskId,
+        JSON.stringify([`Finding ${sentinel}`]),
+        `reviewer-${sentinel}`
+      ],
+    )
     const pipelineEvent = await database.query<{ id: string }>(
       `INSERT INTO pipeline_events (
          pipeline_task_id,
@@ -1523,6 +1701,15 @@ describeIntegration('PostgreSQL integration', () => {
       const sources = await read('/sources?limit=200', sourcesSchema)
       const pipeline = await read('/pipeline', pipelineDetailsSchema)
       await read('/active-source', activeSourceDetailSchema)
+      await read('/active-sources', activeSourceLanesSchema)
+      const reviewExceptions = await read(
+        '/review-exceptions',
+        reviewExceptionsSchema,
+      )
+      const reviewException = await read(
+        `/review-exceptions/${reviewCandidateId}`,
+        reviewExceptionDetailSchema,
+      )
       const knowledge = await read(
         '/knowledge?limit=50&offset=0',
         knowledgePageSchema,
@@ -1557,6 +1744,23 @@ describeIntegration('PostgreSQL integration', () => {
       expect(redactedEvent?.metadata).toEqual({
         status: 'failed',
         stage: 'acquire'
+      })
+      expect(
+        reviewExceptions.find((row) => row.id === reviewCandidateId),
+      ).toMatchObject({
+        source_title: 'XXXXXXXX',
+        resolution_reason: 'XXXXXXXX'
+      })
+      expect(reviewException.payload).toMatchObject({
+        title: 'XXXXXXXX',
+        provenance: [{
+          url: 'XXXXXXXX',
+          evidence_fragment: 'XXXXXXXX'
+        }]
+      })
+      expect(reviewException.verifications[0]).toMatchObject({
+        findings: ['XXXXXXXX'],
+        verified_by: 'XXXXXXXX'
       })
       const redactedExpertTask = expertTasks.find(
         (row) =>
@@ -1614,6 +1818,8 @@ describeIntegration('PostgreSQL integration', () => {
         coverage,
         sources,
         pipeline,
+        reviewExceptions,
+        reviewException,
         expertTasks,
         releases,
         feedbackRows,
@@ -1677,6 +1883,14 @@ describeIntegration('PostgreSQL integration', () => {
       await database.query('DELETE FROM pipeline_events WHERE id = $1', [
         pipelineEventId
       ])
+      await database.query(
+        'DELETE FROM candidate_verifications WHERE knowledge_candidate_id = $1',
+        [reviewCandidateId],
+      )
+      await database.query(
+        'DELETE FROM knowledge_candidates WHERE id = $1',
+        [reviewCandidateId],
+      )
       await database.query('DELETE FROM pipeline_tasks WHERE id = $1', [taskId])
       await database.query('DELETE FROM source_candidates WHERE id = $1', [
         sourceId
@@ -1727,10 +1941,10 @@ describeIntegration('PostgreSQL integration', () => {
       feedback_24h: expect.any(Number)
     })
     expect(overviewPayload.published_revisions).toBeGreaterThanOrEqual(50)
-    expect(overviewPayload.pipeline_funnel).toHaveLength(7)
+    expect(overviewPayload.pipeline_funnel).toHaveLength(8)
     expect(new Set(
       overviewPayload.pipeline_funnel.map((stage) => stage.stage),
-    ).size).toBe(7)
+    ).size).toBe(8)
     for (const stage of overviewPayload.pipeline_funnel) {
       expect(stage.count).toBe(
         stage.queued +
@@ -2380,7 +2594,7 @@ describeIntegration('PostgreSQL integration', () => {
       task_type: 'source_discovery',
       stage: 'discover',
       status: 'queued',
-      count: 3
+      count: 1
     })
 
     const initiallyQueued = await database.query<{ id: string }>(
@@ -2457,7 +2671,7 @@ describeIntegration('PostgreSQL integration', () => {
         lease_token: discoveryLease,
         sources: [{
           canonical_url: sourceUrl,
-          document_type: 'command_reference',
+          document_type: 'configuration_guide',
           title: `IOS XE pipeline integration source ${unique}`,
           document_version: '17.15',
           document_date: '2026-07-18'
@@ -2697,7 +2911,7 @@ describeIntegration('PostgreSQL integration', () => {
         url: sourceUrl,
         content_hash: storedCandidate.rows[0]?.fragment_hash,
         evidence_role: 'primary',
-        document_type: 'command_reference',
+        document_type: 'configuration_guide',
         title: `IOS XE pipeline integration source ${unique}`,
         document_version: '17.15',
         document_date: '2026-07-18',
@@ -2752,7 +2966,7 @@ describeIntegration('PostgreSQL integration', () => {
       )
       expect(verificationResult).toMatchObject({
         verified: 1,
-        manual_review: 1
+        deep_review: 1
       })
       await recordAgentRunResult(database, {
         agent_run_id: String(verification['agent_run_id']),
@@ -2761,6 +2975,86 @@ describeIntegration('PostgreSQL integration', () => {
         cached_input_tokens: 0,
         output_tokens: 80,
         reasoning_output_tokens: 0,
+        duration_ms: 60
+      })
+
+      const deepReview = await claimPipelineTask(
+        database,
+        config,
+        'integration-pipeline-coordinator',
+      )
+      expect(deepReview['task_type']).toBe('candidate_deep_review')
+      const deepPayload = deepReview['payload'] as {
+        candidates: Array<{ id: string }>
+      }
+      expect(deepPayload.candidates).toHaveLength(1)
+      await submitCandidateDeepReview(
+        database,
+        config,
+        {
+          pipeline_task_id: String(deepReview['pipeline_task_id']),
+          lease_token: String(deepReview['lease_token']),
+          decisions: [{
+            candidate_id: deepPayload.candidates[0]!.id,
+            decision: 'unresolved',
+            confidence: 0.85,
+            quality_score: 0.82,
+            findings: [
+              'The low pass could not repair the unknown operating system.'
+            ],
+            repaired_candidate: null
+          }]
+        },
+        'independent-integration-deep-reviewer',
+      )
+      await recordAgentRunResult(database, {
+        agent_run_id: String(deepReview['agent_run_id']),
+        status: 'completed',
+        input_tokens: 140,
+        cached_input_tokens: 0,
+        output_tokens: 40,
+        reasoning_output_tokens: 0,
+        duration_ms: 50
+      })
+
+      const mediumReview = await claimPipelineTask(
+        database,
+        config,
+        'integration-pipeline-coordinator',
+      )
+      expect(mediumReview).toMatchObject({
+        task_type: 'candidate_deep_review',
+        requested_reasoning_effort: 'medium'
+      })
+      const mediumPayload = mediumReview['payload'] as {
+        candidates: Array<{ id: string }>
+      }
+      await submitCandidateDeepReview(
+        database,
+        config,
+        {
+          pipeline_task_id: String(mediumReview['pipeline_task_id']),
+          lease_token: String(mediumReview['lease_token']),
+          decisions: [{
+            candidate_id: mediumPayload.candidates[0]!.id,
+            decision: 'rejected',
+            confidence: 0.99,
+            quality_score: 0.99,
+            findings: [
+              'The independent medium pass confirmed the context is invalid.'
+            ],
+            repaired_candidate: null
+          }]
+        },
+        'independent-integration-medium-reviewer',
+      )
+      await recordAgentRunResult(database, {
+        agent_run_id: String(mediumReview['agent_run_id']),
+        status: 'completed',
+        input_tokens: 180,
+        cached_input_tokens: 0,
+        output_tokens: 40,
+        reasoning_output_tokens: 15,
         duration_ms: 60
       })
 

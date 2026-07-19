@@ -97,11 +97,14 @@ export const overviewSchema = z.object({
   ai_model: z.string(),
   reasoning_effort: z.string(),
   max_concurrent_ai_runs: scalarNumberSchema,
+  max_active_sources: scalarNumberSchema,
+  max_deep_review_runs: scalarNumberSchema,
   control_generation: scalarNumberSchema,
   pause_requested_at: nullableStringSchema,
   paused_reason: nullableStringSchema,
   pipeline_updated_at: timestampSchema,
   active_source_id: nullableStringSchema,
+  active_source_count: scalarNumberSchema,
   active_source_title: nullableStringSchema,
   active_source_status: nullableStringSchema,
   active_vendor: nullableStringSchema,
@@ -122,9 +125,22 @@ export const overviewSchema = z.object({
   active_luna_executors: scalarNumberSchema,
   queued_expert: scalarNumberSchema,
   queued_verify: scalarNumberSchema,
+  queued_deep_review: scalarNumberSchema,
   queued_analyze: scalarNumberSchema,
   queued_discover: scalarNumberSchema,
   tokens_per_revision: scalarNumberSchema,
+  projected_publications_per_day: scalarNumberSchema,
+  automatic_resolution_rate: scalarNumberSchema,
+  manual_exceptions_24h: scalarNumberSchema,
+  average_analysis_batch: scalarNumberSchema,
+  average_verification_batch: scalarNumberSchema,
+  executor_utilization: scalarNumberSchema,
+  discovery_unique_yield: scalarNumberSchema,
+  discovery_duplicates_avoided: scalarNumberSchema,
+  publication_failures_24h: scalarNumberSchema,
+  candidates_created_24h: scalarNumberSchema,
+  candidates_verified_24h: scalarNumberSchema,
+  candidates_deep_resolved_24h: scalarNumberSchema,
   pause_pending: z.boolean(),
   published_records_24h: scalarNumberSchema,
   deployed_commit_sha: nullableStringSchema,
@@ -196,6 +212,10 @@ export const pipelineSettingsSchema = z.object({
   ai_model: z.string(),
   reasoning_effort: z.string(),
   max_concurrent_ai_runs: scalarNumberSchema,
+  max_active_sources: scalarNumberSchema,
+  max_deep_review_runs: scalarNumberSchema,
+  source_buffer_target: scalarNumberSchema,
+  manual_exception_daily_cap: scalarNumberSchema,
   active_source_id: nullableStringSchema,
   active_coverage_target_id: nullableStringSchema.optional(),
   control_generation: scalarNumberSchema,
@@ -303,6 +323,59 @@ export const activeSourceDetailSchema = z.object({
   candidates: z.array(knowledgeCandidateSchema),
   events: z.array(pipelineEventSchema)
 }).nullable()
+
+export const activeSourceLaneSchema = z.object({
+  slot_number: scalarNumberSchema,
+  id: z.string(),
+  title: z.string(),
+  status: z.string(),
+  vendor_slug: z.string(),
+  operating_system_slug: nullableStringSchema,
+  document_role: z.string(),
+  fragments_total: scalarNumberSchema,
+  fragments_completed: scalarNumberSchema,
+  candidates_total: scalarNumberSchema,
+  candidates_verified: scalarNumberSchema,
+  candidates_deep_review: scalarNumberSchema,
+  candidates_quarantined: scalarNumberSchema,
+  updated_at: timestampSchema
+})
+
+export const activeSourceLanesSchema = z.array(activeSourceLaneSchema)
+
+export const reviewExceptionSchema = z.object({
+  id: z.string(),
+  stable_key: z.string(),
+  status: z.enum(['manual_exception', 'quarantined']),
+  dangerous: z.boolean(),
+  confidence: scalarNumberSchema,
+  quality_score: scalarNumberSchema,
+  resolution_attempts: scalarNumberSchema,
+  resolution_reason: nullableStringSchema,
+  next_review_at: nullableStringSchema,
+  created_at: timestampSchema,
+  updated_at: timestampSchema,
+  source_id: nullableStringSchema,
+  source_title: nullableStringSchema,
+  vendor_slug: nullableStringSchema,
+  operating_system_slug: nullableStringSchema
+})
+
+export const reviewExceptionsSchema = z.array(reviewExceptionSchema)
+export const reviewExceptionDetailSchema = z.object({
+  candidate: reviewExceptionSchema,
+  payload: z.record(z.string(), z.unknown()),
+  verifications: z.array(z.object({
+    id: z.string(),
+    decision: z.string(),
+    confidence: scalarNumberSchema,
+    quality_score: scalarNumberSchema,
+    findings: z.array(z.unknown()),
+    review_type: z.string(),
+    verified_by: z.string(),
+    created_at: timestampSchema
+  }))
+})
 
 export const knowledgeRevisionSchema = z.object({
   revision_id: z.string(),
@@ -527,6 +600,11 @@ export type Source = z.infer<typeof sourceSchema>
 export type PipelineDetails = z.infer<typeof pipelineDetailsSchema>
 export type PipelineTask = z.infer<typeof pipelineTaskSchema>
 export type ActiveSourceDetail = z.infer<typeof activeSourceDetailSchema>
+export type ActiveSourceLane = z.infer<typeof activeSourceLaneSchema>
+export type ReviewException = z.infer<typeof reviewExceptionSchema>
+export type ReviewExceptionDetail = z.infer<
+  typeof reviewExceptionDetailSchema
+>
 export type KnowledgePage = z.infer<typeof knowledgePageSchema>
 export type KnowledgeRevision = z.infer<typeof knowledgeRevisionSchema>
 export type ImportRun = z.infer<typeof importRunSchema>

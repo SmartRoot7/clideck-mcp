@@ -178,7 +178,8 @@ async function run(): Promise<void> {
     }
     case 'submit-discovery':
     case 'submit-analysis':
-    case 'submit-verification': {
+    case 'submit-verification':
+    case 'submit-deep-review': {
       const draftPath = process.argv[3]
       if (!draftPath) throw new Error('Submission JSON path is required')
       const lease = await readLease()
@@ -186,7 +187,8 @@ async function run(): Promise<void> {
       const tool = {
         'submit-discovery': 'submit_source_discovery',
         'submit-analysis': 'submit_fragment_analysis',
-        'submit-verification': 'submit_candidate_verification'
+        'submit-verification': 'submit_candidate_verification',
+        'submit-deep-review': 'submit_candidate_deep_review'
       }[action]!
       const result = await callTool(tool, {
         ...draft,

@@ -6,6 +6,7 @@ import { resolve } from 'node:path'
 import { serveStatic } from '@hono/node-server/serve-static'
 import {
   activeSourceDetailSchema,
+  activeSourceLanesSchema,
   agentRunsSchema,
   approvalsSchema,
   conflictsSchema,
@@ -20,6 +21,8 @@ import {
   provenanceSchema,
   qualitySchema,
   releasesSchema,
+  reviewExceptionDetailSchema,
+  reviewExceptionsSchema,
   sourcesSchema
 } from '@clideck/admin-contracts'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
@@ -36,14 +39,17 @@ import type { Database } from '../db.js'
 import { resolvePublicActor } from '../domain/auth.js'
 import {
   actOnExpertTask,
+  actOnReviewException,
   actOnSource,
   decideConflict,
   forceDiscovery,
   getActiveSource,
+  getActiveSources,
   getAdminOverview,
   getPipelineDetails,
   getQualityDashboard,
   getRevisionProvenance,
+  getReviewException,
   listAgentRuns,
   listCodeChangeApprovals,
   listConflicts,
@@ -54,6 +60,7 @@ import {
   listKnowledge,
   listLabValidations,
   listReleases,
+  listReviewExceptions,
   listSources,
   recordAdminAudit,
   setPipelineConcurrency,
@@ -68,6 +75,7 @@ import { resolveNetworkContext } from '../domain/context.js'
 import { searchKnowledge } from '../domain/knowledge.js'
 import {
   sanitizeDemoActiveSource,
+  sanitizeDemoActiveSources,
   sanitizeDemoExpertTasks,
   sanitizeDemoFeedback,
   sanitizeDemoImports,
@@ -75,6 +83,8 @@ import {
   sanitizeDemoPipeline,
   sanitizeDemoProvenance,
   sanitizeDemoReleases,
+  sanitizeDemoReviewException,
+  sanitizeDemoReviewExceptions,
   sanitizeDemoSources
 } from '../domain/public-demo.js'
 import {
@@ -364,6 +374,45 @@ export function createApiApp(dependencies: ApiDependencies) {
       activeSourceDetailSchema,
       await getActiveSource(adminDatabase),
     ))),
+  )
+
+  app.get('/public/v1/demo/active-sources', async (context) =>
+    context.json(sanitizeDemoActiveSources(parseHttpContract(
+      activeSourceLanesSchema,
+      await getActiveSources(adminDatabase),
+    ))),
+  )
+
+  app.get('/public/v1/demo/review-exceptions', async (context) => {
+    const requested = context.req.query('status')
+    const status =
+      requested === 'manual_exception' || requested === 'quarantined'
+        ? requested
+        : null
+    return context.json(sanitizeDemoReviewExceptions(parseHttpContract(
+      reviewExceptionsSchema,
+      await listReviewExceptions(adminDatabase, status),
+    )))
+  })
+
+  app.get(
+    '/public/v1/demo/review-exceptions/:candidateId',
+    async (context) => {
+      const candidateId = context.req.param('candidateId')
+      if (!z.uuid().safeParse(candidateId).success) {
+        return context.json({ error: 'invalid_candidate_id' }, 400)
+      }
+      const exception = await getReviewException(
+        adminDatabase,
+        candidateId,
+      )
+      return exception
+        ? context.json(sanitizeDemoReviewException(parseHttpContract(
+            reviewExceptionDetailSchema,
+            exception,
+          )))
+        : context.json({ error: 'not_found' }, 404)
+    },
   )
 
   app.get('/public/v1/demo/knowledge', async (context) => {
@@ -839,6 +888,38 @@ export function createApiApp(dependencies: ApiDependencies) {
     context.json(await getActiveSource(adminDatabase)),
   )
 
+  app.get('/admin/v1/active-sources', async (context) =>
+    context.json(await getActiveSources(adminDatabase)),
+  )
+
+  app.get('/admin/v1/review-exceptions', async (context) => {
+    const requested = context.req.query('status')
+    const status =
+      requested === 'manual_exception' || requested === 'quarantined'
+        ? requested
+        : null
+    return context.json(
+      await listReviewExceptions(adminDatabase, status),
+    )
+  })
+
+  app.get(
+    '/admin/v1/review-exceptions/:candidateId',
+    async (context) => {
+      const candidateId = context.req.param('candidateId')
+      if (!z.uuid().safeParse(candidateId).success) {
+        return context.json({ error: 'invalid_candidate_id' }, 400)
+      }
+      const exception = await getReviewException(
+        adminDatabase,
+        candidateId,
+      )
+      return exception
+        ? context.json(exception)
+        : context.json({ error: 'not_found' }, 404)
+    },
+  )
+
   app.get('/admin/v1/knowledge', async (context) => {
     const limit = Math.min(
       100,
@@ -994,6 +1075,47 @@ export function createApiApp(dependencies: ApiDependencies) {
       ? context.json(result)
       : context.json({ error: 'not_found' }, 404)
   })
+
+  app.post(
+    '/admin/v1/review-exceptions/:candidateId/action',
+    async (context) => {
+      const actor = context.get('adminActor')
+      if (actor.role !== 'super_admin') {
+        return context.json({ error: 'forbidden' }, 403)
+      }
+      const candidateId = context.req.param('candidateId')
+      const parsed = z.object({
+        action: z.enum(['retry_deep', 'publish', 'reject']),
+        reason: z.string().trim().min(5).max(2_000)
+      }).safeParse(await context.req.json<unknown>())
+      if (!z.uuid().safeParse(candidateId).success || !parsed.success) {
+        return context.json(
+          { error: 'invalid_review_exception_action' },
+          400,
+        )
+      }
+      try {
+        const result = await actOnReviewException(
+          adminDatabase,
+          candidateId,
+          parsed.data.action,
+          actor,
+          parsed.data.reason,
+        )
+        return result
+          ? context.json(result)
+          : context.json({ error: 'not_found' }, 404)
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message.startsWith('MANUAL_PUBLISH_')
+        ) {
+          return context.json({ error: error.message }, 409)
+        }
+        throw error
+      }
+    },
+  )
 
   app.post('/admin/v1/tasks/:taskId/action', async (context) => {
     const actor = context.get('adminActor')

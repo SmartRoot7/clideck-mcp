@@ -35,6 +35,25 @@ const webResearchTasks = new Set<PipelineTaskType>([
   'source_refresh'
 ])
 
+export function assertPipelineAiPolicy(input: {
+  taskType: PipelineTaskType
+  model: string
+  reasoning: string
+}): void {
+  if (input.model !== 'gpt-5.6-luna') {
+    throw new Error('PIPELINE_LUNA_MODEL_REQUIRED')
+  }
+  if (
+    input.reasoning !== 'low' &&
+    !(
+      input.taskType === 'candidate_deep_review' &&
+      input.reasoning === 'medium'
+    )
+  ) {
+    throw new Error('PIPELINE_REASONING_POLICY_REJECTED')
+  }
+}
+
 export function codexExecutorArguments(input: {
   taskType: PipelineTaskType
   model: string
@@ -43,6 +62,7 @@ export function codexExecutorArguments(input: {
   outputSchemaPath: string
   workingDirectory: string
 }): string[] {
+  assertPipelineAiPolicy(input)
   return [
     'exec',
     '--ephemeral',
@@ -57,7 +77,11 @@ export function codexExecutorArguments(input: {
       '--disable',
       feature
     ]),
-    ...(webResearchTasks.has(input.taskType)
+    ...(webResearchTasks.has(input.taskType) ||
+      (
+        input.taskType === 'candidate_deep_review' &&
+        input.reasoning === 'medium'
+      )
       ? ['--enable', 'standalone_web_search']
       : ['--disable', 'standalone_web_search']),
     '-m',

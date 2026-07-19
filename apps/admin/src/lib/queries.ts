@@ -1,5 +1,6 @@
 import {
   activeSourceDetailSchema,
+  activeSourceLanesSchema,
   agentRunsSchema,
   approvalsSchema,
   conflictsSchema,
@@ -14,6 +15,8 @@ import {
   provenanceSchema,
   qualitySchema,
   releasesSchema,
+  reviewExceptionDetailSchema,
+  reviewExceptionsSchema,
   sessionSchema,
   sourcesSchema
 } from '@clideck/admin-contracts'
@@ -87,6 +90,51 @@ export function useActiveSource(enabled = true) {
     enabled,
     refetchInterval: enabled ? 10_000 : false,
     staleTime: 8_000
+  })
+}
+
+export function useActiveSources(enabled = true) {
+  const { apiPrefix } = useOperationsRuntime()
+  return useQuery({
+    queryKey: [apiPrefix, 'active-sources'],
+    queryFn: () =>
+      getJson(`${apiPrefix}/active-sources`, activeSourceLanesSchema),
+    enabled,
+    refetchInterval: enabled ? 10_000 : false,
+    staleTime: 8_000
+  })
+}
+
+export function useReviewExceptions(
+  status: '' | 'manual_exception' | 'quarantined',
+  enabled = true
+) {
+  const { apiPrefix } = useOperationsRuntime()
+  const suffix = status ? `?status=${status}` : ''
+  return useQuery({
+    queryKey: [apiPrefix, 'review-exceptions', status],
+    queryFn: () => getJson(
+      `${apiPrefix}/review-exceptions${suffix}`,
+      reviewExceptionsSchema
+    ),
+    enabled,
+    refetchInterval: enabled ? 15_000 : false
+  })
+}
+
+export function useReviewException(
+  candidateId: string | null
+) {
+  const { apiPrefix } = useOperationsRuntime()
+  return useQuery({
+    queryKey: [apiPrefix, 'review-exception', candidateId],
+    queryFn: () => getJson(
+      `${apiPrefix}/review-exceptions/${encodeURIComponent(
+        candidateId ?? ''
+      )}`,
+      reviewExceptionDetailSchema
+    ),
+    enabled: Boolean(candidateId)
   })
 }
 

@@ -26,10 +26,11 @@ import {
   shortId,
   titleCase
 } from '../lib/format'
-import { useActiveSource } from '../lib/queries'
+import { useActiveSource, useActiveSources } from '../lib/queries'
 
 export function ActiveSourcePage() {
   const query = useActiveSource()
+  const lanesQuery = useActiveSources()
   const [tab, setTab] = useState<'fragments' | 'candidates' | 'events'>('fragments')
   if (query.isLoading) return <LoadingState label="Loading the active source…" />
   if (query.isError) return <ErrorState onRetry={() => void query.refetch()}>Active source data is unavailable.</ErrorState>
@@ -47,6 +48,39 @@ export function ActiveSourcePage() {
   const completion = fragmentsTotal ? (fragmentsDone / fragmentsTotal) * 100 : 0
   return (
     <div className="dashboard-stack">
+      <Panel
+        title="Active source lanes"
+        icon={Layers3}
+        help="Up to four independent documents move through extraction and verification concurrently, preventing one difficult source from idling Luna."
+        action={<Status tone="good">{lanesQuery.data?.length ?? 0} active</Status>}
+      >
+        <div className="source-lanes">
+          {(lanesQuery.data ?? []).map((lane) => {
+            const total = numberOf(lane.fragments_total)
+            const done = numberOf(lane.fragments_completed)
+            const percent = total ? (done / total) * 100 : 0
+            return (
+              <article className="source-lane" key={lane.id}>
+                <header>
+                  <span>Lane {formatNumber(lane.slot_number, 0)}</span>
+                  <Status>{titleCase(lane.status)}</Status>
+                </header>
+                <strong>{lane.title}</strong>
+                <small>{lane.vendor_slug} · {lane.operating_system_slug ?? 'Vendor-level'} · {titleCase(lane.document_role)}</small>
+                <ProgressBar value={percent} label={`${Math.round(percent)}% processed`} />
+                <footer>
+                  <span>{formatNumber(lane.candidates_verified, 0)} verified</span>
+                  <span>{formatNumber(lane.candidates_deep_review, 0)} deep</span>
+                  <span>{formatNumber(lane.candidates_quarantined, 0)} quarantine</span>
+                </footer>
+              </article>
+            )
+          })}
+          {!lanesQuery.isLoading && (lanesQuery.data?.length ?? 0) === 0 && (
+            <EmptyState>No source lane is currently assigned.</EmptyState>
+          )}
+        </div>
+      </Panel>
       <Panel
         title={source.title}
         icon={FileCheck2}

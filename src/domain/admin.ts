@@ -1,6 +1,10 @@
 import type { Database } from '../db.js'
+import { enforceCoreCandidatePolicy } from '@clideck/domain-kit'
 import { withTransaction } from '../db.js'
+import { getNetworkDomainPack } from './domain-packs.js'
 import { ensurePipelineWork } from './pipeline.js'
+import { candidateKnowledgeSchema } from './publication.js'
+import { enforceKnowledgeRisk } from './risk.js'
 
 export type AdminRole = 'admin' | 'super_admin'
 
@@ -54,11 +58,15 @@ export async function getAdminOverview(
          ps.ai_model,
          ps.reasoning_effort,
          ps.max_concurrent_ai_runs,
+         ps.max_active_sources,
+         ps.max_deep_review_runs,
          ps.control_generation,
          ps.pause_requested_at,
          ps.paused_reason,
          ps.updated_at AS pipeline_updated_at,
          sc.id AS active_source_id,
+         (SELECT count(*)::int FROM active_source_slots)
+           AS active_source_count,
          sc.title AS active_source_title,
          sc.status AS active_source_status,
          ct.vendor_slug AS active_vendor,
@@ -72,7 +80,8 @@ export async function getAdminOverview(
           WHERE created_at >= now() - interval '24 hours') AS feedback_24h,
          (SELECT count(*)::int FROM source_candidates) AS sources_total,
          (SELECT count(*)::int FROM source_candidates
-          WHERE status = 'completed') AS sources_completed,
+          WHERE status IN ('completed', 'completed_with_exceptions'))
+           AS sources_completed,
          (SELECT count(*)::int FROM source_fragments) AS fragments_total,
          (SELECT count(*)::int FROM knowledge_candidates) AS candidates_total,
          (SELECT count(*)::int FROM pipeline_tasks
@@ -98,6 +107,7 @@ export async function getAdminOverview(
               'source_discovery',
               'fragment_analysis',
               'candidate_verification',
+              'candidate_deep_review',
               'source_refresh'
             )) AS active_luna_executors,
          (SELECT count(*)::int FROM pipeline_tasks
@@ -106,6 +116,10 @@ export async function getAdminOverview(
          (SELECT count(*)::int FROM pipeline_tasks
           WHERE status = 'queued'
             AND task_type = 'candidate_verification') AS queued_verify,
+         (SELECT count(*)::int FROM pipeline_tasks
+          WHERE status = 'queued'
+            AND task_type = 'candidate_deep_review')
+           AS queued_deep_review,
          (SELECT count(*)::int FROM pipeline_tasks
           WHERE status = 'queued'
             AND task_type = 'fragment_analysis') AS queued_analyze,
@@ -118,6 +132,110 @@ export async function getAdminOverview(
             / nullif(sum(published_revisions), 0),
             0
           )::numeric(14,2) FROM agent_runs) AS tokens_per_revision
+         ,
+         (SELECT count(*)::int * 24
+          FROM knowledge_candidates
+          WHERE status = 'published'
+            AND updated_at >= now() - interval '1 hour')
+           AS projected_publications_per_day,
+         (SELECT coalesce(
+            100.0 * count(*) FILTER (
+              WHERE status IN (
+                'verified', 'published', 'rejected', 'conflict',
+                'quarantined'
+              )
+            ) / nullif(count(*) FILTER (
+              WHERE status IN (
+                'verified', 'published', 'rejected', 'conflict',
+                'quarantined', 'manual_exception'
+              )
+            ), 0),
+            100
+          )::numeric(6,3)
+          FROM knowledge_candidates)
+           AS automatic_resolution_rate,
+         (SELECT count(*)::int
+          FROM knowledge_candidates
+          WHERE status = 'manual_exception'
+            AND updated_at >= now() - interval '24 hours')
+           AS manual_exceptions_24h,
+         (SELECT coalesce(avg(
+            jsonb_array_length(payload->'fragments')
+          ), 0)::numeric(8,2)
+          FROM pipeline_tasks
+          WHERE task_type = 'fragment_analysis'
+            AND created_at >= now() - interval '24 hours')
+           AS average_analysis_batch,
+         (SELECT coalesce(avg(
+            jsonb_array_length(payload->'candidates')
+          ), 0)::numeric(8,2)
+          FROM pipeline_tasks
+          WHERE task_type = 'candidate_verification'
+            AND created_at >= now() - interval '24 hours')
+           AS average_verification_batch,
+         (SELECT coalesce(
+            least(
+              100,
+              100.0 * sum(coalesce(duration_ms, 0))
+                / nullif(
+                  extract(epoch FROM (
+                    greatest(now(), max(started_at)) -
+                    least(
+                      now() - interval '24 hours',
+                      min(started_at)
+                    )
+                  )) * 1000 * ps.max_concurrent_ai_runs,
+                  0
+                )
+            ),
+            0
+          )::numeric(6,2)
+          FROM agent_runs
+          WHERE started_at >= now() - interval '24 hours')
+           AS executor_utilization,
+         (SELECT coalesce(sum(
+            (result->>'inserted_sources')::int
+          ), 0)::int + coalesce((
+            SELECT sum(unique_yield)::int
+            FROM source_collections
+          ), 0)
+          FROM pipeline_tasks
+          WHERE task_type IN ('source_discovery', 'source_refresh')
+            AND status = 'completed'
+            AND completed_at >= now() - interval '24 hours')
+           AS discovery_unique_yield,
+         (SELECT coalesce(sum(
+            (result->>'duplicate_sources')::int
+          ), 0)::int + coalesce((
+            SELECT sum(duplicates_avoided)::int
+            FROM source_collections
+          ), 0)
+          FROM pipeline_tasks
+          WHERE task_type IN ('source_discovery', 'source_refresh')
+            AND status = 'completed'
+            AND completed_at >= now() - interval '24 hours')
+           AS discovery_duplicates_avoided,
+         (SELECT count(*)::int
+          FROM pipeline_tasks
+          WHERE task_type = 'source_publication'
+            AND status = 'failed'
+            AND completed_at >= now() - interval '24 hours')
+           AS publication_failures_24h,
+         (SELECT count(*)::int
+          FROM knowledge_candidates
+          WHERE created_at >= now() - interval '24 hours')
+           AS candidates_created_24h,
+         (SELECT count(*)::int
+          FROM candidate_verifications
+          WHERE decision = 'verified'
+            AND created_at >= now() - interval '24 hours')
+           AS candidates_verified_24h,
+         (SELECT count(*)::int
+          FROM candidate_verifications
+          WHERE review_type IN ('deep_low', 'deep_medium')
+            AND decision IN ('verified', 'rejected', 'conflict')
+            AND created_at >= now() - interval '24 hours')
+           AS candidates_deep_resolved_24h
        FROM active_release ar
        JOIN releases r ON r.id = ar.release_id
        CROSS JOIN pipeline_settings ps
@@ -142,6 +260,7 @@ export async function getAdminOverview(
              'chunk',
              'analyze',
              'verify',
+             'deep_review',
              'publish'
            ]::text[]
          ) WITH ORDINALITY
@@ -358,7 +477,9 @@ export async function listCoverageTargets(database: Database) {
      LEFT JOIN LATERAL (
        SELECT
          count(*) AS total,
-         count(*) FILTER (WHERE status = 'completed') AS completed,
+         count(*) FILTER (
+           WHERE status IN ('completed', 'completed_with_exceptions')
+         ) AS completed,
          count(*) FILTER (WHERE status = 'failed') AS failed
        FROM source_candidates sc
        WHERE sc.coverage_target_id = ct.id
@@ -535,6 +656,290 @@ export async function getActiveSource(database: Database) {
     candidates: candidates.rows,
     events: errors.rows
   }
+}
+
+export async function getActiveSources(database: Database) {
+  const result = await database.query(
+    `SELECT
+       slots.slot_number,
+       source.id,
+       source.title,
+       source.status,
+       target.vendor_slug,
+       target.operating_system_slug,
+       target.document_role,
+       coalesce(progress.fragments_total, 0)::int AS fragments_total,
+       coalesce(progress.fragments_completed, 0)::int
+         AS fragments_completed,
+       coalesce(progress.candidates_total, 0)::int AS candidates_total,
+       coalesce(progress.candidates_verified, 0)::int
+         AS candidates_verified,
+       coalesce(progress.candidates_deep_review, 0)::int
+         AS candidates_deep_review,
+       coalesce(progress.candidates_quarantined, 0)::int
+         AS candidates_quarantined,
+       source.updated_at
+     FROM active_source_slots slots
+     JOIN source_candidates source
+       ON source.id = slots.source_candidate_id
+     JOIN coverage_targets target
+       ON target.id = source.coverage_target_id
+     LEFT JOIN LATERAL (
+       SELECT
+         (SELECT count(*)
+          FROM source_fragments fragment
+          JOIN source_artifacts artifact
+            ON artifact.id = fragment.source_artifact_id
+          WHERE artifact.source_candidate_id = source.id)
+           AS fragments_total,
+         (SELECT count(*)
+          FROM source_fragments fragment
+          JOIN source_artifacts artifact
+            ON artifact.id = fragment.source_artifact_id
+          WHERE artifact.source_candidate_id = source.id
+            AND fragment.status IN (
+              'analyzed', 'verified', 'published', 'rejected', 'failed'
+            )) AS fragments_completed,
+         count(candidate.id) AS candidates_total,
+         count(candidate.id) FILTER (
+           WHERE candidate.status IN ('verified', 'published')
+         ) AS candidates_verified,
+         count(candidate.id) FILTER (
+           WHERE candidate.status = 'deep_review'
+         ) AS candidates_deep_review,
+         count(candidate.id) FILTER (
+           WHERE candidate.status = 'quarantined'
+         ) AS candidates_quarantined
+       FROM pipeline_tasks task
+       LEFT JOIN knowledge_candidates candidate
+         ON candidate.pipeline_task_id = task.id
+       WHERE task.source_candidate_id = source.id
+     ) progress ON true
+     ORDER BY slots.slot_number`,
+  )
+  return result.rows
+}
+
+export async function listReviewExceptions(
+  database: Database,
+  status: 'manual_exception' | 'quarantined' | null,
+) {
+  const result = await database.query(
+    `SELECT
+       candidate.id,
+       candidate.stable_key,
+       candidate.status,
+       candidate.dangerous,
+       candidate.confidence,
+       candidate.quality_score,
+       candidate.resolution_attempts,
+       candidate.resolution_reason,
+       candidate.next_review_at,
+       candidate.created_at,
+       candidate.updated_at,
+       source.id AS source_id,
+       source.title AS source_title,
+       target.vendor_slug,
+       target.operating_system_slug
+     FROM knowledge_candidates candidate
+     JOIN pipeline_tasks task
+       ON task.id = candidate.pipeline_task_id
+     LEFT JOIN source_candidates source
+       ON source.id = task.source_candidate_id
+     LEFT JOIN coverage_targets target
+       ON target.id = source.coverage_target_id
+     WHERE candidate.status IN ('manual_exception', 'quarantined')
+       AND ($1::text IS NULL OR candidate.status = $1)
+     ORDER BY
+       CASE candidate.status WHEN 'manual_exception' THEN 0 ELSE 1 END,
+       candidate.updated_at DESC
+     LIMIT 500`,
+    [status],
+  )
+  return result.rows
+}
+
+export async function getReviewException(
+  database: Database,
+  candidateId: string,
+) {
+  const candidate = await database.query(
+    `SELECT
+       candidate.id,
+       candidate.stable_key,
+       candidate.status,
+       candidate.dangerous,
+       candidate.confidence,
+       candidate.quality_score,
+       candidate.resolution_attempts,
+       candidate.resolution_reason,
+       candidate.next_review_at,
+       candidate.created_at,
+       candidate.updated_at,
+       source.id AS source_id,
+       source.title AS source_title,
+       target.vendor_slug,
+       target.operating_system_slug,
+       candidate.payload
+     FROM knowledge_candidates candidate
+     JOIN pipeline_tasks task
+       ON task.id = candidate.pipeline_task_id
+     LEFT JOIN source_candidates source
+       ON source.id = task.source_candidate_id
+     LEFT JOIN coverage_targets target
+       ON target.id = source.coverage_target_id
+     WHERE candidate.id = $1
+       AND candidate.status IN ('manual_exception', 'quarantined')`,
+    [candidateId],
+  )
+  if (!candidate.rows[0]) return null
+  const verifications = await database.query(
+    `SELECT
+       id,
+       decision,
+       confidence,
+       quality_score,
+       findings,
+       review_type,
+       verified_by,
+       created_at
+     FROM candidate_verifications
+     WHERE knowledge_candidate_id = $1
+     ORDER BY created_at DESC`,
+    [candidateId],
+  )
+  const { payload, ...row } = candidate.rows[0]
+  return {
+    candidate: row,
+    payload,
+    verifications: verifications.rows
+  }
+}
+
+export async function actOnReviewException(
+  database: Database,
+  candidateId: string,
+  action: 'retry_deep' | 'publish' | 'reject',
+  actor: { id: string; role: AdminRole },
+  reason: string,
+) {
+  const result = await withTransaction(database, async (client) => {
+    const selected = await client.query<{
+      id: string
+      payload: unknown
+      source_candidate_id: string | null
+    }>(
+      `SELECT
+         candidate.id,
+         candidate.payload,
+         task.source_candidate_id
+       FROM knowledge_candidates candidate
+       JOIN pipeline_tasks task ON task.id = candidate.pipeline_task_id
+       WHERE candidate.id = $1
+         AND candidate.status IN ('manual_exception', 'quarantined')
+       FOR UPDATE OF candidate`,
+      [candidateId],
+    )
+    const candidate = selected.rows[0]
+    if (!candidate) return null
+    if (action === 'publish') {
+      const parsed = enforceKnowledgeRisk(
+        candidateKnowledgeSchema.parse(candidate.payload),
+      )
+      const pack = getNetworkDomainPack()
+      const packCandidate = pack.candidateSchema.parse(parsed)
+      const validation = pack.validateCandidate(packCandidate)
+      if (!validation.valid) {
+        throw new Error('MANUAL_PUBLISH_POLICY_REJECTED')
+      }
+      try {
+        enforceCoreCandidatePolicy(pack.toCoreCandidate(packCandidate))
+      } catch {
+        throw new Error('MANUAL_PUBLISH_POLICY_REJECTED')
+      }
+      const context = await client.query<{ valid: boolean }>(
+        `SELECT (
+           EXISTS (
+             SELECT 1 FROM vendors WHERE slug = $1
+           )
+           AND EXISTS (
+             SELECT 1
+             FROM operating_systems os
+             JOIN vendors vendor ON vendor.id = os.vendor_id
+             WHERE vendor.slug = $1 AND os.slug = $2
+           )
+           AND (
+             $3::text IS NULL OR EXISTS (
+               SELECT 1
+               FROM platforms platform
+               JOIN vendors vendor ON vendor.id = platform.vendor_id
+               WHERE vendor.slug = $1 AND platform.slug = $3
+             )
+           )
+         ) AS valid`,
+        [
+          parsed.vendor_slug,
+          parsed.operating_system_slug,
+          parsed.platform_slug ?? null
+        ],
+      )
+      if (!context.rows[0]?.valid) {
+        throw new Error('MANUAL_PUBLISH_CONTEXT_INVALID')
+      }
+    }
+    const nextStatus = {
+      retry_deep: 'deep_review',
+      publish: 'verified',
+      reject: 'rejected'
+    } as const
+    await client.query(
+      `UPDATE knowledge_candidates
+          SET status = $2,
+              deep_review_task_id = NULL,
+              resolution_attempts = CASE
+                WHEN $2 = 'deep_review' THEN 0
+                ELSE resolution_attempts
+              END,
+              resolution_reason = $3,
+              next_review_at = CASE
+                WHEN $2 = 'deep_review' THEN now()
+                ELSE NULL
+              END,
+              updated_at = now()
+        WHERE id = $1`,
+      [candidateId, nextStatus[action], reason],
+    )
+    if (action === 'publish' && candidate.source_candidate_id) {
+      await client.query(
+        `UPDATE source_candidates
+            SET status = 'verifying',
+                completed_at = NULL,
+                updated_at = now()
+          WHERE id = $1
+            AND status IN (
+              'completed_with_exceptions',
+              'failed'
+            )`,
+        [candidate.source_candidate_id],
+      )
+    }
+    return {
+      id: candidateId,
+      action,
+      status: nextStatus[action]
+    }
+  })
+  if (!result) return null
+  await recordAdminAudit(
+    database,
+    actor,
+    `review_exception.${action}`,
+    'knowledge_candidate',
+    candidateId,
+    { reason },
+  )
+  await ensurePipelineWork(database)
+  return result
 }
 
 export async function listKnowledge(
@@ -1098,6 +1503,11 @@ export async function actOnSource(
         [sourceId, actor.id],
       )
     } else {
+      await client.query(
+        `DELETE FROM active_source_slots
+         WHERE source_candidate_id = $1`,
+        [sourceId],
+      )
       await client.query(
         `UPDATE source_candidates
             SET status = 'rejected',

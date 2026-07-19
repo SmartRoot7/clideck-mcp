@@ -13,6 +13,7 @@ import {
   type NetworkKnowledgeCandidate,
   type NetworkPublicRecord
 } from './schemas.js'
+import { networkCommandReferenceExtractor } from './fast-extractor.js'
 
 const networkRiskToCoreRisk = {
   safe_read_only: 'safe_read_only',
@@ -123,6 +124,7 @@ export const networkDomainPack: DomainPack<
   contextSchema: networkContextSchema,
   candidateSchema: networkKnowledgeCandidateSchema,
   publicRecordSchema: networkPublicRecordSchema,
+  deterministicExtractor: networkCommandReferenceExtractor,
   normalizeContext(input) {
     return networkContextSchema.parse(input)
   },

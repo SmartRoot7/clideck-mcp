@@ -59,6 +59,7 @@ const STAGE_ICONS = [
   Layers3,
   Bot,
   ShieldCheck,
+  ShieldCheck,
   Tag
 ]
 
@@ -129,6 +130,70 @@ export function OverviewPage({ overview }: { overview: Overview }) {
           <span>{activeTotal.toLocaleString()} revisions currently active.</span>
         </div>
       </Panel>
+
+      <section className="metric-grid metric-grid--four">
+        <Metric
+          label="Projected / day"
+          value={compactNumber(overview.projected_publications_per_day)}
+          icon={TimerReset}
+          help="Current hour publication rate projected across a full day. It is directional until the pipeline stabilises."
+          detail="Rolling hourly projection"
+          tone={numberOf(overview.projected_publications_per_day) >= 10_000 ? 'good' : 'warning'}
+        />
+        <Metric
+          label="Automatic resolution"
+          value={`${formatNumber(overview.automatic_resolution_rate, 2)}%`}
+          icon={ShieldCheck}
+          help="Candidates resolved without becoming ordinary human review work."
+          detail={`${overview.manual_exceptions_24h} manual exceptions / 24h`}
+          tone={numberOf(overview.automatic_resolution_rate) >= 99.9 ? 'good' : 'warning'}
+        />
+        <Metric
+          label="Executor utilisation"
+          value={`${formatNumber(overview.executor_utilization, 1)}%`}
+          icon={Gauge}
+          help="Share of available Luna execution time spent on useful claimed work during the last 24 hours."
+          detail={`${overview.active_source_count} / ${overview.max_active_sources} source lanes`}
+          tone={numberOf(overview.executor_utilization) >= 85 ? 'good' : 'warning'}
+        />
+        <Metric
+          label="Batch efficiency"
+          value={`${formatNumber(overview.average_analysis_batch, 1)} / ${formatNumber(overview.average_verification_batch, 1)}`}
+          icon={Boxes}
+          help="Average fragments per analysis run and candidates per verification run over the last 24 hours."
+          detail="Analysis / verification"
+        />
+        <Metric
+          label="Deep resolved"
+          value={overview.candidates_deep_resolved_24h}
+          icon={Bot}
+          help="Candidates automatically resolved by low or medium deep review in the last 24 hours."
+          detail={`${overview.queued_deep_review} queued`}
+          tone="good"
+        />
+        <Metric
+          label="Discovery yield"
+          value={overview.discovery_unique_yield}
+          icon={Pickaxe}
+          help="Unique approved official sources discovered during the last 24 hours."
+          detail={`${overview.discovery_duplicates_avoided} duplicates avoided`}
+        />
+        <Metric
+          label="Candidates / 24h"
+          value={overview.candidates_created_24h}
+          icon={Layers3}
+          help="Structured candidates created by deterministic extraction or Luna during the last 24 hours."
+          detail={`${overview.candidates_verified_24h} verification passes`}
+        />
+        <Metric
+          label="Publication failures"
+          value={overview.publication_failures_24h}
+          icon={AlertTriangle}
+          help="Source publication jobs that failed. Candidate-level validation errors are isolated and do not count here."
+          detail="Last rolling 24 hours"
+          tone={numberOf(overview.publication_failures_24h) ? 'danger' : 'good'}
+        />
+      </section>
 
       <PipelineRail overview={overview} />
 

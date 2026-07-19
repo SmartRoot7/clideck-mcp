@@ -48,6 +48,7 @@ export type SectionId =
   | 'quality'
   | 'lab'
   | 'conflicts'
+  | 'review-exceptions'
   | 'feedback'
   | 'tasks'
   | 'releases'
@@ -63,7 +64,7 @@ const GROUPS: Array<{
     items: [
       { id: 'overview', label: 'Overview', icon: CircleGauge },
       { id: 'pipeline', label: 'Pipeline', icon: Network },
-      { id: 'active-source', label: 'Active Source', icon: FileCheck2 },
+      { id: 'active-source', label: 'Active Sources', icon: FileCheck2 },
       { id: 'agent-runs', label: 'Agent Runs', icon: BrainCircuit }
     ]
   },
@@ -82,6 +83,7 @@ const GROUPS: Array<{
       { id: 'quality', label: 'Quality', icon: ShieldCheck },
       { id: 'lab', label: 'Lab', icon: Beaker },
       { id: 'conflicts', label: 'Conflicts', icon: GitCompareArrows },
+      { id: 'review-exceptions', label: 'Review Exceptions', icon: AlertTriangle },
       { id: 'feedback', label: 'Feedback', icon: MessageSquareText }
     ]
   },
@@ -240,7 +242,7 @@ export function AppShell({
 const SECTION_COPY: Record<SectionId, string> = {
   overview: 'Published knowledge, live throughput, cost and operational health.',
   pipeline: 'Every stage from source discovery through immutable publication.',
-  'active-source': 'Progress, evidence extraction and candidates for the current source.',
+  'active-source': 'Four concurrent source lanes, extraction progress and candidate outcomes.',
   'agent-runs': 'Luna capacity, token efficiency, duration and run outcomes.',
   coverage: 'Prioritised vendor, model, operating system and document gaps.',
   sources: 'Discovered documents, acquisition state and source-level controls.',
@@ -249,6 +251,7 @@ const SECTION_COPY: Record<SectionId, string> = {
   quality: 'Confidence, evaluation results, latency and dangerous-safety gates.',
   lab: 'Batfish and containerlab evidence linked to revisions and commits.',
   conflicts: 'Knowledge disagreements that need an explicit audited decision.',
+  'review-exceptions': 'Rare automatic-review outcomes, quarantine and emergency operator controls.',
   feedback: 'Operator feedback connected to revisions and expert tasks.',
   tasks: 'Urgent expert work, stage progress, ownership and recovery controls.',
   releases: 'Immutable knowledge packages and the currently active snapshot.',

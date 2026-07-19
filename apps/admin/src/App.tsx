@@ -55,6 +55,7 @@ const PipelinePage = lazy(() => import('./pages/pipeline').then((module) => ({ d
 const ProvenancePage = lazy(() => import('./pages/provenance').then((module) => ({ default: module.ProvenancePage })))
 const QualityPage = lazy(() => import('./pages/quality').then((module) => ({ default: module.QualityPage })))
 const ReleasesPage = lazy(() => import('./pages/releases').then((module) => ({ default: module.ReleasesPage })))
+const ReviewExceptionsPage = lazy(() => import('./pages/review-exceptions').then((module) => ({ default: module.ReviewExceptionsPage })))
 const SourcesPage = lazy(() => import('./pages/sources').then((module) => ({ default: module.SourcesPage })))
 const TasksPage = lazy(() => import('./pages/tasks').then((module) => ({ default: module.TasksPage })))
 
@@ -140,11 +141,11 @@ function LoginScreen({ onSuccess }: { onSuccess: () => void }) {
         </footer>
       </section>
       <aside className="login-context">
-        <span className="eyebrow">CliDeck MCP 0.6.1</span>
+        <span className="eyebrow">CliDeck MCP 0.7</span>
         <h2>A knowledge factory you can actually understand.</h2>
         <p>Published output first. Every source, Luna run, safety gate and immutable release remains visible and controllable.</p>
         <div className="login-pipeline" aria-label="Pipeline stages">
-          {['Discover', 'Acquire', 'Convert', 'Chunk', 'Analyze', 'Verify', 'Publish'].map((stage, index) => (
+          {['Discover', 'Acquire', 'Convert', 'Chunk', 'Analyze', 'Verify', 'Deep review', 'Publish'].map((stage, index) => (
             <span key={stage}><b>{index + 1}</b>{stage}</span>
           ))}
         </div>
@@ -263,6 +264,7 @@ export const OPERATIONS_PAGE_REGISTRY: Record<
   quality: () => <QualityPage />,
   lab: () => <LabPage />,
   conflicts: () => <ConflictsPage />,
+  'review-exceptions': () => <ReviewExceptionsPage />,
   feedback: () => <FeedbackPage />,
   tasks: () => <TasksPage />,
   releases: () => <ReleasesPage />,

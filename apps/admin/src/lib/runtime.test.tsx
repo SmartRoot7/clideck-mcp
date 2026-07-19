@@ -25,11 +25,11 @@ afterEach(() => {
 })
 
 describe('shared operations runtime', () => {
-  it('uses the same complete 16-page registry and navigation for both roles', () => {
+  it('uses the same complete 17-page registry and navigation for both roles', () => {
     const sectionIds = NAVIGATION_GROUPS.flatMap((group) =>
       group.items.map((item) => item.id),
     )
-    expect(sectionIds).toHaveLength(16)
+    expect(sectionIds).toHaveLength(17)
     expect(Object.keys(OPERATIONS_PAGE_REGISTRY).sort()).toEqual(
       [...sectionIds].sort(),
     )

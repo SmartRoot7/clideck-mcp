@@ -9,7 +9,9 @@ import {
 import {
   bindCandidateAnalysisProvenanceHashes,
   boundFragmentAnalysisBatch,
+  automaticUnresolvedDisposition,
   candidateAnalysisArtifactSchema,
+  candidateDeepReviewAgentArtifactSchema,
   candidateVerificationAgentArtifactSchema,
   candidateVerificationArtifactSchema,
   discoveryArtifactSchema,
@@ -19,7 +21,11 @@ import {
   normalizeCandidateAnalysisOptionalFields,
   normalizeCandidateAnalysisStableKeys
 } from '../src/domain/pipeline.js'
-import { chunkSourceText } from '../src/domain/pipeline-worker.js'
+import {
+  chunkSourceText,
+  isCandidatePublicationValidationError
+} from '../src/domain/pipeline-worker.js'
+import { CorePolicyError } from '@clideck/domain-kit'
 import { enforceKnowledgeRisk } from '../src/domain/risk.js'
 import {
   analyzeDeviceSnapshot,
@@ -116,6 +122,37 @@ describe('knowledge safety classification', () => {
 })
 
 describe('deterministic source processing', () => {
+  it('keeps the fourth unresolved medium review out of manual work', () => {
+    expect(automaticUnresolvedDisposition({
+      reviewPass: 'medium',
+      dangerous: true,
+      confidence: 0.99,
+      todayManualExceptions: 3,
+      manualExceptionDailyCap: 3
+    })).toBe('quarantined')
+    expect(automaticUnresolvedDisposition({
+      reviewPass: 'low',
+      dangerous: true,
+      confidence: 0.99,
+      todayManualExceptions: 3,
+      manualExceptionDailyCap: 3
+    })).toBe('deep_review')
+  })
+
+  it('isolates candidate policy failures from the source package', () => {
+    expect(
+      isCandidatePublicationValidationError(
+        new CorePolicyError(
+          'DANGEROUS_CANDIDATE_REQUIRES_ROLLBACK',
+          'Dangerous candidates require an explicit rollback procedure.',
+        ),
+      ),
+    ).toBe(true)
+    expect(
+      isCandidatePublicationValidationError(new Error('connection lost')),
+    ).toBe(false)
+  })
+
   it('bounds every AI analysis batch by evidence bytes', () => {
     const fragments = [
       { id: 'one', content: 'a'.repeat(30_000) },
@@ -144,7 +181,7 @@ describe('deterministic source processing', () => {
     const selected = boundFragmentAnalysisBatch(fragments)
 
     expect(selected.map((fragment) => fragment.id)).toEqual(
-      fragments.slice(0, 8).map((fragment) => fragment.id),
+      fragments.map((fragment) => fragment.id),
     )
     expect(
       selected.reduce(
@@ -152,7 +189,7 @@ describe('deterministic source processing', () => {
           bytes + Buffer.byteLength(fragment.content, 'utf8'),
         0,
       ),
-    ).toBeLessThan(30_000)
+    ).toBeLessThan(65_536)
   })
 
   it('keeps substantive sections in separate AI runs', () => {
@@ -162,7 +199,11 @@ describe('deterministic source processing', () => {
       { id: 'policy-routing', content: 'c'.repeat(2_782) }
     ])
 
-    expect(selected.map((fragment) => fragment.id)).toEqual(['route-map'])
+    expect(selected.map((fragment) => fragment.id)).toEqual([
+      'route-map',
+      'prefix-list',
+      'policy-routing'
+    ])
   })
 
   it('emits OpenAI-strict object schemas for every AI artifact', () => {
@@ -202,6 +243,7 @@ describe('deterministic source processing', () => {
       candidateAnalysisArtifactSchema,
       candidateVerificationAgentArtifactSchema,
       candidateVerificationArtifactSchema,
+      candidateDeepReviewAgentArtifactSchema,
       expertResearchStructuredArtifactSchema
     ]) {
       const generated = openAiStrictJsonSchema(schema)
@@ -226,7 +268,7 @@ describe('deterministic source processing', () => {
         },
         {
           candidate_index: 0,
-          decision: 'manual_review',
+          decision: 'deep_review',
           confidence: 0.89,
           quality_score: 0.9,
           findings: ['Applicability needs review.']

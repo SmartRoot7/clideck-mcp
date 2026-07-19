@@ -90,6 +90,28 @@ describe('parallel Luna runtime', () => {
       .toBe('--disable')
   })
 
+  it('allows medium reasoning only for automatic deep review', () => {
+    const common = {
+      model: pipelineModel,
+      reasoning: 'medium',
+      outputPath: '/tmp/output.json',
+      outputSchemaPath: '/tmp/schema.json',
+      workingDirectory: '/tmp/lane'
+    }
+    expect(() => codexExecutorArguments({
+      ...common,
+      taskType: 'fragment_analysis'
+    })).toThrow('PIPELINE_REASONING_POLICY_REJECTED')
+    const deepReview = codexExecutorArguments({
+      ...common,
+      taskType: 'candidate_deep_review'
+    })
+    expect(deepReview).toContain('model_reasoning_effort="medium"')
+    expect(
+      deepReview[deepReview.indexOf('standalone_web_search') - 1]
+    ).toBe('--enable')
+  })
+
   it('rejects generated artifacts that contain a real secret', () => {
     const environment = {
       CLIDECK_RESEARCHER_TOKEN: 'sentinel-secret-value-12345',

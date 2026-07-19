@@ -1,6 +1,6 @@
 {
   "name": "clideck-mcp",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "private": true,
   "description": "Agent-native framework for verified, continuously updated MCP knowledge systems",
   "type": "module",
@@ -56,6 +56,7 @@
     "pipeline:submit-discovery": "node --env-file=.secrets/researcher-bridge.env --import tsx src/cli/pipeline-client.ts submit-discovery",
     "pipeline:submit-analysis": "node --env-file=.secrets/researcher-bridge.env --import tsx src/cli/pipeline-client.ts submit-analysis",
     "pipeline:submit-verification": "node --env-file=.secrets/researcher-bridge.env --import tsx src/cli/pipeline-client.ts submit-verification",
+    "pipeline:submit-deep-review": "node --env-file=.secrets/researcher-bridge.env --import tsx src/cli/pipeline-client.ts submit-deep-review",
     "pipeline:submit-expert": "node --env-file=.secrets/researcher-bridge.env --import tsx src/cli/pipeline-client.ts submit-expert",
     "test": "vitest run && pnpm -r --filter '@clideck/domain-*' test && pnpm --filter @clideck/admin-ui test",
     "test:watch": "vitest"

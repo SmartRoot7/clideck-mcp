@@ -1,11 +1,14 @@
 import type {
   ActiveSourceDetail,
+  ActiveSourceLane,
   ExpertTask,
   Feedback,
   ImportRun,
   Overview,
   PipelineDetails,
   Provenance,
+  ReviewException,
+  ReviewExceptionDetail,
   Release,
   Source
 } from '@clideck/admin-contracts'
@@ -76,11 +79,14 @@ export function sanitizeDemoOverview(overview: Overview): Overview {
     ai_model: overview.ai_model,
     reasoning_effort: overview.reasoning_effort,
     max_concurrent_ai_runs: overview.max_concurrent_ai_runs,
+    max_active_sources: overview.max_active_sources,
+    max_deep_review_runs: overview.max_deep_review_runs,
     control_generation: overview.control_generation,
     pause_requested_at: overview.pause_requested_at,
     paused_reason: redactNullable(overview.paused_reason),
     pipeline_updated_at: overview.pipeline_updated_at,
     active_source_id: overview.active_source_id,
+    active_source_count: overview.active_source_count,
     active_source_title: redactNullable(overview.active_source_title),
     active_source_status: overview.active_source_status,
     active_vendor: overview.active_vendor,
@@ -101,9 +107,25 @@ export function sanitizeDemoOverview(overview: Overview): Overview {
     active_luna_executors: overview.active_luna_executors,
     queued_expert: overview.queued_expert,
     queued_verify: overview.queued_verify,
+    queued_deep_review: overview.queued_deep_review,
     queued_analyze: overview.queued_analyze,
     queued_discover: overview.queued_discover,
     tokens_per_revision: overview.tokens_per_revision,
+    projected_publications_per_day:
+      overview.projected_publications_per_day,
+    automatic_resolution_rate: overview.automatic_resolution_rate,
+    manual_exceptions_24h: overview.manual_exceptions_24h,
+    average_analysis_batch: overview.average_analysis_batch,
+    average_verification_batch: overview.average_verification_batch,
+    executor_utilization: overview.executor_utilization,
+    discovery_unique_yield: overview.discovery_unique_yield,
+    discovery_duplicates_avoided:
+      overview.discovery_duplicates_avoided,
+    publication_failures_24h: overview.publication_failures_24h,
+    candidates_created_24h: overview.candidates_created_24h,
+    candidates_verified_24h: overview.candidates_verified_24h,
+    candidates_deep_resolved_24h:
+      overview.candidates_deep_resolved_24h,
     pause_pending: overview.pause_pending,
     published_records_24h: overview.published_records_24h,
     deployed_commit_sha: overview.deployed_commit_sha,
@@ -228,6 +250,11 @@ export function sanitizeDemoPipeline(
       ai_model: pipeline.settings.ai_model,
       reasoning_effort: pipeline.settings.reasoning_effort,
       max_concurrent_ai_runs: pipeline.settings.max_concurrent_ai_runs,
+      max_active_sources: pipeline.settings.max_active_sources,
+      max_deep_review_runs: pipeline.settings.max_deep_review_runs,
+      source_buffer_target: pipeline.settings.source_buffer_target,
+      manual_exception_daily_cap:
+        pipeline.settings.manual_exception_daily_cap,
       active_source_id: pipeline.settings.active_source_id,
       active_coverage_target_id:
         pipeline.settings.active_coverage_target_id,
@@ -259,6 +286,71 @@ export function sanitizeDemoPipeline(
       source_title: redactNullable(task.source_title)
     })),
     events: pipeline.events.map(sanitizePipelineEvent)
+  }
+}
+
+export function sanitizeDemoActiveSources(
+  lanes: ActiveSourceLane[],
+): ActiveSourceLane[] {
+  return lanes.map((lane) => ({
+    ...lane,
+    title: REDACTED_SOURCE_IDENTITY
+  }))
+}
+
+export function sanitizeDemoReviewExceptions(
+  exceptions: ReviewException[],
+): ReviewException[] {
+  return exceptions.map((exception) => ({
+    ...exception,
+    source_title: redactNullable(exception.source_title),
+    resolution_reason: redactNullable(exception.resolution_reason)
+  }))
+}
+
+function sanitizeCandidatePayload(value: unknown, key = ''): unknown {
+  if (
+    [
+      'url',
+      'title',
+      'document_title',
+      'manual_title',
+      'evidence_fragment',
+      'source_locator',
+      'content_hash'
+    ].includes(key)
+  ) {
+    return value === null ? null : REDACTED_SOURCE_IDENTITY
+  }
+  if (Array.isArray(value)) {
+    return value.map((entry) => sanitizeCandidatePayload(entry))
+  }
+  if (!value || typeof value !== 'object') return value
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(
+      ([entryKey, entryValue]) => [
+        entryKey,
+        sanitizeCandidatePayload(entryValue, entryKey)
+      ],
+    ),
+  )
+}
+
+export function sanitizeDemoReviewException(
+  detail: ReviewExceptionDetail,
+): ReviewExceptionDetail {
+  return {
+    candidate: sanitizeDemoReviewExceptions([detail.candidate])[0]!,
+    payload: sanitizeCandidatePayload(
+      detail.payload,
+    ) as Record<string, unknown>,
+    verifications: detail.verifications.map((verification) => ({
+      ...verification,
+      findings: verification.findings.map(
+        () => REDACTED_SOURCE_IDENTITY,
+      ),
+      verified_by: REDACTED_SOURCE_IDENTITY
+    }))
   }
 }
 
