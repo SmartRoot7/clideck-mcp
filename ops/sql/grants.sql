@@ -15,9 +15,11 @@ GRANT SELECT ON
   device_models,
   context_aliases,
   public_active_knowledge,
+  public_active_domain_knowledge,
   public_active_release_summary,
   public_lab_validation_summary,
   public_latest_eval_result,
+  domain_packs,
   knowledge_items,
   knowledge_revisions,
   knowledge_public_trust,
@@ -41,6 +43,8 @@ TO clideck_mcp_api;
 GRANT SELECT ON
   active_release,
   public_active_knowledge,
+  public_active_domain_knowledge,
+  domain_packs,
   expert_tasks,
   knowledge_conflicts,
   releases,
@@ -106,6 +110,10 @@ TO clideck_mcp_admin;
 GRANT SELECT, INSERT ON
   knowledge_items,
   knowledge_revisions
+TO clideck_mcp_worker;
+GRANT SELECT ON
+  domain_packs,
+  public_active_domain_knowledge
 TO clideck_mcp_worker;
 GRANT SELECT, INSERT, UPDATE ON
   source_documents,
