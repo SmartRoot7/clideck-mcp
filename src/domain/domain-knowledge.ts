@@ -1,11 +1,17 @@
 import {
   coreKnowledgeRevisionSchema,
   enforceCoreCandidatePolicy,
-  type CoreKnowledgeRevision
+  exportDomainPackJsonSchemas,
+  jsonObjectSchema,
+  type CoreKnowledgeRevision,
+  type DomainPackJsonSchemas,
+  type DomainPackManifestV1
 } from '@clideck/domain-kit'
 
 import type { DatabaseClient } from '../db.js'
 import { getDomainPackRegistry } from './domain-packs.js'
+
+type DatabaseQueryable = Pick<DatabaseClient, 'query'>
 
 type DomainPackCatalogRow = {
   manifest_schema_version: string
@@ -59,11 +65,12 @@ export type DomainRevisionReference = {
 
 export type DomainKnowledgeSearchResult = {
   domain_id: string
+  context: Record<string, unknown>
   records: unknown[]
 }
 
 async function assertInstalledPack(
-  client: DatabaseClient,
+  client: DatabaseQueryable,
   domainId: string,
 ): Promise<void> {
   const pack = getDomainPackRegistry().get(domainId)
@@ -86,7 +93,7 @@ async function assertInstalledPack(
 }
 
 export async function createDomainKnowledgeRevision(
-  client: DatabaseClient,
+  client: DatabaseQueryable,
   domainId: string,
   unparsedCandidate: unknown,
 ): Promise<DomainRevisionReference> {
@@ -365,7 +372,7 @@ function toCoreRevision(row: DomainKnowledgeRow): CoreKnowledgeRevision {
 }
 
 export async function searchDomainKnowledge(
-  client: DatabaseClient,
+  client: DatabaseQueryable,
   input: {
     domainId: string
     question: string
@@ -476,9 +483,51 @@ export async function searchDomainKnowledge(
 
   return {
     domain_id: input.domainId,
+    context: jsonObjectSchema.parse(context),
     records: result.rows.map((row) => {
       const record = pack.fromCoreRevision(toCoreRevision(row))
       return pack.publicRecordSchema.parse(record)
     })
+  }
+}
+
+export async function listKnowledgeDomains(
+  client: DatabaseQueryable,
+): Promise<DomainPackManifestV1[]> {
+  const installed = await client.query<DomainPackCatalogRow & { id: string }>(
+    `SELECT id, manifest_schema_version, pack_version, enabled
+     FROM domain_packs
+     WHERE enabled
+     ORDER BY id`,
+  )
+  const installedById = new Map(
+    installed.rows.map((row) => [row.id, row]),
+  )
+  return getDomainPackRegistry().list().filter((manifest) => {
+    const catalog = installedById.get(manifest.id)
+    return Boolean(
+      catalog &&
+      catalog.manifest_schema_version === manifest.schema_version &&
+      catalog.pack_version === manifest.version,
+    )
+  })
+}
+
+export async function describeKnowledgeDomain(
+  client: DatabaseQueryable,
+  domainId: string,
+): Promise<{
+  manifest: DomainPackManifestV1
+  schemas: Pick<DomainPackJsonSchemas, 'context' | 'public_record'>
+}> {
+  await assertInstalledPack(client, domainId)
+  const pack = getDomainPackRegistry().get(domainId)
+  const schemas = exportDomainPackJsonSchemas(pack)
+  return {
+    manifest: pack.manifest,
+    schemas: {
+      context: schemas.context,
+      public_record: schemas.public_record
+    }
   }
 }

@@ -8,8 +8,11 @@ import {
   ENGINEERING_MEASUREMENT_SAMPLES,
   engineeringPublicRecordSchema
 } from '@clideck/domain-engineering-measurements'
+import { Client } from '@modelcontextprotocol/sdk/client/index.js'
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 
 import { createPublicTaskId, sha256, sha256Label } from '../src/crypto.js'
+import type { Database } from '../src/db.js'
 import {
   actOnSource,
   getAdminOverview,
@@ -58,6 +61,7 @@ import {
 } from './helpers.js'
 import { createApiApp } from '../src/http/api-app.js'
 import { createMetrics } from '../src/metrics.js'
+import { createPublicMcpServer } from '../src/mcp/public-server.js'
 
 const { Pool } = pg
 const describeIntegration = integrationDatabaseUrl ? describe : describe.skip
@@ -303,6 +307,124 @@ describeIntegration('PostgreSQL integration', () => {
         plus: '0.010',
         unit: 'mm'
       })
+
+      const transactionalDatabase = client as unknown as Database
+      const mcpServer = createPublicMcpServer({
+        config,
+        database: transactionalDatabase,
+        quarantineDatabase: transactionalDatabase,
+        logger,
+        metrics: createMetrics(),
+        actor: { kind: 'anonymous' },
+        clientKey: 'integration-domain-tools',
+        requestId: randomUUID()
+      })
+      const mcpClient = new Client({
+        name: 'domain-tools-integration',
+        version: '1.0.0'
+      })
+      const [clientTransport, serverTransport] =
+        InMemoryTransport.createLinkedPair()
+      await Promise.all([
+        mcpClient.connect(clientTransport),
+        mcpServer.connect(serverTransport)
+      ])
+      try {
+        const tools = await mcpClient.listTools()
+        expect(tools.tools.map((tool) => tool.name)).toEqual(
+          expect.arrayContaining([
+            'resolve_network_context',
+            'query_network_knowledge',
+            'list_knowledge_domains',
+            'describe_knowledge_domain',
+            'query_domain_knowledge'
+          ]),
+        )
+        expect(tools.tools).toHaveLength(16)
+
+        const listed = await mcpClient.callTool({
+          name: 'list_knowledge_domains',
+          arguments: {}
+        })
+        expect(listed.structuredContent).toMatchObject({
+          domains: expect.arrayContaining([
+            expect.objectContaining({ id: 'network' }),
+            expect.objectContaining({ id: 'engineering-measurements' })
+          ])
+        })
+
+        const described = await mcpClient.callTool({
+          name: 'describe_knowledge_domain',
+          arguments: { domain_id: 'engineering-measurements' }
+        })
+        expect(described.structuredContent).toMatchObject({
+          manifest: { id: 'engineering-measurements' },
+          schemas: {
+            context: expect.objectContaining({
+              $schema: expect.any(String)
+            }),
+            public_record: expect.objectContaining({
+              $schema: expect.any(String)
+            })
+          }
+        })
+
+        const queried = await mcpClient.callTool({
+          name: 'query_domain_knowledge',
+          arguments: {
+            domain_id: 'engineering-measurements',
+            question: 'What is the Demo block A reference length?',
+            context: {
+              discipline: 'metrology',
+              quantity: 'reference block length',
+              system: 'Demo block A',
+              conditions: ['Reference demo environment']
+            }
+          }
+        })
+        expect(queried.structuredContent).toMatchObject({
+          domain_id: 'engineering-measurements',
+          unknown: false,
+          next_action: 'use_answer',
+          answers: [
+            expect.objectContaining({
+              record_type: 'measurement',
+              payload: expect.objectContaining({
+                measured: { value: '100.000', unit: 'mm' }
+              })
+            })
+          ]
+        })
+
+        const invalid = await mcpClient.callTool({
+          name: 'query_domain_knowledge',
+          arguments: {
+            domain_id: 'engineering-measurements',
+            question: 'Find a value',
+            context: {}
+          }
+        })
+        expect(invalid.isError).toBe(true)
+        expect(invalid.content).toEqual([
+          expect.objectContaining({
+            text: expect.stringContaining('INVALID_DOMAIN_CONTEXT')
+          })
+        ])
+
+        const unknownDomain = await mcpClient.callTool({
+          name: 'describe_knowledge_domain',
+          arguments: { domain_id: 'unknown-domain' }
+        })
+        expect(unknownDomain.isError).toBe(true)
+        expect(unknownDomain.content).toEqual([
+          expect.objectContaining({
+            text: expect.stringContaining('UNKNOWN_DOMAIN')
+          })
+        ])
+      } finally {
+        await mcpClient.close()
+        await mcpServer.close()
+      }
 
       const counts = await client.query<{
         network_records: number

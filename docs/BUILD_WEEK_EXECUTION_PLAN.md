@@ -13,7 +13,7 @@ Branch policy: `main` only; completed stages are committed and pushed directly.
 
 ## Current focus
 
-`D2.2 — Generic MCP tools`
+`D2.3 — Public read-only operations demo`
 
 ## Baseline
 
@@ -251,7 +251,7 @@ Verification:
 
 Completed: 2026-07-19
 
-### [~] D2.2 — Generic MCP tools
+### [x] D2.2 — Generic MCP tools
 
 Deliverables:
 
@@ -265,7 +265,24 @@ Acceptance:
 - unknown domains and invalid contexts fail explicitly;
 - existing network tools remain unchanged.
 
-### [ ] D2.3 — Public read-only operations demo
+Verification:
+
+- all three generic tools were listed and called through a real MCP SDK Client
+  over the SDK in-memory transport;
+- the catalog reports both built-in packs and the description tool exports
+  Draft 2020-12 context/public-record schemas;
+- generic query returned the exact Engineering value through structured
+  content after pack-specific context and response validation;
+- invalid context returns `INVALID_DOMAIN_CONTEXT`, and an unknown pack returns
+  `UNKNOWN_DOMAIN` without leaking an internal error;
+- all 13 existing network/product tools remain registered with their original
+  names; the server now exposes 16 tools in total;
+- 65/65 backend and PostgreSQL tests, 13 built-in pack tests, and 5 admin UI
+  tests passed without skip; typecheck and production build passed.
+
+Completed: 2026-07-19
+
+### [~] D2.3 — Public read-only operations demo
 
 URL: `https://mcp.clideck.com/demo`
 

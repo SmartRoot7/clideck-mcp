@@ -1,3 +1,5 @@
+import { z } from 'zod'
+
 export function textAndStructured<T extends Record<string, unknown>>(value: T) {
   return {
     content: [{ type: 'text' as const, text: JSON.stringify(value) }],
@@ -21,6 +23,44 @@ const publicErrors: Record<string, string> = {
 }
 
 export function publicToolError(error: unknown) {
+  if (error instanceof z.ZodError) {
+    return {
+      isError: true,
+      content: [{
+        type: 'text' as const,
+        text:
+          'INVALID_DOMAIN_CONTEXT: Context does not match the selected domain schema.'
+      }]
+    }
+  }
+  if (
+    error instanceof Error &&
+    error.message.startsWith('DOMAIN_PACK_NOT_FOUND:')
+  ) {
+    return {
+      isError: true,
+      content: [{
+        type: 'text' as const,
+        text: 'UNKNOWN_DOMAIN: The requested knowledge domain is not installed.'
+      }]
+    }
+  }
+  if (
+    error instanceof Error &&
+    (
+      error.message.startsWith('DOMAIN_PACK_NOT_ENABLED:') ||
+      error.message.startsWith('DOMAIN_PACK_CATALOG_VERSION_MISMATCH:')
+    )
+  ) {
+    return {
+      isError: true,
+      content: [{
+        type: 'text' as const,
+        text:
+          'DOMAIN_UNAVAILABLE: The requested knowledge domain is disabled or incompatible.'
+      }]
+    }
+  }
   const code =
     error instanceof Error && publicErrors[error.message]
       ? error.message

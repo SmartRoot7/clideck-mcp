@@ -17,6 +17,19 @@ import {
   reviewNetworkChange,
   verifyNetworkChange
 } from '../domain/change.js'
+import {
+  describeKnowledgeDomain,
+  listKnowledgeDomains,
+  searchDomainKnowledge
+} from '../domain/domain-knowledge.js'
+import {
+  describeKnowledgeDomainInputSchema,
+  describeKnowledgeDomainOutputSchema,
+  listKnowledgeDomainsInputSchema,
+  listKnowledgeDomainsOutputSchema,
+  queryDomainKnowledgeInputSchema,
+  queryDomainKnowledgeOutputSchema
+} from '../domain/domain-tool-schemas.js'
 import { searchKnowledge } from '../domain/knowledge.js'
 import { analyzeDeviceSnapshot } from '../domain/snapshot.js'
 import { recordPublicUsage } from '../domain/telemetry.js'
@@ -144,7 +157,7 @@ export function createPublicMcpServer(
   const server = new McpServer(
     {
       name: 'CliDeck MCP — Network Knowledge',
-      version: '0.4.0',
+      version: '0.6.0',
       title: 'CliDeck MCP — Network Knowledge',
       websiteUrl: 'https://clideck.com/software/mcp'
     },
@@ -163,6 +176,78 @@ export function createPublicMcpServer(
           }
         }
       : undefined,
+  )
+
+  server.registerTool(
+    'list_knowledge_domains',
+    {
+      title: 'List Knowledge Domains',
+      description:
+        'List installed, compatible knowledge domain packs and their declared capabilities.',
+      inputSchema: listKnowledgeDomainsInputSchema,
+      outputSchema: listKnowledgeDomainsOutputSchema,
+      annotations: {
+        readOnlyHint: true,
+        idempotentHint: true,
+        openWorldHint: false
+      }
+    },
+    wrapTool(dependencies, 'list_knowledge_domains', async () => ({
+      domains: await listKnowledgeDomains(dependencies.database)
+    })),
+  )
+
+  server.registerTool(
+    'describe_knowledge_domain',
+    {
+      title: 'Describe Knowledge Domain',
+      description:
+        'Return the context and public-record contracts for one installed knowledge domain.',
+      inputSchema: describeKnowledgeDomainInputSchema,
+      outputSchema: describeKnowledgeDomainOutputSchema,
+      annotations: {
+        readOnlyHint: true,
+        idempotentHint: true,
+        openWorldHint: false
+      }
+    },
+    wrapTool(dependencies, 'describe_knowledge_domain', async (input) =>
+      describeKnowledgeDomain(dependencies.database, input.domain_id),
+    ),
+  )
+
+  server.registerTool(
+    'query_domain_knowledge',
+    {
+      title: 'Query Domain Knowledge',
+      description:
+        'Run deterministic search in one domain using that pack’s validated context and public-record schema.',
+      inputSchema: queryDomainKnowledgeInputSchema,
+      outputSchema: queryDomainKnowledgeOutputSchema,
+      annotations: {
+        readOnlyHint: true,
+        idempotentHint: true,
+        openWorldHint: false
+      }
+    },
+    wrapTool(dependencies, 'query_domain_knowledge', async (input) => {
+      const result = await searchDomainKnowledge(dependencies.database, {
+        domainId: input.domain_id,
+        question: input.question,
+        context: input.context,
+        limit: input.limit
+      })
+      return {
+        domain_id: result.domain_id,
+        context: result.context,
+        answers: result.records,
+        unknown: result.records.length === 0,
+        next_action:
+          result.records.length === 0
+            ? 'knowledge_not_found' as const
+            : 'use_answer' as const
+      }
+    }),
   )
 
   server.registerTool(
