@@ -33,6 +33,9 @@ async function testApp() {
     expect(request.headers.get('authorization')).toBe(
       `Bearer ${config.adminToken}`,
     )
+    expect(request.headers.get('host')).toBe(
+      `127.0.0.1:${config.api.port}`,
+    )
     expect(request.headers.get('x-clideck-admin-role')).toBe('super_admin')
     return Response.json(overviewFixture())
   }

@@ -255,6 +255,10 @@ export function createAdminUiApp(dependencies: AdminUiDependencies) {
         method,
         headers: {
           authorization: `Bearer ${config.adminToken}`,
+          // Hono's in-memory fetch adapter does not synthesize Host from the
+          // Request URL. Production request policy requires an explicit,
+          // allowlisted loopback host.
+          host: `127.0.0.1:${config.api.port}`,
           ...(body ? { 'content-type': 'application/json' } : {}),
           'x-clideck-admin-actor': actorId,
           'x-clideck-admin-role': 'super_admin',
