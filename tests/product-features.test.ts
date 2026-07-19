@@ -485,6 +485,21 @@ describe('deterministic source processing', () => {
     }
   })
 
+  it('chunks a large multibyte document without oversized fragments', () => {
+    const source = `${'🔐 network-state '.repeat(30_000)}\n\nshow version`
+    const startedAt = performance.now()
+    const fragments = chunkSourceText(source)
+    expect(performance.now() - startedAt).toBeLessThan(2_000)
+    expect(fragments.length).toBeGreaterThan(1)
+    expect(fragments.every(
+      (fragment) =>
+        Buffer.byteLength(fragment.content, 'utf8') <= 30_000,
+    )).toBe(true)
+    expect(fragments.some((fragment) =>
+      fragment.content.includes('show version'),
+    )).toBe(true)
+  })
+
   it('deduplicates repeated source fragments before persistence', () => {
     const repeated = [
       'show clock',
@@ -606,13 +621,14 @@ describe('device snapshot intelligence', () => {
 
   it('strictly re-redacts contributed output', () => {
     const result = sanitizeSnapshot(
-      'hostname edge-1\nusername val password p4ss\n192.168.20.1 aabb.ccdd.eeff',
+      'hostname edge-1\nusername val password p4ss\n192.168.20.1 fd12:3456::1 aabb.ccdd.eeff',
       'strict',
     )
     expect(result.sanitized).toContain('[REDACTED_SECRET]')
     expect(result.sanitized).toContain('[REDACTED_IP]')
     expect(result.sanitized).toContain('[REDACTED_MAC]')
     expect(result.sanitized).not.toContain('edge-1')
+    expect(result.sanitized).not.toContain('fd12:3456::1')
   })
 })
 
@@ -644,6 +660,50 @@ describe('change guard and post-change verification', () => {
     })
     expect(unknown.decision).toBe('unknown')
     expect(unknown.verification_token).toBeNull()
+    const secret = reviewNetworkChange(config, {
+      intent: 'Review an unknown credential command',
+      context,
+      commands: ['mystery password SuperSecret12345']
+    })
+    expect(secret.unknown_commands[0]).not.toContain('SuperSecret12345')
+    for (const separator of [
+      '\n',
+      '\r\n',
+      '\r',
+      '\u0085',
+      '\u2028',
+      '\u2029'
+    ]) {
+      for (const injectedWrite of [
+        'router ospf 1',
+        'ip route 10.0.0.0 255.0.0.0 192.0.2.1',
+        'ip access-list extended EDGE',
+        'spanning-tree vlan 10 root primary',
+        'vlan 4000',
+        'mystery feature enable'
+      ]) {
+        const multiline = reviewNetworkChange(config, {
+          intent: 'Reject a write hidden after a read-only command',
+          context,
+          commands: [`show version${separator}${injectedWrite}`]
+        })
+        expect(multiline.decision).not.toBe('allowed_with_checks')
+        expect(multiline.approval_required).toBe(true)
+        if (multiline.decision === 'unknown') {
+          expect(multiline.verification_token).toBeNull()
+        } else {
+          expect(multiline.decision).toBe('manual_review_required')
+          expect(multiline.risk_level).toBe('high')
+        }
+      }
+    }
+    const configDiff = reviewNetworkChange(config, {
+      intent: 'Reject a write hidden in a bare-CR configuration diff',
+      context,
+      config_diff: 'show version\rrouter bgp 65000'
+    })
+    expect(configDiff.decision).toBe('manual_review_required')
+    expect(configDiff.approval_required).toBe(true)
   })
 
   it('issues a signed plan and fails closed during verification', () => {
@@ -742,6 +802,21 @@ describe('upgrade and topology intelligence', () => {
     expect(graph.paths[0]?.complete).toBe(false)
     expect(graph.probable_fault_domain).toBe('dist-1')
     expect(graph.retention).toBe('not_stored')
+    const redacted = analyzeNetworkPath({
+      snapshots: [{
+        device_hint: 'Bearer abcdefghijklmnopqrstuvwxyz',
+        output_type: 'traceroute',
+        content: [
+          'traceroute to 203.0.113.10',
+          '1 edge.example (10.0.0.2) 1 ms',
+          'password SuperSecret12345'
+        ].join('\n')
+      }]
+    })
+    expect(JSON.stringify(redacted)).not.toContain(
+      'abcdefghijklmnopqrstuvwxyz',
+    )
+    expect(JSON.stringify(redacted)).not.toContain('SuperSecret12345')
   })
 })
 
@@ -755,6 +830,7 @@ describe('commit-bound lab assurance', () => {
       generated_at: '2026-07-17T12:00:00.000Z',
       validations: [{
         stable_key: 'cisco.ios-xe.show-ip-route',
+        revision_hash: `sha256:${'0'.repeat(64)}`,
         validation_type: 'batfish_modeled',
         fixture_key: 'c9300-route-model',
         tool_version: 'batfish-2025.07.07.2423',
@@ -772,6 +848,17 @@ describe('commit-bound lab assurance', () => {
       }]
     })
     expect(verifyLabReport(report).report_hash).toBe(report.report_hash)
+    const { report_hash: _reportHash, ...unsignedReport } = report
+    const expired = finalizeLabReport({
+      ...unsignedReport,
+      validations: report.validations.map((validation) => ({
+        ...validation,
+        expires_at: '2026-07-18T12:00:00.000Z'
+      }))
+    })
+    expect(() => verifyLabReport(expired)).toThrow(
+      'LAB_VALIDATION_EXPIRED',
+    )
     expect(() =>
       verifyLabReport({
         ...report,
@@ -785,6 +872,7 @@ describe('commit-bound lab assurance', () => {
       generated_at: '2026-07-17T12:00:00.000Z',
       validations: [{
         stable_key: 'cisco.ios-xe.show-ip-route',
+        revision_hash: `sha256:${'0'.repeat(64)}`,
         validation_type: 'runtime_lab_validated',
         fixture_key: 'open-frr-runtime',
         tool_version: 'containerlab-0.72.0',

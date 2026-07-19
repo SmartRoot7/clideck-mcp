@@ -26,6 +26,14 @@ export const discoverySourceSchema = z.object({
   document_date: z.iso.date().optional()
 })
 
+const pipelineSourcePayloadSchema = z.object({
+  canonical_url: z.url().startsWith('https://'),
+  document_type: z.string().trim().min(1).max(80),
+  title: z.string().trim().min(1).max(500),
+  document_version: z.string().trim().min(1).max(160).nullable().optional(),
+  document_date: z.iso.date().nullable().optional()
+})
+
 const discoveryArtifactShape = {
   sources: z.array(discoverySourceSchema).max(10),
   rejection_reason: z.string().trim().min(12).max(1_000).optional()
@@ -370,7 +378,7 @@ export const agentRunResultSchema = z.object({
 })
 
 export const pipelineSystemFailureSchema = z.object({
-  failure_code: z.string().regex(/^[A-Z][A-Z0-9_]{2,63}$/),
+  failure_code: z.literal('COORDINATOR_REPEATED_FAILURE'),
   failure_message: z.string().trim().min(8).max(1_000)
 })
 
@@ -825,7 +833,9 @@ async function queueSourceWork(
     document_type: source.document_type,
     title: source.title,
     document_version: source.document_version,
-    document_date: source.document_date,
+    document_date: source.document_date
+      ? new Date(source.document_date).toISOString().slice(0, 10)
+      : null,
     coverage_target: {
       vendor_slug: source.vendor_slug,
       product_family: source.product_family,
@@ -1711,6 +1721,23 @@ export async function pausePipelineForSystemFailure(
   researcherId: string,
 ): Promise<Record<string, unknown>> {
   return withTransaction(database, async (client) => {
+    const corroboration = await client.query<{ count: number }>(
+      `SELECT count(*)::int AS count
+       FROM (
+         SELECT status, error_code
+         FROM agent_runs
+         WHERE executor_id = $1
+           AND completed_at >= now() - interval '15 minutes'
+         ORDER BY completed_at DESC
+         LIMIT 3
+       ) recent
+       WHERE status = 'failed'
+         AND error_code = 'AGENT_LAUNCH_FAILED'`,
+      [researcherId],
+    )
+    if ((corroboration.rows[0]?.count ?? 0) < 3) {
+      throw new Error('PIPELINE_SYSTEM_FAILURE_NOT_CORROBORATED')
+    }
     await client.query(
       `UPDATE pipeline_settings
           SET enabled = false,
@@ -1733,7 +1760,7 @@ export async function pausePipelineForSystemFailure(
          'system',
          'paused',
          $1,
-         jsonb_build_object('failure_code', $2)
+         jsonb_build_object('failure_code', $2::text)
        )`,
       [input.failure_message, input.failure_code],
     )
@@ -2071,8 +2098,11 @@ export async function submitCandidateAnalysis(
           : [],
         ),
     )
-    const reservedFragments = await client.query<{ count: number }>(
-      `SELECT count(*)::int AS count
+    const reservedFragments = await client.query<{
+      id: string
+      content_hash: string
+    }>(
+      `SELECT id, content_hash
        FROM source_fragments
        WHERE id = ANY($1::uuid[])
          AND reservation_task_id = $2
@@ -2080,18 +2110,45 @@ export async function submitCandidateAnalysis(
       [[...allowedFragmentIds], task.id],
     )
     if (
-      (reservedFragments.rows[0]?.count ?? 0) !== allowedFragmentIds.size
+      reservedFragments.rows.length !== allowedFragmentIds.size
     ) {
       throw new Error('PIPELINE_FRAGMENT_RESERVATION_INVALID')
     }
+    const trustedFragmentHashes = new Map(
+      reservedFragments.rows.map((fragment) => [
+        fragment.id,
+        fragment.content_hash
+      ]),
+    )
+    const sourceIdentity = pipelineSourcePayloadSchema.parse(task.payload)
     const insertedIds: string[] = []
     for (const submission of input.candidates) {
       if (!allowedFragmentIds.has(submission.fragment_id)) {
         throw new Error('PIPELINE_FRAGMENT_NOT_IN_TASK')
       }
-      const candidate = enforceKnowledgeRisk(
+      const unboundCandidate = enforceKnowledgeRisk(
         pipelineCandidatePayloadSchema.parse(submission.candidate),
       )
+      const evidence = unboundCandidate.provenance[0]!
+      const candidate = {
+        ...unboundCandidate,
+        provenance: [{
+          url: sourceIdentity.canonical_url,
+          document_type: sourceIdentity.document_type,
+          title: sourceIdentity.title.slice(0, 240),
+          ...(sourceIdentity.document_version
+            ? { document_version: sourceIdentity.document_version }
+            : {}),
+          ...(sourceIdentity.document_date
+            ? { document_date: sourceIdentity.document_date }
+            : {}),
+          verified_at: unboundCandidate.last_verified_at,
+          content_hash:
+            trustedFragmentHashes.get(submission.fragment_id)!,
+          evidence_fragment: evidence.evidence_fragment,
+          evidence_role: 'primary' as const
+        }]
+      }
       const serialized = JSON.stringify(candidate)
       const inserted = await client.query<{ id: string }>(
         `INSERT INTO knowledge_candidates (

@@ -7,6 +7,7 @@ import { serveStatic } from '@hono/node-server/serve-static'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { Hono, type Context } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
+import { routePath } from 'hono/route'
 import { secureHeaders } from 'hono/secure-headers'
 import { timeout } from 'hono/timeout'
 import { z } from 'zod'
@@ -54,7 +55,10 @@ import {
   taskCredentialsSchema,
   upgradeAdvisorInputSchema
 } from '../domain/schemas.js'
-import { analyzeDeviceSnapshot } from '../domain/snapshot.js'
+import {
+  analyzeDeviceSnapshot,
+  sanitizeSnapshot
+} from '../domain/snapshot.js'
 import {
   getPublicStats,
   recordPublicUsage
@@ -127,9 +131,19 @@ export function createApiApp(dependencies: ApiDependencies) {
     context.header('x-request-id', requestId)
     const startedAt = performance.now()
     await next()
+    if (context.req.path.startsWith('/_clideck-mcp-ui/assets/')) {
+      context.header(
+        'cache-control',
+        'public, max-age=31536000, immutable',
+      )
+    }
+    const matchedRoute = routePath(context, -1)
     metrics.httpRequests.inc({
       process: 'api',
-      route: context.req.path,
+      route:
+        context.res.status === 404 || matchedRoute === '*'
+          ? '__unmatched__'
+          : matchedRoute,
       method: context.req.method,
       status: String(context.res.status)
     })
@@ -400,7 +414,9 @@ export function createApiApp(dependencies: ApiDependencies) {
         risk_level: 'critical',
         blast_radius: [],
         matched_rules: [],
-        unknown_commands: parsed.data.commands ?? [],
+        unknown_commands: (parsed.data.commands ?? []).map((command) =>
+          sanitizeSnapshot(command.slice(0, 240), 'secrets_only').sanitized
+        ),
         prechecks: [],
         stop_conditions: [
           'Stop: deep change-review coverage is currently limited to Cisco IOS-XE.'
@@ -1110,14 +1126,15 @@ export function createApiApp(dependencies: ApiDependencies) {
   }
 
   if (config.enablePublicDemo) {
-    const demoAssetRoot = resolve(config.demoAssetRoot)
-    const demoIndexPath = resolve(demoAssetRoot, 'index.html')
-    if (existsSync(demoAssetRoot)) {
+    const sharedUiAssetRoot = resolve(config.adminUi.assetRoot)
+    const demoIndexPath = resolve(sharedUiAssetRoot, 'index.html')
+    if (existsSync(sharedUiAssetRoot)) {
       app.use(
-        '/demo/assets/*',
+        '/_clideck-mcp-ui/assets/*',
         serveStatic({
-          root: demoAssetRoot,
-          rewriteRequestPath: (path) => path.replace(/^\/demo/, ''),
+          root: sharedUiAssetRoot,
+          rewriteRequestPath: (path) =>
+            path.replace(/^\/_clideck-mcp-ui/, ''),
           onFound: (_path, context) => {
             context.header(
               'cache-control',

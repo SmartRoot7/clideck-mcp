@@ -88,25 +88,6 @@ export async function claimResearchTask(
   return row ?? { available: false }
 }
 
-async function loadLeasedTask(
-  database: Database,
-  publicId: string,
-  leaseToken: string,
-): Promise<ResearchTaskRow> {
-  const result = await database.query<ResearchTaskRow>(
-    `SELECT id, public_id, question, network_context, attempts, expires_at
-     FROM expert_tasks
-     WHERE public_id = $1
-       AND lease_token_hash = $2
-       AND lease_until > now()
-       AND status IN ('researching', 'claimed')`,
-    [publicId, sha256(leaseToken)],
-  )
-  const task = result.rows[0]
-  if (!task) throw new Error('RESEARCH_LEASE_INVALID')
-  return task
-}
-
 export async function heartbeatResearchTask(
   database: Database,
   config: AppConfig,
@@ -139,24 +120,29 @@ export async function requestResearchInput(
   leaseToken: string,
   question: string,
 ): Promise<Record<string, unknown>> {
-  const task = await loadLeasedTask(database, publicId, leaseToken)
   await withTransaction(database, async (client) => {
+    const consumed = await client.query<{ id: string }>(
+      `UPDATE expert_tasks
+          SET status = 'input_required',
+              input_request = $3,
+              lease_token_hash = NULL,
+              lease_until = NULL,
+              updated_at = now()
+        WHERE public_id = $1
+          AND lease_token_hash = $2
+          AND lease_until > now()
+          AND status IN ('researching', 'claimed')
+        RETURNING id`,
+      [publicId, sha256(leaseToken), question],
+    )
+    const taskId = consumed.rows[0]?.id
+    if (!taskId) throw new Error('RESEARCH_LEASE_INVALID')
     await client.query(
       `INSERT INTO task_messages (
          task_id, direction, body
        )
        VALUES ($1, 'researcher_to_client', $2)`,
-      [task.id, question],
-    )
-    await client.query(
-      `UPDATE expert_tasks
-          SET status = 'input_required',
-              input_request = $2,
-              lease_token_hash = NULL,
-              lease_until = NULL,
-              updated_at = now()
-        WHERE id = $1`,
-      [task.id, question],
+      [taskId, question],
     )
     await client.query(
       `INSERT INTO task_public_events (
@@ -168,7 +154,7 @@ export async function requestResearchInput(
          35,
          'Research paused until the requester supplies bounded clarification.'
        )`,
-      [task.id],
+      [taskId],
     )
   })
   return { task_id: publicId, status: 'input_required' }
@@ -179,11 +165,6 @@ export async function submitCandidateRevision(
   input: CandidateRevision,
 ): Promise<Record<string, unknown>> {
   const candidate = candidateRevisionSchema.parse(input)
-  const task = await loadLeasedTask(
-    database,
-    candidate.task_id,
-    candidate.lease_token,
-  )
   await Promise.all(
     candidate.provenance.map((source) =>
       assertSafeProvenanceUrl(source.url),
@@ -198,21 +179,27 @@ export async function submitCandidateRevision(
   const contentHash = sha256Label(serialized)
 
   await withTransaction(database, async (client) => {
-    await client.query(
-      `INSERT INTO task_artifacts (
-         task_id, artifact_type, payload, content_hash
-       )
-       VALUES ($1, 'candidate_revision', $2::jsonb, $3)`,
-      [task.id, serialized, contentHash],
-    )
-    await client.query(
+    const consumed = await client.query<{ id: string }>(
       `UPDATE expert_tasks
           SET status = 'validating',
               lease_token_hash = NULL,
               lease_until = NULL,
               updated_at = now()
-        WHERE id = $1`,
-      [task.id],
+        WHERE public_id = $1
+          AND lease_token_hash = $2
+          AND lease_until > now()
+          AND status IN ('researching', 'claimed')
+        RETURNING id`,
+      [candidate.task_id, sha256(candidate.lease_token)],
+    )
+    const taskId = consumed.rows[0]?.id
+    if (!taskId) throw new Error('RESEARCH_LEASE_INVALID')
+    await client.query(
+      `INSERT INTO task_artifacts (
+         task_id, artifact_type, payload, content_hash
+       )
+       VALUES ($1, 'candidate_revision', $2::jsonb, $3)`,
+      [taskId, serialized, contentHash],
     )
     await client.query(
       `INSERT INTO task_public_events (
@@ -224,7 +211,7 @@ export async function submitCandidateRevision(
          60,
          'Candidate knowledge submitted to the deterministic policy gate.'
        )`,
-      [task.id],
+      [taskId],
     )
   })
 
@@ -243,25 +230,38 @@ export async function failResearchTask(
   failureCode: string,
   failureMessage: string,
 ): Promise<Record<string, unknown>> {
-  const task = await loadLeasedTask(database, publicId, leaseToken)
-  await database.query(
-    `WITH inserted_event AS (
-       INSERT INTO task_public_events (
-         task_id, stage, progress_percent, public_message
-       )
-       VALUES ($1, 'failed', 100, 'Research ended without publishable knowledge.')
-     )
-     UPDATE expert_tasks
+  await withTransaction(database, async (client) => {
+    const consumed = await client.query<{ id: string }>(
+      `UPDATE expert_tasks
         SET status = 'failed',
-            failure_code = $2,
-            failure_message = $3,
+            failure_code = $3,
+            failure_message = $4,
             lease_token_hash = NULL,
             lease_until = NULL,
             completed_at = now(),
             updated_at = now()
-      WHERE id = $1`,
-    [task.id, failureCode, failureMessage],
-  )
+      WHERE public_id = $1
+        AND lease_token_hash = $2
+        AND lease_until > now()
+        AND status IN ('researching', 'claimed')
+      RETURNING id`,
+      [publicId, sha256(leaseToken), failureCode, failureMessage],
+    )
+    const taskId = consumed.rows[0]?.id
+    if (!taskId) throw new Error('RESEARCH_LEASE_INVALID')
+    await client.query(
+      `INSERT INTO task_public_events (
+         task_id, stage, progress_percent, public_message
+       )
+       VALUES (
+         $1,
+         'failed',
+         100,
+         'Research ended without publishable knowledge.'
+       )`,
+      [taskId],
+    )
+  })
   return { task_id: publicId, status: 'failed' }
 }
 

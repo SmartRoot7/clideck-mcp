@@ -27,6 +27,7 @@ type ExistingItemRow = {
 
 type DomainKnowledgeRow = {
   revision_id: string
+  public_ref: string
   revision_number: number
   release_sequence: number
   domain_id: string
@@ -268,7 +269,7 @@ export async function createDomainKnowledgeRevision(
          evidence_fragment
        )
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-       ON CONFLICT (canonical_url, content_hash)
+       ON CONFLICT (domain_id, canonical_url, content_hash)
        DO UPDATE SET verified_at = greatest(
          source_documents.verified_at,
          excluded.verified_at
@@ -359,7 +360,7 @@ function toCoreRevision(row: DomainKnowledgeRow): CoreKnowledgeRevision {
     confidence_reason: row.confidence_reason,
     last_verified_at: normalizeDate(row.last_verified_at),
     provenance: row.provenance,
-    revision_ref: row.revision_id,
+    revision_ref: row.public_ref,
     revision_number: Number(row.revision_number),
     release_sequence: Number(row.release_sequence),
     assurance: {
@@ -387,6 +388,7 @@ export async function searchDomainKnowledge(
   const result = await client.query<DomainKnowledgeRow>(
     `SELECT
        kr.id AS revision_id,
+       kr.public_ref,
        kr.revision_number,
        release.sequence AS release_sequence,
        ki.domain_id,
@@ -409,8 +411,18 @@ export async function searchDomainKnowledge(
        kr.quality_score,
        kr.confidence_reason,
        kr.last_verified_at,
-       coalesce(trust.validation_level, 'documentation_reviewed')
-         AS validation_level,
+       coalesce(
+         current_validation.validation_level,
+         CASE
+           WHEN trust.validation_level IN (
+             'batfish_modeled',
+             'runtime_lab_validated'
+           )
+             THEN 'documentation_reviewed'
+           ELSE trust.validation_level
+         END,
+         'documentation_reviewed'
+       ) AS validation_level,
        coalesce(trust.independent_confirmations, 1)
          AS independent_confirmations,
        coalesce(trust.next_review_at, kr.last_verified_at + 180)
@@ -434,6 +446,8 @@ export async function searchDomainKnowledge(
      JOIN knowledge_revisions kr
        ON kr.id = release_item.revision_id
      LEFT JOIN knowledge_public_trust trust ON trust.revision_id = kr.id
+     LEFT JOIN LATERAL current_knowledge_validation(kr.id)
+       current_validation ON true
      LEFT JOIN LATERAL (
        SELECT json_agg(json_strip_nulls(json_build_object(
          'url', document.canonical_url,

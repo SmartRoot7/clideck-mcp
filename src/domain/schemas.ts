@@ -130,6 +130,7 @@ export const taskStatusSchema = z.object({
     'researching',
     'input_required',
     'validating',
+    'publishing',
     'completed',
     'failed',
     'cancelled',

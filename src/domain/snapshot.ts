@@ -1,3 +1,5 @@
+import { isIP } from 'node:net'
+
 import { sha256Label } from '../crypto.js'
 
 export type SnapshotType =
@@ -98,6 +100,24 @@ export function sanitizeSnapshot(
       /\b(?:\d{1,3}\.){3}\d{1,3}(?:\/\d{1,2})?\b/g,
       '[REDACTED_IP]',
     )
+    let ipv6Count = 0
+    sanitized = sanitized.replace(
+      /[0-9A-Fa-f:.]{2,}(?:\/\d{1,3})?/g,
+      (candidate) => {
+        const [address] = candidate.split('/', 1)
+        if (!candidate.includes(':') || isIP(address ?? '') !== 6) {
+          return candidate
+        }
+        ipv6Count += 1
+        return '[REDACTED_IP]'
+      },
+    )
+    if (ipv6Count > 0) {
+      counts.set(
+        'ip_address',
+        (counts.get('ip_address') ?? 0) + ipv6Count,
+      )
+    }
   }
 
   return {

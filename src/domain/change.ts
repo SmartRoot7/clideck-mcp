@@ -55,8 +55,10 @@ function normalizedChangeLines(input: {
   config_diff?: string | undefined
 }): string[] {
   const lines = [
-    ...(input.commands ?? []),
-    ...(input.config_diff?.split(/\r?\n/) ?? [])
+    ...(input.commands ?? []).flatMap((command) =>
+      command.split(/\r\n|[\n\r\u0085\u2028\u2029]/u),
+    ),
+    ...(input.config_diff?.split(/\r\n|[\n\r\u0085\u2028\u2029]/u) ?? [])
   ]
   return lines
     .map((line) => line.replace(/^[+-]\s?/, '').trim())
@@ -161,7 +163,9 @@ export function reviewNetworkChange(
       blastRadius.add('local_device')
       continue
     }
-    unknownCommands.push(line.slice(0, 240))
+    unknownCommands.push(
+      sanitizeSnapshot(line.slice(0, 240), 'secrets_only').sanitized,
+    )
   }
 
   const riskLevel = critical
@@ -239,7 +243,7 @@ export function reviewNetworkChange(
       required
     })),
     rollback,
-    approval_required: hasWrite,
+    approval_required: hasWrite || unknownCommands.length > 0,
     verification_token: verificationToken,
     verification_token_expires_at: expiresAt,
     limitations: [

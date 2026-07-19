@@ -252,7 +252,7 @@ export async function createKnowledgeRevision(
          evidence_fragment
        )
        VALUES ('network', $1, $2, $3, $4, $5, $6, $7, $8, $9)
-       ON CONFLICT (canonical_url, content_hash)
+       ON CONFLICT (domain_id, canonical_url, content_hash)
        DO UPDATE SET verified_at = greatest(
          source_documents.verified_at,
          excluded.verified_at
@@ -304,7 +304,11 @@ export async function createKnowledgeRevision(
      )`,
     [
       revisionId,
-      candidate.provenance.length,
+      new Set(
+        candidate.provenance.map((source) =>
+          `${source.url}\0${source.content_hash}`,
+        ),
+      ).size,
       candidate.confidence_reason,
       candidate.last_verified_at,
       candidate.dangerous
@@ -416,13 +420,18 @@ export async function processNextCandidate(
     )
     const task = result.rows[0]
     if (!task) return null
-    await client.query(
+    const reserved = await client.query<{ id: string }>(
       `UPDATE expert_tasks
-       SET updated_at = now()
-       WHERE id = $1`,
+       SET status = 'publishing',
+           claim_owner = 'knowledge-worker',
+           lease_until = now() + interval '10 minutes',
+           updated_at = now()
+       WHERE id = $1
+         AND status = 'validating'
+       RETURNING id`,
       [task.id],
     )
-    return task
+    return reserved.rows[0] ? task : null
   })
 
   if (!candidateTask) return false
@@ -442,15 +451,27 @@ export async function processNextCandidate(
             SET status = 'failed',
                 failure_code = 'MANUAL_REVIEW_REQUIRED',
                 failure_message = 'Candidate retained internally; automatic publication threshold was not met.',
+                claim_owner = NULL,
+                lease_until = NULL,
                 completed_at = now(),
                 updated_at = now()
-          WHERE id = $1 AND status = 'validating'`,
+          WHERE id = $1 AND status = 'publishing'`,
         [candidateTask.id],
       )
       return true
     }
 
     const publication = await withTransaction(database, async (client) => {
+      const lockedTask = await client.query<{ id: string }>(
+        `SELECT id
+         FROM expert_tasks
+         WHERE id = $1
+           AND status = 'publishing'
+           AND lease_until > now()
+         FOR UPDATE`,
+        [candidateTask.id],
+      )
+      if (!lockedTask.rows[0]) throw new Error('PUBLICATION_LEASE_INVALID')
       await client.query(
         `INSERT INTO task_public_events (
            task_id, stage, progress_percent, public_message
@@ -520,9 +541,11 @@ export async function processNextCandidate(
             SET status = 'completed',
                 result_revision_id = $2,
                 result_payload = $3::jsonb,
+                claim_owner = NULL,
+                lease_until = NULL,
                 completed_at = now(),
                 updated_at = now()
-          WHERE id = $1 AND status = 'validating'`,
+          WHERE id = $1 AND status = 'publishing'`,
         [
           candidateTask.id,
           revisionId,
@@ -582,9 +605,11 @@ export async function processNextCandidate(
           SET status = 'failed',
               failure_code = 'VALIDATION_FAILED',
               failure_message = 'Candidate failed the structured validation or publication gate.',
+              claim_owner = NULL,
+              lease_until = NULL,
               completed_at = now(),
               updated_at = now()
-        WHERE id = $1 AND status = 'validating'`,
+        WHERE id = $1 AND status = 'publishing'`,
       [candidateTask.id],
     )
   }
@@ -632,6 +657,15 @@ export async function runWorkerMaintenance(
               updated_at = now(),
               completed_at = CASE WHEN attempts >= 5 THEN now() ELSE NULL END
         WHERE status IN ('claimed', 'researching')
+          AND lease_until <= now()`,
+    )
+    await client.query(
+      `UPDATE expert_tasks
+          SET status = 'validating',
+              claim_owner = NULL,
+              lease_until = NULL,
+              updated_at = now()
+        WHERE status = 'publishing'
           AND lease_until <= now()`,
     )
     await client.query(

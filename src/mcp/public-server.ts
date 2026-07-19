@@ -31,7 +31,10 @@ import {
   queryDomainKnowledgeOutputSchema
 } from '../domain/domain-tool-schemas.js'
 import { searchKnowledge } from '../domain/knowledge.js'
-import { analyzeDeviceSnapshot } from '../domain/snapshot.js'
+import {
+  analyzeDeviceSnapshot,
+  sanitizeSnapshot
+} from '../domain/snapshot.js'
 import { recordPublicUsage } from '../domain/telemetry.js'
 import { analyzeNetworkPath } from '../domain/topology.js'
 import {
@@ -601,7 +604,9 @@ export function createPublicMcpServer(
           risk_level: 'critical' as const,
           blast_radius: [],
           matched_rules: [],
-          unknown_commands: input.commands ?? [],
+          unknown_commands: (input.commands ?? []).map((command) =>
+            sanitizeSnapshot(command.slice(0, 240), 'secrets_only').sanitized
+          ),
           prechecks: [],
           stop_conditions: [
             'Stop: deep change-review coverage is currently limited to Cisco IOS-XE.'

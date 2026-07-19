@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto'
 
+import { sanitizeSnapshot } from './snapshot.js'
+
 type NodeKind = 'device' | 'hop' | 'network' | 'unknown'
 type Protocol = 'cdp' | 'lldp' | 'route' | 'traceroute'
 
@@ -250,7 +252,18 @@ export function analyzeNetworkPath(input: {
   }> = []
   let probableFaultDomain: string | null = null
 
-  for (const snapshot of input.snapshots) {
+  for (const untrustedSnapshot of input.snapshots) {
+    const snapshot = {
+      ...untrustedSnapshot,
+      device_hint: sanitizeSnapshot(
+        untrustedSnapshot.device_hint,
+        'secrets_only',
+      ).sanitized,
+      content: sanitizeSnapshot(
+        untrustedSnapshot.content,
+        'secrets_only',
+      ).sanitized
+    }
     const type =
       snapshot.output_type === 'auto'
         ? autoType(snapshot.content)
@@ -272,9 +285,16 @@ export function analyzeNetworkPath(input: {
       parsed = trace.parsed
       if (trace.hops.length > 1) {
         paths.push({
-          source: input.source ?? snapshot.device_hint,
+          source: input.source
+            ? sanitizeSnapshot(input.source, 'secrets_only').sanitized
+            : snapshot.device_hint,
           destination:
-            input.destination ??
+            (input.destination
+              ? sanitizeSnapshot(
+                  input.destination,
+                  'secrets_only',
+                ).sanitized
+              : undefined) ??
             nodes.get(trace.hops.at(-1)!)?.label ??
             'unknown',
           hops: trace.hops,

@@ -4,6 +4,12 @@ import {
   pipelineModel,
   pipelineReasoning
 } from '../src/cli/pipeline-runtime.js'
+import {
+  assertArtifactContainsNoSecrets,
+  codexExecutorArguments,
+  codexExecutorEnvironment,
+  sensitiveEnvironmentValues
+} from '../src/cli/pipeline-codex-policy.js'
 
 describe('parallel Luna runtime', () => {
   it('uses four isolated executor lanes with the economical model', () => {
@@ -25,5 +31,83 @@ describe('parallel Luna runtime', () => {
     expect(new Set(
       workspaces.map((workspace) => workspace.tempDirectory),
     ).size).toBe(4)
+  })
+
+  it('starts Luna with local tools disabled and a minimal environment', () => {
+    const args = codexExecutorArguments({
+      taskType: 'fragment_analysis',
+      model: pipelineModel,
+      reasoning: pipelineReasoning,
+      outputPath: '/tmp/output.json',
+      outputSchemaPath: '/tmp/schema.json',
+      workingDirectory: '/tmp/lane'
+    })
+    expect(args).toContain(pipelineModel)
+    expect(args).toContain('model_reasoning_effort="low"')
+    for (const feature of [
+      'shell_tool',
+      'unified_exec',
+      'apps',
+      'browser_use',
+      'multi_agent'
+    ]) {
+      expect(args).toContain(feature)
+      expect(args[args.indexOf(feature) - 1]).toBe('--disable')
+    }
+    const inherited = codexExecutorEnvironment({
+      PATH: '/usr/bin',
+      HOME: '/tmp/home',
+      CODEX_HOME: '/tmp/codex',
+      DATABASE_URL: 'postgres://secret',
+      ADMIN_TOKEN: 'sensitive-admin-token'
+    })
+    expect(inherited).toEqual({
+      PATH: '/usr/bin',
+      HOME: '/tmp/home',
+      CODEX_HOME: '/tmp/codex'
+    })
+  })
+
+  it('allows web search only for bounded research tasks', () => {
+    const common = {
+      model: pipelineModel,
+      reasoning: pipelineReasoning,
+      outputPath: '/tmp/output.json',
+      outputSchemaPath: '/tmp/schema.json',
+      workingDirectory: '/tmp/lane'
+    }
+    const discovery = codexExecutorArguments({
+      ...common,
+      taskType: 'source_discovery'
+    })
+    const analysis = codexExecutorArguments({
+      ...common,
+      taskType: 'fragment_analysis'
+    })
+    expect(discovery[discovery.indexOf('standalone_web_search') - 1])
+      .toBe('--enable')
+    expect(analysis[analysis.indexOf('standalone_web_search') - 1])
+      .toBe('--disable')
+  })
+
+  it('rejects generated artifacts that contain a real secret', () => {
+    const environment = {
+      CLIDECK_RESEARCHER_TOKEN: 'sentinel-secret-value-12345',
+      PATH: '/usr/bin'
+    }
+    const sensitive = sensitiveEnvironmentValues(environment)
+    expect(sensitive).toEqual(['sentinel-secret-value-12345'])
+    expect(() =>
+      assertArtifactContainsNoSecrets(
+        '{"summary":"sentinel-secret-value-12345"}',
+        sensitive,
+      ),
+    ).toThrow('AGENT_ARTIFACT_SECRET_DETECTED')
+    expect(() =>
+      assertArtifactContainsNoSecrets(
+        '{"summary":"No credentials are present."}',
+        sensitive,
+      ),
+    ).not.toThrow()
   })
 })

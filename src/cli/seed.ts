@@ -373,7 +373,7 @@ async function seedKnowledgeItem(
      VALUES (
        $1, $2, $3, $4, 'IOS XE', DATE '2026-07-17', $5, $6
      )
-     ON CONFLICT (canonical_url, content_hash)
+     ON CONFLICT (domain_id, canonical_url, content_hash)
      DO UPDATE SET verified_at = excluded.verified_at
      RETURNING id`,
     [

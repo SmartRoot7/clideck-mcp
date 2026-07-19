@@ -31,6 +31,7 @@ import {
   getPublicRevision,
   searchKnowledge
 } from '../src/domain/knowledge.js'
+import { labRevisionHash } from '../src/domain/lab.js'
 import {
   createKnowledgeRevision,
   publishKnowledgeBatch,
@@ -44,12 +45,18 @@ import {
   ensurePipelineWork,
   failPipelineTask,
   heartbeatPipelineTask,
+  pausePipelineForSystemFailure,
   recordAgentRunResult,
   submitCandidateAnalysis,
   submitCandidateVerification,
   submitSourceDiscovery
 } from '../src/domain/pipeline.js'
 import { processNextPipelineTask } from '../src/domain/pipeline-worker.js'
+import {
+  claimResearchTask,
+  failResearchTask,
+  requestResearchInput
+} from '../src/domain/researcher.js'
 import {
   createExpertTask,
   getExpertTask,
@@ -63,6 +70,7 @@ import {
 import { createApiApp } from '../src/http/api-app.js'
 import { createMetrics } from '../src/metrics.js'
 import { createPublicMcpServer } from '../src/mcp/public-server.js'
+import { IOS_XE_SEED_KNOWLEDGE } from '../src/seed-data/ios-xe-knowledge.js'
 
 const { Pool } = pg
 const describeIntegration = integrationDatabaseUrl ? describe : describe.skip
@@ -241,6 +249,198 @@ describeIntegration('PostgreSQL integration', () => {
         all_domain_records: baseline.rows[0]!.count + 1,
         indexed: true
       })
+    } finally {
+      await client.query('ROLLBACK')
+      client.release()
+    }
+  })
+
+  it('binds lab assurance to the exact active revision content', async () => {
+    const fact = IOS_XE_SEED_KNOWLEDGE.find(
+      (record) => record.stableKey === 'cisco.ios-xe.show-ip-route',
+    )!
+    const active = await database.query<Record<string, unknown>>(
+      `SELECT
+         stable_key,
+         kind,
+         version_min,
+         version_max,
+         title,
+         summary,
+         question_patterns,
+         cli_mode,
+         command_text,
+         procedure_steps,
+         prerequisites,
+         risks,
+         verification_steps,
+         rollback_steps,
+         limitations,
+         dangerous
+       FROM public_active_knowledge
+       WHERE stable_key = $1`,
+      [fact.stableKey],
+    )
+    const expected = labRevisionHash({
+      stable_key: fact.stableKey,
+      kind: fact.kind,
+      version_min: fact.versionMin,
+      version_max: fact.versionMax ?? null,
+      title: fact.title,
+      summary: fact.summary,
+      question_patterns: fact.questionPatterns,
+      cli_mode: fact.cliMode ?? null,
+      command_text: fact.command ?? null,
+      procedure_steps: fact.procedure,
+      prerequisites: fact.prerequisites,
+      risks: fact.risks,
+      verification_steps: fact.verification,
+      rollback_steps: fact.rollback,
+      limitations: fact.limitations,
+      dangerous: fact.dangerous
+    })
+    expect(labRevisionHash(active.rows[0])).toBe(expected)
+  })
+
+  it('derives every public assurance projection from unexpired evidence', async () => {
+    const client = await database.connect()
+    try {
+      await client.query('BEGIN')
+      const engineeringRevision = await createDomainKnowledgeRevision(
+        client,
+        'engineering-measurements',
+        ENGINEERING_MEASUREMENT_SAMPLES[0]!,
+      )
+      await publishKnowledgeBatch(
+        client,
+        [{
+          itemId: engineeringRevision.itemId,
+          revisionId: engineeringRevision.revisionId
+        }],
+        'Current-assurance projection integration fixture',
+        'integration-test',
+      )
+      const revisions = await client.query<{
+        revision_id: string
+        domain_id: string
+      }>(
+        `SELECT revision_id, domain_id
+         FROM public_active_domain_knowledge
+         WHERE stable_key = ANY($1::text[])
+         ORDER BY domain_id`,
+        [[
+          'cisco.ios-xe.show-ip-route',
+          ENGINEERING_MEASUREMENT_SAMPLES[0]!.stable_key
+        ]],
+      )
+      expect(revisions.rows).toHaveLength(2)
+      const revisionIds = revisions.rows.map((row) => row.revision_id)
+      await client.query(
+        `UPDATE knowledge_public_trust
+         SET validation_level = 'runtime_lab_validated',
+             lab_validated_at = '2020-01-01T00:00:00Z'
+         WHERE revision_id = ANY($1::uuid[])`,
+        [revisionIds],
+      )
+      await client.query(
+        `INSERT INTO knowledge_validations (
+           revision_id,
+           validation_type,
+           status,
+           fixture_key,
+           tool_version,
+           report_hash,
+           commit_sha,
+           summary,
+           internal_report,
+           executed_at,
+           expires_at
+         )
+         SELECT
+           revision_id,
+           'runtime_lab_validated',
+           'passed',
+           'expired-assurance-fixture',
+           'integration-test',
+           $2,
+           repeat('a', 40),
+           'Synthetic expired evidence for the assurance projection test.',
+           '{}'::jsonb,
+           '2020-01-01T00:00:00Z',
+           '2020-01-02T00:00:00Z'
+         FROM unnest($1::uuid[]) AS revision_id`,
+        [revisionIds, `sha256:${'b'.repeat(64)}`],
+      )
+
+      const expired = await client.query<{
+        validation_level: string
+        lab_validated_at: string | null
+      }>(
+        `SELECT validation_level, lab_validated_at
+         FROM public_active_knowledge
+         WHERE stable_key = 'cisco.ios-xe.show-ip-route'
+         UNION ALL
+         SELECT validation_level, NULL::timestamptz
+         FROM public_active_domain_knowledge
+         WHERE stable_key = $1`,
+        [ENGINEERING_MEASUREMENT_SAMPLES[0]!.stable_key],
+      )
+      expect(expired.rows).toEqual([
+        {
+          validation_level: 'documentation_reviewed',
+          lab_validated_at: null
+        },
+        {
+          validation_level: 'documentation_reviewed',
+          lab_validated_at: null
+        }
+      ])
+
+      await client.query(
+        `INSERT INTO knowledge_validations (
+           revision_id,
+           validation_type,
+           status,
+           fixture_key,
+           tool_version,
+           report_hash,
+           commit_sha,
+           summary,
+           internal_report,
+           executed_at,
+           expires_at
+         )
+         SELECT
+           revision_id,
+           'batfish_modeled',
+           'passed',
+           'current-assurance-fixture',
+           'integration-test',
+           $2,
+           repeat('c', 40),
+           'Synthetic current evidence for the assurance projection test.',
+           '{}'::jsonb,
+           '2026-07-18T00:00:00Z',
+           '2099-01-01T00:00:00Z'
+         FROM unnest($1::uuid[]) AS revision_id`,
+        [revisionIds, `sha256:${'d'.repeat(64)}`],
+      )
+      const current = await client.query<{
+        validation_level: string
+      }>(
+        `SELECT validation_level
+         FROM public_active_knowledge
+         WHERE stable_key = 'cisco.ios-xe.show-ip-route'
+         UNION ALL
+         SELECT validation_level
+         FROM public_active_domain_knowledge
+         WHERE stable_key = $1`,
+        [ENGINEERING_MEASUREMENT_SAMPLES[0]!.stable_key],
+      )
+      expect(current.rows).toEqual([
+        { validation_level: 'batfish_modeled' },
+        { validation_level: 'batfish_modeled' }
+      ])
     } finally {
       await client.query('ROLLBACK')
       client.release()
@@ -902,6 +1102,35 @@ describeIntegration('PostgreSQL integration', () => {
       },
     )
     expect(oversized.status).toBe(413)
+
+    const unsupportedChange = await app.request(
+      '/public/v1/playground/review-change',
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          authorization: `Bearer ${config.playgroundToken}`,
+          'x-clideck-client-key': clientKey
+        },
+        body: JSON.stringify({
+          intent: 'Review an unsupported Junos credential command',
+          context: {
+            vendor: 'Juniper',
+            operating_system: 'Junos'
+          },
+          commands: ['set system login password SuperSecret12345']
+        })
+      },
+    )
+    expect(unsupportedChange.status).toBe(200)
+    const unsupportedPayload = await unsupportedChange.json() as {
+      decision: string
+      unknown_commands: string[]
+    }
+    expect(unsupportedPayload.decision).toBe('unknown')
+    expect(unsupportedPayload.unknown_commands[0]).not.toContain(
+      'SuperSecret12345',
+    )
   })
 
   it('serves the real admin data through a read-only sanitized demo contract', async () => {
@@ -1347,9 +1576,10 @@ describeIntegration('PostgreSQL integration', () => {
   })
 
   it('re-redacts opted-in samples into the isolated quarantine', async () => {
-    const revision = await database.query<{ revision_id: string }>(
-      `SELECT revision_id
-       FROM public_active_knowledge
+    const revision = await database.query<{ public_ref: string }>(
+      `SELECT kr.public_ref
+       FROM public_active_knowledge pak
+       JOIN knowledge_revisions kr ON kr.id = pak.revision_id
        ORDER BY stable_key
        LIMIT 1`,
     )
@@ -1359,7 +1589,7 @@ describeIntegration('PostgreSQL integration', () => {
       database,
       { kind: 'anonymous' },
       {
-        revision_ref: revision.rows[0]!.revision_id,
+        revision_ref: revision.rows[0]!.public_ref,
         category: 'correct',
         sample_contribution: {
           consent: true,
@@ -1387,7 +1617,7 @@ describeIntegration('PostgreSQL integration', () => {
          extract(epoch FROM expires_at - contributed_at) / 86400
            AS ttl_days
        FROM snapshot_contributions
-       WHERE id = $1`,
+       WHERE public_ref = $1`,
       [result.contribution_id],
     )
     const serialized = JSON.stringify(contribution.rows[0])
@@ -1399,13 +1629,13 @@ describeIntegration('PostgreSQL integration', () => {
     await database.query(
       `UPDATE snapshot_contributions
        SET expires_at = now() - interval '1 second'
-       WHERE id = $1`,
+       WHERE public_ref = $1`,
       [result.contribution_id],
     )
     await runWorkerMaintenance(database, `test-${randomUUID()}`)
     const expired = await database.query<{ exists: boolean }>(
       `SELECT EXISTS (
-         SELECT 1 FROM snapshot_contributions WHERE id = $1
+         SELECT 1 FROM snapshot_contributions WHERE public_ref = $1
        ) AS exists`,
       [result.contribution_id],
     )
@@ -1492,9 +1722,11 @@ describeIntegration('PostgreSQL integration', () => {
       ],
     )
 
-    await expect(
+    const publicationAttempts = await Promise.all([
       processNextCandidate(database, config, logger),
-    ).resolves.toBe(true)
+      processNextCandidate(database, config, logger)
+    ])
+    expect(publicationAttempts.sort()).toEqual([false, true])
 
     const state = await database.query<{
       status: string
@@ -1520,8 +1752,138 @@ describeIntegration('PostgreSQL integration', () => {
       1,
     )
     expect(answers[0]?.command).toBe(`show test-loopback-${unique}`)
-    expect(answers[0]?.revision_ref).toBe(
+    expect(answers[0]?.revision_ref).not.toBe(
       state.rows[0]?.result_revision_id,
+    )
+    expect(await getPublicRevision(
+      database,
+      answers[0]!.revision_ref,
+    )).not.toBeNull()
+  })
+
+  it('rejects stale researcher mutations after a task is reclaimed', async () => {
+    const task = await createExpertTask(
+      database,
+      config,
+      { kind: 'anonymous' },
+      'How should a stale researcher lease be handled safely?',
+      {
+        vendor: 'Cisco',
+        operating_system: 'IOS XE'
+      },
+    )
+    await database.query(
+      `UPDATE expert_tasks SET priority = 10 WHERE public_id = $1`,
+      [task.task_id],
+    )
+    const first = await claimResearchTask(
+      database,
+      config,
+      'stale-researcher-01',
+    )
+    expect(first['task_id']).toBe(task.task_id)
+    await database.query(
+      `UPDATE expert_tasks
+       SET lease_until = now() - interval '1 second'
+       WHERE public_id = $1`,
+      [task.task_id],
+    )
+    await runWorkerMaintenance(database, `test-${randomUUID()}`)
+    const second = await claimResearchTask(
+      database,
+      config,
+      'fresh-researcher-02',
+    )
+    expect(second['task_id']).toBe(task.task_id)
+
+    await expect(requestResearchInput(
+      database,
+      task.task_id,
+      String(first['lease_token']),
+      'This stale lease must not pause the reclaimed task.',
+    )).rejects.toThrow('RESEARCH_LEASE_INVALID')
+    await expect(failResearchTask(
+      database,
+      task.task_id,
+      String(first['lease_token']),
+      'STALE_LEASE',
+      'This stale lease must not terminate the reclaimed task.',
+    )).rejects.toThrow('RESEARCH_LEASE_INVALID')
+
+    const state = await database.query<{
+      status: string
+      claim_owner: string
+    }>(
+      `SELECT status, claim_owner
+       FROM expert_tasks
+       WHERE public_id = $1`,
+      [task.task_id],
+    )
+    expect(state.rows[0]).toEqual({
+      status: 'researching',
+      claim_owner: 'fresh-researcher-02'
+    })
+    await failResearchTask(
+      database,
+      task.task_id,
+      String(second['lease_token']),
+      'TEST_COMPLETE',
+      'The fresh lease completed the stale-lease integration scenario.',
+    )
+  })
+
+  it('requires three recent executor failures before a system pause', async () => {
+    const executorId = `pipeline-executor-test-${randomUUID()}`
+    await expect(pausePipelineForSystemFailure(
+      database,
+      {
+        failure_code: 'COORDINATOR_REPEATED_FAILURE',
+        failure_message:
+          'A single uncorroborated failure must not pause the pipeline.'
+      },
+      executorId,
+    )).rejects.toThrow('PIPELINE_SYSTEM_FAILURE_NOT_CORROBORATED')
+
+    await database.query(
+      `INSERT INTO agent_runs (
+         model,
+         reasoning_effort,
+         status,
+         error_code,
+         executor_id,
+         completed_at
+       )
+       SELECT
+         'gpt-5.6-luna',
+         'low',
+         'failed',
+         'AGENT_LAUNCH_FAILED',
+         $1,
+         now()
+       FROM generate_series(1, 3)`,
+      [executorId],
+    )
+    const paused = await pausePipelineForSystemFailure(
+      database,
+      {
+        failure_code: 'COORDINATOR_REPEATED_FAILURE',
+        failure_message:
+          'Three recent launch failures require an operator-visible pause.'
+      },
+      executorId,
+    )
+    expect(paused).toMatchObject({
+      enabled: false,
+      system_failure: true
+    })
+    await database.query(
+      `UPDATE pipeline_settings
+       SET enabled = true,
+           paused_reason = NULL,
+           pause_requested_at = NULL,
+           updated_at = now(),
+           updated_by = 'integration-test'
+       WHERE singleton`,
     )
   })
 
@@ -1835,17 +2197,26 @@ describeIntegration('PostgreSQL integration', () => {
         confidence_reason:
           'The fragment directly contains the bounded read-only command.',
         last_verified_at: '2026-07-18',
-        provenance: [{
-          url: sourceUrl,
-          document_type: 'command_reference',
-          title: `IOS XE pipeline integration source ${unique}`,
-          document_version: '17.15',
-          document_date: '2026-07-18',
-          verified_at: '2026-07-18',
-          content_hash: sha256Label(sourceText),
-          evidence_fragment: `show pipeline-integration-${unique}`,
-          evidence_role: 'primary' as const
-        }]
+        provenance: [
+          {
+            url: 'https://attacker.example/forged-source',
+            document_type: 'forged',
+            title: 'Forged source identity',
+            verified_at: '2026-07-18',
+            content_hash: sha256Label('forged-fragment'),
+            evidence_fragment: `show pipeline-integration-${unique}`,
+            evidence_role: 'corroborating' as const
+          },
+          {
+            url: 'https://attacker.example/duplicate-confirmation',
+            document_type: 'forged',
+            title: 'Second forged confirmation',
+            verified_at: '2026-07-18',
+            content_hash: sha256Label('second-forged-fragment'),
+            evidence_fragment: `show pipeline-integration-${unique}`,
+            evidence_role: 'primary' as const
+          }
+        ]
       }
       const invalidContextCandidate = {
         ...candidate,
@@ -1862,6 +2233,39 @@ describeIntegration('PostgreSQL integration', () => {
         ],
         rejected_fragments: []
       })
+      const storedCandidate = await database.query<{
+        payload: {
+          provenance: Array<{
+            url: string
+            content_hash: string
+            evidence_role: string
+          }>
+        }
+        fragment_hash: string
+      }>(
+        `SELECT
+           kc.payload,
+           sf.content_hash AS fragment_hash
+         FROM knowledge_candidates kc
+         JOIN source_fragments sf ON sf.id = kc.source_fragment_id
+         WHERE kc.pipeline_task_id = $1
+           AND kc.stable_key = $2`,
+        [
+          String(analysis['pipeline_task_id']),
+          candidate.stable_key
+        ],
+      )
+      expect(storedCandidate.rows[0]?.payload.provenance).toEqual([{
+        url: sourceUrl,
+        content_hash: storedCandidate.rows[0]?.fragment_hash,
+        evidence_role: 'primary',
+        document_type: 'command_reference',
+        title: `IOS XE pipeline integration source ${unique}`,
+        document_version: '17.15',
+        document_date: '2026-07-18',
+        verified_at: '2026-07-18',
+        evidence_fragment: `show pipeline-integration-${unique}`
+      }])
       const verificationReservations = await database.query<{
         count: number
       }>(

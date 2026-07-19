@@ -90,19 +90,19 @@ a scientific reference database.
 
 ## Truthful public demo
 
-`/demo` is not a mock dashboard. It is a second read-only build of the real
-`apps/admin` application:
+`/demo` is not a mock dashboard. It runs the exact same compiled
+`apps/admin` frontend bundle as the LAN console:
 
-- the same React source, pages, charts, formatters, breakpoints, and tooltips;
+- the same JS, CSS, pages, charts, formatters, breakpoints, and tooltips;
 - real aggregate data from the active production database;
 - the same Overview, Pipeline, Coverage, and Quality screens;
 - no login, admin session, mutation controls, or private endpoints.
 
 The server removes source identity, provenance, document content, internal IDs,
 questions, hostnames, audit data, and internal errors before JSON reaches the
-browser. Values are not hidden with CSS blur. Public and LAN builds may expose
-different permissions and fields, but they do not maintain separate visual
-implementations.
+browser. Values are not hidden with CSS blur. Public and LAN routes expose
+different permissions and fields, but there is only one visual implementation
+and one production frontend artifact.
 
 ## Architecture
 

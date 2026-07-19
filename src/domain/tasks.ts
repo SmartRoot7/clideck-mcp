@@ -24,6 +24,7 @@ type TaskRow = {
     | 'researching'
     | 'input_required'
     | 'validating'
+    | 'publishing'
     | 'completed'
     | 'failed'
     | 'cancelled'
@@ -172,6 +173,8 @@ function toPublicTaskStatus(
         ? 'researching'
         : row.status === 'validating'
           ? 'validating'
+          : row.status === 'publishing'
+            ? 'publishing'
           : row.status === 'completed'
             ? 'completed'
             : row.status === 'cancelled'
@@ -361,16 +364,20 @@ export async function submitFeedback(
     internalTaskId = task.id
   }
 
-  const result = await database.query<{ id: string }>(
+  const result = await database.query<{ public_ref: string }>(
     `INSERT INTO feedback (
        tenant_id, revision_id, task_id, rating, category, comment
      )
-     SELECT $1, pak.revision_id, $3, $4, $5, $6
-       FROM (SELECT $2::uuid AS revision_id) requested
-       LEFT JOIN public_active_knowledge pak
-         ON pak.revision_id = requested.revision_id
-      WHERE $2::uuid IS NULL OR pak.revision_id IS NOT NULL
-     RETURNING id`,
+     SELECT $1, kr.id, $3, $4, $5, $6
+       FROM (SELECT $2::uuid AS public_ref) requested
+       LEFT JOIN knowledge_revisions kr
+         ON kr.public_ref = requested.public_ref
+       LEFT JOIN release_items ri
+         ON ri.revision_id = kr.id
+       LEFT JOIN active_release ar
+         ON ar.release_id = ri.release_id
+      WHERE $2::uuid IS NULL OR ar.release_id IS NOT NULL
+     RETURNING public_ref`,
     [
       actor.kind === 'tenant' ? actor.tenantId : null,
       input.revision_ref ?? null,
@@ -397,7 +404,9 @@ export async function submitFeedback(
         ],
       ),
     )
-    const contribution = await quarantineDatabase.query<{ id: string }>(
+    const contribution = await quarantineDatabase.query<{
+      public_ref: string
+    }>(
       `INSERT INTO snapshot_contributions (
          consent_version,
          snapshot_type,
@@ -411,7 +420,7 @@ export async function submitFeedback(
          snapshot_contributions.expires_at,
          now() + interval '30 days'
        )
-       RETURNING id`,
+       RETURNING public_ref`,
       [
         input.sample_contribution.consent_version,
         input.sample_contribution.snapshot_type,
@@ -420,11 +429,11 @@ export async function submitFeedback(
         sha256Label(strict)
       ],
     )
-    contributionId = contribution.rows[0]!.id
+    contributionId = contribution.rows[0]!.public_ref
   }
   return {
     accepted: true,
-    feedback_id: row.id,
+    feedback_id: row.public_ref,
     ...(contributionId ? { contribution_id: contributionId } : {})
   }
 }

@@ -164,7 +164,7 @@ export function createAdminUiApp(dependencies: AdminUiDependencies) {
     await next()
     context.header(
       'cache-control',
-      context.req.path.startsWith('/admin/assets/')
+      context.req.path.startsWith('/_clideck-mcp-ui/assets/')
         ? 'public, max-age=31536000, immutable'
         : 'no-store',
     )
@@ -644,10 +644,11 @@ export function createAdminUiApp(dependencies: AdminUiDependencies) {
 
   if (existsSync(assetRoot)) {
     app.use(
-      '/admin/assets/*',
+      '/_clideck-mcp-ui/assets/*',
       serveStatic({
         root: assetRoot,
-        rewriteRequestPath: (path) => path.replace(/^\/admin/, ''),
+        rewriteRequestPath: (path) =>
+          path.replace(/^\/_clideck-mcp-ui/, ''),
         onFound: (_path, context) => {
           context.header('cache-control', 'public, max-age=31536000, immutable')
         }

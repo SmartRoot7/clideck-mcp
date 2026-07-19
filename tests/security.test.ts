@@ -11,7 +11,13 @@ import {
   assertSafeProvenanceUrl,
   isBlockedAddress
 } from '../src/security/url-policy.js'
+import { purgeExpiredSourceArtifacts } from '../src/domain/pipeline-worker.js'
+import { createApiApp } from '../src/http/api-app.js'
 import { isTrustedProxy } from '../src/http/security.js'
+import { createLogger } from '../src/logger.js'
+import { createMetrics } from '../src/metrics.js'
+import type { Database } from '../src/db.js'
+import { createTestConfig } from './helpers.js'
 
 describe('security primitives', () => {
   it('keeps continuous pipeline objects in the production grant matrix', async () => {
@@ -77,7 +83,12 @@ describe('security primitives', () => {
       '169.254.169.254',
       '192.168.1.1',
       '::1',
-      'fd00::1'
+      'fd00::1',
+      'fec0::1',
+      'ff02::1',
+      '::127.0.0.1',
+      '::ffff:127.0.0.1',
+      '::ffff:7f00:1'
     ]) {
       expect(isBlockedAddress(address)).toBe(true)
     }
@@ -92,5 +103,65 @@ describe('security primitives', () => {
   it('trusts only explicitly configured proxy ranges', () => {
     expect(isTrustedProxy('127.0.0.1', ['127.0.0.1/32'])).toBe(true)
     expect(isTrustedProxy('10.0.0.1', ['127.0.0.1/32'])).toBe(false)
+  })
+
+  it('collapses arbitrary 404 paths into one metrics label', async () => {
+    const config = createTestConfig()
+    const database = {
+      query: async () => {
+        throw new Error('A not-found request must not query the database')
+      }
+    } as unknown as Database
+    const metrics = createMetrics()
+    const app = createApiApp({
+      config,
+      database,
+      adminDatabase: database,
+      quarantineDatabase: database,
+      logger: createLogger(config),
+      metrics
+    })
+    await Promise.all(
+      Array.from({ length: 50 }, (_, index) =>
+        app.request(`http://localhost/not-found-${index}`),
+      ),
+    )
+    const family = (await metrics.registry.getMetricsAsJSON()).find(
+      (metric) => metric.name === 'clideck_mcp_http_requests_total',
+    )
+    const unmatched = family?.values.filter(
+      (sample) => sample.labels['route'] === '__unmatched__',
+    )
+    expect(unmatched).toHaveLength(1)
+  })
+
+  it('does not mark an artifact purged when file deletion fails', async () => {
+    const statements: string[] = []
+    const database = {
+      query: async (sql: string) => {
+        statements.push(sql)
+        return sql.includes('FROM source_artifacts')
+          ? {
+              rows: [{
+                id: '11111111-1111-4111-8111-111111111111',
+                storage_path: '/tmp/undeletable-source',
+                extracted_text_path: null
+              }]
+            }
+          : { rows: [] }
+      }
+    } as unknown as Database
+    const removeFile = async () => {
+      throw Object.assign(new Error('permission denied'), { code: 'EACCES' })
+    }
+
+    await expect(purgeExpiredSourceArtifacts(
+      database,
+      createLogger(createTestConfig()),
+      removeFile,
+    )).resolves.toBe(0)
+    expect(statements.some((sql) =>
+      sql.includes("SET status = 'purged'"),
+    )).toBe(false)
   })
 })

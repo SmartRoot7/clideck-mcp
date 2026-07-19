@@ -8,6 +8,7 @@ import type { InternalResolvedContext } from './context.js'
 
 type KnowledgeRow = {
   revision_id: string
+  public_ref: string
   kind: PublicKnowledge['kind']
   vendor_name: string
   platform_name: string | null
@@ -54,7 +55,7 @@ function toPublicKnowledge(
   conflicts: ConflictRow[],
 ): PublicKnowledge {
   return {
-    revision_ref: row.revision_id,
+    revision_ref: row.public_ref,
     kind: row.kind,
     title: row.title,
     summary: row.summary,
@@ -156,6 +157,7 @@ export async function searchKnowledge(
      )
      SELECT
        rr.revision_id,
+       kr.public_ref,
        ki.kind,
        v.display_name AS vendor_name,
        p.display_name AS platform_name,
@@ -179,7 +181,15 @@ export async function searchKnowledge(
        kr.quality_score,
        kr.last_verified_at,
        coalesce(
-         kpt.validation_level,
+         current_validation.validation_level,
+         CASE
+           WHEN kpt.validation_level IN (
+             'batfish_modeled',
+             'runtime_lab_validated'
+           )
+             THEN 'documentation_reviewed'
+           ELSE kpt.validation_level
+         END,
          'documentation_reviewed'
        ) AS validation_level,
        coalesce(kpt.independent_confirmations, 1) AS independent_confirmations,
@@ -191,7 +201,7 @@ export async function searchKnowledge(
          kpt.next_review_at,
          kr.last_verified_at + 180
        ) AS next_review_at,
-       kpt.lab_validated_at,
+       current_validation.lab_validated_at,
        rr.rank
      FROM ranked_revisions rr
      JOIN knowledge_revisions kr ON kr.id = rr.revision_id
@@ -200,6 +210,8 @@ export async function searchKnowledge(
      LEFT JOIN platforms p ON p.id = kr.platform_id
      LEFT JOIN operating_systems os ON os.id = kr.operating_system_id
      LEFT JOIN knowledge_public_trust kpt ON kpt.revision_id = kr.id
+     LEFT JOIN LATERAL current_knowledge_validation(kr.id)
+       current_validation ON true
      ORDER BY rr.rank DESC, kr.confidence DESC, kr.last_verified_at DESC`,
     [
       normalizedQuestion,
@@ -257,9 +269,10 @@ export async function getPublicRevision(
   requestedVersion: string | null = null,
 ): Promise<PublicKnowledge | null> {
   const result = await database.query<KnowledgeRow>(
-    `SELECT pak.*, 1::float8 AS rank
+    `SELECT pak.*, kr.public_ref, 1::float8 AS rank
      FROM public_active_knowledge pak
-     WHERE pak.revision_id = $1`,
+     JOIN knowledge_revisions kr ON kr.id = pak.revision_id
+     WHERE pak.revision_id = $1 OR kr.public_ref = $1`,
     [revisionId],
   )
   const row = result.rows[0]

@@ -39,6 +39,8 @@ import {
 } from './publication.js'
 
 const execFileAsync = promisify(execFile)
+const maxOcrPages = 100
+const maxOcrDurationMs = 10 * 60_000
 
 const sourcePayloadSchema = z.object({
   source_id: z.string().uuid(),
@@ -231,14 +233,17 @@ async function ocrPdfPages(
   })
   const match = /^Pages:\s+(\d+)$/im.exec(info.stdout)
   const pageCount = match?.[1] ? Number(match[1]) : null
-  if (!pageCount || pageCount > 2_000) {
+  if (!pageCount) {
     return { text: '', pageCount }
   }
+  if (pageCount > maxOcrPages) throw new Error('SOURCE_OCR_PAGE_LIMIT')
 
   const scratch = await mkdtemp(join(tmpdir(), 'clideck-mcp-ocr-'))
   const pages: string[] = []
+  const deadline = Date.now() + maxOcrDurationMs
   try {
     for (let page = 1; page <= pageCount; page += 1) {
+      if (Date.now() >= deadline) throw new Error('SOURCE_OCR_TIME_LIMIT')
       const prefix = join(scratch, `page-${page}`)
       try {
         await execFileAsync(
@@ -320,24 +325,50 @@ type TextFragment = {
 
 function splitOversizedText(text: string, maxBytes: number): string[] {
   const pieces: string[] = []
-  let remaining = text.trim()
-  while (Buffer.byteLength(remaining, 'utf8') > maxBytes) {
-    let end = Math.min(remaining.length, maxBytes)
-    while (
-      end > 1 &&
-      Buffer.byteLength(remaining.slice(0, end), 'utf8') > maxBytes
-    ) {
-      end -= 1
+  let cursor = 0
+  while (cursor < text.length) {
+    while (cursor < text.length && /\s/.test(text[cursor] ?? '')) {
+      cursor += 1
+    }
+    if (cursor >= text.length) break
+
+    let end = cursor
+    let bytes = 0
+    let exceeded = false
+    while (end < text.length) {
+      const codePoint = text.codePointAt(end)
+      if (codePoint === undefined) break
+      const codeUnits = codePoint > 0xffff ? 2 : 1
+      const codePointBytes =
+        codePoint <= 0x7f
+          ? 1
+          : codePoint <= 0x7ff
+            ? 2
+            : codePoint <= 0xffff
+              ? 3
+              : 4
+      if (bytes + codePointBytes > maxBytes) {
+        exceeded = true
+        break
+      }
+      bytes += codePointBytes
+      end += codeUnits
+    }
+
+    if (!exceeded) {
+      const finalPiece = text.slice(cursor).trim()
+      if (finalPiece) pieces.push(finalPiece)
+      break
     }
     const boundary = Math.max(
-      remaining.lastIndexOf('\n', end),
-      remaining.lastIndexOf(' ', end),
+      text.lastIndexOf('\n', end),
+      text.lastIndexOf(' ', end),
     )
-    if (boundary > end / 2) end = boundary
-    pieces.push(remaining.slice(0, end).trim())
-    remaining = remaining.slice(end).trim()
+    if (boundary > cursor + (end - cursor) / 2) end = boundary
+    const piece = text.slice(cursor, end).trim()
+    if (piece) pieces.push(piece)
+    cursor = end
   }
-  if (remaining) pieces.push(remaining)
   return pieces
 }
 
@@ -882,6 +913,7 @@ export async function processNextPipelineTask(
 export async function purgeExpiredSourceArtifacts(
   database: Database,
   logger: Logger,
+  removeFile: typeof unlink = unlink,
 ): Promise<number> {
   const expired = await database.query<{
     id: string
@@ -897,9 +929,33 @@ export async function purgeExpiredSourceArtifacts(
   )
   let purged = 0
   for (const artifact of expired.rows) {
-    await unlink(artifact.storage_path).catch(() => undefined)
-    if (artifact.extracted_text_path) {
-      await unlink(artifact.extracted_text_path).catch(() => undefined)
+    try {
+      await removeFile(artifact.storage_path)
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        logger.error(
+          {
+            err: error,
+            sourceArtifactId: artifact.id
+          },
+          'Could not purge expired source artifact',
+        )
+        continue
+      }
+    }
+    if (artifact.extracted_text_path) try {
+      await removeFile(artifact.extracted_text_path)
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        logger.error(
+          {
+            err: error,
+            sourceArtifactId: artifact.id
+          },
+          'Could not purge expired extracted source text',
+        )
+        continue
+      }
     }
     await database.query(
       `UPDATE source_artifacts

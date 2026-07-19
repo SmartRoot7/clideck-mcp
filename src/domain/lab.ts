@@ -4,6 +4,7 @@ import { z } from 'zod'
 
 export const labValidationSchema = z.object({
   stable_key: z.string().min(3).max(200),
+  revision_hash: z.string().regex(/^sha256:[0-9a-f]{64}$/),
   validation_type: z.enum([
     'documentation_reviewed',
     'batfish_modeled',
@@ -58,6 +59,32 @@ function canonicalize(value: unknown): unknown {
   return value
 }
 
+export const labRevisionBindingSchema = z.object({
+  stable_key: z.string().min(3).max(200),
+  kind: z.string().min(1).max(80),
+  version_min: z.string().nullable(),
+  version_max: z.string().nullable(),
+  title: z.string(),
+  summary: z.string(),
+  question_patterns: z.array(z.string()),
+  cli_mode: z.string().nullable(),
+  command_text: z.string().nullable(),
+  procedure_steps: z.array(z.string()),
+  prerequisites: z.array(z.string()),
+  risks: z.array(z.string()),
+  verification_steps: z.array(z.string()),
+  rollback_steps: z.array(z.string()),
+  limitations: z.array(z.string()),
+  dangerous: z.boolean()
+})
+
+export function labRevisionHash(input: unknown): string {
+  const binding = labRevisionBindingSchema.parse(input)
+  return `sha256:${createHash('sha256')
+    .update(JSON.stringify(canonicalize(binding)))
+    .digest('hex')}`
+}
+
 export function labReportHash(report: UnsignedLabReport): string {
   const serialized = JSON.stringify(canonicalize(report))
   return `sha256:${createHash('sha256').update(serialized).digest('hex')}`
@@ -78,6 +105,11 @@ export function verifyLabReport(input: unknown): LabReport {
     throw new Error('LAB_REPORT_HASH_MISMATCH')
   }
   for (const validation of report.validations) {
+    const executedAt = Date.parse(validation.executed_at)
+    const expiresAt = Date.parse(validation.expires_at)
+    if (expiresAt <= Date.now() || expiresAt <= executedAt) {
+      throw new Error('LAB_VALIDATION_EXPIRED')
+    }
     if (
       validation.validation_type === 'runtime_lab_validated' &&
       (!validation.runtime_image_tested || !validation.runtime_vendor)

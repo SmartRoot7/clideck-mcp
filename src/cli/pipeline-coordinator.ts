@@ -31,6 +31,12 @@ import {
   pipelineModel,
   pipelineReasoning
 } from './pipeline-runtime.js'
+import {
+  assertArtifactContainsNoSecrets,
+  codexExecutorArguments,
+  codexExecutorEnvironment,
+  sensitiveEnvironmentValues
+} from './pipeline-codex-policy.js'
 
 const environmentSchema = z.object({
   CLIDECK_PIPELINE_MODEL: z.literal(pipelineModel)
@@ -340,33 +346,17 @@ async function runCodex(
   return new Promise((resolvePromise, rejectPromise) => {
     const child = spawn(
       environment.CLIDECK_PIPELINE_CODEX_BINARY,
-      [
-        'exec',
-        '--ephemeral',
-        '--ignore-user-config',
-        '--json',
-        '--color',
-        'never',
-        '--sandbox',
-        'read-only',
-        '-m',
-        environment.CLIDECK_PIPELINE_MODEL,
-        '-c',
-        `model_reasoning_effort="${environment.CLIDECK_PIPELINE_REASONING}"`,
-        '-c',
-        'approval_policy="never"',
-        '-c',
-        'tool_output_token_limit=4000',
-        '-o',
-        agentOutputPath,
-        '--output-schema',
-        agentOutputSchemaPath,
-        '-C',
-        tempDirectory,
-        '-'
-      ],
+      codexExecutorArguments({
+        taskType: task.task_type,
+        model: environment.CLIDECK_PIPELINE_MODEL,
+        reasoning: environment.CLIDECK_PIPELINE_REASONING,
+        outputPath: agentOutputPath,
+        outputSchemaPath: agentOutputSchemaPath,
+        workingDirectory: tempDirectory
+      }),
       {
         cwd: projectRoot,
+        env: codexExecutorEnvironment(process.env),
         stdio: ['pipe', 'pipe', 'pipe']
       },
     )
@@ -597,11 +587,21 @@ function safeErrorSummary(error: unknown): string {
 async function submitAgentArtifact(
   task: z.infer<typeof claimedTaskSchema>,
 ): Promise<void> {
+  const rawArtifact = await readFile(agentOutputPath, 'utf8')
+  assertArtifactContainsNoSecrets(
+    rawArtifact,
+    sensitiveEnvironmentValues(process.env),
+  )
   const parsed = validateAgentArtifact(
     task,
-    parseAgentJson(await readFile(agentOutputPath, 'utf8')),
+    parseAgentJson(rawArtifact),
   )
-  await writeFile(submissionPath, JSON.stringify(parsed), {
+  const serialized = JSON.stringify(parsed)
+  assertArtifactContainsNoSecrets(
+    serialized,
+    sensitiveEnvironmentValues(process.env),
+  )
+  await writeFile(submissionPath, serialized, {
     encoding: 'utf8',
     mode: 0o600
   })

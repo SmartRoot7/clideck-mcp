@@ -288,9 +288,8 @@ URL: `https://mcp.clideck.com/demo`
 
 Deliverables:
 
-- a second read-only build of the real `apps/admin` application, using the
-  exact same shell, pages, charts, formatters, responsive rules, and source
-  files as the LAN console;
+- the exact same compiled `apps/admin` bundle used by the LAN console, with
+  the same shell, pages, charts, formatters, responsive rules, JS, and CSS;
 - the real Overview, Pipeline, Coverage, and Quality screens;
 - `GET /public/v1/demo/snapshot`;
 - real production aggregate metrics, publication trends, funnel, safe coverage,
@@ -313,9 +312,11 @@ Truthfulness rule:
 
 - there is no separately designed showcase dashboard and no fabricated
   dataset;
-- `/admin` and `/demo` are built from `apps/admin`; only authorization,
-  available sections/actions, and the server-provided data contract differ;
-- changes to shared admin components therefore appear in both builds;
+- `/admin` and `/demo` serve one byte-identical frontend artifact; only
+  authorization, available sections/actions, and the server-provided data
+  contract differ;
+- changes to an admin component therefore cannot ship to one route without
+  shipping to the other;
 - real Network production totals and pipeline activity are shown as reported
   by the active database at request time.
 
@@ -337,8 +338,8 @@ Verification:
   color, and compact navigation. The concept's dark sidebar and invented cards
   were intentionally rejected so the demo remains identical to the real admin
   instead of becoming a marketing mockup;
-- typecheck, 16/16 PostgreSQL integration tests, 7/7 admin UI tests, and both
-  admin/demo production builds passed.
+- typecheck, 16/16 PostgreSQL integration tests, 7/7 admin UI tests, and the
+  single shared production frontend build passed.
 
 Completed: 2026-07-19
 
@@ -380,7 +381,7 @@ Completed: 2026-07-19
 
 ## Final day — release and submission
 
-### [ ] D3.1 — Security and release gate
+### [~] D3.1 — Security and release gate
 
 - scan repository contents and full Git history for secrets and provenance;
 - back up production PostgreSQL and deployment configuration;
@@ -390,6 +391,29 @@ Completed: 2026-07-19
   to the README;
 - make the repository public only after the gate passes;
 - tag the verified release `v0.6.0-build-week`.
+
+Completed so far:
+
+- the repository-wide Codex Security scan closed all 40 review surfaces and
+  produced a final report for 14 findings: 4 medium, 10 low, no high or
+  critical findings;
+- all 14 findings have code remediations and focused regressions in the release
+  worktree, including child-process capability isolation, public-output
+  redaction, fail-closed change canonicalization, SSRF/parser bounds, atomic
+  publication and lease transitions, public-reference separation, and
+  evidence-derived lab assurance;
+- the complete Git history was scanned for common secret patterns without a
+  match, and ignored local credentials remain outside the tracked tree;
+- a fresh production PostgreSQL custom-format backup and a root-only deployment
+  configuration backup were created and checksum-verified;
+- a clean PostgreSQL database applied migrations 001–012; 77 backend and
+  PostgreSQL tests, 13 Domain Pack tests, and 7 UI tests passed without skip;
+- product eval passed 250/250 with dangerous false-safe 0 and known-query
+  p95 3.61 ms; typecheck, production build, and diff checks passed.
+
+Remaining before completion: commit and deploy the exact release, run production
+smoke tests, capture the real deployed demo screenshot, publish the repository,
+and create the release tag.
 
 ### [ ] D3.2 — Build Week submission
 

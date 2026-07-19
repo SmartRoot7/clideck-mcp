@@ -1,8 +1,17 @@
 import { randomUUID } from 'node:crypto'
+import {
+  mkdir,
+  mkdtemp,
+  rm,
+  writeFile
+} from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
 import { createAdminUiApp } from '../src/http/admin-ui-app.js'
+import { createApiApp } from '../src/http/api-app.js'
 import {
   hashAdminPassword,
   LocalAdminSessionStore,
@@ -10,6 +19,8 @@ import {
   verifyAdminPassword
 } from '../src/http/admin-ui-auth.js'
 import { createLogger } from '../src/logger.js'
+import { createMetrics } from '../src/metrics.js'
+import type { Database } from '../src/db.js'
 import { createTestConfig } from './helpers.js'
 
 const origin = 'https://clideck-mcp.lan'
@@ -107,6 +118,64 @@ describe('local admin password and session security', () => {
 })
 
 describe('local admin HTTP boundary', () => {
+  it('serves one byte-identical frontend artifact to admin and demo', async () => {
+    const assetRoot = await mkdtemp(join(tmpdir(), 'clideck-shared-ui-'))
+    await mkdir(join(assetRoot, 'assets'))
+    await writeFile(
+      join(assetRoot, 'index.html'),
+      '<!doctype html><script src="/_clideck-mcp-ui/assets/shared.js"></script>',
+    )
+    await writeFile(
+      join(assetRoot, 'assets', 'shared.js'),
+      'globalThis.__CLIDECK_SHARED_UI__ = true',
+    )
+    const base = createTestConfig()
+    const config = createTestConfig({
+      enablePublicDemo: true,
+      adminUi: { ...base.adminUi, assetRoot }
+    })
+    const database = {
+      query: async () => {
+        throw new Error('Static frontend requests must not query PostgreSQL')
+      }
+    } as unknown as Database
+    try {
+      const admin = createAdminUiApp({
+        config,
+        logger: createLogger(config),
+        internalFetch: async () =>
+          new Response(null, { status: 500 })
+      })
+      const publicApi = createApiApp({
+        config,
+        database,
+        adminDatabase: database,
+        quarantineDatabase: database,
+        logger: createLogger(config),
+        metrics: createMetrics()
+      })
+      const [adminIndex, demoIndex, adminAsset, demoAsset] =
+        await Promise.all([
+          admin.request('/admin'),
+          publicApi.request('/demo'),
+          admin.request('/_clideck-mcp-ui/assets/shared.js'),
+          publicApi.request('/_clideck-mcp-ui/assets/shared.js')
+        ])
+      expect([
+        adminIndex.status,
+        demoIndex.status,
+        adminAsset.status,
+        demoAsset.status
+      ]).toEqual([200, 200, 200, 200])
+      expect(await adminIndex.text()).toBe(await demoIndex.text())
+      expect(await adminAsset.text()).toBe(await demoAsset.text())
+      expect(adminAsset.headers.get('cache-control')).toContain('immutable')
+      expect(demoAsset.headers.get('cache-control')).toContain('immutable')
+    } finally {
+      await rm(assetRoot, { recursive: true, force: true })
+    }
+  })
+
   it('requires a session and issues a strict secure host cookie', async () => {
     const app = await testApp()
     const unauthorized = await app.request('/admin/api/v1/overview', {

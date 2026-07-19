@@ -1,6 +1,9 @@
 import { readFile } from 'node:fs/promises'
 
-import { verifyLabReport } from '../domain/lab.js'
+import {
+  labRevisionHash,
+  verifyLabReport
+} from '../domain/lab.js'
 import { createCliRuntime } from './runtime.js'
 
 const [reportPath] = process.argv.slice(2)
@@ -28,14 +31,53 @@ try {
   await database.query('BEGIN')
   for (const validation of report.validations) {
     if (validation.status !== 'passed') continue
-    const revision = await database.query<{ revision_id: string }>(
-      `SELECT revision_id
+    const revision = await database.query<{
+      revision_id: string
+      stable_key: string
+      kind: string
+      version_min: string | null
+      version_max: string | null
+      title: string
+      summary: string
+      question_patterns: string[]
+      cli_mode: string | null
+      command_text: string | null
+      procedure_steps: string[]
+      prerequisites: string[]
+      risks: string[]
+      verification_steps: string[]
+      rollback_steps: string[]
+      limitations: string[]
+      dangerous: boolean
+    }>(
+      `SELECT
+         revision_id,
+         stable_key,
+         kind,
+         version_min,
+         version_max,
+         title,
+         summary,
+         question_patterns,
+         cli_mode,
+         command_text,
+         procedure_steps,
+         prerequisites,
+         risks,
+         verification_steps,
+         rollback_steps,
+         limitations,
+         dangerous
        FROM public_active_knowledge
        WHERE stable_key = $1`,
       [validation.stable_key],
     )
-    const revisionId = revision.rows[0]?.revision_id
-    if (!revisionId) throw new Error('LAB_VALIDATION_REVISION_NOT_ACTIVE')
+    const activeRevision = revision.rows[0]
+    if (!activeRevision) throw new Error('LAB_VALIDATION_REVISION_NOT_ACTIVE')
+    const revisionId = activeRevision.revision_id
+    if (labRevisionHash(activeRevision) !== validation.revision_hash) {
+      throw new Error('LAB_VALIDATION_REVISION_MISMATCH')
+    }
 
     await database.query(
       `INSERT INTO knowledge_validations (
@@ -59,21 +101,6 @@ try {
         validation.executed_at,
         validation.expires_at
       ],
-    )
-    await database.query(
-      `UPDATE knowledge_public_trust
-       SET
-         validation_level = CASE
-           WHEN $2 = 'runtime_lab_validated'
-             THEN 'runtime_lab_validated'
-           WHEN $2 = 'batfish_modeled'
-             AND validation_level = 'documentation_reviewed'
-             THEN 'batfish_modeled'
-           ELSE validation_level
-         END,
-         lab_validated_at = $3
-       WHERE revision_id = $1`,
-      [revisionId, validation.validation_type, validation.executed_at],
     )
     imported += 1
   }
