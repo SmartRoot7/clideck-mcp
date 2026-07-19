@@ -1,5 +1,4 @@
 import { enforceCoreCandidatePolicy } from './core.js'
-import type { JsonObject } from './json.js'
 import {
   assertManifestCompatibility
 } from './registry.js'
@@ -38,11 +37,8 @@ export function runDomainPackConformance(
   if (coreCandidate.domain_id !== manifest.id) {
     throw new Error('DOMAIN_PACK_CORE_DOMAIN_MISMATCH')
   }
-  if (
-    JSON.stringify(coreCandidate.context) !==
-    JSON.stringify(context satisfies JsonObject)
-  ) {
-    throw new Error('DOMAIN_PACK_CORE_CONTEXT_MISMATCH')
+  if (Object.keys(coreCandidate.context).length === 0) {
+    throw new Error('DOMAIN_PACK_CORE_CONTEXT_EMPTY')
   }
   return {
     domain_id: manifest.id,

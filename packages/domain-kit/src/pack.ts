@@ -4,7 +4,6 @@ import type {
   CoreKnowledgeCandidate,
   CoreKnowledgeRevision
 } from './core.js'
-import type { JsonObject } from './json.js'
 import type { DomainPackManifestV1 } from './manifest.js'
 
 export type DomainValidationIssue = {
@@ -19,7 +18,7 @@ export type DomainValidationResult = {
 }
 
 export interface DomainPack<
-  Context extends JsonObject = JsonObject,
+  Context extends Record<string, unknown> = Record<string, unknown>,
   Candidate = unknown,
   PublicRecord = unknown
 > {

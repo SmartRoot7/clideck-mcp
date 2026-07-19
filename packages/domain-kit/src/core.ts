@@ -36,6 +36,7 @@ export const coreRiskLevelSchema = z.enum([
   'physical_harm',
   'unknown'
 ])
+export type CoreRiskLevel = z.infer<typeof coreRiskLevelSchema>
 
 export const coreKnowledgeCandidateSchema = z.strictObject({
   domain_id: domainIdSchema,

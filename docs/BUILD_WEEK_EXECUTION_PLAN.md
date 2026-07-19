@@ -13,7 +13,7 @@ Branch policy: `main` only; completed stages are committed and pushed directly.
 
 ## Current focus
 
-`D1.3 — Network Domain Pack`
+`D1.4 — Scaffolder and authoring documentation`
 
 ## Baseline
 
@@ -121,7 +121,7 @@ Verification:
 
 Completed: 2026-07-19
 
-### [~] D1.3 — Network Domain Pack
+### [x] D1.3 — Network Domain Pack
 
 Goal: make the production network implementation the first built-in domain pack
 without changing its public tools or deterministic behavior.
@@ -139,7 +139,18 @@ Acceptance:
 - existing release and risk behavior is unchanged;
 - network candidate publication uses the pack adapter.
 
-### [ ] D1.4 — Scaffolder and authoring documentation
+Verification:
+
+- the built-in registry loads the Network pack through the same compatibility
+  gate used by future packs;
+- Cisco IOS XE, Junos, and Arista EOS fixtures map to the core envelope;
+- Network pack conformance and validation tests: 3/3 passed;
+- 61/61 backend/PostgreSQL tests, 6 Domain Kit tests, and 5 admin tests passed;
+- current typecheck and production build passed.
+
+Completed: 2026-07-19
+
+### [~] D1.4 — Scaffolder and authoring documentation
 
 Goal: let a developer and their Codex create a safe fork-specific domain without
 editing core internals.

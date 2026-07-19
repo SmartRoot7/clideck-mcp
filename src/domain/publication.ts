@@ -1,3 +1,7 @@
+import {
+  enforceCoreCandidatePolicy
+} from '@clideck/domain-kit'
+
 import type { AppConfig } from '../config.js'
 import { sha256Label } from '../crypto.js'
 import type { Database, DatabaseClient } from '../db.js'
@@ -5,6 +9,7 @@ import { withTransaction } from '../db.js'
 import type { Logger } from '../logger.js'
 import { normalizeVendorVersion } from '../version.js'
 import { candidateRevisionSchema } from './schemas.js'
+import { getNetworkDomainPack } from './domain-packs.js'
 import { enforceKnowledgeRisk } from './risk.js'
 
 const storedCandidateSchema = candidateRevisionSchema.omit({
@@ -104,6 +109,19 @@ export async function createKnowledgeRevision(
   const candidate = enforceKnowledgeRisk(
     candidateKnowledgeSchema.parse(unparsedCandidate),
   )
+  const networkDomainPack = getNetworkDomainPack()
+  const packCandidate = networkDomainPack.candidateSchema.parse(candidate)
+  const packValidation = networkDomainPack.validateCandidate(packCandidate)
+  if (!packValidation.valid) {
+    throw new Error(
+      `NETWORK_DOMAIN_CANDIDATE_INVALID:${packValidation.issues
+        .map((issue) => issue.code)
+        .join(',')}`,
+    )
+  }
+  const coreCandidate = enforceCoreCandidatePolicy(
+    networkDomainPack.toCoreCandidate(packCandidate),
+  )
   const context = await resolveCandidateContext(client, candidate)
   const stableKey = await resolveCandidateStableKey(
     client,
@@ -111,15 +129,17 @@ export async function createKnowledgeRevision(
     createdBy,
   )
   const item = await client.query<{ id: string; kind: string }>(
-    `INSERT INTO knowledge_items (stable_key, kind)
-     VALUES ($1, $2)
+    `INSERT INTO knowledge_items (domain_id, stable_key, kind)
+     VALUES ('network', $1, $2)
      ON CONFLICT (stable_key) DO NOTHING
      RETURNING id, kind`,
     [stableKey, candidate.kind],
   )
   const existingItem = item.rows[0] ?? (
     await client.query<{ id: string; kind: string }>(
-      'SELECT id, kind FROM knowledge_items WHERE stable_key = $1',
+      `SELECT id, kind
+       FROM knowledge_items
+       WHERE domain_id = 'network' AND stable_key = $1`,
       [stableKey],
     )
   ).rows[0]
@@ -137,6 +157,10 @@ export async function createKnowledgeRevision(
   const revision = await client.query<{ id: string }>(
     `INSERT INTO knowledge_revisions (
        knowledge_item_id,
+       domain_id,
+       domain_schema_version,
+       domain_context,
+       domain_payload,
        revision_number,
        status,
        vendor_id,
@@ -166,13 +190,17 @@ export async function createKnowledgeRevision(
        created_by
      )
      VALUES (
-       $1, $2, 'validated', $3, $4, $5, $6, $7, $8, $9,
-       $10, $11, $12, $13, $14, $15::jsonb, $16::jsonb, $17::jsonb,
-       $18::jsonb, $19::jsonb, $20::jsonb, $21, $22, $23, $24, $25, $26, $27
+       $1, 'network', $2, $3::jsonb, $4::jsonb,
+       $5, 'validated', $6, $7, $8, $9, $10, $11, $12,
+       $13, $14, $15, $16, $17, $18::jsonb, $19::jsonb, $20::jsonb,
+       $21::jsonb, $22::jsonb, $23::jsonb, $24, $25, $26, $27, $28, $29, $30
      )
      RETURNING id`,
     [
       existingItem.id,
+      networkDomainPack.manifest.schema_version,
+      JSON.stringify(coreCandidate.context),
+      JSON.stringify(coreCandidate.payload),
       nextRevision.rows[0]!.next_revision,
       context.vendorId,
       context.platformId,
@@ -212,6 +240,7 @@ export async function createKnowledgeRevision(
   for (const source of candidate.provenance) {
     const document = await client.query<{ id: string }>(
       `INSERT INTO source_documents (
+         domain_id,
          canonical_url,
          document_type,
          title,
@@ -222,7 +251,7 @@ export async function createKnowledgeRevision(
          content_hash,
          evidence_fragment
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       VALUES ('network', $1, $2, $3, $4, $5, $6, $7, $8, $9)
        ON CONFLICT (canonical_url, content_hash)
        DO UPDATE SET verified_at = greatest(
          source_documents.verified_at,
