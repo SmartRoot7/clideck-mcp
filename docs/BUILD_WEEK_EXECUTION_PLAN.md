@@ -282,7 +282,7 @@ Verification:
 
 Completed: 2026-07-19
 
-### [~] D2.3 / 0.6.1 — Exact read-only operations demo
+### [x] D2.3 / 0.6.1 — Exact read-only operations demo
 
 URL: `https://mcp.clideck.com/demo`
 
@@ -347,8 +347,23 @@ Verification:
   immediate Pause/Resume, retained confirmation dialogs for other actions,
   zero demo-side DB/audit changes, no horizontal overflow, and no console
   errors;
-- production deployment and production database immutability checks remain
-  before completion.
+- production deployed
+  `0e32b25338f293eb4f97a13e94c920a6f0b30d2d`; health reports 0.6.1 and
+  `/demo` returns 200 through the Cloudflare route;
+- the production demo rendered all 16 sections with release #62 and 60,111
+  active revisions; browser console errors were empty and document width
+  remained within the desktop viewport;
+- production HTTP checks proved release, feedback, task, pipeline, source, and
+  provenance projections redact or omit the six protected data classes, while
+  a public POST returned 405;
+- clicking production-demo Pause produced the local read-only acknowledgement
+  with no dialog; database state remained `enabled`, concurrency remained 4,
+  control generation remained 13, and the audit count remained 30;
+- the verified PostgreSQL backup and root-only configuration backup precede the
+  deployment; the previous checkout remains available for application
+  rollback.
+
+Completed: 2026-07-19
 
 ### [x] D2.4 — Open-source documentation
 
@@ -403,11 +418,10 @@ Completed so far:
 - the repository-wide Codex Security scan closed all 40 review surfaces and
   produced a final report for 14 findings: 4 medium, 10 low, no high or
   critical findings;
-- all 14 findings have code remediations and focused regressions in the release
-  worktree, including child-process capability isolation, public-output
-  redaction, fail-closed change canonicalization, SSRF/parser bounds, atomic
-  publication and lease transitions, public-reference separation, and
-  evidence-derived lab assurance;
+- all 14 earlier findings retain code remediations and focused regressions;
+  six additional public-demo diff findings now cover release reasons,
+  feedback, event text/metadata, tenant tasks, legacy provenance aliases, and
+  provenance hashes;
 - the complete Git history was scanned for common secret patterns without a
   match, and ignored local credentials remain outside the tracked tree;
 - a fresh production PostgreSQL custom-format backup and a root-only deployment
