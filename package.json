@@ -10,8 +10,10 @@
   },
   "packageManager": "pnpm@11.9.0",
   "scripts": {
-    "build": "pnpm contracts:build && tsc -p tsconfig.build.json && pnpm admin:build",
-    "check": "pnpm contracts:build && tsc -p tsconfig.json --noEmit && pnpm admin:check",
+    "build": "pnpm domain:build && pnpm contracts:build && tsc -p tsconfig.build.json && pnpm admin:build",
+    "check": "pnpm domain:check && pnpm contracts:build && tsc -p tsconfig.json --noEmit && pnpm admin:check",
+    "domain:build": "pnpm --filter @clideck/domain-kit build",
+    "domain:check": "pnpm --filter @clideck/domain-kit check",
     "contracts:build": "pnpm --filter @clideck/admin-contracts build",
     "admin:build": "pnpm --filter @clideck/admin-ui build",
     "admin:check": "pnpm --filter @clideck/admin-ui check",
@@ -49,7 +51,7 @@
     "pipeline:submit-analysis": "node --env-file=.secrets/researcher-bridge.env --import tsx src/cli/pipeline-client.ts submit-analysis",
     "pipeline:submit-verification": "node --env-file=.secrets/researcher-bridge.env --import tsx src/cli/pipeline-client.ts submit-verification",
     "pipeline:submit-expert": "node --env-file=.secrets/researcher-bridge.env --import tsx src/cli/pipeline-client.ts submit-expert",
-    "test": "vitest run && pnpm --filter @clideck/admin-ui test",
+    "test": "vitest run && pnpm --filter @clideck/domain-kit test && pnpm --filter @clideck/admin-ui test",
     "test:watch": "vitest"
   },
   "dependencies": {

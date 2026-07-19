@@ -13,7 +13,7 @@ Branch policy: `main` only; completed stages are committed and pushed directly.
 
 ## Current focus
 
-`D1.1 — @clideck/domain-kit`
+`D1.2 — PostgreSQL domain compatibility layer`
 
 ## Baseline
 
@@ -56,7 +56,7 @@ Verification:
 
 Completed: 2026-07-19
 
-### [~] D1.1 — `@clideck/domain-kit`
+### [x] D1.1 — `@clideck/domain-kit`
 
 Goal: define the stable, versioned extension contract used by every knowledge
 domain.
@@ -78,7 +78,16 @@ Acceptance:
 - schemas can be exported for Codex and third-party tooling;
 - conformance tests pass.
 
-### [ ] D1.2 — PostgreSQL domain compatibility layer
+Verification:
+
+- strict manifest, compatibility, registry, publication-policy, JSON Schema,
+  and conformance tests: 6/6 passed;
+- root typecheck, existing tests, and production build passed;
+- no network runtime or database code changed.
+
+Completed: 2026-07-19
+
+### [~] D1.2 — PostgreSQL domain compatibility layer
 
 Goal: extend the existing immutable storage and release engine without
 reprocessing network data.

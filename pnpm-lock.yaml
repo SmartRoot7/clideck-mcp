@@ -114,6 +114,19 @@ importers:
         specifier: 7.0.2
         version: 7.0.2
 
+  packages/domain-kit:
+    dependencies:
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+    devDependencies:
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+      vitest:
+        specifier: 4.1.10
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.10.4)(jsdom@29.1.1)(vite@8.1.5(@types/node@24.10.4)(esbuild@0.27.7)(tsx@4.21.0))
+
 packages:
 
   '@adobe/css-tools@4.5.0':
