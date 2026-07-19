@@ -20,6 +20,19 @@ describe('dashboard UI primitives', () => {
       name: 'Published knowledge help'
     }))
     expect(screen.getByRole('tooltip')).not.toHaveClass('is-open')
+
+    const trigger = screen.getByRole('button', {
+      name: 'Published knowledge help'
+    })
+    fireEvent.focus(trigger)
+    expect(screen.getByRole('tooltip')).toHaveClass('is-open')
+    fireEvent.blur(trigger)
+    expect(screen.getByRole('tooltip')).not.toHaveClass('is-open')
+
+    fireEvent.click(trigger)
+    expect(screen.getByRole('tooltip')).toHaveClass('is-open')
+    fireEvent.blur(trigger)
+    expect(screen.getByRole('tooltip')).not.toHaveClass('is-open')
   })
 
   it('clamps progress values for accessible output', () => {
