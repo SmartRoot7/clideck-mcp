@@ -5,8 +5,6 @@ import {
   ShieldCheck,
   TestTube2
 } from 'lucide-react'
-import { useMemo } from 'react'
-
 import { Chart } from '../components/chart'
 import {
   DataTable,
@@ -31,7 +29,7 @@ export function QualityPage() {
   if (query.isError || !query.data) return <ErrorState onRetry={() => void query.refetch()}>Quality data is unavailable.</ErrorState>
   const quality = query.data
   const latest = quality.eval_runs[0]
-  const chart = useLatencyChart(quality)
+  const chart = latencyChart(quality)
   return (
     <div className="dashboard-stack">
       <section className="metric-grid metric-grid--four">
@@ -67,12 +65,12 @@ export function QualityPage() {
   )
 }
 
-function useLatencyChart(quality: Quality) {
-  return useMemo(() => ({
+function latencyChart(quality: Quality) {
+  return {
     tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
     grid: { left: 150, right: 28, top: 16, bottom: 30 },
     xAxis: { type: 'value', axisLabel: { formatter: '{value} ms', color: '#667085' }, splitLine: { lineStyle: { color: '#edf0f5' } } },
     yAxis: { type: 'category', data: quality.operation_latency_30d.map((row) => titleCase(row.operation)), axisTick: { show: false }, axisLine: { show: false }, axisLabel: { color: '#344054' } },
     series: [{ type: 'bar', data: quality.operation_latency_30d.map((row) => numberOf(row.average_ms)), itemStyle: { color: '#0f5fff', borderRadius: [0, 4, 4, 0] }, barMaxWidth: 15, label: { show: true, position: 'right', formatter: '{c} ms', color: '#475467' } }]
-  }), [quality])
+  }
 }
