@@ -272,6 +272,9 @@ export function createAdminUiApp(dependencies: AdminUiDependencies) {
     if (!response.ok) {
       return { ok: false, status: safeStatus(response.status) }
     }
+    if (method === 'POST' || response.status === 204) {
+      return { ok: true, value: null }
+    }
     try {
       return { ok: true, value: await response.json() }
     } catch {

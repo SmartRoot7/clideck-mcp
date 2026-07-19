@@ -38,6 +38,9 @@ async function testApp() {
       `127.0.0.1:${config.api.port}`,
     )
     expect(request.headers.get('x-clideck-admin-role')).toBe('super_admin')
+    if (request.method === 'POST') {
+      return new Response(null, { status: 204 })
+    }
     if (url.pathname === '/admin/v1/knowledge') {
       expect(url.search).toBe('')
       return Response.json({ items: [], total: 0, limit: 50, offset: 0 })
@@ -135,6 +138,26 @@ describe('local admin HTTP boundary', () => {
     })
     expect(knowledge.status).toBe(200)
     expect(await knowledge.json()).toMatchObject({ items: [], total: 0 })
+
+    const concurrency = await app.request(
+      '/admin/api/v1/pipeline/concurrency',
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          origin,
+          host,
+          cookie: cookie.split(';')[0]!,
+          'sec-fetch-site': 'same-origin'
+        },
+        body: JSON.stringify({ max_concurrent_ai_runs: 3 })
+      },
+    )
+    expect(concurrency.status).toBe(200)
+    expect(await concurrency.json()).toMatchObject({
+      ok: true,
+      audit_target: 'pipeline'
+    })
   })
 
   it('rejects cross-origin login and invalid host headers', async () => {
