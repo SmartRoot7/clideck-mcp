@@ -351,7 +351,9 @@ export async function publishKnowledgeBatch(
     [reason, createdBy, current.rows[0]?.release_id ?? null],
   )
   const releaseId = release.rows[0]!.id
-  const checkpoint = Number(release.rows[0]!.sequence) % 120 === 0
+  const checkpoint =
+    !current.rows[0] ||
+    Number(release.rows[0]!.sequence) % 120 === 0
   await client.query(
     `INSERT INTO release_changes (
        release_id,

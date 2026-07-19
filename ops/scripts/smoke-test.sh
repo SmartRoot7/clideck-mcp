@@ -23,8 +23,29 @@ tools="$(
     --data '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' \
     "$CLIDECK_MCP_BASE_URL/mcp"
 )"
-if [[ "$(printf '%s\n' "$tools" | jq -r '.result.tools | length')" -ne 13 ]]; then
-  printf 'Expected 13 public MCP tools\n' >&2
+required_tools='[
+  "list_knowledge_domains",
+  "describe_knowledge_domain",
+  "query_domain_knowledge",
+  "resolve_network_context",
+  "query_network_knowledge",
+  "get_network_workflow",
+  "request_expert_answer",
+  "get_expert_task",
+  "continue_expert_task",
+  "cancel_expert_task",
+  "submit_feedback",
+  "analyze_device_snapshot",
+  "review_network_change",
+  "verify_network_change",
+  "advise_network_upgrade",
+  "analyze_network_path"
+]'
+if [[ "$(printf '%s\n' "$tools" | jq \
+  --argjson required "$required_tools" \
+  '[.result.tools[].name] as $actual |
+   ($required | all(. as $name | $actual | index($name) != null))')" != 'true' ]]; then
+  printf 'One or more required public MCP tools are missing\n' >&2
   exit 1
 fi
 

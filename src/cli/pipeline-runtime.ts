@@ -11,6 +11,12 @@ export const pipelineExecutorIds = [
 
 export type PipelineExecutorId = typeof pipelineExecutorIds[number]
 
+export function normalizeTaskReasoning(
+  value: unknown,
+): 'low' | 'medium' {
+  return value === 'medium' ? 'medium' : 'low'
+}
+
 export function pipelineExecutorPaths(
   projectRoot: string,
   executorId: PipelineExecutorId,

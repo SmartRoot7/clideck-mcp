@@ -24,6 +24,7 @@ import {
   normalizeCandidateAnalysisOptionalFields,
   normalizeCandidateAnalysisStableKeys
 } from '../domain/pipeline.js'
+import { candidateKnowledgeSchema } from '../domain/publication.js'
 import {
   omitNullObjectProperties,
   openAiStrictJsonSchema
@@ -32,7 +33,8 @@ import {
   pipelineExecutorIds,
   pipelineExecutorPaths,
   pipelineModel,
-  pipelineReasoning
+  pipelineReasoning,
+  normalizeTaskReasoning
 } from './pipeline-runtime.js'
 import {
   assertArtifactContainsNoSecrets,
@@ -49,6 +51,8 @@ const environmentSchema = z.object({
     .default(pipelineReasoning),
   CLIDECK_PIPELINE_EXECUTOR_ID: z.enum(pipelineExecutorIds)
     .default(pipelineExecutorIds[0]),
+  CLIDECK_RESEARCHER_URL: z.string().url(),
+  CLIDECK_RESEARCHER_TOKEN: z.string().min(32),
   CLIDECK_RESEARCHER_INSTANCE_ID: z.string().min(3).max(200)
     .regex(/^[A-Za-z0-9][A-Za-z0-9_.:-]+$/)
     .default('pipeline-executor-01:manual'),
@@ -76,6 +80,28 @@ const claimedTaskSchema = z.object({
   payload: z.record(z.string(), z.unknown())
 })
 
+const pipelineLeaseSchema = z.object({
+  pipeline_task_id: z.string().uuid(),
+  lease_token: z.string().min(32).max(128),
+  agent_run_id: z.string().uuid(),
+  task_type: z.string(),
+  expert_task_id: z.string().optional()
+})
+
+const usageSchema = z.object({
+  status: z.enum(['completed', 'failed', 'timed_out', 'cancelled']),
+  input_tokens: z.number().int().min(0).default(0),
+  cached_input_tokens: z.number().int().min(0).default(0),
+  output_tokens: z.number().int().min(0).default(0),
+  reasoning_output_tokens: z.number().int().min(0).default(0),
+  duration_ms: z.number().int().min(0),
+  error_code: z.string().optional(),
+  process_exit_code: z.number().int().min(-1).max(255).optional(),
+  diagnostic_code: z.string().optional(),
+  diagnostic_fingerprint: z.string()
+    .regex(/^sha256:[0-9a-f]{64}$/).optional()
+})
+
 type Usage = {
   input_tokens: number
   cached_input_tokens: number
@@ -86,10 +112,12 @@ type Usage = {
 const environment = environmentSchema.parse(process.env)
 const projectRoot = process.cwd()
 const secretEnvPath = resolve(projectRoot, '.secrets/researcher-bridge.env')
-const { tempDirectory } = pipelineExecutorPaths(
+const { secretDirectory, tempDirectory } = pipelineExecutorPaths(
   projectRoot,
   environment.CLIDECK_PIPELINE_EXECUTOR_ID,
 )
+const leasePath = resolve(secretDirectory, 'pipeline-lease.json')
+const taskPath = resolve(secretDirectory, 'pipeline-task.json')
 const usagePath = resolve(tempDirectory, 'agent-usage.json')
 const agentOutputPath = resolve(tempDirectory, 'agent-output.json')
 const agentOutputSchemaPath = resolve(
@@ -102,71 +130,210 @@ const abortController = new AbortController()
 process.once('SIGTERM', () => abortController.abort())
 process.once('SIGINT', () => abortController.abort())
 
-function clientArguments(action: string, ...args: string[]): string[] {
-  return [
-    `--env-file=${secretEnvPath}`,
-    '--import',
-    'tsx',
-    'src/cli/pipeline-client.ts',
-    action,
-    ...args
-  ]
+async function callResearcherTool(
+  name: string,
+  args: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const response = await fetch(environment.CLIDECK_RESEARCHER_URL, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${environment.CLIDECK_RESEARCHER_TOKEN}`,
+      'x-researcher-id': environment.CLIDECK_PIPELINE_EXECUTOR_ID,
+      'x-researcher-instance-id':
+        environment.CLIDECK_RESEARCHER_INSTANCE_ID,
+      'content-type': 'application/json',
+      accept: 'application/json, text/event-stream',
+      'mcp-protocol-version': '2025-11-25'
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'tools/call',
+      params: { name, arguments: args }
+    }),
+    signal: AbortSignal.timeout(30_000)
+  })
+  if (!response.ok) {
+    throw new Error(`Researcher bridge returned HTTP ${response.status}`)
+  }
+  const rpc = await response.json() as {
+    error?: { message?: string }
+    result?: {
+      isError?: boolean
+      content?: Array<{ type: string; text?: string }>
+      structuredContent?: Record<string, unknown>
+    }
+  }
+  if (rpc.error || rpc.result?.isError || !rpc.result?.structuredContent) {
+    throw new Error(
+      rpc.error?.message ??
+      rpc.result?.content?.[0]?.text ??
+      'Researcher bridge tool failed',
+    )
+  }
+  return rpc.result.structuredContent
+}
+
+async function readLease() {
+  return pipelineLeaseSchema.parse(
+    JSON.parse(await readFile(leasePath, 'utf8')),
+  )
+}
+
+async function readJson(path: string): Promise<Record<string, unknown>> {
+  const parsed: unknown = JSON.parse(await readFile(resolve(path), 'utf8'))
+  return z.record(z.string(), z.unknown()).parse(parsed)
+}
+
+async function cleanupLease(): Promise<void> {
+  await Promise.all([
+    unlink(leasePath).catch(() => undefined),
+    unlink(taskPath).catch(() => undefined)
+  ])
 }
 
 async function runClient(
   action: string,
   ...args: string[]
 ): Promise<Record<string, unknown>> {
-  return new Promise((resolvePromise, rejectPromise) => {
-    const child = spawn(
-      process.execPath,
-      clientArguments(action, ...args),
-      {
-        cwd: projectRoot,
-        env: {
-          ...process.env,
-          CLIDECK_RESEARCHER_ID:
-            environment.CLIDECK_PIPELINE_EXECUTOR_ID,
-          CLIDECK_RESEARCHER_INSTANCE_ID:
-            environment.CLIDECK_RESEARCHER_INSTANCE_ID,
-          CLIDECK_PIPELINE_EXECUTOR_ID:
-            environment.CLIDECK_PIPELINE_EXECUTOR_ID
-        },
-        stdio: ['ignore', 'pipe', 'pipe']
-      },
-    )
-    let stdout = ''
-    let stderr = ''
-    child.stdout.setEncoding('utf8')
-    child.stderr.setEncoding('utf8')
-    child.stdout.on('data', (chunk: string) => {
-      if (stdout.length < 1_000_000) stdout += chunk
+  await mkdir(secretDirectory, { recursive: true, mode: 0o700 })
+  if (action === 'claim') {
+    const result = await callResearcherTool('claim_pipeline_task', {})
+    if (!result['pipeline_task_id']) {
+      await cleanupLease()
+      return result
+    }
+    const payload = z.record(z.string(), z.unknown()).parse(result['payload'])
+    const expertTaskId =
+      typeof payload['task_id'] === 'string' ? payload['task_id'] : undefined
+    const lease = pipelineLeaseSchema.parse({
+      pipeline_task_id: result['pipeline_task_id'],
+      lease_token: result['lease_token'],
+      agent_run_id: result['agent_run_id'],
+      task_type: result['task_type'],
+      ...(expertTaskId ? { expert_task_id: expertTaskId } : {})
     })
-    child.stderr.on('data', (chunk: string) => {
-      if (stderr.length < 16_000) stderr += chunk
+    const safeTask = {
+      pipeline_task_id: lease.pipeline_task_id,
+      agent_run_id: lease.agent_run_id,
+      task_type: result['task_type'],
+      stage: result['stage'],
+      lease_until: result['lease_until'],
+      requested_reasoning_effort:
+        normalizeTaskReasoning(result['requested_reasoning_effort']),
+      payload
+    }
+    await Promise.all([
+      writeFile(leasePath, JSON.stringify(lease), {
+        encoding: 'utf8',
+        mode: 0o600
+      }),
+      writeFile(taskPath, JSON.stringify(safeTask, null, 2), {
+        encoding: 'utf8',
+        mode: 0o600
+      })
+    ])
+    return safeTask
+  }
+  if (action === 'cleanup') {
+    await cleanupLease()
+    return {}
+  }
+  const lease = await readLease()
+  if (action === 'heartbeat') {
+    return callResearcherTool('heartbeat_pipeline_task', {
+      pipeline_task_id: lease.pipeline_task_id,
+      lease_token: lease.lease_token
     })
-    child.once('error', rejectPromise)
-    child.once('close', (code) => {
-      if (code !== 0) {
-        rejectPromise(
-          new Error(
-            `Pipeline bridge action ${action} failed: ${stderr.trim()}`,
-          ),
-        )
-        return
-      }
-      try {
-        const parsed: unknown = stdout.trim()
-          ? JSON.parse(stdout)
-          : {}
-        resolvePromise(z.record(z.string(), z.unknown()).parse(parsed))
-      } catch {
-        rejectPromise(
-          new Error(`Pipeline bridge action ${action} returned invalid JSON`),
-        )
-      }
+  }
+  if (action === 'status') {
+    return callResearcherTool('get_pipeline_task_status', {
+      pipeline_task_id: lease.pipeline_task_id
     })
-  })
+  }
+  if (
+    action === 'submit-discovery' ||
+    action === 'submit-analysis' ||
+    action === 'submit-verification' ||
+    action === 'submit-deep-review'
+  ) {
+    const draftPath = args[0]
+    if (!draftPath) throw new Error('Submission JSON path is required')
+    const draft = await readJson(draftPath)
+    const tool = {
+      'submit-discovery': 'submit_source_discovery',
+      'submit-analysis': 'submit_fragment_analysis',
+      'submit-verification': 'submit_candidate_verification',
+      'submit-deep-review': 'submit_candidate_deep_review'
+    }[action]!
+    return callResearcherTool(tool, {
+      ...draft,
+      pipeline_task_id: lease.pipeline_task_id,
+      lease_token: lease.lease_token
+    })
+  }
+  if (action === 'submit-expert') {
+    const draftPath = args[0]
+    if (!draftPath) throw new Error('Candidate JSON path is required')
+    if (!lease.expert_task_id) {
+      throw new Error('Claimed task is not an expert task')
+    }
+    const draft = await readJson(draftPath)
+    const rejection = z.object({
+      rejected: z.literal(true),
+      reason: z.string().trim().min(12).max(1_000)
+    }).safeParse(draft)
+    if (rejection.success) {
+      return callResearcherTool('fail_pipeline_task', {
+        pipeline_task_id: lease.pipeline_task_id,
+        lease_token: lease.lease_token,
+        failure_code: 'EXPERT_NO_VERIFIED_ANSWER',
+        failure_message: rejection.data.reason
+      })
+    }
+    const candidate = candidateKnowledgeSchema.parse(draft)
+    return callResearcherTool('submit_candidate_revision', {
+      ...candidate,
+      task_id: lease.expert_task_id,
+      lease_token: lease.lease_token
+    })
+  }
+  if (action === 'fail') {
+    const [code, message] = args
+    if (!code || !message) {
+      throw new Error('Failure code and message are required')
+    }
+    return callResearcherTool('fail_pipeline_task', {
+      pipeline_task_id: lease.pipeline_task_id,
+      lease_token: lease.lease_token,
+      failure_code: code,
+      failure_message: message
+    })
+  }
+  if (action === 'finish-run') {
+    const usageFile = args[0]
+    if (!usageFile) throw new Error('Usage JSON path is required')
+    const usage = usageSchema.parse(await readJson(usageFile))
+    const result = await callResearcherTool('record_agent_run_result', {
+      agent_run_id: lease.agent_run_id,
+      ...usage
+    })
+    await cleanupLease()
+    return result
+  }
+  if (action === 'system-failure') {
+    const [code, message] = args
+    if (!code || !message) {
+      throw new Error('System failure code and message are required')
+    }
+    const result = await callResearcherTool('pause_pipeline_system_failure', {
+      failure_code: code,
+      failure_message: message
+    })
+    await cleanupLease()
+    return result
+  }
+  throw new Error(`Unsupported pipeline bridge action: ${action}`)
 }
 
 function researcherPrompt(

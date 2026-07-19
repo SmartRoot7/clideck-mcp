@@ -10,6 +10,7 @@ import { z } from 'zod'
 
 import { candidateKnowledgeSchema } from '../domain/publication.js'
 import {
+  normalizeTaskReasoning,
   pipelineExecutorIds,
   pipelineExecutorPaths
 } from './pipeline-runtime.js'
@@ -153,6 +154,8 @@ async function run(): Promise<void> {
         task_type: result['task_type'],
         stage: result['stage'],
         lease_until: result['lease_until'],
+        requested_reasoning_effort:
+          normalizeTaskReasoning(result['requested_reasoning_effort']),
         payload
       }
       await writeFile(leasePath, JSON.stringify(lease), {

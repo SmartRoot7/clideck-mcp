@@ -1,4 +1,7 @@
+import { describe, expect, it } from 'vitest'
+
 import {
+  normalizeTaskReasoning,
   pipelineExecutorIds,
   pipelineExecutorPaths,
   pipelineModel,
@@ -131,5 +134,14 @@ describe('parallel Luna runtime', () => {
         sensitive,
       ),
     ).not.toThrow()
+  })
+})
+
+describe('pipeline task reasoning', () => {
+  it('preserves medium review and fails unknown values closed to low', () => {
+    expect(normalizeTaskReasoning('medium')).toBe('medium')
+    expect(normalizeTaskReasoning('low')).toBe('low')
+    expect(normalizeTaskReasoning(undefined)).toBe('low')
+    expect(normalizeTaskReasoning('high')).toBe('low')
   })
 })
