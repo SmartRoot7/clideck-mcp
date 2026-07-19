@@ -1,5 +1,6 @@
 export * from './conformance.js'
 export * from './core.js'
+export * from './extensions.js'
 export * from './json.js'
 export * from './manifest.js'
 export * from './pack.js'

@@ -132,6 +132,10 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md),
 [docs/OPERATIONS.md](docs/OPERATIONS.md) for the system contract and production
 runbook.
 
+Domain Pack extension contracts and Codex-oriented fork guidance are documented
+in [docs/DOMAIN_PACK_AUTHORING.md](docs/DOMAIN_PACK_AUTHORING.md) and
+[docs/FORKING_WITH_CODEX.md](docs/FORKING_WITH_CODEX.md).
+
 The continuous coordinator and import runbook are documented in
 [docs/RESEARCHER_AUTOMATION.md](docs/RESEARCHER_AUTOMATION.md) and
 [docs/OPERATIONS.md](docs/OPERATIONS.md).

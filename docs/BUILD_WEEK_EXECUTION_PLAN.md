@@ -13,7 +13,7 @@ Branch policy: `main` only; completed stages are committed and pushed directly.
 
 ## Current focus
 
-`D1.4 — Scaffolder and authoring documentation`
+`D1.5 — Day-one quality gate`
 
 ## Baseline
 
@@ -150,7 +150,7 @@ Verification:
 
 Completed: 2026-07-19
 
-### [~] D1.4 — Scaffolder and authoring documentation
+### [x] D1.4 — Scaffolder and authoring documentation
 
 Goal: let a developer and their Codex create a safe fork-specific domain without
 editing core internals.
@@ -172,7 +172,22 @@ Acceptance:
 - invalid or incompatible packs fail with actionable messages;
 - documentation explains safe core/extension boundaries.
 
-### [ ] D1.5 — Day-one quality gate
+Verification:
+
+- `pnpm domain:validate -- --id network` passed seven conformance checks and
+  exported four schema documents in memory;
+- scaffolder argument, traversal, replacement, duplicate, and generated-pack
+  conformance tests passed;
+- the generated template is a runnable strict pack, not placeholder prose;
+- ArtifactStore, SpatialProvider, RelationProvider, and LabValidator boundaries
+  are typechecked;
+- 64/64 backend/PostgreSQL tests, 9 built-in pack tests, and 5 admin tests
+  passed;
+- production build passed.
+
+Completed: 2026-07-19
+
+### [~] D1.5 — Day-one quality gate
 
 Goal: prove that the abstraction is additive and production-safe.
 
