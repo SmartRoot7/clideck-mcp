@@ -289,25 +289,33 @@ export async function getAdminOverview(
     database.query(
       `SELECT
          CASE
-           WHEN grouping(vendor_slug) = 0 THEN 'vendor'
-           WHEN grouping(operating_system_slug) = 0 THEN 'operating_system'
-           WHEN grouping(risk_level) = 0 THEN 'risk'
+           WHEN grouping(v.slug) = 0 THEN 'vendor'
+           WHEN grouping(os.slug) = 0 THEN 'operating_system'
+           WHEN grouping(kr.risk_level) = 0 THEN 'risk'
            ELSE 'origin'
          END AS dimension,
          CASE
-           WHEN grouping(vendor_slug) = 0 THEN vendor_slug
-           WHEN grouping(operating_system_slug) = 0
-             THEN coalesce(operating_system_slug, 'vendor-level')
-           WHEN grouping(risk_level) = 0 THEN risk_level
-           ELSE origin
+           WHEN grouping(v.slug) = 0 THEN v.slug
+           WHEN grouping(os.slug) = 0
+             THEN coalesce(os.slug, 'vendor-level')
+           WHEN grouping(kr.risk_level) = 0 THEN kr.risk_level
+           ELSE kr.created_by
          END AS key,
          count(*)::int AS count
-       FROM public_active_knowledge
+       FROM active_release ar
+       JOIN release_items ri ON ri.release_id = ar.release_id
+       JOIN knowledge_items ki ON ki.id = ri.knowledge_item_id
+       JOIN knowledge_revisions kr ON kr.id = ri.revision_id
+       JOIN vendors v ON v.id = kr.vendor_id
+       LEFT JOIN operating_systems os ON os.id = kr.operating_system_id
+       WHERE ar.singleton
+         AND ki.domain_id = 'network'
+         AND kr.domain_id = 'network'
        GROUP BY GROUPING SETS (
-         (vendor_slug),
-         (operating_system_slug),
-         (risk_level),
-         (origin)
+         (v.slug),
+         (os.slug),
+         (kr.risk_level),
+         (kr.created_by)
        )
        ORDER BY dimension, count DESC`,
     ),
