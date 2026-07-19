@@ -71,6 +71,7 @@ function sanitizePipelineEvent(
 
 export function sanitizeDemoOverview(overview: Overview): Overview {
   return {
+    snapshot_at: overview.snapshot_at,
     active_release: overview.active_release,
     active_release_sequence: overview.active_release_sequence,
     active_release_created_at: overview.active_release_created_at,
@@ -136,6 +137,17 @@ export function sanitizeDemoOverview(overview: Overview): Overview {
       metadata: projectOperationalMetadata(process.metadata),
       healthy: process.healthy
     })),
+    executors: overview.executors.map((executor) => ({
+      executor_id: executor.executor_id,
+      instance_id: redactNullable(executor.instance_id),
+      state: executor.state,
+      healthy: executor.healthy,
+      stage: executor.stage,
+      task_id: executor.task_id,
+      task_type: executor.task_type,
+      heartbeat_at: executor.heartbeat_at,
+      lease_until: executor.lease_until
+    })),
     active_work: overview.active_work
       ? {
           id: overview.active_work.id,
@@ -163,7 +175,12 @@ export function sanitizeDemoOverview(overview: Overview): Overview {
       completed: stage.completed,
       failed: stage.failed,
       cancelled: stage.cancelled,
-      skipped: stage.skipped
+      skipped: stage.skipped,
+      waiting: stage.waiting,
+      waiting_unit: stage.waiting_unit,
+      oldest_waiting_at: stage.oldest_waiting_at,
+      active_executor_ids: stage.active_executor_ids,
+      active_worker_count: stage.active_worker_count
     })),
     breakdowns: {
       vendor: overview.breakdowns.vendor.map((row) => ({

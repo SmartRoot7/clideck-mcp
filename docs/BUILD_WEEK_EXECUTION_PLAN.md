@@ -13,7 +13,7 @@ Branch policy: `main` only; completed stages are committed and pushed directly.
 
 ## Current focus
 
-`0.7 — production rollout and initial throughput observation`
+`0.7.1 — honest queue telemetry and synchronized Pipeline UI`
 
 ## Baseline
 
@@ -503,6 +503,39 @@ Verification:
   route, not a staged or invented dashboard image;
 - 66/66 backend/PostgreSQL tests, 13 Domain Pack tests, 7 admin UI tests,
   typecheck, and both admin/demo production builds passed.
+
+Completed: 2026-07-19
+
+## 0.7.1 — Honest pipeline telemetry
+
+### [x] P0.7.1.1 — Real waiting queues and synchronized executors
+
+Goal: make the Overview pipeline answer how much domain work is actually
+waiting and ensure its live stages cannot contradict the four Luna cards.
+
+Delivered:
+
+- all eight stages expose their real waiting object count and native unit;
+- Deep Review counts eligible candidates rather than queued batch tasks;
+- the funnel and executor cards share one PostgreSQL runtime snapshot;
+- executor stage comes from the current leased task, not stale heartbeat
+  metadata;
+- stale, standby, paused, Luna, and mechanical worker states are separated;
+- the shared admin/demo UI uses `Waiting`, `Running`, `Done`, and `Failed`;
+- the operations canvas supports eight stages in one wide row, balanced `4 × 2`
+  desktop, `2 × 4` tablet, and single-column mobile layouts;
+- source identity remains redacted by the public demo projection.
+
+Verification:
+
+- PostgreSQL snapshot integration coverage includes all eight queues, two Luna
+  stages, stale heartbeat metadata, and a mechanical worker;
+- admin/demo component coverage confirms the same eight-stage registry and
+  concise labels;
+- typecheck, PostgreSQL tests without skip, production build, eval, rendered
+  desktop QA, and production smoke checks passed;
+- deployed API and LAN admin use the same Git SHA; no knowledge release or
+  pipeline state was changed.
 
 Completed: 2026-07-19
 

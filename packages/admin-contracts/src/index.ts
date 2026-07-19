@@ -30,6 +30,18 @@ export const processSchema = z.object({
   healthy: z.boolean()
 })
 
+export const pipelineExecutorSchema = z.object({
+  executor_id: z.string(),
+  instance_id: nullableStringSchema,
+  state: z.enum(['running', 'standby', 'paused', 'stale']),
+  healthy: z.boolean(),
+  stage: nullableStringSchema,
+  task_id: nullableStringSchema,
+  task_type: nullableStringSchema,
+  heartbeat_at: nullableStringSchema,
+  lease_until: nullableStringSchema
+})
+
 export const funnelStageSchema = z.object({
   stage: z.string(),
   count: scalarNumberSchema,
@@ -38,7 +50,12 @@ export const funnelStageSchema = z.object({
   completed: scalarNumberSchema,
   failed: scalarNumberSchema,
   cancelled: scalarNumberSchema,
-  skipped: scalarNumberSchema
+  skipped: scalarNumberSchema,
+  waiting: scalarNumberSchema,
+  waiting_unit: z.string(),
+  oldest_waiting_at: nullableStringSchema,
+  active_executor_ids: z.array(z.string()),
+  active_worker_count: scalarNumberSchema
 })
 
 export const breakdownRowSchema = z.object({
@@ -89,6 +106,7 @@ export const activeWorkSchema = z.object({
 })
 
 export const overviewSchema = z.object({
+  snapshot_at: timestampSchema,
   active_release: z.string(),
   active_release_sequence: scalarNumberSchema,
   active_release_created_at: timestampSchema,
@@ -145,6 +163,7 @@ export const overviewSchema = z.object({
   published_records_24h: scalarNumberSchema,
   deployed_commit_sha: nullableStringSchema,
   processes: z.array(processSchema),
+  executors: z.array(pipelineExecutorSchema),
   active_work: activeWorkSchema.nullable(),
   pipeline_funnel: z.array(funnelStageSchema),
   breakdowns: z.object({

@@ -86,7 +86,7 @@ code { font-size: .78rem; color: #344054; }
 .executor-select select { appearance: none; border: 0; background: transparent; padding: 0; color: #344054; font-size: .75rem; font-weight: 650; }
 .executor-select select:focus { outline: none; }
 
-.workspace__content { width: min(1540px, 100%); margin: 0 auto; padding: 24px clamp(18px, 3vw, 38px) 60px; }
+.workspace__content { width: min(1780px, 100%); margin: 0 auto; padding: 24px clamp(16px, 2vw, 32px) 60px; }
 .page-heading { display: flex; justify-content: space-between; align-items: flex-end; gap: 18px; margin-bottom: 18px; }
 .page-heading h1 { margin: 0 0 5px; font-size: clamp(1.45rem, 2vw, 1.8rem); letter-spacing: -.035em; }
 .page-heading p { margin: 0; color: var(--muted); font-size: .84rem; }
@@ -145,14 +145,14 @@ code { font-size: .78rem; color: #344054; }
 .button--quiet { min-width: 33px; padding: 0 8px; background: transparent; border-color: transparent; }
 .button--quiet:hover:not(:disabled) { background: #f2f4f7; transform: none; }
 
-.pipeline-rail { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); border: 1px solid #e3e7ee; border-radius: 9px; overflow: hidden; }
-.pipeline-stage { position: relative; min-width: 0; padding: 13px 11px 12px; border-right: 1px solid #e8ebf0; background: #fff; }
-.pipeline-stage:last-child { border-right: 0; }
+.pipeline-rail { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 1px; border: 1px solid #e3e7ee; border-radius: 9px; overflow: hidden; background: #e8ebf0; }
+.pipeline-stage { position: relative; min-width: 0; min-height: 118px; padding: 13px 11px 12px; background: #fff; }
 .pipeline-stage.is-bottleneck { background: #fff8ec; box-shadow: inset 0 3px #f5a524; }
 .pipeline-stage.is-running:not(.is-bottleneck) { box-shadow: inset 0 3px var(--blue); }
 .pipeline-stage__top { display: grid; grid-template-columns: 21px 21px 1fr; align-items: center; gap: 5px; min-width: 0; }
 .pipeline-stage__top > span { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: #eef3fc; color: #175cd3; font-size: .6rem; font-weight: 800; }
 .pipeline-stage__top svg { color: var(--blue); }
+.pipeline-stage__top .icon-tooltip__trigger { padding: 1px; }
 .pipeline-stage__top strong { overflow: hidden; text-overflow: ellipsis; font-size: .69rem; }
 .pipeline-stage dl { margin: 12px 0 0; display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
 .pipeline-stage dl div { display: flex; justify-content: space-between; gap: 4px; }
@@ -360,14 +360,16 @@ code { font-size: .78rem; color: #344054; }
 .login-pipeline b { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: rgba(255,255,255,.13); font-size: .6rem; }
 .login-context .eyebrow { color: #86adff; }
 
+@media (max-width: 1600px) {
+  .pipeline-rail { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
 @media (max-width: 1180px) {
   .hero-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .overview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .overview-grid--wide { grid-template-columns: 1fr; }
   .knowledge-filters { grid-template-columns: repeat(3, minmax(130px, 1fr)); }
   .knowledge-filters .search-field { grid-column: span 3; }
-  .pipeline-rail { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  .pipeline-stage { border-bottom: 1px solid #e8ebf0; }
   .key-value { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .login-page { grid-template-columns: minmax(380px, 480px) 1fr; }
   .login-context { padding: 50px; }
@@ -385,6 +387,7 @@ code { font-size: .78rem; color: #344054; }
   .command-bar__source { display: none; }
   .command-bar__status > i { display: none; }
   .executor-grid, .source-lanes, .metric-grid--four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pipeline-rail { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .hero-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .login-page { grid-template-columns: 1fr; }
   .login-context { display: none; }
@@ -403,7 +406,7 @@ code { font-size: .78rem; color: #344054; }
   .panel-actions { flex-wrap: wrap; }
   .metric-grid--four, .hero-metrics, .executor-grid, .source-lanes, .overview-grid { grid-template-columns: 1fr; }
   .metric { min-height: 97px; }
-  .pipeline-rail { grid-template-columns: 1fr 1fr; }
+  .pipeline-rail { grid-template-columns: 1fr; }
   .source-progress { grid-template-columns: 1fr; }
   .source-progress__ring { margin: 0 auto; }
   .active-source-hero { align-items: flex-start; flex-direction: column; }

@@ -20,7 +20,8 @@ import {
   ShieldCheck,
   Tag,
   TimerReset,
-  Waypoints
+  Waypoints,
+  type LucideIcon
 } from 'lucide-react'
 import { useMemo, type CSSProperties } from 'react'
 
@@ -52,16 +53,52 @@ import {
   usePipeline
 } from '../lib/queries'
 
-const STAGE_ICONS = [
-  Waypoints,
-  Database,
-  FileCheck2,
-  Layers3,
-  Bot,
-  ShieldCheck,
-  ShieldCheck,
-  Tag
-]
+export const PIPELINE_STAGES: Record<string, {
+  label: string
+  icon: LucideIcon
+  waitingHelp: string
+}> = {
+  discover: {
+    label: 'Discover',
+    icon: Waypoints,
+    waitingHelp: 'coverage targets ready for source discovery'
+  },
+  acquire: {
+    label: 'Acquire',
+    icon: Database,
+    waitingHelp: 'approved sources waiting to be downloaded'
+  },
+  convert: {
+    label: 'Convert',
+    icon: FileCheck2,
+    waitingHelp: 'downloaded documents waiting for deterministic conversion'
+  },
+  chunk: {
+    label: 'Chunk',
+    icon: Layers3,
+    waitingHelp: 'converted documents waiting to be split into fragments'
+  },
+  analyze: {
+    label: 'Analyze',
+    icon: Bot,
+    waitingHelp: 'fragments waiting for deterministic or Luna analysis'
+  },
+  verify: {
+    label: 'Verify',
+    icon: ShieldCheck,
+    waitingHelp: 'knowledge candidates waiting for standard verification'
+  },
+  deep_review: {
+    label: 'Deep Review',
+    icon: ShieldCheck,
+    waitingHelp: 'candidates waiting for automatic low or medium Luna review'
+  },
+  publish: {
+    label: 'Publish',
+    icon: Tag,
+    waitingHelp: 'verified revisions in source packages ready to publish'
+  }
+}
 
 export function OverviewPage({ overview }: { overview: Overview }) {
   const pipelineQuery = usePipeline()
@@ -75,6 +112,11 @@ export function OverviewPage({ overview }: { overview: Overview }) {
   const tokensOption = useTokenOption(overview)
   const activeTotal = numberOf(overview.published_revisions)
   const activeExecutors = executorRows(overview)
+  const deepReviewWaiting = numberOf(
+    overview.pipeline_funnel.find(
+      (stage) => stage.stage === 'deep_review'
+    )?.waiting,
+  )
 
   return (
     <div className="dashboard-stack">
@@ -168,7 +210,7 @@ export function OverviewPage({ overview }: { overview: Overview }) {
           value={overview.candidates_deep_resolved_24h}
           icon={Bot}
           help="Candidates automatically resolved by low or medium deep review in the last 24 hours."
-          detail={`${overview.queued_deep_review} queued`}
+          detail={`${formatNumber(deepReviewWaiting, 0)} waiting`}
           tone="good"
         />
         <Metric
@@ -405,27 +447,45 @@ function useTokenOption(overview: Overview) {
   }), [overview])
 }
 
-function PipelineRail({ overview }: { overview: Overview }) {
+export function PipelineRail({ overview }: { overview: Overview }) {
   const stages = overview.pipeline_funnel
-  const bottleneck = [...stages].sort(
-    (left, right) =>
-      numberOf(right.queued) + numberOf(right.running) -
-      numberOf(left.queued) - numberOf(left.running),
-  )[0]?.stage
+  const bottleneck = [...stages]
+    .filter((stage) =>
+      numberOf(stage.waiting) > 0 && stage.oldest_waiting_at
+    )
+    .sort((left, right) =>
+      new Date(left.oldest_waiting_at ?? 0).getTime() -
+      new Date(right.oldest_waiting_at ?? 0).getTime()
+    )[0]?.stage
   return (
     <Panel
-      title="Knowledge pipeline · last 24 hours"
+      title="Knowledge pipeline"
       icon={Network}
-      help="Work moves from finding a source to atomic publication. Each stage shows its completed output and live backlog."
+      help="Waiting and Running are a synchronized live snapshot. Done and Failed are stage outcomes from the rolling last 24 hours."
       className="pipeline-rail-panel"
       action={bottleneck ? <Status tone="warning">Bottleneck · {titleCase(bottleneck)}</Status> : null}
     >
       <div className="pipeline-rail">
         {stages.map((stage, index) => {
-          const Icon = STAGE_ICONS[index] ?? Layers3
-          const queued = numberOf(stage.queued)
+          const metadata = PIPELINE_STAGES[stage.stage] ?? {
+            label: titleCase(stage.stage),
+            icon: Layers3,
+            waitingHelp: `${stage.waiting_unit} waiting for this stage`
+          }
+          const Icon = metadata.icon
+          const waiting = numberOf(stage.waiting)
           const running = numberOf(stage.running)
-          const isBottleneck = stage.stage === bottleneck && queued + running > 0
+          const executors = stage.active_executor_ids
+          const workerCount = numberOf(stage.active_worker_count)
+          const activeRunners = [
+            ...executors,
+            ...(workerCount > 0
+              ? [`${workerCount} mechanical worker${
+                workerCount === 1 ? '' : 's'
+              }`]
+              : [])
+          ]
+          const isBottleneck = stage.stage === bottleneck && waiting > 0
           return (
             <article
               key={stage.stage}
@@ -433,13 +493,22 @@ function PipelineRail({ overview }: { overview: Overview }) {
             >
               <div className="pipeline-stage__top">
                 <span>{index + 1}</span>
-                <Icon size={19} />
-                <strong>{titleCase(stage.stage)}</strong>
+                <IconTooltip
+                  icon={Icon}
+                  label={`${metadata.label} stage`}
+                >
+                  Waiting counts {metadata.waitingHelp}. Running is the
+                  live number of tasks; Done and Failed cover the last 24
+                  hours. {activeRunners.length > 0
+                    ? `Active: ${activeRunners.join(', ')}.`
+                    : 'No active runner.'}
+                </IconTooltip>
+                <strong>{metadata.label}</strong>
               </div>
               <dl>
-                <div><dt>Queued</dt><dd>{formatNumber(stage.queued, 0)}</dd></div>
+                <div><dt>Waiting</dt><dd>{formatNumber(stage.waiting, 0)}</dd></div>
                 <div><dt>Running</dt><dd>{formatNumber(stage.running, 0)}</dd></div>
-                <div><dt>Completed</dt><dd>{formatNumber(stage.completed, 0)}</dd></div>
+                <div><dt>Done</dt><dd>{formatNumber(stage.completed, 0)}</dd></div>
                 <div><dt>Failed</dt><dd>{formatNumber(stage.failed, 0)}</dd></div>
               </dl>
               <span className="pipeline-stage__flow" aria-hidden="true" />
@@ -458,30 +527,31 @@ type ExecutorView = {
   heartbeat: string | null
   instance: string
   stage: string
+  task: string | null
 }
 
-function executorRows(overview: Overview): ExecutorView[] {
-  return [1, 2, 3, 4].map((number) => {
-    const name = `pipeline-executor-0${number}`
-    const row = overview.processes.find((process) =>
-      process.worker_name === name || process.instance_id.startsWith(name))
-    const metadata = row?.metadata ?? {}
-    const state = String(metadata['state'] ?? metadata['status'] ?? (
-      row?.healthy ? 'Active' : 'Standby'
-    ))
-    return {
-      name,
-      state,
-      healthy: row?.healthy ?? false,
-      heartbeat: row?.heartbeat_at ?? null,
-      instance: row?.instance_id ?? 'No heartbeat record',
-      stage: String(metadata['stage'] ?? metadata['task_type'] ?? '—')
-    }
-  })
+export function executorRows(overview: Overview): ExecutorView[] {
+  return overview.executors.map((executor) => ({
+    name: executor.executor_id,
+    state: executor.state,
+    healthy: executor.healthy,
+    heartbeat: executor.heartbeat_at,
+    instance: executor.instance_id ?? 'No heartbeat record',
+    stage: executor.stage ?? '—',
+    task: executor.task_id
+  }))
 }
 
 function ExecutorCard(executor: ExecutorView) {
-  const active = executor.healthy && !/standby|idle|capacity/i.test(executor.state)
+  const active = executor.healthy && executor.state === 'running'
+  const statusTone =
+    executor.state === 'stale'
+      ? 'danger'
+      : executor.state === 'paused'
+        ? 'warning'
+        : active
+          ? 'good'
+          : 'neutral'
   return (
     <article className={`executor ${active ? 'is-active' : 'is-standby'}`}>
       <header>
@@ -491,10 +561,10 @@ function ExecutorCard(executor: ExecutorView) {
           </IconTooltip>
           {executor.name}
         </span>
-        <Status tone={active ? 'good' : 'neutral'}>{active ? 'Active' : 'Standby'}</Status>
+        <Status tone={statusTone}>{titleCase(executor.state)}</Status>
       </header>
       <div className="executor__body">
-        <div className="heartbeat" aria-label={active ? 'Live heartbeat' : 'Standby executor'}>
+        <div className="heartbeat" aria-label={`${titleCase(executor.state)} executor`}>
           <i /><b />
         </div>
         <dl>
@@ -502,8 +572,10 @@ function ExecutorCard(executor: ExecutorView) {
           <div><dt>State</dt><dd>{titleCase(executor.state)}</dd></div>
           <div><dt>Heartbeat</dt><dd>{formatDate(executor.heartbeat, false)}</dd></div>
           <div>
-            <dt>Instance</dt>
-            <dd title={executor.instance}>{shortId(executor.instance)}</dd>
+            <dt>Task</dt>
+            <dd title={executor.task ?? undefined}>
+              {executor.task ? shortId(executor.task) : '—'}
+            </dd>
           </div>
         </dl>
       </div>

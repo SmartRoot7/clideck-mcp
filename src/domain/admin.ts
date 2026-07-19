@@ -38,8 +38,7 @@ export async function getAdminOverview(
 ): Promise<Record<string, unknown>> {
   const [
     summary,
-    health,
-    funnel,
+    runtime,
     breakdown,
     activity,
     publishedHourly,
@@ -244,13 +243,11 @@ export async function getAdminOverview(
        WHERE ar.singleton AND ps.singleton`,
     ),
     database.query(
-      `SELECT worker_name, instance_id, heartbeat_at, metadata,
-              (heartbeat_at >= now() - interval '2 minutes') AS healthy
-       FROM worker_heartbeats
-       ORDER BY worker_name`,
-    ),
-    database.query(
-      `WITH stages(stage, ordinal) AS (
+      `WITH
+       snapshot AS (
+         SELECT now() AS snapshot_at
+       ),
+       stages(stage, waiting_unit, ordinal) AS (
          SELECT *
          FROM unnest(
            ARRAY[
@@ -262,29 +259,324 @@ export async function getAdminOverview(
              'verify',
              'deep_review',
              'publish'
+           ]::text[],
+           ARRAY[
+             'targets',
+             'sources',
+             'documents',
+             'documents',
+             'fragments',
+             'candidates',
+             'candidates',
+             'revisions'
            ]::text[]
          ) WITH ORDINALITY
+       ),
+       live_tasks AS (
+         SELECT task.*
+         FROM pipeline_tasks task, snapshot
+         WHERE task.status IN ('claimed', 'running')
+           AND task.lease_until IS NOT NULL
+           AND task.lease_until > snapshot.snapshot_at
+       ),
+       queued_publication_sources AS (
+         SELECT DISTINCT task.source_candidate_id
+         FROM pipeline_tasks task
+         WHERE task.task_type = 'source_publication'
+           AND task.status = 'queued'
+           AND task.source_candidate_id IS NOT NULL
+       ),
+       waiting AS (
+         SELECT
+           'discover'::text AS stage,
+           count(*)::int AS count,
+           min(
+             least(target.next_check_at, target.updated_at)
+           ) AS oldest_waiting_at
+         FROM coverage_targets target, snapshot
+         WHERE target.status <> 'paused'
+           AND (
+             target.status IN ('queued', 'failed')
+             OR (
+               target.status = 'covered'
+               AND target.next_check_at <= snapshot.snapshot_at
+             )
+           )
+           AND NOT EXISTS (
+             SELECT 1
+             FROM pipeline_tasks task
+             WHERE task.coverage_target_id = target.id
+               AND task.task_type IN (
+                 'source_discovery',
+                 'source_refresh'
+               )
+               AND task.status IN ('queued', 'claimed', 'running')
+           )
+         UNION ALL
+         SELECT
+           'acquire',
+           count(*)::int,
+           min(source.updated_at)
+         FROM source_candidates source
+         WHERE source.status IN ('discovered', 'approved')
+         UNION ALL
+         SELECT
+           'convert',
+           count(*)::int,
+           min(source.updated_at)
+         FROM source_candidates source
+         WHERE source.status = 'acquired'
+         UNION ALL
+         SELECT
+           'chunk',
+           count(*)::int,
+           min(source.updated_at)
+         FROM source_candidates source
+         WHERE source.status = 'converted'
+         UNION ALL
+         SELECT
+           'analyze',
+           count(*)::int,
+           min(fragment.updated_at)
+         FROM source_fragments fragment
+         LEFT JOIN pipeline_tasks reservation
+           ON reservation.id = fragment.reservation_task_id
+         WHERE fragment.status = 'queued'
+            OR (
+              fragment.status = 'reserved'
+              AND reservation.status = 'queued'
+            )
+         UNION ALL
+         SELECT
+           'verify',
+           count(*)::int,
+           min(candidate.updated_at)
+         FROM knowledge_candidates candidate
+         LEFT JOIN pipeline_tasks reservation
+           ON reservation.id = candidate.verification_task_id
+         WHERE candidate.status = 'analyzed'
+           AND (
+             candidate.verification_task_id IS NULL
+             OR reservation.status = 'queued'
+           )
+         UNION ALL
+         SELECT
+           'deep_review',
+           count(*)::int,
+           min(candidate.updated_at)
+         FROM knowledge_candidates candidate
+         LEFT JOIN pipeline_tasks reservation
+           ON reservation.id = candidate.deep_review_task_id
+         CROSS JOIN snapshot
+         WHERE candidate.status IN ('deep_review', 'quarantined')
+           AND (
+             candidate.status = 'deep_review'
+             OR candidate.next_review_at IS NULL
+             OR candidate.next_review_at <= snapshot.snapshot_at
+           )
+           AND (
+             candidate.deep_review_task_id IS NULL
+             OR reservation.status = 'queued'
+           )
+         UNION ALL
+         SELECT
+           'publish',
+           count(*)::int,
+           min(candidate.updated_at)
+         FROM knowledge_candidates candidate
+         JOIN pipeline_tasks origin
+           ON origin.id = candidate.pipeline_task_id
+         JOIN queued_publication_sources publication
+           ON publication.source_candidate_id =
+              origin.source_candidate_id
+         WHERE candidate.status = 'verified'
+       ),
+       history AS (
+         SELECT
+           stages.stage,
+           count(task.id) FILTER (
+             WHERE task.status = 'queued'
+           )::int AS queued,
+           count(task.id) FILTER (
+             WHERE task.status = 'completed'
+           )::int AS completed,
+           count(task.id) FILTER (
+             WHERE task.status = 'failed'
+           )::int AS failed,
+           count(task.id) FILTER (
+             WHERE task.status = 'cancelled'
+           )::int AS cancelled,
+           count(task.id) FILTER (
+             WHERE task.status = 'skipped'
+           )::int AS skipped
+         FROM stages
+         LEFT JOIN pipeline_tasks task
+           ON task.stage = stages.stage
+          AND (
+            task.status = 'queued'
+            OR coalesce(
+              task.completed_at,
+              task.updated_at,
+              task.created_at
+            ) >= now() - interval '24 hours'
+          )
+         GROUP BY stages.stage
+       ),
+       stage_runtime AS (
+         SELECT
+           stages.stage,
+           stages.ordinal,
+           stages.waiting_unit,
+           coalesce(waiting.count, 0)::int AS waiting,
+           waiting.oldest_waiting_at,
+           coalesce(history.queued, 0)::int AS queued,
+           count(live.id)::int AS running,
+           coalesce(history.completed, 0)::int AS completed,
+           coalesce(history.failed, 0)::int AS failed,
+           coalesce(history.cancelled, 0)::int AS cancelled,
+           coalesce(history.skipped, 0)::int AS skipped,
+           coalesce(
+             array_agg(DISTINCT live.claim_owner) FILTER (
+               WHERE live.task_type IN (
+                 'expert_research',
+                 'source_discovery',
+                 'fragment_analysis',
+                 'candidate_verification',
+                 'candidate_deep_review',
+                 'source_refresh'
+               )
+                 AND live.claim_owner IS NOT NULL
+             ),
+             ARRAY[]::text[]
+           ) AS active_executor_ids,
+           count(live.id) FILTER (
+             WHERE live.task_type IN (
+               'source_acquisition',
+               'source_conversion',
+               'source_chunking',
+               'source_publication'
+             )
+           )::int AS active_worker_count
+         FROM stages
+         LEFT JOIN waiting ON waiting.stage = stages.stage
+         LEFT JOIN history ON history.stage = stages.stage
+         LEFT JOIN live_tasks live ON live.stage = stages.stage
+         GROUP BY
+           stages.stage,
+           stages.ordinal,
+           stages.waiting_unit,
+           waiting.count,
+           waiting.oldest_waiting_at,
+           history.queued,
+           history.completed,
+           history.failed,
+           history.cancelled,
+           history.skipped
+       ),
+       executor_ids(executor_id, ordinal) AS (
+         VALUES
+           ('pipeline-executor-01', 1),
+           ('pipeline-executor-02', 2),
+           ('pipeline-executor-03', 3),
+           ('pipeline-executor-04', 4)
+       ),
+       executor_runtime AS (
+         SELECT
+           executor.executor_id,
+           executor.ordinal,
+           heartbeat.instance_id,
+           CASE
+             WHEN task.id IS NOT NULL THEN 'running'
+             WHEN heartbeat.heartbeat_at IS NULL
+               OR heartbeat.heartbeat_at <
+                  snapshot.snapshot_at - interval '2 minutes'
+               THEN 'stale'
+             WHEN settings.enabled = false THEN 'paused'
+             ELSE 'standby'
+           END AS state,
+           (
+             heartbeat.heartbeat_at IS NOT NULL
+             AND heartbeat.heartbeat_at >=
+               snapshot.snapshot_at - interval '2 minutes'
+           ) AS healthy,
+           task.stage,
+           task.id AS task_id,
+           task.task_type,
+           heartbeat.heartbeat_at,
+           task.lease_until
+         FROM executor_ids executor
+         CROSS JOIN snapshot
+         CROSS JOIN pipeline_settings settings
+         LEFT JOIN worker_heartbeats heartbeat
+           ON heartbeat.worker_name = executor.executor_id
+         LEFT JOIN LATERAL (
+           SELECT live.*
+           FROM live_tasks live
+           WHERE live.claim_owner = executor.executor_id
+           ORDER BY
+             live.heartbeat_at DESC NULLS LAST,
+             live.created_at DESC
+           LIMIT 1
+         ) task ON true
        )
        SELECT
-         stages.stage,
-         count(pt.id)::int AS count,
-         count(pt.id) FILTER (WHERE pt.status = 'queued')::int AS queued,
-         count(pt.id) FILTER (
-           WHERE pt.status IN ('claimed', 'running')
-         )::int AS running,
-         count(pt.id) FILTER (WHERE pt.status = 'completed')::int
-           AS completed,
-         count(pt.id) FILTER (WHERE pt.status = 'failed')::int AS failed,
-         count(pt.id) FILTER (WHERE pt.status = 'cancelled')::int
-           AS cancelled,
-         count(pt.id) FILTER (WHERE pt.status = 'skipped')::int AS skipped
-       FROM stages
-       LEFT JOIN pipeline_tasks pt
-         ON pt.stage = stages.stage
-        AND coalesce(pt.completed_at, pt.updated_at, pt.created_at)
-          >= now() - interval '24 hours'
-       GROUP BY stages.stage, stages.ordinal
-       ORDER BY stages.ordinal`,
+         snapshot.snapshot_at,
+         (
+           SELECT jsonb_agg(
+             jsonb_build_object(
+               'stage', stage,
+               'count',
+                 queued + running + completed + failed +
+                 cancelled + skipped,
+               'queued', queued,
+               'running', running,
+               'completed', completed,
+               'failed', failed,
+               'cancelled', cancelled,
+               'skipped', skipped,
+               'waiting', waiting,
+               'waiting_unit', waiting_unit,
+               'oldest_waiting_at', oldest_waiting_at,
+               'active_executor_ids', active_executor_ids,
+               'active_worker_count', active_worker_count
+             )
+             ORDER BY ordinal
+           )
+           FROM stage_runtime
+         ) AS pipeline_funnel,
+         (
+           SELECT jsonb_agg(
+             jsonb_build_object(
+               'executor_id', executor_id,
+               'instance_id', instance_id,
+               'state', state,
+               'healthy', healthy,
+               'stage', stage,
+               'task_id', task_id,
+               'task_type', task_type,
+               'heartbeat_at', heartbeat_at,
+               'lease_until', lease_until
+             )
+             ORDER BY ordinal
+           )
+           FROM executor_runtime
+         ) AS executors,
+         (
+           SELECT jsonb_agg(
+             jsonb_build_object(
+               'worker_name', heartbeat.worker_name,
+               'instance_id', heartbeat.instance_id,
+               'heartbeat_at', heartbeat.heartbeat_at,
+               'metadata', heartbeat.metadata,
+               'healthy',
+                 heartbeat.heartbeat_at >=
+                   snapshot.snapshot_at - interval '2 minutes'
+             )
+             ORDER BY heartbeat.worker_name
+           )
+           FROM worker_heartbeats heartbeat
+         ) AS health
+       FROM snapshot`,
     ),
     database.query(
       `SELECT
@@ -410,15 +702,29 @@ export async function getAdminOverview(
   ])
 
   const data = summary.rows[0] ?? {}
+  const runtimeData = runtime.rows[0] ?? {}
+  const runtimeExecutors = Array.isArray(runtimeData['executors'])
+    ? runtimeData['executors']
+    : []
+  const activeLunaExecutors = runtimeExecutors.filter(
+    (executor) =>
+      executor &&
+      typeof executor === 'object' &&
+      'state' in executor &&
+      executor.state === 'running',
+  ).length
   const publishedRecords24h = publishedHourly.rows.reduce(
     (total, row) => total + Number(row.published ?? 0),
     0,
   )
   return {
+    snapshot_at:
+      runtimeData['snapshot_at'] ?? new Date().toISOString(),
     ...data,
+    active_luna_executors: activeLunaExecutors,
     pause_pending:
       data['pipeline_enabled'] === false &&
-      Number(data['active_luna_executors'] ?? 0) > 0,
+      activeLunaExecutors > 0,
     published_records_24h: publishedRecords24h,
     deployed_commit_sha: deployedCommitSha,
     processes: [
@@ -436,10 +742,18 @@ export async function getAdminOverview(
         metadata: { status: 'query_succeeded' },
         healthy: true
       },
-      ...health.rows
+      ...(
+        Array.isArray(runtimeData['health'])
+          ? runtimeData['health']
+          : []
+      )
     ],
+    executors: runtimeExecutors,
     active_work: activeTask.rows[0] ?? null,
-    pipeline_funnel: funnel.rows,
+    pipeline_funnel:
+      Array.isArray(runtimeData['pipeline_funnel'])
+        ? runtimeData['pipeline_funnel']
+        : [],
     breakdowns: {
       vendor: breakdown.rows.filter((row) => row.dimension === 'vendor')
         .slice(0, 20),

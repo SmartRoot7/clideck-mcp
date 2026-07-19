@@ -1918,8 +1918,14 @@ describeIntegration('PostgreSQL integration', () => {
     })
     expect(overview.status).toBe(200)
     const overviewPayload = await overview.json() as {
+      snapshot_at: string
       published_revisions: number
       published_records_24h: number
+      executors: Array<{
+        executor_id: string
+        state: string
+        stage: string | null
+      }>
       pipeline_funnel: Array<{
         stage: string
         count: number
@@ -1929,6 +1935,11 @@ describeIntegration('PostgreSQL integration', () => {
         failed: number
         cancelled: number
         skipped: number
+        waiting: number
+        waiting_unit: string
+        oldest_waiting_at: string | null
+        active_executor_ids: string[]
+        active_worker_count: number
       }>
       published_hourly_24h: Array<{
         hour: string
@@ -1941,6 +1952,8 @@ describeIntegration('PostgreSQL integration', () => {
       feedback_24h: expect.any(Number)
     })
     expect(overviewPayload.published_revisions).toBeGreaterThanOrEqual(50)
+    expect(overviewPayload.snapshot_at).toEqual(expect.any(String))
+    expect(overviewPayload.executors).toHaveLength(4)
     expect(overviewPayload.pipeline_funnel).toHaveLength(8)
     expect(new Set(
       overviewPayload.pipeline_funnel.map((stage) => stage.stage),
@@ -1953,6 +1966,20 @@ describeIntegration('PostgreSQL integration', () => {
         stage.failed +
         stage.cancelled +
         stage.skipped,
+      )
+      expect(stage.waiting).toBeGreaterThanOrEqual(0)
+      expect(stage.waiting_unit).toEqual(expect.any(String))
+      expect(stage.active_executor_ids).toEqual(expect.any(Array))
+      expect(stage.active_worker_count).toBeGreaterThanOrEqual(0)
+    }
+    const runningExecutors = overviewPayload.executors.filter(
+      (executor) => executor.state === 'running',
+    )
+    for (const stage of overviewPayload.pipeline_funnel) {
+      expect(stage.active_executor_ids).toHaveLength(
+        runningExecutors.filter(
+          (executor) => executor.stage === stage.stage,
+        ).length,
       )
     }
     expect(overviewPayload.published_hourly_24h).toHaveLength(24)

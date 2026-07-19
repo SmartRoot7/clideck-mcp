@@ -267,6 +267,7 @@ describe('local admin HTTP boundary', () => {
 function overviewFixture() {
   const now = new Date().toISOString()
   return {
+    snapshot_at: now,
     active_release: randomUUID(),
     active_release_sequence: 7,
     active_release_created_at: now,
@@ -323,6 +324,7 @@ function overviewFixture() {
     published_records_24h: 2,
     deployed_commit_sha: 'a'.repeat(40),
     processes: [],
+    executors: [],
     active_work: null,
     pipeline_funnel: [],
     breakdowns: {
