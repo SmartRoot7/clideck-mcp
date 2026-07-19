@@ -60,8 +60,10 @@ labs without adding speculative infrastructure to core.
 ## Knowledge model
 
 `knowledge_items` provides a stable identity. `knowledge_revisions` is append-only
-and contains structured facts. `releases` and `release_items` form immutable
-snapshots. `active_release` contains one row and is switched in a transaction.
+and contains structured facts. Historical snapshot/checkpoint releases retain
+full `release_items`; ordinary releases contain only immutable
+`release_changes`. `active_knowledge_state` materializes one current revision per
+item for deterministic search. `active_release` identifies the current release.
 
 Every item has a `domain_id`. Every revision can carry versioned
 `domain_context` and `domain_payload`. Existing Network records default to
@@ -189,9 +191,11 @@ Candidates require:
 - confidence ≥ 0.90, or ≥ 0.95 for dangerous procedures;
 - no unresolved blocking conflict.
 
-Publication creates a new immutable release and switches `active_release` in the
-same transaction. Rollback switches it to an earlier release; revisions are never
-overwritten.
+Publication applies at most 50 ready records per immutable delta release and
+switches `active_knowledge_state` plus `active_release` in one transaction under
+an advisory lock. Every 120 releases stores a full checkpoint. Rollback rebuilds
+the requested state from the nearest checkpoint and subsequent deltas in one
+transaction; revisions are never overwritten.
 
 Legacy import is separately resumable by manifest hash and legacy key, but its
 activation is one atomic release. The required release contains exactly 56,798

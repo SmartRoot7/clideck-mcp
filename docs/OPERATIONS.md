@@ -96,7 +96,9 @@ provided.
 ## Knowledge rollback
 
 Use the admin release endpoint to atomically select a previously published
-release. This does not mutate or delete knowledge revisions.
+release. The server reconstructs the target from the nearest immutable
+snapshot/checkpoint plus ordered deltas and replaces `active_knowledge_state`
+inside the same transaction. This does not mutate or delete knowledge revisions.
 
 Application rollback restores the previous checkout and services. Browser
 rollback disables its playground feature flag. Knowledge rollback remains the
