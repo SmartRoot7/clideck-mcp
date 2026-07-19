@@ -1146,6 +1146,37 @@ describeIntegration('PostgreSQL integration', () => {
     const unique = randomUUID()
     const sentinel = `SENTINEL-DEMO-SECRET-${unique}`
     const sourceUrl = `https://private.example.invalid/${unique}`
+    const evalSuite = `demo_volume_${unique.replaceAll('-', '').slice(0, 20)}`
+    await database.query(
+      `INSERT INTO product_eval_runs (
+         suite,
+         report_hash,
+         case_count,
+         passed_count,
+         failed_count,
+         dangerous_false_safe,
+         p50_ms,
+         p95_ms,
+         max_ms,
+         executed_at
+       )
+       SELECT
+         $1,
+         'sha256:' || encode(
+           digest($2 || ordinal::text, 'sha256'),
+           'hex'
+         ),
+         1,
+         1,
+         0,
+         0,
+         1,
+         1,
+         1,
+         now() + ordinal * interval '1 millisecond'
+       FROM generate_series(1, 25) ordinal`,
+      [evalSuite, unique],
+    )
     const source = await database.query<{ id: string }>(
       `INSERT INTO source_candidates (
          coverage_target_id,
@@ -1212,6 +1243,7 @@ describeIntegration('PostgreSQL integration', () => {
       expect(payload.release.published_knowledge).toBeGreaterThanOrEqual(50)
       expect(payload.operations.ai_model).toBe('gpt-5.6-luna')
       expect(payload.pipeline_tasks.length).toBeGreaterThan(0)
+      expect(payload.quality.eval_runs).toHaveLength(20)
       const serialized = JSON.stringify(payload)
       expect(serialized).not.toContain(sentinel)
       expect(serialized).not.toContain(sourceUrl)
@@ -1239,6 +1271,9 @@ describeIntegration('PostgreSQL integration', () => {
         (await hidden.request('/public/v1/demo/snapshot')).status,
       ).toBe(404)
     } finally {
+      await database.query('DELETE FROM product_eval_runs WHERE suite = $1', [
+        evalSuite
+      ])
       await database.query('DELETE FROM pipeline_tasks WHERE id = $1', [taskId])
       await database.query('DELETE FROM source_candidates WHERE id = $1', [
         sourceId

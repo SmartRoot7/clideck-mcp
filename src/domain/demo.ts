@@ -516,7 +516,7 @@ export async function getPublicDemoSnapshot(
       : null,
     quality: {
       summary: quality.summary,
-      eval_runs: quality.eval_runs.map((run) => ({
+      eval_runs: quality.eval_runs.slice(0, 20).map((run) => ({
         suite: run.suite,
         case_count: run.case_count,
         passed_count: run.passed_count,
