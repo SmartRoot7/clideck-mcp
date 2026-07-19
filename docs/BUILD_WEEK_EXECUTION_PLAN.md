@@ -13,7 +13,7 @@ Branch policy: `main` only; completed stages are committed and pushed directly.
 
 ## Current focus
 
-`D3.2 — Build Week submission`
+`D2.3 / 0.6.1 — exact read-only copy of the production admin`
 
 ## Baseline
 
@@ -282,39 +282,45 @@ Verification:
 
 Completed: 2026-07-19
 
-### [x] D2.3 — Public read-only operations demo
+### [~] D2.3 / 0.6.1 — Exact read-only operations demo
 
 URL: `https://mcp.clideck.com/demo`
 
 Deliverables:
 
-- the exact same compiled `apps/admin` bundle used by the LAN console, with
-  the same shell, pages, charts, formatters, responsive rules, JS, and CSS;
-- the real Overview, Pipeline, Coverage, and Quality screens;
-- `GET /public/v1/demo/snapshot`;
-- real production aggregate metrics, publication trends, funnel, safe coverage,
-  executor state, token efficiency, eval results, and allowlisted sample
-  answers;
-- no login or mutation controls.
+- one `OperationsApp`, `AppShell`, page registry, navigation registry, and
+  compiled frontend artifact for `/admin` and `/demo`;
+- all 16 real sections: Overview, Pipeline, Active Source, Agent Runs,
+  Coverage, Sources, Knowledge, Imports, Quality, Lab, Conflicts, Feedback,
+  Expert Tasks, Releases, Approvals, and Provenance;
+- the same real production records, filters, pagination, tables, charts,
+  controls, forms, and confirmation dialogs;
+- mirrored GET-only public endpoints returning the strict admin contracts;
+- no public login or admin session.
 
 Security boundary:
 
-- public mode never calls the admin API or creates an admin session;
-- source URLs/titles, evidence, provenance, task IDs, fragment IDs, questions,
-  internal errors, hostnames, credentials, and audit records are omitted at the
-  server contract;
-- source names are replaced with an explicit “Source identity withheld” label
-  only after the server has removed the underlying values;
-- browser blur is not treated as security;
-- production knowledge data is not included in the repository.
+- the server replaces source identity — source/document/manual title and URL,
+  section locator, evidence fragment, content hashes, and source-bearing free
+  text — with `XXXXXXXX`;
+- tenant ownership and private task/revision linkage are omitted;
+- safe IDs, status, timestamps, counters, release state, Luna activity, token
+  data, and other allowlisted admin fields remain real;
+- every mutation control remains visible and opens the same real dialog;
+- Pause/Resume remains a direct control and no longer asks for a reason or
+  confirmation phrase;
+- the `public_demo` executor stops at final confirmation, returns
+  `Read-only demo — no changes were made`, and performs no fetch;
+- POST, PUT, PATCH, and DELETE under `/public/v1/demo/*` return 405 before
+  domain logic and cannot create an audit event or database change;
+- browser blur is not treated as security.
 
 Truthfulness rule:
 
 - there is no separately designed showcase dashboard and no fabricated
   dataset;
-- `/admin` and `/demo` serve one byte-identical frontend artifact; only
-  authorization, available sections/actions, and the server-provided data
-  contract differ;
+- `/admin` and `/demo` serve one byte-identical frontend artifact; only the
+  runtime role, API prefix, source sanitizer, and final action executor differ;
 - changes to an admin component therefore cannot ship to one route without
   shipping to the other;
 - real Network production totals and pipeline activity are shown as reported
@@ -322,26 +328,27 @@ Truthfulness rule:
 
 Verification:
 
-- the strict public snapshot is assembled from real database queries plus the
-  existing Overview, Coverage, Pipeline, and Quality admin functions;
-- a PostgreSQL integration test inserted a sentinel source URL, title, payload,
-  UUID, and failure message; none appeared in the returned public JSON;
-- POST and unknown `/public/v1/demo/*` routes return 404, and the entire feature
-  returns 404 when `ENABLE_PUBLIC_DEMO=false`;
-- public UI tests confirmed the real admin shell renders while Pause, executor
-  configuration, Sources, Provenance, and other mutation surfaces are absent;
-- local browser checks opened all four sections, confirmed real rows and
-  metrics, no horizontal overflow, no browser errors, and working mobile
-  navigation at 390 px;
-- desktop visual comparison retained the production admin's published-first
-  hierarchy, hourly chart, pipeline rail, executor cards, restrained status
-  color, and compact navigation. The concept's dark sidebar and invented cards
-  were intentionally rejected so the demo remains identical to the real admin
-  instead of becoming a marketing mockup;
-- typecheck, 16/16 PostgreSQL integration tests, 7/7 admin UI tests, and the
-  single shared production frontend build passed.
-
-Completed: 2026-07-19
+- component parity test confirms the same 16 navigation and page registry
+  entries for both roles;
+- confirmation-flow test enters the real reason and confirmation phrase,
+  receives the read-only result, and proves that `fetch` was never called;
+- a PostgreSQL integration test reads every real admin model, inserts sentinel
+  source URL, manual title, evidence fragment, task result, and failure text,
+  and proves the public JSON contains `XXXXXXXX` but none of the sentinels;
+- the same test proves IDs remain visible, all admin Zod contracts pass, all
+  four mutation methods return 405, and the feature flag returns 404;
+- 83/83 backend and PostgreSQL tests, 13 Domain Pack tests, and 8 UI tests pass
+  without skip; product eval passes 250/250 with dangerous false-safe 0 and
+  known-query p95 6.70 ms;
+- Codex Security reported six public-projection disclosures; explicit
+  fail-closed projectors now cover release reasons, feedback, pipeline
+  free-text/metadata, tenant tasks, legacy aliases, and provenance hashes;
+- desktop and 390 px browser QA confirms all 16 sections, source redaction,
+  immediate Pause/Resume, retained confirmation dialogs for other actions,
+  zero demo-side DB/audit changes, no horizontal overflow, and no console
+  errors;
+- production deployment and production database immutability checks remain
+  before completion.
 
 ### [x] D2.4 — Open-source documentation
 
@@ -370,7 +377,7 @@ Verification:
   knowledge, documents, user data, provenance, and operator-imported datasets;
 - architecture and security documents describe Domain Pack isolation and the
   truthful public-demo boundary;
-- project, admin UI, and admin-contract versions are aligned at 0.6.0;
+- project, admin UI, and admin-contract versions are aligned at 0.6.1;
 - the README screenshot was captured from the deployed production `/demo`
   route, not a staged or invented dashboard image;
 - 66/66 backend/PostgreSQL tests, 13 Domain Pack tests, 7 admin UI tests,

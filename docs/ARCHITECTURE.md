@@ -143,15 +143,21 @@ planner to discovery; a failed source cannot reach publication.
 
 ## Public demo
 
-The public `/demo` and LAN `/admin` are two builds of the same `apps/admin`
-source. The public build uses the same pages, charts, components, responsive
-rules, and formatters but receives only a strict read-only snapshot.
+The public `/demo` and LAN `/admin` render the same `OperationsApp`, page
+registry, navigation registry, components, charts, responsive rules, filters,
+action forms, and confirmation dialogs from one compiled `apps/admin` artifact.
+Only the runtime role and API prefix differ.
 
-The snapshot contains real production aggregates and sanitized operational
-records. Source identity, provenance, document content, internal UUIDs,
-questions, errors, hostnames, and audit records are removed on the server.
-Public mode has no session and no mutation endpoint. `ENABLE_PUBLIC_DEMO=false`
-removes both the snapshot and static route.
+The public role reads the same production models through mirrored GET-only
+routes. The server replaces source/document/manual titles, URLs, locators,
+evidence fragments, hashes, and source-bearing free text with `XXXXXXXX`;
+tenant ownership and private task linkage are omitted. Safe IDs, states,
+counters, releases, Luna activity, tokens, and timestamps remain unchanged.
+Dialog-based actions keep the same confirmation flow; Pause/Resume remains a
+direct control. In every case the `public_demo` action executor returns a local
+read-only acknowledgement and does not issue a request. The server also rejects
+non-GET/HEAD methods before domain logic. `ENABLE_PUBLIC_DEMO=false` removes the
+public data and static routes.
 
 ## Expert task lifecycle
 

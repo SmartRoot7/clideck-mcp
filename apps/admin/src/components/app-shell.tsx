@@ -33,6 +33,7 @@ import type { ReactNode } from 'react'
 import { useState } from 'react'
 
 import { formatDate, titleCase } from '../lib/format'
+import type { OperationsRole } from '../lib/runtime'
 import { Button, Status } from './ui'
 
 export type SectionId =
@@ -115,7 +116,7 @@ export function AppShell({
   onPause,
   onConcurrency,
   onLogout,
-  publicMode = false
+  role
 }: {
   section: SectionId
   overview: Overview | undefined
@@ -126,23 +127,12 @@ export function AppShell({
   onPause?: () => void
   onConcurrency?: (value: number) => void
   onLogout?: () => void
-  publicMode?: boolean
+  role: OperationsRole
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const enabled = overview?.pipeline_enabled ?? false
-  const activeSource = publicMode
-    ? 'Production snapshot'
-    : overview?.active_source_title ?? 'No active source'
-  const groups = publicMode
-    ? GROUPS
-        .map((group) => ({
-          ...group,
-          items: group.items.filter((item) =>
-            ['overview', 'pipeline', 'coverage', 'quality'].includes(item.id),
-          )
-        }))
-        .filter((group) => group.items.length)
-    : GROUPS
+  const activeSource = overview?.active_source_title ?? 'No active source'
+  const publicDemo = role === 'public_demo'
   return (
     <div className="app-shell">
       <aside className={`sidebar ${menuOpen ? 'is-open' : ''}`}>
@@ -154,7 +144,7 @@ export function AppShell({
           </button>
         </div>
         <nav aria-label="Admin sections">
-          {groups.map((group) => (
+          {GROUPS.map((group) => (
             <div className="nav-group" key={group.label}>
               <span className="nav-group__label">{group.label}</span>
               {group.items.map((item) => {
@@ -180,8 +170,8 @@ export function AppShell({
           ))}
         </nav>
         <div className="sidebar__footer">
-          <span>{publicMode ? 'Live · public read-only' : 'Local network only'}</span>
-          {publicMode
+          <span>{publicDemo ? 'Live · public read-only' : 'Local network only'}</span>
+          {publicDemo
             ? <a href="/mcp">Connect MCP</a>
             : <button type="button" onClick={onLogout}>Sign out</button>}
         </div>
@@ -203,32 +193,28 @@ export function AppShell({
             </span>
           </div>
           <div className="command-bar__actions">
-            {!publicMode && (
-              <>
-                <Button
-                  variant={enabled ? 'secondary' : 'primary'}
-                  aria-label={enabled ? 'Pause all Luna' : 'Resume pipeline'}
-                  onClick={onPause}
-                >
-                  {enabled ? <Pause size={16} /> : <Play size={16} />}
-                  <span>{enabled ? 'Pause all Luna' : 'Resume pipeline'}</span>
-                </Button>
-                <label className="executor-select">
-                  <Boxes size={17} />
-                  <select
-                    aria-label="Configured Luna executors"
-                    value={Number(overview?.max_concurrent_ai_runs ?? 1)}
-                    onChange={(event) =>
-                      onConcurrency?.(Number(event.target.value))}
-                  >
-                    {[1, 2, 3, 4].map((value) => (
-                      <option value={value} key={value}>{value} executors</option>
-                    ))}
-                  </select>
-                  <ChevronDown size={15} />
-                </label>
-              </>
-            )}
+            <Button
+              variant={enabled ? 'secondary' : 'primary'}
+              aria-label={enabled ? 'Pause all Luna' : 'Resume pipeline'}
+              onClick={onPause}
+            >
+              {enabled ? <Pause size={16} /> : <Play size={16} />}
+              <span>{enabled ? 'Pause all Luna' : 'Resume pipeline'}</span>
+            </Button>
+            <label className="executor-select">
+              <Boxes size={17} />
+              <select
+                aria-label="Configured Luna executors"
+                value={Number(overview?.max_concurrent_ai_runs ?? 1)}
+                onChange={(event) =>
+                  onConcurrency?.(Number(event.target.value))}
+              >
+                {[1, 2, 3, 4].map((value) => (
+                  <option value={value} key={value}>{value} executors</option>
+                ))}
+              </select>
+              <ChevronDown size={15} />
+            </label>
             <Button variant="quiet" aria-label="Refresh live data" onClick={onRefresh} disabled={refreshing}>
               <RefreshCw size={17} className={refreshing ? 'spin' : ''} />
             </Button>

@@ -1,8 +1,4 @@
 import {
-  mutationAckSchema,
-  type MutationAck
-} from '@clideck/admin-contracts'
-import {
   useMutation,
   useQueryClient
 } from '@tanstack/react-query'
@@ -14,7 +10,7 @@ import {
   useState
 } from 'react'
 
-import { postJson } from '../lib/api'
+import { useOperationsRuntime } from '../lib/runtime'
 import { Button, Toast } from './ui'
 
 export type ActionSpec = {
@@ -29,6 +25,7 @@ export type ActionSpec = {
 
 export function useAdminAction() {
   const queryClient = useQueryClient()
+  const runtime = useOperationsRuntime()
   const [spec, setSpec] = useState<ActionSpec | null>(null)
   const [confirmation, setConfirmation] = useState('')
   const [reason, setReason] = useState('')
@@ -38,10 +35,9 @@ export function useAdminAction() {
   } | null>(null)
   const mutation = useMutation({
     mutationFn: async (current: ActionSpec) =>
-      postJson<MutationAck>(
+      runtime.executeMutation(
         current.path,
         current.buildBody(reason.trim()),
-        mutationAckSchema,
       ),
     onSuccess: async (result) => {
       setToast({ tone: 'success', message: result.message })

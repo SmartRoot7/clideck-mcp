@@ -4,6 +4,24 @@ import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 
 import { serveStatic } from '@hono/node-server/serve-static'
+import {
+  activeSourceDetailSchema,
+  agentRunsSchema,
+  approvalsSchema,
+  conflictsSchema,
+  coverageTargetsSchema,
+  expertTasksSchema,
+  feedbackRowsSchema,
+  importRunsSchema,
+  knowledgePageSchema,
+  labSchema,
+  overviewSchema,
+  pipelineDetailsSchema,
+  provenanceSchema,
+  qualitySchema,
+  releasesSchema,
+  sourcesSchema
+} from '@clideck/admin-contracts'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { Hono, type Context } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
@@ -25,12 +43,17 @@ import {
   getAdminOverview,
   getPipelineDetails,
   getQualityDashboard,
+  getRevisionProvenance,
   listAgentRuns,
+  listCodeChangeApprovals,
+  listConflicts,
   listCoverageTargets,
+  listExpertTasks,
   listFeedback,
   listImports,
   listKnowledge,
   listLabValidations,
+  listReleases,
   listSources,
   recordAdminAudit,
   setPipelineConcurrency,
@@ -42,8 +65,18 @@ import {
   verifyNetworkChange
 } from '../domain/change.js'
 import { resolveNetworkContext } from '../domain/context.js'
-import { getPublicDemoSnapshot } from '../domain/demo.js'
 import { searchKnowledge } from '../domain/knowledge.js'
+import {
+  sanitizeDemoActiveSource,
+  sanitizeDemoExpertTasks,
+  sanitizeDemoFeedback,
+  sanitizeDemoImports,
+  sanitizeDemoOverview,
+  sanitizeDemoPipeline,
+  sanitizeDemoProvenance,
+  sanitizeDemoReleases,
+  sanitizeDemoSources
+} from '../domain/public-demo.js'
 import {
   changeReviewInputSchema,
   changeVerificationInputSchema,
@@ -101,6 +134,13 @@ type ApiBindings = {
     requestId: string
     adminActor: AdminActor
   }
+}
+
+function parseHttpContract<T>(
+  schema: z.ZodType<T>,
+  value: unknown,
+): T {
+  return schema.parse(JSON.parse(JSON.stringify(value)))
 }
 
 export function createApiApp(dependencies: ApiDependencies) {
@@ -163,7 +203,7 @@ export function createApiApp(dependencies: ApiDependencies) {
     context.json({
       status: 'ok',
       service: 'CliDeck MCP — Network Knowledge',
-      version: '0.6.0'
+      version: '0.6.1'
     }),
   )
 
@@ -265,27 +305,179 @@ export function createApiApp(dependencies: ApiDependencies) {
     return context.json(stats)
   })
 
-  app.get('/public/v1/demo/snapshot', async (context) => {
+  app.use('/public/v1/demo/*', async (context, next) => {
     if (!config.enablePublicDemo) {
       return context.json({ error: 'not_found' }, 404)
+    }
+    if (!['GET', 'HEAD'].includes(context.req.method)) {
+      return context.json({ error: 'method_not_allowed' }, 405)
     }
     const rate = await consumeRateLimit(
       database,
       getClientAddress(context, config),
-      'public_demo_snapshot',
+      'public_demo_read',
       Math.max(60, config.publicRateLimitPerMinute),
     )
     context.header('x-ratelimit-remaining', String(rate.remaining))
     if (!rate.allowed) {
       return context.json({ error: 'rate_limited' }, 429)
     }
-    const snapshot = await getPublicDemoSnapshot(adminDatabase)
-    context.header(
-      'cache-control',
-      'public, max-age=30, stale-while-revalidate=120',
-    )
-    return context.json(snapshot)
+    context.header('cache-control', 'no-store')
+    await next()
   })
+
+  app.get('/public/v1/demo/overview', async (context) =>
+    context.json(sanitizeDemoOverview(parseHttpContract(
+      overviewSchema,
+      await getAdminOverview(adminDatabase, config.deployCommitSha),
+    ))),
+  )
+
+  app.get('/public/v1/demo/coverage', async (context) =>
+    context.json(parseHttpContract(
+      coverageTargetsSchema,
+      await listCoverageTargets(adminDatabase),
+    )),
+  )
+
+  app.get('/public/v1/demo/sources', async (context) => {
+    const status = context.req.query('status')?.trim() || null
+    const limit = Math.min(
+      500,
+      Math.max(1, Number(context.req.query('limit') ?? 200) || 200),
+    )
+    return context.json(sanitizeDemoSources(parseHttpContract(
+      sourcesSchema,
+      await listSources(adminDatabase, status, limit),
+    )))
+  })
+
+  app.get('/public/v1/demo/pipeline', async (context) =>
+    context.json(sanitizeDemoPipeline(parseHttpContract(
+      pipelineDetailsSchema,
+      await getPipelineDetails(adminDatabase),
+    ))),
+  )
+
+  app.get('/public/v1/demo/active-source', async (context) =>
+    context.json(sanitizeDemoActiveSource(parseHttpContract(
+      activeSourceDetailSchema,
+      await getActiveSource(adminDatabase),
+    ))),
+  )
+
+  app.get('/public/v1/demo/knowledge', async (context) => {
+    const limit = Math.min(
+      100,
+      Math.max(1, Number(context.req.query('limit') ?? 50) || 50),
+    )
+    const offset = Math.min(
+      100_000,
+      Math.max(0, Number(context.req.query('offset') ?? 0) || 0),
+    )
+    const query = (name: string) => context.req.query(name)?.trim() || null
+    return context.json(parseHttpContract(
+      knowledgePageSchema,
+      await listKnowledge(adminDatabase, {
+        query: query('q'),
+        vendor: query('vendor'),
+        operatingSystem: query('operating_system'),
+        kind: query('kind'),
+        risk: query('risk'),
+        origin: query('origin'),
+        limit,
+        offset
+      }),
+    ))
+  })
+
+  app.get('/public/v1/demo/imports', async (context) =>
+    context.json(sanitizeDemoImports(parseHttpContract(
+      importRunsSchema,
+      await listImports(adminDatabase),
+    ))),
+  )
+
+  app.get('/public/v1/demo/agent-runs', async (context) => {
+    const limit = Math.min(
+      500,
+      Math.max(1, Number(context.req.query('limit') ?? 200) || 200),
+    )
+    return context.json(parseHttpContract(
+      agentRunsSchema,
+      await listAgentRuns(adminDatabase, limit),
+    ))
+  })
+
+  app.get('/public/v1/demo/tasks', async (context) =>
+    context.json(sanitizeDemoExpertTasks(parseHttpContract(
+      expertTasksSchema,
+      await listExpertTasks(adminDatabase),
+    ))),
+  )
+
+  app.get('/public/v1/demo/quality', async (context) =>
+    context.json(parseHttpContract(
+      qualitySchema,
+      await getQualityDashboard(adminDatabase),
+    )),
+  )
+
+  app.get('/public/v1/demo/lab', async (context) =>
+    context.json(parseHttpContract(
+      labSchema,
+      await listLabValidations(adminDatabase),
+    )),
+  )
+
+  app.get('/public/v1/demo/conflicts', async (context) =>
+    context.json(parseHttpContract(
+      conflictsSchema,
+      await listConflicts(adminDatabase),
+    )),
+  )
+
+  app.get('/public/v1/demo/releases', async (context) =>
+    context.json(sanitizeDemoReleases(parseHttpContract(
+      releasesSchema,
+      await listReleases(adminDatabase),
+    ))),
+  )
+
+  app.get('/public/v1/demo/feedback', async (context) =>
+    context.json(sanitizeDemoFeedback(parseHttpContract(
+      feedbackRowsSchema,
+      await listFeedback(adminDatabase),
+    ))),
+  )
+
+  app.get('/public/v1/demo/approvals', async (context) =>
+    context.json(parseHttpContract(
+      approvalsSchema,
+      await listCodeChangeApprovals(adminDatabase),
+    )),
+  )
+
+  app.get(
+    '/public/v1/demo/revisions/:revisionId/provenance',
+    async (context) => {
+      const revisionId = context.req.param('revisionId')
+      if (!z.uuid().safeParse(revisionId).success) {
+        return context.json({ error: 'invalid_revision_id' }, 400)
+      }
+      const provenance = await getRevisionProvenance(
+        adminDatabase,
+        revisionId,
+      )
+      if (!provenance) {
+        return context.json({ error: 'not_found' }, 404)
+      }
+      return context.json(sanitizeDemoProvenance(parseHttpContract(
+        provenanceSchema,
+        provenance,
+      )))
+    },
+  )
 
   app.all('/public/v1/demo/*', (context) =>
     context.json({ error: 'not_found' }, 404),
@@ -857,73 +1049,15 @@ export function createApiApp(dependencies: ApiDependencies) {
   })
 
   app.get('/admin/v1/tasks', async (context) => {
-    const result = await adminDatabase.query(
-      `SELECT
-         et.public_id,
-         et.tenant_id,
-         et.status,
-         et.priority,
-         et.attempts,
-         et.claim_owner,
-         et.lease_until,
-         et.expires_at,
-         et.created_at,
-         et.updated_at,
-         et.completed_at,
-         et.failure_code,
-         et.failure_message,
-         et.result_revision_id,
-         latest_event.stage,
-         latest_event.progress_percent,
-         latest_event.public_message,
-         release.sequence AS result_release_sequence
-       FROM expert_tasks et
-       LEFT JOIN LATERAL (
-         SELECT stage, progress_percent, public_message
-         FROM task_public_events
-         WHERE task_id = et.id
-         ORDER BY created_at DESC, id DESC
-         LIMIT 1
-       ) latest_event ON true
-       LEFT JOIN LATERAL (
-         SELECT r.sequence
-         FROM release_items ri
-         JOIN releases r ON r.id = ri.release_id
-         WHERE ri.revision_id = et.result_revision_id
-         ORDER BY r.sequence DESC
-         LIMIT 1
-       ) release ON true
-       ORDER BY et.created_at DESC
-       LIMIT 100`,
-    )
-    return context.json(result.rows)
+    return context.json(await listExpertTasks(adminDatabase))
   })
 
   app.get('/admin/v1/conflicts', async (context) => {
-    const result = await adminDatabase.query(
-      `SELECT id, left_revision_id, right_revision_id, severity,
-              description, status, created_at, resolved_at
-       FROM knowledge_conflicts
-       ORDER BY created_at DESC
-       LIMIT 100`,
-    )
-    return context.json(result.rows)
+    return context.json(await listConflicts(adminDatabase))
   })
 
   app.get('/admin/v1/releases', async (context) => {
-    const result = await adminDatabase.query(
-      `SELECT
-         r.id, r.sequence, r.status, r.reason, r.created_by, r.created_at,
-         (ar.release_id IS NOT NULL) AS active,
-         count(ri.revision_id)::int AS revision_count
-       FROM releases r
-       LEFT JOIN active_release ar ON ar.release_id = r.id
-       LEFT JOIN release_items ri ON ri.release_id = r.id
-       GROUP BY r.id, ar.release_id
-       ORDER BY r.sequence DESC
-       LIMIT 100`,
-    )
-    return context.json(result.rows)
+    return context.json(await listReleases(adminDatabase))
   })
 
   app.post('/admin/v1/releases/:releaseId/activate', async (context) => {
@@ -988,77 +1122,14 @@ export function createApiApp(dependencies: ApiDependencies) {
     if (!/^[0-9a-f-]{36}$/.test(revisionId)) {
       return context.json({ error: 'invalid_revision_id' }, 400)
     }
-    const result = await adminDatabase.query(
-      `SELECT
-         kr.id::text AS revision_id,
-         CASE
-           WHEN lrm.revision_id IS NOT NULL THEN
-             jsonb_build_object(
-               'origin', 'legacy_import',
-               'legacy_key', lrm.legacy_key,
-               'item_type', lrm.legacy_item_type,
-               'source_trust', lrm.source_trust,
-               'lifecycle_status', lrm.lifecycle_status,
-               'original_risk_level', lrm.original_risk_level,
-               'original_confidence', lrm.original_confidence,
-               'original_quality_score', lrm.original_quality_score,
-               'published_at', lrm.published_at,
-               'provenance', lrm.provenance,
-               'payload_hash', lrm.payload_hash
-             )
-           ELSE coalesce((
-             SELECT jsonb_agg(
-               jsonb_build_object(
-                 'vendor', v.display_name,
-                 'title', sd.title,
-                 'document_version', sd.document_version,
-                 'canonical_url', sd.canonical_url,
-                 'document_date', sd.document_date,
-                 'verified_at', sd.verified_at,
-                 'content_hash', sd.content_hash,
-                 'evidence_fragment', sd.evidence_fragment,
-                 'evidence_role', rs.evidence_role,
-                 'confidence_reason', rs.confidence_reason
-               )
-               ORDER BY rs.evidence_role, sd.verified_at DESC
-             )
-             FROM revision_sources rs
-             JOIN source_documents sd ON sd.id = rs.source_document_id
-             JOIN vendors v ON v.id = sd.vendor_id
-             WHERE rs.revision_id = kr.id
-           ), '[]'::jsonb)
-         END AS provenance,
-         kr.created_at,
-         kr.status
-       FROM knowledge_revisions kr
-       LEFT JOIN legacy_revision_metadata lrm ON lrm.revision_id = kr.id
-       WHERE kr.id = $1`,
-      [revisionId],
-    )
-    if (!result.rows[0]) return context.json({ error: 'not_found' }, 404)
-    return context.json(result.rows[0])
+    const provenance = await getRevisionProvenance(adminDatabase, revisionId)
+    return provenance
+      ? context.json(provenance)
+      : context.json({ error: 'not_found' }, 404)
   })
 
   app.get('/admin/v1/code-change-approvals', async (context) => {
-    const result = await adminDatabase.query(
-      `SELECT
-         cca.id,
-         coalesce(et.public_id, cca.task_id::text, 'unlinked') AS task_id,
-         cca.repository,
-         cca.summary,
-         cca.risk_assessment,
-         cca.status,
-         cca.requested_by,
-         cca.decided_by,
-         cca.decision_reason,
-         cca.created_at,
-         cca.decided_at
-       FROM code_change_approvals cca
-       LEFT JOIN expert_tasks et ON et.id = cca.task_id
-       ORDER BY cca.created_at DESC
-       LIMIT 100`,
-    )
-    return context.json(result.rows)
+    return context.json(await listCodeChangeApprovals(adminDatabase))
   })
 
   app.post('/admin/v1/code-change-approvals/:approvalId/decision', async (context) => {

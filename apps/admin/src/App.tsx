@@ -1,7 +1,5 @@
 import {
-  mutationAckSchema,
-  sessionSchema,
-  type MutationAck
+  sessionSchema
 } from '@clideck/admin-contracts'
 import {
   useMutation,
@@ -14,12 +12,12 @@ import {
 } from 'lucide-react'
 import {
   lazy,
+  type ReactNode,
   Suspense,
   useEffect,
   useState
 } from 'react'
 
-import { useAdminAction } from './components/action-dialog'
 import {
   AppShell,
   sectionFromLocation,
@@ -36,16 +34,13 @@ import {
   postJson
 } from './lib/api'
 import {
-  demoCoverage,
-  demoOverview,
-  demoPipeline,
-  demoQuality
-} from './lib/demo'
-import {
   useOverview,
-  usePublicDemoSnapshot,
   useSession
 } from './lib/queries'
+import {
+  OperationsRuntimeProvider,
+  useOperationsRuntime
+} from './lib/runtime'
 const ActiveSourcePage = lazy(() => import('./pages/active-source').then((module) => ({ default: module.ActiveSourcePage })))
 const AgentRunsPage = lazy(() => import('./pages/agent-runs').then((module) => ({ default: module.AgentRunsPage })))
 const ApprovalsPage = lazy(() => import('./pages/approvals').then((module) => ({ default: module.ApprovalsPage })))
@@ -65,9 +60,17 @@ const TasksPage = lazy(() => import('./pages/tasks').then((module) => ({ default
 
 export default function App() {
   if (window.location.pathname.startsWith('/demo')) {
-    return <PublicDemoApp />
+    return (
+      <OperationsRuntimeProvider role="public_demo">
+        <OperationsApp />
+      </OperationsRuntimeProvider>
+    )
   }
-  return <LocalAdminApp />
+  return (
+    <OperationsRuntimeProvider role="super_admin">
+      <LocalAdminApp />
+    </OperationsRuntimeProvider>
+  )
 }
 
 function LocalAdminApp() {
@@ -76,102 +79,7 @@ function LocalAdminApp() {
   if (sessionQuery.isError || !sessionQuery.data?.authenticated) {
     return <LoginScreen onSuccess={() => void sessionQuery.refetch()} />
   }
-  return <AuthenticatedApp />
-}
-
-function PublicDemoApp() {
-  const query = usePublicDemoSnapshot()
-  const [section, setSection] = useState<SectionId>(sectionFromLocation)
-  if (query.isLoading || !query.data) {
-    if (query.isError) {
-      return (
-        <div className="standalone-state">
-          <ErrorState onRetry={() => void query.refetch()}>
-            The live read-only snapshot is temporarily unavailable.
-          </ErrorState>
-        </div>
-      )
-    }
-    return <AppBoot />
-  }
-  const snapshot = query.data
-  const overview = demoOverview(snapshot)
-  const pipeline = demoPipeline(snapshot)
-  const coverage = demoCoverage(snapshot)
-  const quality = demoQuality(snapshot)
-  const navigate = (next: SectionId) => {
-    const allowed: SectionId[] = [
-      'overview',
-      'pipeline',
-      'coverage',
-      'quality'
-    ]
-    if (!allowed.includes(next)) return
-    window.history.pushState(
-      {},
-      '',
-      next === 'overview' ? '/demo' : `/demo/${next}`,
-    )
-    setSection(next)
-    window.scrollTo({
-      top: 0,
-      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
-        ? 'auto'
-        : 'smooth'
-    })
-  }
-  return (
-    <AppShell
-      section={section}
-      overview={overview}
-      refreshing={query.isFetching}
-      onNavigate={navigate}
-      onRefresh={() => void query.refetch()}
-      publicMode
-    >
-      <Suspense fallback={<LoadingState label="Opening section…" />}>
-        <PublicDemoPage
-          section={section}
-          overview={overview}
-          pipeline={pipeline}
-          coverage={coverage}
-          quality={quality}
-        />
-      </Suspense>
-    </AppShell>
-  )
-}
-
-function PublicDemoPage({
-  section,
-  overview,
-  pipeline,
-  coverage,
-  quality
-}: {
-  section: SectionId
-  overview: ReturnType<typeof demoOverview>
-  pipeline: ReturnType<typeof demoPipeline>
-  coverage: ReturnType<typeof demoCoverage>
-  quality: ReturnType<typeof demoQuality>
-}) {
-  switch (section) {
-    case 'pipeline':
-      return <PipelinePage overview={overview} data={pipeline} readOnly />
-    case 'coverage':
-      return <CoveragePage data={coverage} readOnly />
-    case 'quality':
-      return <QualityPage data={quality} readOnly />
-    default:
-      return (
-        <OverviewPage
-          overview={overview}
-          pipelineData={pipeline}
-          coverageData={coverage}
-          publicMode
-        />
-      )
-  }
+  return <OperationsApp />
 }
 
 function AppBoot() {
@@ -232,7 +140,7 @@ function LoginScreen({ onSuccess }: { onSuccess: () => void }) {
         </footer>
       </section>
       <aside className="login-context">
-        <span className="eyebrow">CliDeck MCP 0.5</span>
+        <span className="eyebrow">CliDeck MCP 0.6.1</span>
         <h2>A knowledge factory you can actually understand.</h2>
         <p>Published output first. Every source, Luna run, safety gate and immutable release remains visible and controllable.</p>
         <div className="login-pipeline" aria-label="Pipeline stages">
@@ -245,17 +153,26 @@ function LoginScreen({ onSuccess }: { onSuccess: () => void }) {
   )
 }
 
-function AuthenticatedApp() {
+function OperationsApp() {
   const queryClient = useQueryClient()
   const overviewQuery = useOverview()
-  const action = useAdminAction()
+  const runtime = useOperationsRuntime()
   const [section, setSection] = useState<SectionId>(sectionFromLocation)
   const [toast, setToast] = useState<string | null>(null)
   const concurrencyMutation = useMutation({
-    mutationFn: (value: number) => postJson<MutationAck>(
+    mutationFn: (value: number) => runtime.executeMutation(
       '/admin/api/v1/pipeline/concurrency',
       { max_concurrent_ai_runs: value },
-      mutationAckSchema,
+    ),
+    onSuccess: async (result) => {
+      setToast(result.message)
+      await queryClient.invalidateQueries()
+    }
+  })
+  const pipelineStateMutation = useMutation({
+    mutationFn: (enabled: boolean) => runtime.executeMutation(
+      '/admin/api/v1/pipeline/state',
+      { enabled },
     ),
     onSuccess: async (result) => {
       setToast(result.message)
@@ -279,7 +196,9 @@ function AuthenticatedApp() {
   }
 
   const navigate = (next: SectionId) => {
-    const path = next === 'overview' ? '/admin' : `/admin/${next}`
+    const path = next === 'overview'
+      ? runtime.routePrefix
+      : `${runtime.routePrefix}/${next}`
     window.history.pushState({}, '', path)
     setSection(next)
     window.scrollTo({ top: 0, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
@@ -293,30 +212,26 @@ function AuthenticatedApp() {
         refreshing={overviewQuery.isFetching}
         onNavigate={navigate}
         onRefresh={() => void queryClient.invalidateQueries()}
-        onPause={() => action.open({
-          title: overview.pipeline_enabled ? 'Pause all Luna' : 'Resume pipeline',
-          summary: overview.pipeline_enabled
-            ? 'Stop every Luna process within 10 seconds. Mechanical work may finish, but no new token-consuming task will start.'
-            : 'Resume the continuous scheduler and allow configured Luna executors to claim unfinished work.',
-          path: '/admin/api/v1/pipeline/state',
-          confirmText: overview.pipeline_enabled ? 'PAUSE' : 'RESUME',
-          requireReason: true,
-          danger: overview.pipeline_enabled,
-          buildBody: (reason) => ({ enabled: !overview.pipeline_enabled, reason })
-        })}
+        onPause={() =>
+          pipelineStateMutation.mutate(!overview.pipeline_enabled)}
         onConcurrency={(value) => concurrencyMutation.mutate(value)}
-        onLogout={() => void postEmpty('/admin/auth/logout').then(() => {
-          queryClient.clear()
-          window.location.assign('/admin')
-        })}
+        role={runtime.role}
+        {...(runtime.role === 'super_admin'
+          ? {
+              onLogout: () => void postEmpty('/admin/auth/logout').then(() => {
+                queryClient.clear()
+                window.location.assign('/admin')
+              })
+            }
+          : {})}
       >
         <Suspense fallback={<LoadingState label="Opening section…" />}>
           <CurrentPage section={section} overview={overview} />
         </Suspense>
       </AppShell>
-      {action.dialog}{action.toast}
       {toast && <Toast tone="success" onClose={() => setToast(null)}>{toast}</Toast>}
       {concurrencyMutation.isError && <Toast tone="error" onClose={() => concurrencyMutation.reset()}>Could not change Luna concurrency.</Toast>}
+      {pipelineStateMutation.isError && <Toast tone="error" onClose={() => pipelineStateMutation.reset()}>Could not change the pipeline state.</Toast>}
     </>
   )
 }
@@ -328,22 +243,29 @@ function CurrentPage({
   section: SectionId
   overview: NonNullable<ReturnType<typeof useOverview>['data']>
 }) {
-  switch (section) {
-    case 'overview': return <OverviewPage overview={overview} />
-    case 'pipeline': return <PipelinePage overview={overview} />
-    case 'active-source': return <ActiveSourcePage />
-    case 'agent-runs': return <AgentRunsPage overview={overview} />
-    case 'coverage': return <CoveragePage />
-    case 'sources': return <SourcesPage />
-    case 'knowledge': return <KnowledgePage />
-    case 'imports': return <ImportsPage />
-    case 'quality': return <QualityPage />
-    case 'lab': return <LabPage />
-    case 'conflicts': return <ConflictsPage />
-    case 'feedback': return <FeedbackPage />
-    case 'tasks': return <TasksPage />
-    case 'releases': return <ReleasesPage />
-    case 'approvals': return <ApprovalsPage />
-    case 'provenance': return <ProvenancePage />
-  }
+  return OPERATIONS_PAGE_REGISTRY[section](overview)
+}
+
+export const OPERATIONS_PAGE_REGISTRY: Record<
+  SectionId,
+  (
+    overview: NonNullable<ReturnType<typeof useOverview>['data']>,
+  ) => ReactNode
+> = {
+  overview: (overview) => <OverviewPage overview={overview} />,
+  pipeline: (overview) => <PipelinePage overview={overview} />,
+  'active-source': () => <ActiveSourcePage />,
+  'agent-runs': (overview) => <AgentRunsPage overview={overview} />,
+  coverage: () => <CoveragePage />,
+  sources: () => <SourcesPage />,
+  knowledge: () => <KnowledgePage />,
+  imports: () => <ImportsPage />,
+  quality: () => <QualityPage />,
+  lab: () => <LabPage />,
+  conflicts: () => <ConflictsPage />,
+  feedback: () => <FeedbackPage />,
+  tasks: () => <TasksPage />,
+  releases: () => <ReleasesPage />,
+  approvals: () => <ApprovalsPage />,
+  provenance: () => <ProvenancePage />
 }

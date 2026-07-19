@@ -5,10 +5,27 @@ import { join } from 'node:path'
 
 import pg from 'pg'
 import {
+  activeSourceDetailSchema,
+  agentRunsSchema,
+  approvalsSchema,
+  conflictsSchema,
+  coverageTargetsSchema,
+  expertTasksSchema,
+  feedbackRowsSchema,
+  importRunsSchema,
+  knowledgePageSchema,
+  labSchema,
+  overviewSchema,
+  pipelineDetailsSchema,
+  provenanceSchema,
+  qualitySchema,
+  releasesSchema,
+  sourcesSchema
+} from '@clideck/admin-contracts'
+import {
   ENGINEERING_MEASUREMENT_SAMPLES,
   engineeringPublicRecordSchema
 } from '@clideck/domain-engineering-measurements'
-import { publicDemoSnapshotSchema } from '@clideck/demo-contracts'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 
@@ -1133,7 +1150,7 @@ describeIntegration('PostgreSQL integration', () => {
     )
   })
 
-  it('serves the real admin data through a read-only sanitized demo contract', async () => {
+  it('serves every real admin read model through the sanitized demo role', async () => {
     const demoConfig = createTestConfig({
       adminRateLimitPerMinute: 1_000,
       enablePublicDemo: true
@@ -1179,15 +1196,31 @@ describeIntegration('PostgreSQL integration', () => {
     )
     const source = await database.query<{ id: string }>(
       `INSERT INTO source_candidates (
-         coverage_target_id,
-         canonical_url,
-         document_type,
-         title,
-         discovered_by
+       coverage_target_id,
+       canonical_url,
+       document_type,
+       title,
+         discovered_by,
+         content_hash,
+         failure_message
        )
-       VALUES ($1, $2, 'command_reference', $3, 'integration-test')
+       VALUES (
+         $1,
+         $2,
+         'command_reference',
+         $3,
+         'integration-test',
+         'sha256:' || encode(digest($4, 'sha256'), 'hex'),
+         $5
+       )
        RETURNING id`,
-      [coverageTargetId, sourceUrl, sentinel],
+      [
+        coverageTargetId,
+        sourceUrl,
+        sentinel,
+        `sha256:${sentinel}`,
+        `Source failure ${sentinel}`
+      ],
     )
     const sourceId = source.rows[0]!.id
     const task = await database.query<{ id: string }>(
@@ -1226,6 +1259,241 @@ describeIntegration('PostgreSQL integration', () => {
       ],
     )
     const taskId = task.rows[0]!.id
+    const pipelineEvent = await database.query<{ id: string }>(
+      `INSERT INTO pipeline_events (
+         pipeline_task_id,
+         source_candidate_id,
+         stage,
+         event_type,
+         message,
+         metadata
+       )
+       VALUES ($1, $2, 'acquire', 'failed', $3, $4::jsonb)
+       RETURNING id`,
+      [
+        taskId,
+        sourceId,
+        `Historical source failure in ${sentinel}`,
+        JSON.stringify({
+          status: 'failed',
+          stage: 'acquire',
+          source_url: sourceUrl,
+          document: sentinel,
+          credential: sentinel
+        })
+      ],
+    )
+    const pipelineEventId = pipelineEvent.rows[0]!.id
+    const publishedRevision = await database.query<{
+      revision_id: string
+      vendor_id: string
+    }>(
+      `SELECT ri.revision_id, kr.vendor_id
+       FROM active_release ar
+       JOIN release_items ri ON ri.release_id = ar.release_id
+       JOIN knowledge_revisions kr ON kr.id = ri.revision_id
+       JOIN knowledge_items ki ON ki.id = kr.knowledge_item_id
+       WHERE ar.singleton
+         AND ki.domain_id = 'network'
+         AND kr.vendor_id IS NOT NULL
+       ORDER BY kr.created_at
+       LIMIT 1`,
+    )
+    const revisionId = publishedRevision.rows[0]?.revision_id
+    const vendorId = publishedRevision.rows[0]?.vendor_id
+    expect(revisionId).toBeTruthy()
+    expect(vendorId).toBeTruthy()
+    const sourceDocument = await database.query<{ id: string }>(
+      `INSERT INTO source_documents (
+         domain_id,
+         canonical_url,
+         document_type,
+         title,
+         vendor_id,
+         verified_at,
+         content_hash,
+         evidence_fragment
+       )
+       VALUES (
+         'network',
+         $1,
+         'command_reference',
+         $2,
+         $3,
+         current_date,
+         'sha256:' || encode(digest($4, 'sha256'), 'hex'),
+         $5
+       )
+       RETURNING id`,
+      [
+        sourceUrl,
+        sentinel,
+        vendorId,
+        `demo-provenance-${unique}`,
+        `Evidence ${sentinel}`
+      ],
+    )
+    const sourceDocumentId = sourceDocument.rows[0]!.id
+    await database.query(
+      `INSERT INTO revision_sources (
+         revision_id,
+         source_document_id,
+         evidence_role,
+         confidence_reason
+       )
+       VALUES ($1, $2, 'corroborating', $3)`,
+      [revisionId, sourceDocumentId, 'Public demo redaction integration test.'],
+    )
+    const legacyRevision = await database.query<{ revision_id: string }>(
+      `SELECT ri.revision_id
+       FROM active_release ar
+       JOIN release_items ri ON ri.release_id = ar.release_id
+       LEFT JOIN legacy_revision_metadata lrm
+         ON lrm.revision_id = ri.revision_id
+       WHERE ar.singleton
+         AND ri.revision_id <> $1
+         AND lrm.revision_id IS NULL
+       ORDER BY ri.revision_id
+       LIMIT 1`,
+      [revisionId],
+    )
+    const legacyRevisionId = legacyRevision.rows[0]?.revision_id
+    expect(legacyRevisionId).toBeTruthy()
+    if (!legacyRevisionId) {
+      throw new Error('A second non-legacy revision is required for demo tests.')
+    }
+    await database.query(
+      `INSERT INTO legacy_revision_metadata (
+         revision_id,
+         legacy_key,
+         legacy_item_type,
+         source_trust,
+         lifecycle_status,
+         original_risk_level,
+         original_confidence,
+         original_quality_score,
+         published_at,
+         provenance,
+         payload_hash
+       )
+       VALUES (
+         $1,
+         $2,
+         'runbook',
+         'verified',
+         'published',
+         'low',
+         0.96,
+         0.94,
+         now(),
+         $3::jsonb,
+         'sha256:' || encode(digest($4, 'sha256'), 'hex')
+       )`,
+      [
+        legacyRevisionId,
+        `legacy-${sentinel}`,
+        JSON.stringify({
+          source_url: sourceUrl,
+          document: sentinel,
+          evidence: `Evidence ${sentinel}`,
+          href: sourceUrl
+        }),
+        `sha256:${sentinel}`
+      ],
+    )
+    const tenant = await database.query<{ id: string }>(
+      `INSERT INTO tenants (slug, display_name)
+       VALUES ($1, $2)
+       RETURNING id`,
+      [
+        `demo-security-${unique}`,
+        `Tenant ${sentinel}`
+      ],
+    )
+    const tenantId = tenant.rows[0]!.id
+    const expertTask = await database.query<{ id: string }>(
+      `INSERT INTO expert_tasks (
+         public_id,
+         tenant_id,
+         status,
+         question,
+         network_context,
+         requested_by,
+         priority,
+         attempts,
+         claim_owner,
+         failure_code,
+         failure_message,
+         expires_at
+       )
+       VALUES (
+         $1,
+         $2,
+         'failed',
+         $3,
+         $4::jsonb,
+         'integration_test',
+         9,
+         2,
+         $5,
+         'private_failure',
+         $6,
+         now() + interval '1 day'
+       )
+       RETURNING id`,
+      [
+        `ekt_${unique.replaceAll('-', '')}`,
+        tenantId,
+        `Question ${sentinel}`,
+        JSON.stringify({ source_url: sourceUrl }),
+        `executor-${sentinel}`,
+        `Failure ${sentinel}`
+      ],
+    )
+    const expertTaskId = expertTask.rows[0]!.id
+    await database.query(
+      `INSERT INTO task_public_events (
+         task_id,
+         stage,
+         progress_percent,
+         public_message
+       )
+       VALUES ($1, 'validating', 42, $2)`,
+      [expertTaskId, `Researching ${sentinel}`],
+    )
+    const feedback = await database.query<{ id: string }>(
+      `INSERT INTO feedback (
+         tenant_id,
+         revision_id,
+         task_id,
+         rating,
+         category,
+         comment
+       )
+       VALUES ($1, $2, $3, -1, 'incorrect', $4)
+       RETURNING id`,
+      [tenantId, revisionId, expertTaskId, `Feedback ${sentinel}`],
+    )
+    const feedbackId = feedback.rows[0]!.id
+    const release = await database.query<{
+      id: string
+      sequence: number
+    }>(
+      `INSERT INTO releases (
+         status,
+         reason,
+         created_by
+       )
+       VALUES (
+         'published',
+         $1,
+         'integration-test'
+       )
+       RETURNING id, sequence`,
+      [`Published ${sentinel}`],
+    )
+    const releaseId = release.rows[0]!.id
+    const releaseSequence = release.rows[0]!.sequence
 
     try {
       const app = createApiApp({
@@ -1236,28 +1504,136 @@ describeIntegration('PostgreSQL integration', () => {
         logger,
         metrics: createMetrics()
       })
-      const response = await app.request('/public/v1/demo/snapshot')
-      expect(response.status).toBe(200)
-      expect(response.headers.get('cache-control')).toContain('max-age=30')
-      const payload = publicDemoSnapshotSchema.parse(await response.json())
-      expect(payload.release.published_knowledge).toBeGreaterThanOrEqual(50)
-      expect(payload.operations.ai_model).toBe('gpt-5.6-luna')
-      expect(payload.pipeline_tasks.length).toBeGreaterThan(0)
-      expect(payload.quality.eval_runs).toHaveLength(20)
-      const serialized = JSON.stringify(payload)
+      const read = async <T>(
+        path: string,
+        schema: { parse: (value: unknown) => T },
+      ): Promise<T> => {
+        const response = await app.request(`/public/v1/demo${path}`)
+        const body = await response.json()
+        expect(
+          response.status,
+          `${path}: ${JSON.stringify(body)}`,
+        ).toBe(200)
+        expect(response.headers.get('cache-control')).toBe('no-store')
+        return schema.parse(body)
+      }
+
+      const overview = await read('/overview', overviewSchema)
+      const coverage = await read('/coverage', coverageTargetsSchema)
+      const sources = await read('/sources?limit=200', sourcesSchema)
+      const pipeline = await read('/pipeline', pipelineDetailsSchema)
+      await read('/active-source', activeSourceDetailSchema)
+      const knowledge = await read(
+        '/knowledge?limit=50&offset=0',
+        knowledgePageSchema,
+      )
+      await read('/imports', importRunsSchema)
+      await read('/agent-runs?limit=200', agentRunsSchema)
+      const expertTasks = await read('/tasks', expertTasksSchema)
+      const quality = await read('/quality', qualitySchema)
+      await read('/lab', labSchema)
+      await read('/conflicts', conflictsSchema)
+      const releases = await read('/releases', releasesSchema)
+      const feedbackRows = await read('/feedback', feedbackRowsSchema)
+      await read('/approvals', approvalsSchema)
+
+      expect(overview.published_revisions).toBeGreaterThanOrEqual(50)
+      expect(overview.ai_model).toBe('gpt-5.6-luna')
+      expect(coverage.length).toBeGreaterThan(0)
+      expect(quality.eval_runs.length).toBeGreaterThanOrEqual(25)
+
+      const redactedSource = sources.find((row) => row.id === sourceId)
+      expect(redactedSource?.title).toBe('XXXXXXXX')
+      expect(redactedSource?.content_hash).toBe('XXXXXXXX')
+      expect(redactedSource?.failure_message).toBe('XXXXXXXX')
+      const redactedTask = pipeline.tasks.find((row) => row.id === taskId)
+      expect(redactedTask?.source_title).toBe('XXXXXXXX')
+      expect(redactedTask?.failure_message).toBe('XXXXXXXX')
+      expect(redactedTask?.result).toBeNull()
+      const redactedEvent = pipeline.events.find(
+        (row) => row.id === pipelineEventId,
+      )
+      expect(redactedEvent?.message).toBe('XXXXXXXX')
+      expect(redactedEvent?.metadata).toEqual({
+        status: 'failed',
+        stage: 'acquire'
+      })
+      const redactedExpertTask = expertTasks.find(
+        (row) =>
+          row.stage === 'validating' &&
+          Number(row.priority) === 9 &&
+          Number(row.progress_percent) === 42,
+      )
+      expect(redactedExpertTask).toMatchObject({
+        public_id: expect.stringMatching(/^DEMO-TASK-\d{3}$/),
+        tenant_id: null,
+        claim_owner: null,
+        failure_code: null,
+        failure_message: 'XXXXXXXX',
+        result_revision_id: null,
+        progress_percent: 42,
+        public_message: 'XXXXXXXX',
+        result_release_sequence: null
+      })
+      const redactedRelease = releases.find(
+        (row) => row.sequence === releaseSequence,
+      )
+      expect(redactedRelease).toMatchObject({
+        id: releaseId,
+        reason: 'XXXXXXXX'
+      })
+      const redactedFeedback = feedbackRows.find(
+        (row) => row.id === feedbackId,
+      )
+      expect(redactedFeedback).toMatchObject({
+        revision_id: null,
+        task_id: null,
+        comment: 'XXXXXXXX'
+      })
+
+      expect(knowledge.total).toBeGreaterThanOrEqual(50)
+      const provenance = await read(
+        `/revisions/${revisionId}/provenance`,
+        provenanceSchema,
+      )
+      expect(provenance.revision_id).toBe(revisionId)
+      expect(JSON.stringify(provenance.provenance)).toContain('XXXXXXXX')
+      const legacyProvenance = await read(
+        `/revisions/${legacyRevisionId}/provenance`,
+        provenanceSchema,
+      )
+      expect(legacyProvenance.provenance).toMatchObject({
+        origin: 'legacy_import',
+        legacy_key: 'XXXXXXXX',
+        provenance: 'XXXXXXXX',
+        payload_hash: 'XXXXXXXX'
+      })
+
+      const serialized = JSON.stringify({
+        overview,
+        coverage,
+        sources,
+        pipeline,
+        expertTasks,
+        releases,
+        feedbackRows,
+        quality,
+        provenance,
+        legacyProvenance
+      })
       expect(serialized).not.toContain(sentinel)
       expect(serialized).not.toContain(sourceUrl)
-      expect(serialized).not.toContain(sourceId)
-      expect(serialized).not.toContain(taskId)
-      expect(serialized).not.toContain('failure_message')
-      expect(serialized).not.toContain('provenance')
+      expect(serialized).toContain(sourceId)
+      expect(serialized).toContain(taskId)
 
-      const mutation = await app.request('/public/v1/demo/snapshot', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: '{}'
-      })
-      expect(mutation.status).toBe(404)
+      for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) {
+        const mutation = await app.request('/public/v1/demo/overview', {
+          method,
+          headers: { 'content-type': 'application/json' },
+          ...(method === 'DELETE' ? {} : { body: '{}' })
+        })
+        expect(mutation.status, method).toBe(405)
+      }
 
       const hidden = createApiApp({
         config: { ...demoConfig, enablePublicDemo: false },
@@ -1268,11 +1644,38 @@ describeIntegration('PostgreSQL integration', () => {
         metrics: createMetrics()
       })
       expect(
-        (await hidden.request('/public/v1/demo/snapshot')).status,
+        (await hidden.request('/public/v1/demo/overview')).status,
       ).toBe(404)
     } finally {
+      await database.query('DELETE FROM feedback WHERE id = $1', [
+        feedbackId
+      ])
+      await database.query(
+        'DELETE FROM task_public_events WHERE task_id = $1',
+        [expertTaskId],
+      )
+      await database.query('DELETE FROM expert_tasks WHERE id = $1', [
+        expertTaskId
+      ])
+      await database.query('DELETE FROM tenants WHERE id = $1', [tenantId])
+      await database.query(
+        'DELETE FROM legacy_revision_metadata WHERE revision_id = $1',
+        [legacyRevisionId],
+      )
+      await database.query('DELETE FROM releases WHERE id = $1', [releaseId])
+      await database.query(
+        `DELETE FROM revision_sources
+         WHERE revision_id = $1 AND source_document_id = $2`,
+        [revisionId, sourceDocumentId],
+      )
+      await database.query('DELETE FROM source_documents WHERE id = $1', [
+        sourceDocumentId
+      ])
       await database.query('DELETE FROM product_eval_runs WHERE suite = $1', [
         evalSuite
+      ])
+      await database.query('DELETE FROM pipeline_events WHERE id = $1', [
+        pipelineEventId
       ])
       await database.query('DELETE FROM pipeline_tasks WHERE id = $1', [taskId])
       await database.query('DELETE FROM source_candidates WHERE id = $1', [

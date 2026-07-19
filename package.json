@@ -1,6 +1,6 @@
 {
   "name": "clideck-mcp",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "private": true,
   "description": "Agent-native framework for verified, continuously updated MCP knowledge systems",
   "type": "module",
@@ -17,7 +17,7 @@
     "domain:create": "tsx src/cli/create-domain.ts",
     "domain:validate": "tsx src/cli/validate-domain.ts",
     "domain:seed-engineering": "tsx src/cli/seed-engineering-measurements.ts",
-    "contracts:build": "pnpm --filter @clideck/admin-contracts build && pnpm --filter @clideck/demo-contracts build",
+    "contracts:build": "pnpm --filter @clideck/admin-contracts build",
     "admin:build": "pnpm --filter @clideck/admin-ui build",
     "admin:check": "pnpm --filter @clideck/admin-ui check",
     "admin:dev": "pnpm --filter @clideck/admin-ui dev",
@@ -61,7 +61,6 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@clideck/demo-contracts": "workspace:*",
     "@clideck/domain-kit": "workspace:*",
     "@clideck/domain-engineering-measurements": "workspace:*",
     "@clideck/domain-network": "workspace:*",

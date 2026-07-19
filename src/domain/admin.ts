@@ -759,6 +759,152 @@ export async function listFeedback(database: Database) {
   return result.rows
 }
 
+export async function listExpertTasks(database: Database) {
+  const result = await database.query(
+    `SELECT
+       et.public_id,
+       et.tenant_id,
+       et.status,
+       et.priority,
+       et.attempts,
+       et.claim_owner,
+       et.lease_until,
+       et.expires_at,
+       et.created_at,
+       et.updated_at,
+       et.completed_at,
+       et.failure_code,
+       et.failure_message,
+       et.result_revision_id,
+       latest_event.stage,
+       latest_event.progress_percent,
+       latest_event.public_message,
+       release.sequence AS result_release_sequence
+     FROM expert_tasks et
+     LEFT JOIN LATERAL (
+       SELECT stage, progress_percent, public_message
+       FROM task_public_events
+       WHERE task_id = et.id
+       ORDER BY created_at DESC, id DESC
+       LIMIT 1
+     ) latest_event ON true
+     LEFT JOIN LATERAL (
+       SELECT r.sequence
+       FROM release_items ri
+       JOIN releases r ON r.id = ri.release_id
+       WHERE ri.revision_id = et.result_revision_id
+       ORDER BY r.sequence DESC
+       LIMIT 1
+     ) release ON true
+     ORDER BY et.created_at DESC
+     LIMIT 100`,
+  )
+  return result.rows
+}
+
+export async function listConflicts(database: Database) {
+  const result = await database.query(
+    `SELECT id, left_revision_id, right_revision_id, severity,
+            description, status, created_at, resolved_at
+     FROM knowledge_conflicts
+     ORDER BY created_at DESC
+     LIMIT 100`,
+  )
+  return result.rows
+}
+
+export async function listReleases(database: Database) {
+  const result = await database.query(
+    `SELECT
+       r.id, r.sequence, r.status, r.reason, r.created_by, r.created_at,
+       (ar.release_id IS NOT NULL) AS active,
+       count(ri.revision_id)::int AS revision_count
+     FROM releases r
+     LEFT JOIN active_release ar ON ar.release_id = r.id
+     LEFT JOIN release_items ri ON ri.release_id = r.id
+     GROUP BY r.id, ar.release_id
+     ORDER BY r.sequence DESC
+     LIMIT 100`,
+  )
+  return result.rows
+}
+
+export async function getRevisionProvenance(
+  database: Database,
+  revisionId: string,
+) {
+  const result = await database.query(
+    `SELECT
+       kr.id::text AS revision_id,
+       CASE
+         WHEN lrm.revision_id IS NOT NULL THEN
+           jsonb_build_object(
+             'origin', 'legacy_import',
+             'legacy_key', lrm.legacy_key,
+             'item_type', lrm.legacy_item_type,
+             'source_trust', lrm.source_trust,
+             'lifecycle_status', lrm.lifecycle_status,
+             'original_risk_level', lrm.original_risk_level,
+             'original_confidence', lrm.original_confidence,
+             'original_quality_score', lrm.original_quality_score,
+             'published_at', lrm.published_at,
+             'provenance', lrm.provenance,
+             'payload_hash', lrm.payload_hash
+           )
+         ELSE coalesce((
+           SELECT jsonb_agg(
+             jsonb_build_object(
+               'vendor', v.display_name,
+               'title', sd.title,
+               'document_version', sd.document_version,
+               'canonical_url', sd.canonical_url,
+               'document_date', sd.document_date,
+               'verified_at', sd.verified_at,
+               'content_hash', sd.content_hash,
+               'evidence_fragment', sd.evidence_fragment,
+               'evidence_role', rs.evidence_role,
+               'confidence_reason', rs.confidence_reason
+             )
+             ORDER BY rs.evidence_role, sd.verified_at DESC
+           )
+           FROM revision_sources rs
+           JOIN source_documents sd ON sd.id = rs.source_document_id
+           JOIN vendors v ON v.id = sd.vendor_id
+           WHERE rs.revision_id = kr.id
+         ), '[]'::jsonb)
+       END AS provenance,
+       kr.created_at,
+       kr.status
+     FROM knowledge_revisions kr
+     LEFT JOIN legacy_revision_metadata lrm ON lrm.revision_id = kr.id
+     WHERE kr.id = $1`,
+    [revisionId],
+  )
+  return result.rows[0] ?? null
+}
+
+export async function listCodeChangeApprovals(database: Database) {
+  const result = await database.query(
+    `SELECT
+       cca.id,
+       coalesce(et.public_id, cca.task_id::text, 'unlinked') AS task_id,
+       cca.repository,
+       cca.summary,
+       cca.risk_assessment,
+       cca.status,
+       cca.requested_by,
+       cca.decided_by,
+       cca.decision_reason,
+       cca.created_at,
+       cca.decided_at
+     FROM code_change_approvals cca
+     LEFT JOIN expert_tasks et ON et.id = cca.task_id
+     ORDER BY cca.created_at DESC
+     LIMIT 100`,
+  )
+  return result.rows
+}
+
 export async function setPipelineEnabled(
   database: Database,
   enabled: boolean,

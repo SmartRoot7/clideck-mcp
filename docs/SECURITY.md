@@ -27,9 +27,12 @@ Full manuals, private documents, and user logs are prohibited.
 
 The public operations demo follows the same rule. It is the real admin frontend,
 not a screenshot or mock, but it receives a separate strict server contract.
-Sensitive fields are omitted from JSON rather than blurred or hidden in CSS.
-The public mode creates no admin session, cannot call local admin routes, and
-contains no mutation surface.
+Sensitive fields are projected through explicit allowlists and replaced or
+omitted in JSON rather than blurred or hidden in CSS. This includes
+source-bearing free text, content hashes, tenant ownership, private task
+linkage, and legacy provenance aliases. The public mode creates no admin
+session, cannot call local admin routes, and has no server-side mutation route.
+Its visible controls execute only a local read-only acknowledgement.
 
 ## Application controls
 
@@ -48,8 +51,11 @@ contains no mutation surface.
 - Error responses are generic and carry a correlation ID.
 - The application performs no outbound fetch from public input, preventing SSRF
   in the public path.
-- The public demo is feature-gated, rate-limited, cached briefly, and exposes
-  only `GET /public/v1/demo/snapshot`; unknown or mutation routes return 404.
+- The public demo is feature-gated, rate-limited, `no-store`, and exposes only
+  mirrored GET/HEAD read models under `/public/v1/demo/*`. Source identities
+  and source-bearing free text are replaced server-side with `XXXXXXXX`;
+  tenant/private linkage is omitted; POST, PUT, PATCH, and DELETE are rejected
+  before domain logic.
 - The playground requires a site-only BFF token, explicit route allowlisting,
   a 64 KiB body ceiling, and a privacy-preserving daily client key.
 - Heavy analyses are limited to 10/minute, expert tasks to 3/day, and opted-in

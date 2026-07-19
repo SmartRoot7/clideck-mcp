@@ -62,23 +62,13 @@ const STAGE_ICONS = [
   Tag
 ]
 
-export function OverviewPage({
-  overview,
-  publicMode = false,
-  pipelineData,
-  coverageData
-}: {
-  overview: Overview
-  publicMode?: boolean
-  pipelineData?: PipelineDetails
-  coverageData?: CoverageTarget[]
-}) {
-  const pipelineQuery = usePipeline(!publicMode)
-  const sourceQuery = useActiveSource(!publicMode)
-  const coverageQuery = useCoverage(!publicMode)
-  const pipeline = pipelineData ?? pipelineQuery.data
-  const source = publicMode ? undefined : sourceQuery.data
-  const coverage = coverageData ?? coverageQuery.data ?? []
+export function OverviewPage({ overview }: { overview: Overview }) {
+  const pipelineQuery = usePipeline()
+  const sourceQuery = useActiveSource()
+  const coverageQuery = useCoverage()
+  const pipeline = pipelineQuery.data
+  const source = sourceQuery.data
+  const coverage = coverageQuery.data ?? []
   const publishedOption = usePublishedOption(overview)
   const activityOption = useActivityOption(overview)
   const tokensOption = useTokenOption(overview)
@@ -147,18 +137,15 @@ export function OverviewPage({
           <ExecutorCard
             key={executor.name}
             {...executor}
-            publicMode={publicMode}
           />
         ))}
       </section>
 
       <div className="overview-grid">
-        {!publicMode && (
-          <ActiveSourceCard
-            source={source}
-            loading={sourceQuery.isLoading}
-          />
-        )}
+        <ActiveSourceCard
+          source={source}
+          loading={sourceQuery.isLoading}
+        />
         <Panel
           title="30-day publication trend"
           icon={BarChart3}
@@ -184,15 +171,13 @@ export function OverviewPage({
         <BreakdownPanel overview={overview} />
       </div>
 
-      {!publicMode && (
-        <div className="overview-grid overview-grid--wide">
-          <RecentFailures overview={overview} />
-          <RecentActivity
-            pipeline={pipeline}
-            loading={pipelineQuery.isLoading}
-          />
-        </div>
-      )}
+      <div className="overview-grid overview-grid--wide">
+        <RecentFailures overview={overview} />
+        <RecentActivity
+          pipeline={pipeline}
+          loading={pipelineQuery.isLoading}
+        />
+      </div>
     </div>
   )
 }
@@ -430,9 +415,7 @@ function executorRows(overview: Overview): ExecutorView[] {
   })
 }
 
-function ExecutorCard(
-  executor: ExecutorView & { publicMode?: boolean },
-) {
+function ExecutorCard(executor: ExecutorView) {
   const active = executor.healthy && !/standby|idle|capacity/i.test(executor.state)
   return (
     <article className={`executor ${active ? 'is-active' : 'is-standby'}`}>
@@ -453,12 +436,10 @@ function ExecutorCard(
           <div><dt>Stage</dt><dd>{titleCase(executor.stage)}</dd></div>
           <div><dt>State</dt><dd>{titleCase(executor.state)}</dd></div>
           <div><dt>Heartbeat</dt><dd>{formatDate(executor.heartbeat, false)}</dd></div>
-          {!executor.publicMode && (
-            <div>
-              <dt>Instance</dt>
-              <dd title={executor.instance}>{shortId(executor.instance)}</dd>
-            </div>
-          )}
+          <div>
+            <dt>Instance</dt>
+            <dd title={executor.instance}>{shortId(executor.instance)}</dd>
+          </div>
         </dl>
       </div>
     </article>

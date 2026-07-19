@@ -23,7 +23,7 @@ import {
 } from '@tanstack/react-query'
 
 import { getJson } from './api'
-import { fetchPublicDemoSnapshot } from './demo'
+import { useOperationsRuntime } from './runtime'
 
 export function useSession() {
   return useQuery({
@@ -35,49 +35,43 @@ export function useSession() {
 }
 
 export function useOverview() {
+  const { apiPrefix } = useOperationsRuntime()
   return useQuery({
-    queryKey: ['overview'],
-    queryFn: () => getJson('/admin/api/v1/overview', overviewSchema),
+    queryKey: [apiPrefix, 'overview'],
+    queryFn: () => getJson(`${apiPrefix}/overview`, overviewSchema),
     refetchInterval: 10_000,
     staleTime: 8_000
   })
 }
 
-export function usePublicDemoSnapshot() {
-  return useQuery({
-    queryKey: ['public-demo-snapshot'],
-    queryFn: fetchPublicDemoSnapshot,
-    refetchInterval: 30_000,
-    staleTime: 20_000,
-    retry: 2
-  })
-}
-
 export function useCoverage(enabled = true) {
+  const { apiPrefix } = useOperationsRuntime()
   return useQuery({
-    queryKey: ['coverage'],
-    queryFn: () => getJson('/admin/api/v1/coverage', coverageTargetsSchema),
+    queryKey: [apiPrefix, 'coverage'],
+    queryFn: () => getJson(`${apiPrefix}/coverage`, coverageTargetsSchema),
     enabled
   })
 }
 
 export function useSources(status: string, limit: number, enabled = true) {
+  const { apiPrefix } = useOperationsRuntime()
   const search = new URLSearchParams()
   if (status) search.set('status', status)
   search.set('limit', String(limit))
   return useQuery({
-    queryKey: ['sources', status, limit],
+    queryKey: [apiPrefix, 'sources', status, limit],
     queryFn: () =>
-      getJson(`/admin/api/v1/sources?${search.toString()}`, sourcesSchema),
+      getJson(`${apiPrefix}/sources?${search.toString()}`, sourcesSchema),
     enabled,
     placeholderData: keepPreviousData
   })
 }
 
 export function usePipeline(enabled = true) {
+  const { apiPrefix } = useOperationsRuntime()
   return useQuery({
-    queryKey: ['pipeline'],
-    queryFn: () => getJson('/admin/api/v1/pipeline', pipelineDetailsSchema),
+    queryKey: [apiPrefix, 'pipeline'],
+    queryFn: () => getJson(`${apiPrefix}/pipeline`, pipelineDetailsSchema),
     enabled,
     refetchInterval: enabled ? 10_000 : false,
     staleTime: 8_000
@@ -85,10 +79,11 @@ export function usePipeline(enabled = true) {
 }
 
 export function useActiveSource(enabled = true) {
+  const { apiPrefix } = useOperationsRuntime()
   return useQuery({
-    queryKey: ['active-source'],
+    queryKey: [apiPrefix, 'active-source'],
     queryFn: () =>
-      getJson('/admin/api/v1/active-source', activeSourceDetailSchema),
+      getJson(`${apiPrefix}/active-source`, activeSourceDetailSchema),
     enabled,
     refetchInterval: enabled ? 10_000 : false,
     staleTime: 8_000
@@ -107,6 +102,7 @@ export type KnowledgeFilters = {
 }
 
 export function useKnowledge(filters: KnowledgeFilters, enabled = true) {
+  const { apiPrefix } = useOperationsRuntime()
   const search = new URLSearchParams({
     limit: String(filters.limit),
     offset: String(filters.offset)
@@ -120,94 +116,104 @@ export function useKnowledge(filters: KnowledgeFilters, enabled = true) {
   if (filters.risk) search.set('risk', filters.risk)
   if (filters.origin) search.set('origin', filters.origin)
   return useQuery({
-    queryKey: ['knowledge', filters],
+    queryKey: [apiPrefix, 'knowledge', filters],
     queryFn: () =>
-      getJson(`/admin/api/v1/knowledge?${search.toString()}`, knowledgePageSchema),
+      getJson(`${apiPrefix}/knowledge?${search.toString()}`, knowledgePageSchema),
     enabled,
     placeholderData: keepPreviousData
   })
 }
 
 export function useImports(enabled = true) {
+  const { apiPrefix } = useOperationsRuntime()
   return useQuery({
-    queryKey: ['imports'],
-    queryFn: () => getJson('/admin/api/v1/imports', importRunsSchema),
+    queryKey: [apiPrefix, 'imports'],
+    queryFn: () => getJson(`${apiPrefix}/imports`, importRunsSchema),
     enabled
   })
 }
 
 export function useAgentRuns(limit = 100, enabled = true) {
+  const { apiPrefix } = useOperationsRuntime()
   return useQuery({
-    queryKey: ['agent-runs', limit],
+    queryKey: [apiPrefix, 'agent-runs', limit],
     queryFn: () =>
-      getJson(`/admin/api/v1/agent-runs?limit=${limit}`, agentRunsSchema),
+      getJson(`${apiPrefix}/agent-runs?limit=${limit}`, agentRunsSchema),
     enabled,
     placeholderData: keepPreviousData
   })
 }
 
 export function useTasks(enabled = true) {
+  const { apiPrefix } = useOperationsRuntime()
   return useQuery({
-    queryKey: ['tasks'],
-    queryFn: () => getJson('/admin/api/v1/tasks', expertTasksSchema),
+    queryKey: [apiPrefix, 'tasks'],
+    queryFn: () => getJson(`${apiPrefix}/tasks`, expertTasksSchema),
     enabled
   })
 }
 
 export function useQuality(enabled = true) {
+  const { apiPrefix } = useOperationsRuntime()
   return useQuery({
-    queryKey: ['quality'],
-    queryFn: () => getJson('/admin/api/v1/quality', qualitySchema),
+    queryKey: [apiPrefix, 'quality'],
+    queryFn: () => getJson(`${apiPrefix}/quality`, qualitySchema),
     enabled
   })
 }
 
 export function useLab(enabled = true) {
+  const { apiPrefix } = useOperationsRuntime()
   return useQuery({
-    queryKey: ['lab'],
-    queryFn: () => getJson('/admin/api/v1/lab', labSchema),
+    queryKey: [apiPrefix, 'lab'],
+    queryFn: () => getJson(`${apiPrefix}/lab`, labSchema),
     enabled
   })
 }
 
 export function useConflicts(enabled = true) {
+  const { apiPrefix } = useOperationsRuntime()
   return useQuery({
-    queryKey: ['conflicts'],
-    queryFn: () => getJson('/admin/api/v1/conflicts', conflictsSchema),
+    queryKey: [apiPrefix, 'conflicts'],
+    queryFn: () => getJson(`${apiPrefix}/conflicts`, conflictsSchema),
     enabled
   })
 }
 
 export function useReleases(enabled = true) {
+  const { apiPrefix } = useOperationsRuntime()
   return useQuery({
-    queryKey: ['releases'],
-    queryFn: () => getJson('/admin/api/v1/releases', releasesSchema),
+    queryKey: [apiPrefix, 'releases'],
+    queryFn: () => getJson(`${apiPrefix}/releases`, releasesSchema),
     enabled
   })
 }
 
 export function useFeedback(enabled = true) {
+  const { apiPrefix } = useOperationsRuntime()
   return useQuery({
-    queryKey: ['feedback'],
-    queryFn: () => getJson('/admin/api/v1/feedback', feedbackRowsSchema),
+    queryKey: [apiPrefix, 'feedback'],
+    queryFn: () => getJson(`${apiPrefix}/feedback`, feedbackRowsSchema),
     enabled
   })
 }
 
 export function useApprovals(enabled = true) {
+  const { apiPrefix } = useOperationsRuntime()
   return useQuery({
-    queryKey: ['approvals'],
-    queryFn: () => getJson('/admin/api/v1/approvals', approvalsSchema),
+    queryKey: [apiPrefix, 'approvals'],
+    queryFn: () => getJson(`${apiPrefix}/approvals`, approvalsSchema),
     enabled
   })
 }
 
 export function useProvenance(revisionId: string | null) {
+  const { apiPrefix } = useOperationsRuntime()
   return useQuery({
-    queryKey: ['provenance', revisionId],
+    queryKey: [apiPrefix, 'provenance', revisionId],
     queryFn: () =>
       getJson(
-        `/admin/api/v1/revisions/${encodeURIComponent(revisionId ?? '')}/provenance`,
+        `${apiPrefix}/revisions/${encodeURIComponent(revisionId ?? '')}/provenance`,
         provenanceSchema,
       ),
     enabled: Boolean(revisionId)

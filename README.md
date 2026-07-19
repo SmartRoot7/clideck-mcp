@@ -93,16 +93,25 @@ a scientific reference database.
 `/demo` is not a mock dashboard. It runs the exact same compiled
 `apps/admin` frontend bundle as the LAN console:
 
-- the same JS, CSS, pages, charts, formatters, breakpoints, and tooltips;
-- real aggregate data from the active production database;
-- the same Overview, Pipeline, Coverage, and Quality screens;
-- no login, admin session, mutation controls, or private endpoints.
+- the same 16 pages, navigation, JS, CSS, charts, tables, filters, tooltips,
+  forms, and confirmation dialogs;
+- the same real operational records and totals from the active production
+  database;
+- no login or admin session;
+- all controls remain visible and interactive; dialog-based actions keep their
+  full confirmation flow, while Pause/Resume remains a direct control;
+- the public role turns the final action into a local read-only no-op and never
+  sends a mutation request.
 
-The server removes source identity, provenance, document content, internal IDs,
-questions, hostnames, audit data, and internal errors before JSON reaches the
-browser. Values are not hidden with CSS blur. Public and LAN routes expose
-different permissions and fields, but there is only one visual implementation
-and one production frontend artifact.
+The server replaces source identity — document/manual titles, source URLs,
+locators, evidence fragments, content hashes, and unstructured text that may
+repeat those values — with the literal value `XXXXXXXX` before JSON reaches the
+browser. Tenant ownership and internal task linkage are omitted. IDs, statuses,
+timestamps, counters, releases, Luna runs, tokens, and the rest of the safe
+operational model stay real. Values are not hidden with CSS blur. `/admin` and
+`/demo` select different RBAC runtimes around one `OperationsApp`; there is only
+one visual implementation and one production frontend artifact. The public API
+exposes matching GET models and no mutation route.
 
 ![The real CliDeck MCP production operations dashboard](docs/assets/clideck-mcp-demo.jpg)
 
