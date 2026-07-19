@@ -1,11 +1,11 @@
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vitest/config'
 
-export default defineConfig({
-  base: '/admin/',
+export default defineConfig(({ mode }) => ({
+  base: mode === 'demo' ? '/demo/' : '/admin/',
   plugins: [react()],
   build: {
-    outDir: '../../dist-admin',
+    outDir: mode === 'demo' ? '../../dist-demo' : '../../dist-admin',
     emptyOutDir: true,
     sourcemap: false,
     target: 'es2022'
@@ -22,4 +22,4 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts']
   }
-})
+}))

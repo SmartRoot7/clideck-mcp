@@ -13,7 +13,7 @@ Branch policy: `main` only; completed stages are committed and pushed directly.
 
 ## Current focus
 
-`D2.3 — Public read-only operations demo`
+`D2.4 — Open-source documentation`
 
 ## Baseline
 
@@ -282,27 +282,65 @@ Verification:
 
 Completed: 2026-07-19
 
-### [~] D2.3 — Public read-only operations demo
+### [x] D2.3 — Public read-only operations demo
 
 URL: `https://mcp.clideck.com/demo`
 
 Deliverables:
 
-- separate Vite demo build reusing the LAN console visual system;
-- Overview, Pipeline, Coverage, Knowledge Domains, and Quality screens;
+- a second read-only build of the real `apps/admin` application, using the
+  exact same shell, pages, charts, formatters, responsive rules, and source
+  files as the LAN console;
+- the real Overview, Pipeline, Coverage, and Quality screens;
 - `GET /public/v1/demo/snapshot`;
-- live aggregate metrics, publication trends, funnel, safe coverage, executor
-  count, token efficiency, eval, and allowlisted sample answers;
+- real production aggregate metrics, publication trends, funnel, safe coverage,
+  executor state, token efficiency, eval results, and allowlisted sample
+  answers;
 - no login or mutation controls.
 
 Security boundary:
 
-- no admin API or admin session is reachable from the demo;
+- public mode never calls the admin API or creates an admin session;
 - source URLs/titles, evidence, provenance, task IDs, fragment IDs, questions,
   internal errors, hostnames, credentials, and audit records are omitted at the
   server contract;
+- source names are replaced with an explicit “Source identity withheld” label
+  only after the server has removed the underlying values;
 - browser blur is not treated as security;
 - production knowledge data is not included in the repository.
+
+Truthfulness rule:
+
+- there is no separately designed showcase dashboard and no fabricated
+  dataset;
+- `/admin` and `/demo` are built from `apps/admin`; only authorization,
+  available sections/actions, and the server-provided data contract differ;
+- changes to shared admin components therefore appear in both builds;
+- real Network production totals and pipeline activity are shown as reported
+  by the active database at request time.
+
+Verification:
+
+- the strict public snapshot is assembled from real database queries plus the
+  existing Overview, Coverage, Pipeline, and Quality admin functions;
+- a PostgreSQL integration test inserted a sentinel source URL, title, payload,
+  UUID, and failure message; none appeared in the returned public JSON;
+- POST and unknown `/public/v1/demo/*` routes return 404, and the entire feature
+  returns 404 when `ENABLE_PUBLIC_DEMO=false`;
+- public UI tests confirmed the real admin shell renders while Pause, executor
+  configuration, Sources, Provenance, and other mutation surfaces are absent;
+- local browser checks opened all four sections, confirmed real rows and
+  metrics, no horizontal overflow, no browser errors, and working mobile
+  navigation at 390 px;
+- desktop visual comparison retained the production admin's published-first
+  hierarchy, hourly chart, pipeline rail, executor cards, restrained status
+  color, and compact navigation. The concept's dark sidebar and invented cards
+  were intentionally rejected so the demo remains identical to the real admin
+  instead of becoming a marketing mockup;
+- typecheck, 16/16 PostgreSQL integration tests, 7/7 admin UI tests, and both
+  admin/demo production builds passed.
+
+Completed: 2026-07-19
 
 ### [ ] D2.4 — Open-source documentation
 

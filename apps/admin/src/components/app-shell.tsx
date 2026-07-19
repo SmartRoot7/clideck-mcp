@@ -97,7 +97,7 @@ const GROUPS: Array<{
 
 export function sectionFromLocation(): SectionId {
   const segment = window.location.pathname
-    .replace(/^\/admin\/?/, '')
+    .replace(/^\/(admin|demo)\/?/, '')
     .split('/')[0]
   const all = GROUPS.flatMap((group) => group.items.map((item) => item.id))
   return all.includes(segment as SectionId)
@@ -114,7 +114,8 @@ export function AppShell({
   onRefresh,
   onPause,
   onConcurrency,
-  onLogout
+  onLogout,
+  publicMode = false
 }: {
   section: SectionId
   overview: Overview | undefined
@@ -122,13 +123,26 @@ export function AppShell({
   children: ReactNode
   onNavigate: (section: SectionId) => void
   onRefresh: () => void
-  onPause: () => void
-  onConcurrency: (value: number) => void
-  onLogout: () => void
+  onPause?: () => void
+  onConcurrency?: (value: number) => void
+  onLogout?: () => void
+  publicMode?: boolean
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const enabled = overview?.pipeline_enabled ?? false
-  const activeSource = overview?.active_source_title ?? 'No active source'
+  const activeSource = publicMode
+    ? 'Production snapshot'
+    : overview?.active_source_title ?? 'No active source'
+  const groups = publicMode
+    ? GROUPS
+        .map((group) => ({
+          ...group,
+          items: group.items.filter((item) =>
+            ['overview', 'pipeline', 'coverage', 'quality'].includes(item.id),
+          )
+        }))
+        .filter((group) => group.items.length)
+    : GROUPS
   return (
     <div className="app-shell">
       <aside className={`sidebar ${menuOpen ? 'is-open' : ''}`}>
@@ -140,7 +154,7 @@ export function AppShell({
           </button>
         </div>
         <nav aria-label="Admin sections">
-          {GROUPS.map((group) => (
+          {groups.map((group) => (
             <div className="nav-group" key={group.label}>
               <span className="nav-group__label">{group.label}</span>
               {group.items.map((item) => {
@@ -166,8 +180,10 @@ export function AppShell({
           ))}
         </nav>
         <div className="sidebar__footer">
-          <span>Local network only</span>
-          <button type="button" onClick={onLogout}>Sign out</button>
+          <span>{publicMode ? 'Live · public read-only' : 'Local network only'}</span>
+          {publicMode
+            ? <a href="/mcp">Connect MCP</a>
+            : <button type="button" onClick={onLogout}>Sign out</button>}
         </div>
       </aside>
       {menuOpen && <button type="button" className="sidebar-scrim" aria-label="Close navigation" onClick={() => setMenuOpen(false)} />}
@@ -187,27 +203,32 @@ export function AppShell({
             </span>
           </div>
           <div className="command-bar__actions">
-            <Button
-              variant={enabled ? 'secondary' : 'primary'}
-              aria-label={enabled ? 'Pause all Luna' : 'Resume pipeline'}
-              onClick={onPause}
-            >
-              {enabled ? <Pause size={16} /> : <Play size={16} />}
-              <span>{enabled ? 'Pause all Luna' : 'Resume pipeline'}</span>
-            </Button>
-            <label className="executor-select">
-              <Boxes size={17} />
-              <select
-                aria-label="Configured Luna executors"
-                value={Number(overview?.max_concurrent_ai_runs ?? 1)}
-                onChange={(event) => onConcurrency(Number(event.target.value))}
-              >
-                {[1, 2, 3, 4].map((value) => (
-                  <option value={value} key={value}>{value} executors</option>
-                ))}
-              </select>
-              <ChevronDown size={15} />
-            </label>
+            {!publicMode && (
+              <>
+                <Button
+                  variant={enabled ? 'secondary' : 'primary'}
+                  aria-label={enabled ? 'Pause all Luna' : 'Resume pipeline'}
+                  onClick={onPause}
+                >
+                  {enabled ? <Pause size={16} /> : <Play size={16} />}
+                  <span>{enabled ? 'Pause all Luna' : 'Resume pipeline'}</span>
+                </Button>
+                <label className="executor-select">
+                  <Boxes size={17} />
+                  <select
+                    aria-label="Configured Luna executors"
+                    value={Number(overview?.max_concurrent_ai_runs ?? 1)}
+                    onChange={(event) =>
+                      onConcurrency?.(Number(event.target.value))}
+                  >
+                    {[1, 2, 3, 4].map((value) => (
+                      <option value={value} key={value}>{value} executors</option>
+                    ))}
+                  </select>
+                  <ChevronDown size={15} />
+                </label>
+              </>
+            )}
             <Button variant="quiet" aria-label="Refresh live data" onClick={onRefresh} disabled={refreshing}>
               <RefreshCw size={17} className={refreshing ? 'spin' : ''} />
             </Button>

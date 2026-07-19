@@ -63,7 +63,11 @@ code { font-size: .78rem; color: #344054; }
 .nav-item.is-active svg { stroke-width: 2.2; }
 .sidebar__footer { margin-top: auto; padding: 18px 10px 3px; border-top: 1px solid #edf0f5; display: flex; flex-direction: column; gap: 7px; }
 .sidebar__footer span { font-size: .67rem; color: #98a2b3; text-transform: uppercase; letter-spacing: .06em; }
-.sidebar__footer button { border: 0; padding: 0; background: transparent; color: #475467; text-align: left; font-size: .76rem; }
+.sidebar__footer button, .sidebar__footer a {
+  border: 0; padding: 0; background: transparent; color: #475467;
+  text-align: left; font-size: .76rem; text-decoration: none;
+}
+.sidebar__footer a:hover { color: var(--blue); }
 .sidebar-scrim { display: none; }
 
 .workspace { grid-column: 2; min-width: 0; }

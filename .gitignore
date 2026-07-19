@@ -7,6 +7,7 @@ lab/results/*
 node_modules/
 dist/
 dist-admin/
+dist-demo/
 coverage/
 .DS_Store
 *.log

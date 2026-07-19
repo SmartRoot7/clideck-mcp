@@ -35,7 +35,17 @@ import {
   postEmpty,
   postJson
 } from './lib/api'
-import { useOverview, useSession } from './lib/queries'
+import {
+  demoCoverage,
+  demoOverview,
+  demoPipeline,
+  demoQuality
+} from './lib/demo'
+import {
+  useOverview,
+  usePublicDemoSnapshot,
+  useSession
+} from './lib/queries'
 const ActiveSourcePage = lazy(() => import('./pages/active-source').then((module) => ({ default: module.ActiveSourcePage })))
 const AgentRunsPage = lazy(() => import('./pages/agent-runs').then((module) => ({ default: module.AgentRunsPage })))
 const ApprovalsPage = lazy(() => import('./pages/approvals').then((module) => ({ default: module.ApprovalsPage })))
@@ -54,12 +64,114 @@ const SourcesPage = lazy(() => import('./pages/sources').then((module) => ({ def
 const TasksPage = lazy(() => import('./pages/tasks').then((module) => ({ default: module.TasksPage })))
 
 export default function App() {
+  if (window.location.pathname.startsWith('/demo')) {
+    return <PublicDemoApp />
+  }
+  return <LocalAdminApp />
+}
+
+function LocalAdminApp() {
   const sessionQuery = useSession()
   if (sessionQuery.isLoading) return <AppBoot />
   if (sessionQuery.isError || !sessionQuery.data?.authenticated) {
     return <LoginScreen onSuccess={() => void sessionQuery.refetch()} />
   }
   return <AuthenticatedApp />
+}
+
+function PublicDemoApp() {
+  const query = usePublicDemoSnapshot()
+  const [section, setSection] = useState<SectionId>(sectionFromLocation)
+  if (query.isLoading || !query.data) {
+    if (query.isError) {
+      return (
+        <div className="standalone-state">
+          <ErrorState onRetry={() => void query.refetch()}>
+            The live read-only snapshot is temporarily unavailable.
+          </ErrorState>
+        </div>
+      )
+    }
+    return <AppBoot />
+  }
+  const snapshot = query.data
+  const overview = demoOverview(snapshot)
+  const pipeline = demoPipeline(snapshot)
+  const coverage = demoCoverage(snapshot)
+  const quality = demoQuality(snapshot)
+  const navigate = (next: SectionId) => {
+    const allowed: SectionId[] = [
+      'overview',
+      'pipeline',
+      'coverage',
+      'quality'
+    ]
+    if (!allowed.includes(next)) return
+    window.history.pushState(
+      {},
+      '',
+      next === 'overview' ? '/demo' : `/demo/${next}`,
+    )
+    setSection(next)
+    window.scrollTo({
+      top: 0,
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
+        ? 'auto'
+        : 'smooth'
+    })
+  }
+  return (
+    <AppShell
+      section={section}
+      overview={overview}
+      refreshing={query.isFetching}
+      onNavigate={navigate}
+      onRefresh={() => void query.refetch()}
+      publicMode
+    >
+      <Suspense fallback={<LoadingState label="Opening section…" />}>
+        <PublicDemoPage
+          section={section}
+          overview={overview}
+          pipeline={pipeline}
+          coverage={coverage}
+          quality={quality}
+        />
+      </Suspense>
+    </AppShell>
+  )
+}
+
+function PublicDemoPage({
+  section,
+  overview,
+  pipeline,
+  coverage,
+  quality
+}: {
+  section: SectionId
+  overview: ReturnType<typeof demoOverview>
+  pipeline: ReturnType<typeof demoPipeline>
+  coverage: ReturnType<typeof demoCoverage>
+  quality: ReturnType<typeof demoQuality>
+}) {
+  switch (section) {
+    case 'pipeline':
+      return <PipelinePage overview={overview} data={pipeline} readOnly />
+    case 'coverage':
+      return <CoveragePage data={coverage} readOnly />
+    case 'quality':
+      return <QualityPage data={quality} readOnly />
+    default:
+      return (
+        <OverviewPage
+          overview={overview}
+          pipelineData={pipeline}
+          coverageData={coverage}
+          publicMode
+        />
+      )
+  }
 }
 
 function AppBoot() {

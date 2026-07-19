@@ -23,11 +23,17 @@ import {
 } from '../lib/format'
 import { useQuality } from '../lib/queries'
 
-export function QualityPage() {
-  const query = useQuality()
-  if (query.isLoading) return <LoadingState label="Loading quality gates and evaluations…" />
-  if (query.isError || !query.data) return <ErrorState onRetry={() => void query.refetch()}>Quality data is unavailable.</ErrorState>
-  const quality = query.data
+export function QualityPage({
+  data,
+  readOnly = false
+}: {
+  data?: Quality
+  readOnly?: boolean
+} = {}) {
+  const query = useQuality(!data)
+  if (!data && query.isLoading) return <LoadingState label="Loading quality gates and evaluations…" />
+  if (!data && (query.isError || !query.data)) return <ErrorState onRetry={() => void query.refetch()}>Quality data is unavailable.</ErrorState>
+  const quality = data ?? query.data!
   const latest = quality.eval_runs[0]
   const chart = latencyChart(quality)
   return (
@@ -57,8 +63,12 @@ export function QualityPage() {
           { key: 'result', label: 'Result', render: (row) => <Status tone={numberOf(row.failed_count) ? 'danger' : 'good'}>{row.passed_count} / {row.case_count} passed</Status> },
           { key: 'false-safe', label: 'False-safe', render: (row) => <span className={numberOf(row.dangerous_false_safe) ? 'text-danger' : ''}>{row.dangerous_false_safe}</span> },
           { key: 'latency', label: 'Latency p50 / p95 / max', render: (row) => `${row.p50_ms} / ${row.p95_ms} / ${row.max_ms} ms` },
-          { key: 'commit', label: 'Commit', render: (row) => <code title={row.commit_sha ?? ''}>{shortId(row.commit_sha)}</code> },
-          { key: 'report', label: 'Report', render: (row) => <code title={row.report_hash}>{shortId(row.report_hash)}</code> }
+          ...(!readOnly
+            ? [
+                { key: 'commit', label: 'Commit', render: (row: Quality['eval_runs'][number]) => <code title={row.commit_sha ?? ''}>{shortId(row.commit_sha)}</code> },
+                { key: 'report', label: 'Report', render: (row: Quality['eval_runs'][number]) => <code title={row.report_hash}>{shortId(row.report_hash)}</code> }
+              ]
+            : [])
         ]} rowKey={(row) => String(row.id)} empty="No product evaluations have been imported." />
       </Panel>
     </div>

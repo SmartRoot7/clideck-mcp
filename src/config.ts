@@ -22,6 +22,7 @@ const envSchema = z.object({
   ),
   ADMIN_UI_SESSION_HOURS: z.coerce.number().int().min(1).max(72).default(12),
   ADMIN_UI_ASSET_ROOT: z.string().min(1).default('./dist-admin'),
+  DEMO_ASSET_ROOT: z.string().min(1).default('./dist-demo'),
   RESEARCHER_HOST: z.string().min(1).default('127.0.0.1'),
   RESEARCHER_PORT: z.coerce.number().int().min(1).max(65535).default(8788),
   DATABASE_URL: z.string().url().startsWith('postgresql://'),
@@ -62,6 +63,7 @@ const envSchema = z.object({
   DANGEROUS_AUTO_PUBLISH_CONFIDENCE: z.coerce.number().min(0.5).max(1).default(0.95),
   ENABLE_NATIVE_MCP_TASKS: booleanString.default(false),
   ENABLE_PLAYGROUND: booleanString.default(false),
+  ENABLE_PUBLIC_DEMO: booleanString.default(false),
   ENABLE_REMOTE_ADMIN_API: booleanString.default(true)
 })
 
@@ -80,6 +82,7 @@ export type AppConfig = {
     sessionHours: number
     assetRoot: string
   }
+  demoAssetRoot: string
   researcher: { host: string; port: number }
   databaseUrl: string
   adminDatabaseUrl: string
@@ -113,6 +116,7 @@ export type AppConfig = {
   dangerousAutoPublishConfidence: number
   enableNativeMcpTasks: boolean
   enablePlayground: boolean
+  enablePublicDemo: boolean
   enableRemoteAdminApi: boolean
 }
 
@@ -141,6 +145,7 @@ export function getConfig(
       sessionHours: parsed.ADMIN_UI_SESSION_HOURS,
       assetRoot: parsed.ADMIN_UI_ASSET_ROOT
     },
+    demoAssetRoot: parsed.DEMO_ASSET_ROOT,
     researcher: {
       host: parsed.RESEARCHER_HOST,
       port: parsed.RESEARCHER_PORT
@@ -184,6 +189,7 @@ export function getConfig(
       parsed.DANGEROUS_AUTO_PUBLISH_CONFIDENCE,
     enableNativeMcpTasks: parsed.ENABLE_NATIVE_MCP_TASKS,
     enablePlayground: parsed.ENABLE_PLAYGROUND,
+    enablePublicDemo: parsed.ENABLE_PUBLIC_DEMO,
     enableRemoteAdminApi: parsed.ENABLE_REMOTE_ADMIN_API
   }
 

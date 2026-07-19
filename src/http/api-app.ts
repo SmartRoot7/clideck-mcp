@@ -1,5 +1,9 @@
 import { randomUUID } from 'node:crypto'
+import { existsSync } from 'node:fs'
+import { readFile } from 'node:fs/promises'
+import { resolve } from 'node:path'
 
+import { serveStatic } from '@hono/node-server/serve-static'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { Hono, type Context } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
@@ -37,6 +41,7 @@ import {
   verifyNetworkChange
 } from '../domain/change.js'
 import { resolveNetworkContext } from '../domain/context.js'
+import { getPublicDemoSnapshot } from '../domain/demo.js'
 import { searchKnowledge } from '../domain/knowledge.js'
 import {
   changeReviewInputSchema,
@@ -144,7 +149,7 @@ export function createApiApp(dependencies: ApiDependencies) {
     context.json({
       status: 'ok',
       service: 'CliDeck MCP — Network Knowledge',
-      version: '0.5.0'
+      version: '0.6.0'
     }),
   )
 
@@ -245,6 +250,32 @@ export function createApiApp(dependencies: ApiDependencies) {
     )
     return context.json(stats)
   })
+
+  app.get('/public/v1/demo/snapshot', async (context) => {
+    if (!config.enablePublicDemo) {
+      return context.json({ error: 'not_found' }, 404)
+    }
+    const rate = await consumeRateLimit(
+      database,
+      getClientAddress(context, config),
+      'public_demo_snapshot',
+      Math.max(60, config.publicRateLimitPerMinute),
+    )
+    context.header('x-ratelimit-remaining', String(rate.remaining))
+    if (!rate.allowed) {
+      return context.json({ error: 'rate_limited' }, 429)
+    }
+    const snapshot = await getPublicDemoSnapshot(database)
+    context.header(
+      'cache-control',
+      'public, max-age=30, stale-while-revalidate=120',
+    )
+    return context.json(snapshot)
+  })
+
+  app.all('/public/v1/demo/*', (context) =>
+    context.json({ error: 'not_found' }, 404),
+  )
 
   app.use('/public/v1/playground/*', async (context, next) => {
     if (!config.enablePlayground) {
@@ -1076,6 +1107,37 @@ export function createApiApp(dependencies: ApiDependencies) {
     )
     return context.json(result.rows[0])
   })
+  }
+
+  if (config.enablePublicDemo) {
+    const demoAssetRoot = resolve(config.demoAssetRoot)
+    const demoIndexPath = resolve(demoAssetRoot, 'index.html')
+    if (existsSync(demoAssetRoot)) {
+      app.use(
+        '/demo/assets/*',
+        serveStatic({
+          root: demoAssetRoot,
+          rewriteRequestPath: (path) => path.replace(/^\/demo/, ''),
+          onFound: (_path, context) => {
+            context.header(
+              'cache-control',
+              'public, max-age=31536000, immutable',
+            )
+          }
+        }),
+      )
+    }
+    const serveDemoIndex = async (context: Context<ApiBindings>) => {
+      try {
+        const html = await readFile(demoIndexPath, 'utf8')
+        context.header('cache-control', 'no-cache')
+        return context.html(html)
+      } catch {
+        return context.json({ error: 'demo_not_built' }, 503)
+      }
+    }
+    app.get('/demo', serveDemoIndex)
+    app.get('/demo/*', serveDemoIndex)
   }
 
   app.notFound((context) => context.json({ error: 'not_found' }, 404))

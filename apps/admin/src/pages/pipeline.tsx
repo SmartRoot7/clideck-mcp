@@ -34,14 +34,24 @@ import {
 } from '../lib/format'
 import { usePipeline } from '../lib/queries'
 
-export function PipelinePage({ overview }: { overview: Overview }) {
-  const query = usePipeline()
+export function PipelinePage({
+  overview,
+  data,
+  readOnly = false
+}: {
+  overview: Overview
+  data?: PipelineDetails
+  readOnly?: boolean
+}) {
+  const query = usePipeline(!data)
   const [status, setStatus] = useState('')
-  if (query.isLoading) return <LoadingState label="Loading pipeline state…" />
-  if (query.isError || !query.data) {
+  if (!data && query.isLoading) {
+    return <LoadingState label="Loading pipeline state…" />
+  }
+  if (!data && (query.isError || !query.data)) {
     return <ErrorState onRetry={() => void query.refetch()}>Pipeline data is unavailable.</ErrorState>
   }
-  const pipeline = query.data
+  const pipeline = data ?? query.data!
   const tasks = status
     ? pipeline.tasks.filter((task) => task.status === status)
     : pipeline.tasks
@@ -75,7 +85,7 @@ export function PipelinePage({ overview }: { overview: Overview }) {
       <div className="overview-grid overview-grid--wide">
         <Panel title="Active work" icon={Play} help="Tasks that currently hold a lease and are being processed.">
           {active.length ? (
-            <TaskTable rows={active.slice(0, 12)} />
+            <TaskTable rows={active.slice(0, 12)} readOnly={readOnly} />
           ) : <EmptyState>No task currently holds a live lease.</EmptyState>}
         </Panel>
         <Panel title="Queue by priority" icon={ShieldCheck} help="AI queue order is expert, verification, analysis, then discovery. Mechanical work continues independently.">
@@ -112,37 +122,47 @@ export function PipelinePage({ overview }: { overview: Overview }) {
           </label>
         }
       >
-        <TaskTable rows={tasks} />
+        <TaskTable rows={tasks} readOnly={readOnly} />
       </Panel>
 
-      <Panel title="Event timeline" icon={Clock3} help="Newest milestones, retries, failures and publications emitted by the coordinator and workers.">
-        <DataTable
-          rows={pipeline.events.slice(0, 100)}
-          columns={[
-            { key: 'time', label: 'Time', render: (row) => formatDate(row.created_at) },
-            { key: 'stage', label: 'Stage', render: (row) => <Status tone={toneFor(row.event_type)}>{titleCase(row.stage)}</Status> },
-            { key: 'event', label: 'Event', render: (row) => titleCase(row.event_type) },
-            { key: 'message', label: 'Milestone', render: (row) => row.message },
-            { key: 'task', label: 'Task', render: (row) => <code title={row.pipeline_task_id ?? ''}>{shortId(row.pipeline_task_id)}</code> }
-          ]}
-          rowKey={(row) => row.id}
-          empty="No pipeline events have been recorded."
-        />
-      </Panel>
+      {!readOnly && (
+        <Panel title="Event timeline" icon={Clock3} help="Newest milestones, retries, failures and publications emitted by the coordinator and workers.">
+          <DataTable
+            rows={pipeline.events.slice(0, 100)}
+            columns={[
+              { key: 'time', label: 'Time', render: (row) => formatDate(row.created_at) },
+              { key: 'stage', label: 'Stage', render: (row) => <Status tone={toneFor(row.event_type)}>{titleCase(row.stage)}</Status> },
+              { key: 'event', label: 'Event', render: (row) => titleCase(row.event_type) },
+              { key: 'message', label: 'Milestone', render: (row) => row.message },
+              { key: 'task', label: 'Task', render: (row) => <code title={row.pipeline_task_id ?? ''}>{shortId(row.pipeline_task_id)}</code> }
+            ]}
+            rowKey={(row) => row.id}
+            empty="No pipeline events have been recorded."
+          />
+        </Panel>
+      )}
     </div>
   )
 }
 
-function TaskTable({ rows }: { rows: PipelineDetails['tasks'] }) {
+function TaskTable({
+  rows,
+  readOnly = false
+}: {
+  rows: PipelineDetails['tasks']
+  readOnly?: boolean
+}) {
   const columns: Array<TableColumn<PipelineDetails['tasks'][number]>> = [
-    { key: 'type', label: 'Work', render: (row) => <div className="primary-cell"><strong>{titleCase(row.task_type)}</strong><span>{row.source_title ?? 'System task'}</span></div> },
+    { key: 'type', label: 'Work', render: (row) => <div className="primary-cell"><strong>{titleCase(row.task_type)}</strong><span>{readOnly ? 'Source identity withheld' : row.source_title ?? 'System task'}</span></div> },
     { key: 'stage', label: 'Stage', render: (row) => <Status>{titleCase(row.stage)}</Status> },
     { key: 'status', label: 'Status', render: (row) => <Status>{titleCase(row.status)}</Status> },
     { key: 'priority', label: 'Priority', render: (row) => formatNumber(row.priority, 0) },
-    { key: 'owner', label: 'Executor', render: (row) => row.claim_owner ?? '—' },
+    { key: 'owner', label: 'Executor', render: (row) => readOnly ? 'Ephemeral worker' : row.claim_owner ?? '—' },
     { key: 'attempts', label: 'Attempts', render: (row) => formatNumber(row.attempts, 0) },
     { key: 'updated', label: 'Updated', render: (row) => formatDate(row.updated_at) },
-    { key: 'id', label: 'Task ID', render: (row) => <code title={row.id}>{shortId(row.id)}</code> }
+    ...(!readOnly
+      ? [{ key: 'id', label: 'Task ID', render: (row: PipelineDetails['tasks'][number]) => <code title={row.id}>{shortId(row.id)}</code> }]
+      : [])
   ]
   return <DataTable rows={rows} columns={columns} rowKey={(row) => row.id} empty="No tasks match this status." />
 }

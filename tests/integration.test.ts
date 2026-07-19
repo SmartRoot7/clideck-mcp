@@ -8,6 +8,7 @@ import {
   ENGINEERING_MEASUREMENT_SAMPLES,
   engineeringPublicRecordSchema
 } from '@clideck/domain-engineering-measurements'
+import { publicDemoSnapshotSchema } from '@clideck/demo-contracts'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 
@@ -901,6 +902,119 @@ describeIntegration('PostgreSQL integration', () => {
       },
     )
     expect(oversized.status).toBe(413)
+  })
+
+  it('serves the real admin data through a read-only sanitized demo contract', async () => {
+    const demoConfig = createTestConfig({
+      adminRateLimitPerMinute: 1_000,
+      enablePublicDemo: true
+    })
+    const target = await database.query<{ id: string }>(
+      'SELECT id FROM coverage_targets ORDER BY priority DESC LIMIT 1',
+    )
+    const coverageTargetId = target.rows[0]?.id
+    expect(coverageTargetId).toBeTruthy()
+    const unique = randomUUID()
+    const sentinel = `SENTINEL-DEMO-SECRET-${unique}`
+    const sourceUrl = `https://private.example.invalid/${unique}`
+    const source = await database.query<{ id: string }>(
+      `INSERT INTO source_candidates (
+         coverage_target_id,
+         canonical_url,
+         document_type,
+         title,
+         discovered_by
+       )
+       VALUES ($1, $2, 'command_reference', $3, 'integration-test')
+       RETURNING id`,
+      [coverageTargetId, sourceUrl, sentinel],
+    )
+    const sourceId = source.rows[0]!.id
+    const task = await database.query<{ id: string }>(
+      `INSERT INTO pipeline_tasks (
+         task_type,
+         stage,
+         status,
+         priority,
+         coverage_target_id,
+         source_candidate_id,
+         dedupe_key,
+         payload,
+         result,
+         failure_message
+       )
+       VALUES (
+         'source_acquisition',
+         'acquire',
+         'failed',
+         1,
+         $1,
+         $2,
+         $3,
+         $4::jsonb,
+         $5::jsonb,
+         $6
+       )
+       RETURNING id`,
+      [
+        coverageTargetId,
+        sourceId,
+        `demo-sanitization-${unique}`,
+        JSON.stringify({ source_url: sourceUrl, credential: sentinel }),
+        JSON.stringify({ document_title: sentinel }),
+        sentinel
+      ],
+    )
+    const taskId = task.rows[0]!.id
+
+    try {
+      const app = createApiApp({
+        config: demoConfig,
+        database,
+        adminDatabase: database,
+        quarantineDatabase: database,
+        logger,
+        metrics: createMetrics()
+      })
+      const response = await app.request('/public/v1/demo/snapshot')
+      expect(response.status).toBe(200)
+      expect(response.headers.get('cache-control')).toContain('max-age=30')
+      const payload = publicDemoSnapshotSchema.parse(await response.json())
+      expect(payload.release.published_knowledge).toBeGreaterThanOrEqual(50)
+      expect(payload.operations.ai_model).toBe('gpt-5.6-luna')
+      expect(payload.pipeline_tasks.length).toBeGreaterThan(0)
+      const serialized = JSON.stringify(payload)
+      expect(serialized).not.toContain(sentinel)
+      expect(serialized).not.toContain(sourceUrl)
+      expect(serialized).not.toContain(sourceId)
+      expect(serialized).not.toContain(taskId)
+      expect(serialized).not.toContain('failure_message')
+      expect(serialized).not.toContain('provenance')
+
+      const mutation = await app.request('/public/v1/demo/snapshot', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{}'
+      })
+      expect(mutation.status).toBe(404)
+
+      const hidden = createApiApp({
+        config: { ...demoConfig, enablePublicDemo: false },
+        database,
+        adminDatabase: database,
+        quarantineDatabase: database,
+        logger,
+        metrics: createMetrics()
+      })
+      expect(
+        (await hidden.request('/public/v1/demo/snapshot')).status,
+      ).toBe(404)
+    } finally {
+      await database.query('DELETE FROM pipeline_tasks WHERE id = $1', [taskId])
+      await database.query('DELETE FROM source_candidates WHERE id = $1', [
+        sourceId
+      ])
+    }
   })
 
   it('serves the signed website admin contract from PostgreSQL', async () => {

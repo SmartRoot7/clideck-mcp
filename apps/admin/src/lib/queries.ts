@@ -23,6 +23,7 @@ import {
 } from '@tanstack/react-query'
 
 import { getJson } from './api'
+import { fetchPublicDemoSnapshot } from './demo'
 
 export function useSession() {
   return useQuery({
@@ -39,6 +40,16 @@ export function useOverview() {
     queryFn: () => getJson('/admin/api/v1/overview', overviewSchema),
     refetchInterval: 10_000,
     staleTime: 8_000
+  })
+}
+
+export function usePublicDemoSnapshot() {
+  return useQuery({
+    queryKey: ['public-demo-snapshot'],
+    queryFn: fetchPublicDemoSnapshot,
+    refetchInterval: 30_000,
+    staleTime: 20_000,
+    retry: 2
   })
 }
 

@@ -5,12 +5,15 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:demo": "vite --mode demo",
     "build": "vite build",
+    "build:demo": "vite build --mode demo",
     "check": "tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
     "@clideck/admin-contracts": "workspace:*",
+    "@clideck/demo-contracts": "workspace:*",
     "@fontsource-variable/inter": "5.2.8",
     "@fontsource-variable/jetbrains-mono": "5.2.8",
     "@tanstack/react-query": "5.101.2",
