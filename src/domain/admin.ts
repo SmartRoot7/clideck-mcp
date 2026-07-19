@@ -321,53 +321,34 @@ export async function getAdminOverview(
     ),
     database.query(
       `WITH days AS (
-         SELECT generate_series(
-           current_date - 29,
-           current_date,
-           interval '1 day'
-         )::date AS day
-       ),
-       revision_daily AS (
-         SELECT created_at::date AS day, count(*)::int AS count
-         FROM knowledge_revisions
-         WHERE created_at >= current_date - 29
-         GROUP BY created_at::date
-       ),
-       published_daily AS (
-         SELECT updated_at::date AS day, count(*)::int AS count
-         FROM knowledge_candidates
-         WHERE status = 'published'
-           AND updated_at >= current_date - 29
-         GROUP BY updated_at::date
-       ),
-       task_daily AS (
-         SELECT completed_at::date AS day, count(*)::int AS count
-         FROM pipeline_tasks
-         WHERE completed_at >= current_date - 29
-           AND status = 'completed'
-         GROUP BY completed_at::date
-       ),
-       agent_daily AS (
-         SELECT
-           started_at::date AS day,
-           sum(
-             input_tokens + output_tokens + reasoning_output_tokens
-           )::bigint AS tokens
-         FROM agent_runs
-         WHERE started_at >= current_date - 29
-         GROUP BY started_at::date
+         SELECT current_date - day_offset AS day
+         FROM generate_series(0, 29) AS day_offset
        )
        SELECT
          d.day,
-         coalesce(pd.count, 0) AS published,
-         coalesce(rd.count, 0) AS revisions_created,
-         coalesce(td.count, 0) AS stages_completed,
-         coalesce(ad.tokens, 0) AS tokens
+         (SELECT count(*)::int
+          FROM knowledge_candidates kc
+          WHERE kc.status = 'published'
+            AND kc.updated_at >= d.day
+            AND kc.updated_at < d.day + 1) AS published,
+         (SELECT count(*)::int
+          FROM knowledge_revisions kr
+          WHERE kr.created_at >= d.day
+            AND kr.created_at < d.day + 1) AS revisions_created,
+         (SELECT count(*)::int
+          FROM pipeline_tasks pt
+          WHERE pt.status = 'completed'
+            AND pt.completed_at >= d.day
+            AND pt.completed_at < d.day + 1) AS stages_completed,
+         (SELECT coalesce(sum(
+            ar.input_tokens +
+            ar.output_tokens +
+            ar.reasoning_output_tokens
+          ), 0)::bigint
+          FROM agent_runs ar
+          WHERE ar.started_at >= d.day
+            AND ar.started_at < d.day + 1) AS tokens
        FROM days d
-       LEFT JOIN published_daily pd ON pd.day = d.day
-       LEFT JOIN revision_daily rd ON rd.day = d.day
-       LEFT JOIN task_daily td ON td.day = d.day
-       LEFT JOIN agent_daily ad ON ad.day = d.day
        ORDER BY d.day`,
     ),
     database.query(
