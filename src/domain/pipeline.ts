@@ -569,6 +569,32 @@ export type PipelineTaskRow = {
   attempts?: number
 }
 
+type LeasedKnowledgeDemand = {
+  question: string
+  tool_name: string
+  context: Record<string, unknown>
+}
+
+/**
+ * A demand question is already available to discovery, but source-derived AI
+ * tasks are intentionally stored without it. Add it only to the short-lived
+ * leased payload so extraction and review can preserve the exact requested
+ * technical terms without duplicating user input in every task row.
+ */
+export function withLeasedKnowledgeDemand(
+  payload: Record<string, unknown>,
+  demand: LeasedKnowledgeDemand,
+): Record<string, unknown> {
+  return {
+    ...payload,
+    knowledge_demand: {
+      question: demand.question,
+      tool_name: demand.tool_name,
+      context: demand.context,
+    },
+  }
+}
+
 const aiTaskTypes: PipelineTaskRow['task_type'][] = [
   'expert_research',
   'source_discovery',
@@ -2986,6 +3012,18 @@ export async function claimPipelineTask(
         task_id: expert.rows[0].public_id,
         question: expert.rows[0].question,
         network_context: expert.rows[0].network_context
+      }
+    }
+
+    if (task.knowledge_demand_id) {
+      const demand = await client.query<LeasedKnowledgeDemand>(
+        `SELECT question, tool_name, context
+         FROM knowledge_demands
+         WHERE id = $1`,
+        [task.knowledge_demand_id],
+      )
+      if (demand.rows[0]) {
+        payload = withLeasedKnowledgeDemand(payload, demand.rows[0])
       }
     }
 

@@ -24,7 +24,8 @@ import {
   materializeCandidateDeepReviewArtifact,
   materializeCandidateVerificationArtifact,
   normalizeCandidateAnalysisOptionalFields,
-  normalizeCandidateAnalysisStableKeys
+  normalizeCandidateAnalysisStableKeys,
+  withLeasedKnowledgeDemand
 } from '../src/domain/pipeline.js'
 import {
   chunkSourceText,
@@ -202,6 +203,28 @@ describe('deterministic source processing', () => {
       'AGENT_ARTIFACT_REJECTED',
       'The generated artifact failed validation: decisions.0.repaired_candidate.provenance.0.content_hash: Invalid string: must match pattern.',
     )).toBe(false)
+  })
+
+  it('adds an unknown-question context only to the leased AI payload', () => {
+    const storedTaskPayload = {
+      source_id: 'source-1',
+      fragments: [{ id: 'fragment-1' }]
+    }
+    const leasedPayload = withLeasedKnowledgeDemand(storedTaskPayload, {
+      question: 'Diagnose MACsec MKA rekey failure on Catalyst 9300',
+      tool_name: 'query_network_knowledge',
+      context: { vendor_slug: 'cisco', operating_system_slug: 'ios-xe' }
+    })
+
+    expect(storedTaskPayload).not.toHaveProperty('knowledge_demand')
+    expect(leasedPayload).toMatchObject({
+      source_id: 'source-1',
+      knowledge_demand: {
+        question: 'Diagnose MACsec MKA rekey failure on Catalyst 9300',
+        tool_name: 'query_network_knowledge',
+        context: { vendor_slug: 'cisco', operating_system_slug: 'ios-xe' }
+      }
+    })
   })
 
   it('accepts finite client limits so handlers can clamp them safely', () => {

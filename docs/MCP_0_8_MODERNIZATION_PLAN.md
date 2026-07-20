@@ -3,8 +3,9 @@
 ## Current focus
 
 `[~]` Observe the production demand-driven loop through analysis, verification
-and publication. The next measured gap is eliminating Luna runs on early,
-document-order fragments that do not address an urgent unknown question.
+and publication. The next measured gap is ensuring an analysis executor retains
+the urgent question in its short-lived lease, so an extracted candidate can be
+correctly linked back to that question.
 
 ## Scope and completion journal
 
@@ -200,6 +201,22 @@ documents, without any artifact-size, quality or safety regression.
 Ready when an urgent demand begins with relevant sections from the official
 source, all remaining fragments remain retryable, and production observation
 shows fewer zero-yield Luna analysis runs without a false learned answer.
+
+### M15 — Preserve the question through demand analysis
+
+- `[~]` Add the stored unknown question and context to the short-lived leased
+  payload for source-derived AI tasks, without copying it into persisted task
+  payloads or public/admin responses.
+- `[~]` Require a demand-linked extraction candidate to directly answer that
+  question and retain a specific technical term that the deterministic gate can
+  verify.
+- `[~]` Keep generic useful facts available to background coverage, but reject
+  them from the priority answer path rather than presenting them as the answer
+  to a different question.
+
+Ready when a demand-linked analysis run can create a relevant candidate from a
+ranked official fragment, and an unknown question becomes `published` only when
+that candidate passes the existing verification and release policy.
 
 ## Production verification — 20 July 2026
 
