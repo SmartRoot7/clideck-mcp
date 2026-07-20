@@ -49,6 +49,7 @@ import {
 } from './publication.js'
 import { recordPipelineTransition } from './pipeline-transitions.js'
 import { enforceKnowledgeRisk } from './risk.js'
+import { maxSourceFragmentBytes } from './pipeline-limits.js'
 
 const execFileAsync = promisify(execFile)
 const maxOcrPages = 100
@@ -780,7 +781,7 @@ function normalizeSourcePages(text: string): string {
 }
 
 export function chunkSourceText(text: string): TextFragment[] {
-  const maxBytes = 30_000
+  const maxBytes = maxSourceFragmentBytes
   const blocks = normalizeSourcePages(text)
     .split(/\n{2,}/)
     .map((block) => block.trim())

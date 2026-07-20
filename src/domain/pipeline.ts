@@ -16,6 +16,10 @@ import {
   fillWeightedAiCapacity,
   type WeightedAiStage
 } from './pipeline-scheduler.js'
+import {
+  fragmentAnalysisEvidenceBudgetBytes,
+  maxFragmentAnalysisBatchSize
+} from './pipeline-limits.js'
 import { getNetworkDomainPack } from './domain-packs.js'
 import {
   recordPipelineTransition,
@@ -721,14 +725,12 @@ const aiPriorities = {
   discover: 50
 } as const
 const mediumPlatformFallbackRetryThreshold = 4
-const maxFragmentAnalysisBatchBytes = 65_536
-const maxFragmentAnalysisBatchSize = 16
 
 export function boundFragmentAnalysisBatch<
   T extends { content: string }
 >(
   fragments: T[],
-  maxBytes = maxFragmentAnalysisBatchBytes,
+  maxBytes = fragmentAnalysisEvidenceBudgetBytes,
 ): T[] {
   const selected: T[] = []
   let selectedBytes = 0

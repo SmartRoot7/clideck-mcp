@@ -360,6 +360,20 @@ Ready when a transient Medium platform incident cannot strand records forever,
 and the recovery path never publishes a claim that has not passed the existing
 Domain Pack, provenance, version, confidence and risk gates.
 
+### M25 — Evidence-sized source fragments
+
+- `[x]` Derive the persisted source-fragment ceiling from the existing bounded
+  analysis evidence budget and the intended useful cohort size, rather than
+  allowing a single source fragment to consume nearly half of an analysis run.
+- `[x]` Preserve deterministic splitting, UTF-8 safety, section locators and
+  content hashes; the change affects only newly chunked sources.
+- `[~]` Observe median analysis batch size, Luna utilisation and candidate
+  quality on production before considering any further change to evidence
+  limits.
+
+Ready when normal documents can fill a related analysis cohort without raising
+the Luna evidence budget or weakening provenance and risk validation.
+
 ## Production verification — 20 July 2026
 
 - `[x]` Deployed `bc7c950b585bd994efa704e4ca246320fbde05dd` exclusively through

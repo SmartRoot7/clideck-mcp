@@ -35,6 +35,7 @@ import {
   chunkSourceText,
   isCandidatePublicationValidationError
 } from '../src/domain/pipeline-worker.js'
+import { maxSourceFragmentBytes } from '../src/domain/pipeline-limits.js'
 import { CorePolicyError } from '@clideck/domain-kit'
 import { enforceKnowledgeRisk } from '../src/domain/risk.js'
 import { buildSearchQueries } from '../src/domain/search-query.js'
@@ -899,7 +900,7 @@ describe('deterministic source processing', () => {
     expect(fragments.length).toBeGreaterThan(1)
     expect(fragments.every(
       (fragment) =>
-        Buffer.byteLength(fragment.content, 'utf8') <= 30_000,
+        Buffer.byteLength(fragment.content, 'utf8') <= maxSourceFragmentBytes,
     )).toBe(true)
     expect(new Set(fragments.map((fragment) => fragment.contentHash)).size)
       .toBe(fragments.length)
@@ -922,7 +923,7 @@ describe('deterministic source processing', () => {
     expect(fragments.length).toBeGreaterThan(1)
     expect(fragments.every(
       (fragment) =>
-        Buffer.byteLength(fragment.content, 'utf8') <= 30_000,
+        Buffer.byteLength(fragment.content, 'utf8') <= maxSourceFragmentBytes,
     )).toBe(true)
     expect(fragments.some((fragment) =>
       fragment.content.includes('show version'),
