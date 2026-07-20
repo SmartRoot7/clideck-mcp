@@ -295,6 +295,18 @@ because one Luna run or official URL failed.
 Ready when an external Deep Medium failure protects tokens without making the
 rest of the four-Luna pipeline appear fully occupied.
 
+### M21 — Publication-equivalent validation before Ready
+
+- `[x]` Apply Network Domain Pack and core publication policy validation during
+  standard Verify, before a record receives `verified`/Ready status.
+- `[x]` Route an invalid candidate to automatic Deep Review with a bounded,
+  non-source-revealing reason; publication retains its final invariant.
+- `[~]` Observe the reduction in `publication_preflight` repairs on production
+  without relaxing rollback, confidence, version or provenance requirements.
+
+Ready when invalid records no longer consume a release attempt merely to find
+out that they need automated repair.
+
 ## Production verification — 20 July 2026
 
 - `[x]` Deployed `bc7c950b585bd994efa704e4ca246320fbde05dd` exclusively through

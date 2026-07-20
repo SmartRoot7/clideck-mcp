@@ -20,6 +20,7 @@ import {
   expertResearchStructuredArtifactSchema,
   applyDeepReviewRepair,
   nextDeepReviewBatchLimitAfterCleanPass,
+  getDeterministicPublicationPreflightDisposition,
   getDeterministicRiskDisposition,
   isRetryableCodexPlatformArtifactFailure,
   shouldReduceDeepReviewBatchOnFailure,
@@ -179,6 +180,46 @@ describe('knowledge safety classification', () => {
 
     expect(inspected.dangerous).toBe(false)
     expect(inspected.risk_level).toBe('safe_read_only')
+  })
+
+  it('routes publication-invalid records to automatic review before Ready', () => {
+    const candidate = {
+      stable_key: 'cisco-iosxe-preflight-content-required',
+      kind: 'command' as const,
+      vendor_slug: 'cisco',
+      operating_system_slug: 'ios-xe',
+      title: 'Incomplete command reference',
+      summary: 'A record deliberately missing both command and procedure.',
+      question_patterns: ['How do I use this incomplete command reference?'],
+      procedure: [],
+      prerequisites: [],
+      risks: [],
+      verification: ['Confirm that a command or procedure is present.'],
+      rollback: [],
+      limitations: [],
+      dangerous: false,
+      risk_level: 'safe_read_only' as const,
+      confidence: 0.95,
+      quality_score: 0.95,
+      confidence_reason: 'The test checks the deterministic publication gate.',
+      last_verified_at: '2026-07-20',
+      provenance: [{
+        url: 'https://www.cisco.com/example-preflight',
+        document_type: 'command_reference',
+        title: 'Internal test evidence',
+        verified_at: '2026-07-20',
+        content_hash: `sha256:${'f'.repeat(64)}`,
+        evidence_fragment: 'A command or procedure is required.',
+        evidence_role: 'primary' as const
+      }]
+    }
+
+    expect(
+      getDeterministicPublicationPreflightDisposition(candidate),
+    ).toMatchObject({
+      decision: 'deep_review',
+      finding: expect.stringContaining('Domain Pack')
+    })
   })
 })
 

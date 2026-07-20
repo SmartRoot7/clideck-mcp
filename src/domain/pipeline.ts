@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { enforceCoreCandidatePolicy } from '@clideck/domain-kit'
+
 import type { AppConfig } from '../config.js'
 import {
   randomUrlToken,
@@ -14,6 +16,7 @@ import {
   fillWeightedAiCapacity,
   type WeightedAiStage
 } from './pipeline-scheduler.js'
+import { getNetworkDomainPack } from './domain-packs.js'
 import {
   recordPipelineTransition,
   recordPipelineTransitions
@@ -24,6 +27,7 @@ import {
 } from './knowledge-demand-relevance.js'
 import { omitNullObjectProperties } from './structured-output.js'
 import { candidateRevisionSchema } from './schemas.js'
+import { candidateKnowledgeSchema } from './publication.js'
 import { enforceKnowledgeRisk } from './risk.js'
 
 const pipelineLeaseSchema = z.object({
@@ -4231,6 +4235,45 @@ export function getDeterministicRiskDisposition(
   return null
 }
 
+/**
+ * Publication retains its own invariant, but the same structural and Domain
+ * Pack checks belong in Verify too. Discovering a malformed payload only at
+ * publication wastes a release slot and sends an otherwise repairable record
+ * through an avoidable extra Deep Review cycle.
+ */
+export function getDeterministicPublicationPreflightDisposition(
+  unparsedCandidate: unknown,
+): {
+  decision: 'deep_review'
+  finding: string
+} | null {
+  try {
+    const candidate = enforceKnowledgeRisk(
+      candidateKnowledgeSchema.parse(unparsedCandidate),
+    )
+    const networkDomainPack = getNetworkDomainPack()
+    const packCandidate = networkDomainPack.candidateSchema.parse(candidate)
+    const packValidation = networkDomainPack.validateCandidate(packCandidate)
+    if (!packValidation.valid) {
+      return {
+        decision: 'deep_review',
+        finding:
+          'Deterministic publication preflight rejected the Domain Pack payload.',
+      }
+    }
+    enforceCoreCandidatePolicy(
+      networkDomainPack.toCoreCandidate(packCandidate),
+    )
+    return null
+  } catch {
+    return {
+      decision: 'deep_review',
+      finding:
+        'Deterministic publication preflight rejected the candidate payload.',
+    }
+  }
+}
+
 async function getDeterministicCandidateDisposition(
   client: DatabaseClient,
   unparsedCandidate: unknown,
@@ -4241,6 +4284,10 @@ async function getDeterministicCandidateDisposition(
   const candidate = pipelineCandidatePayloadSchema.parse(unparsedCandidate)
   const riskDisposition = getDeterministicRiskDisposition(candidate)
   if (riskDisposition) return riskDisposition
+
+  const publicationPreflight =
+    getDeterministicPublicationPreflightDisposition(candidate)
+  if (publicationPreflight) return publicationPreflight
 
   try {
     if (candidate.version_min) normalizeVendorVersion(candidate.version_min)
