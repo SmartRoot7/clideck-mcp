@@ -66,6 +66,9 @@ export interface DomainPack<
   readonly candidateSchema: z.ZodType<Candidate>
   readonly publicRecordSchema: z.ZodType<PublicRecord>
   readonly deterministicExtractor?: DeterministicExtractor<Candidate>
+  readonly searchContext?: {
+    readonly hardKeys: readonly string[]
+  }
   normalizeContext(input: unknown): Context
   validateCandidate(candidate: Candidate): DomainValidationResult
   toCoreCandidate(candidate: Candidate): CoreKnowledgeCandidate

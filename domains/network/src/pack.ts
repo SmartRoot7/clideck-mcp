@@ -125,6 +125,9 @@ export const networkDomainPack: DomainPack<
   candidateSchema: networkKnowledgeCandidateSchema,
   publicRecordSchema: networkPublicRecordSchema,
   deterministicExtractor: networkCommandReferenceExtractor,
+  searchContext: {
+    hardKeys: ['vendor', 'operating_system']
+  },
   normalizeContext(input) {
     return networkContextSchema.parse(input)
   },

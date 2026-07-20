@@ -342,6 +342,7 @@ export const changeReviewOutputSchema = z.object({
   blast_radius: z.array(z.string()),
   matched_rules: z.array(z.string()),
   unknown_commands: z.array(z.string()),
+  operational_guidance: z.array(z.string()),
   prechecks: z.array(z.string()),
   stop_conditions: z.array(z.string()),
   verification_plan: z.array(verificationCheckSchema),

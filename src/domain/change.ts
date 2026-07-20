@@ -22,7 +22,7 @@ type VerificationPayload = {
   rollback: string[]
 }
 
-const criticalRules: Array<[RegExp, string]> = [
+const destructiveRules: Array<[RegExp, string]> = [
   [/\bwrite erase\b/i, 'erase_startup_configuration'],
   [/\berase\s+(?:startup-config|nvram:)/i, 'erase_startup_configuration'],
   [/\bformat\s+(?:flash|bootflash|nvram)/i, 'format_device_storage'],
@@ -110,6 +110,65 @@ function verificationChecksForRules(rules: string[]): VerificationCheck[] {
   return checks
 }
 
+function operationalGuidanceForRules(
+  rules: string[],
+  hasUnknownCommands: boolean,
+): string[] {
+  const guidance = new Set<string>()
+  for (const rule of rules) {
+    switch (rule) {
+      case 'erase_startup_configuration':
+        guidance.add(
+          'Erases the saved startup configuration. The current running configuration may remain in memory until a reload; confirm the exact platform behavior before use.',
+        )
+        break
+      case 'format_device_storage':
+        guidance.add(
+          'Formats device storage and can remove software images, packages, logs, and recovery files stored on that filesystem.',
+        )
+        break
+      case 'zeroize_crypto_keys':
+        guidance.add(
+          'Removes cryptographic key material. Services that depend on those keys can fail until keys and trust relationships are recreated.',
+        )
+        break
+      case 'disable_aaa':
+        guidance.add(
+          'Changes the authentication model and can remove working remote-access paths. Verify console access and the resulting login method first.',
+        )
+        break
+      case 'factory_reset':
+        guidance.add(
+          'Returns the device toward its factory state and can remove configuration, identity, and management access.',
+        )
+        break
+      case 'device_reload':
+        guidance.add(
+          'Restarts the device or stack, interrupts forwarding, and applies the saved boot configuration and software state.',
+        )
+        break
+      case 'software_install':
+        guidance.add(
+          'Changes the installed software state and may require activation, commit, and reload steps that are specific to the platform and release.',
+        )
+        break
+      default:
+        break
+    }
+  }
+  if (hasUnknownCommands) {
+    guidance.add(
+      'At least one command was not recognized by the deterministic rule set. Its meaning was not inferred; use the returned command text to confirm syntax and platform applicability.',
+    )
+  }
+  if (guidance.size === 0) {
+    guidance.add(
+      'The review classifies operational risk and supplies checks without withholding the requested command or procedure.',
+    )
+  }
+  return [...guidance]
+}
+
 export function reviewNetworkChange(
   config: AppConfig,
   input: {
@@ -123,17 +182,19 @@ export function reviewNetworkChange(
   const matchedRules = new Set<string>()
   const blastRadius = new Set<string>()
   const unknownCommands: string[] = []
-  let critical = false
+  let destructive = false
   let high = false
   let medium = false
   let hasWrite = false
 
   for (const line of lines) {
-    const criticalMatch = criticalRules.find(([pattern]) => pattern.test(line))
-    if (criticalMatch) {
-      critical = true
+    const destructiveMatch = destructiveRules.find(([pattern]) =>
+      pattern.test(line)
+    )
+    if (destructiveMatch) {
+      destructive = true
       hasWrite = true
-      matchedRules.add(criticalMatch[1])
+      matchedRules.add(destructiveMatch[1])
       blastRadius.add('device_or_stack')
       continue
     }
@@ -163,25 +224,20 @@ export function reviewNetworkChange(
       blastRadius.add('local_device')
       continue
     }
+    high = true
+    hasWrite = true
+    blastRadius.add('unknown_scope')
     unknownCommands.push(
       sanitizeSnapshot(line.slice(0, 240), 'secrets_only').sanitized,
     )
   }
 
-  const riskLevel = critical
-    ? 'critical' as const
-    : high
-      ? 'high' as const
-      : medium || hasWrite
-        ? 'medium' as const
-        : 'low' as const
-  const decision = critical
-    ? 'blocked' as const
-    : unknownCommands.length > 0
-      ? 'unknown' as const
-      : high
-        ? 'manual_review_required' as const
-        : 'allowed_with_checks' as const
+  const riskLevel = destructive || high
+    ? 'high' as const
+    : medium || hasWrite
+      ? 'medium' as const
+      : 'low' as const
+  const decision = 'allowed_with_checks' as const
   const rules = [...matchedRules]
   const checks = verificationChecksForRules(rules)
   const rollback = hasWrite
@@ -192,42 +248,46 @@ export function reviewNetworkChange(
       ]
     : ['No configuration change is expected; rollback is not applicable.']
   const prechecks = [
-    'Confirm the exact device model and IOS-XE version.',
+    'Confirm the exact device model and operating-system version.',
     'Capture the relevant before-state output.',
     'Confirm an independent management or console path is available.',
-    ...(hasWrite ? ['Confirm a current configuration backup and maintenance approval.'] : [])
+    ...(hasWrite ? ['Confirm a current configuration backup and maintenance approval.'] : []),
+    ...(destructive
+      ? [
+          'Confirm the restore source and recovery procedure before applying the command.',
+          'Record the current boot, storage, configuration, identity, and access state that the command can remove or interrupt.'
+        ]
+      : [])
   ]
   const stopConditions = [
     'Stop if the device context or version does not match the review.',
     'Stop on unexpected parser output, loss of management access, or new critical logs.',
     ...(unknownCommands.length > 0
-      ? ['Stop until every unknown command has been independently reviewed.']
+      ? [
+          'Confirm the syntax and platform applicability of every unrecognized command before applying it.'
+        ]
       : [])
   ]
 
-  let verificationToken: string | null = null
-  let expiresAt: string | null = null
-  if (!critical && unknownCommands.length === 0) {
-    expiresAt = new Date(Date.now() + 30 * 60_000).toISOString()
-    const payload: VerificationPayload = {
-      version: 1,
-      expires_at: expiresAt,
-      change_digest: sha256Label(
-        JSON.stringify({
-          intent: input.intent,
-          context: input.context,
-          lines
-        }),
-      ),
-      risk_level: riskLevel,
-      checks,
-      rollback
-    }
-    verificationToken = signPayload(
-      payload as unknown as Record<string, unknown>,
-      config.verificationSigningKey,
-    )
+  const expiresAt = new Date(Date.now() + 30 * 60_000).toISOString()
+  const payload: VerificationPayload = {
+    version: 1,
+    expires_at: expiresAt,
+    change_digest: sha256Label(
+      JSON.stringify({
+        intent: input.intent,
+        context: input.context,
+        lines
+      }),
+    ),
+    risk_level: riskLevel,
+    checks,
+    rollback
   }
+  const verificationToken = signPayload(
+    payload as unknown as Record<string, unknown>,
+    config.verificationSigningKey,
+  )
 
   return {
     decision,
@@ -235,6 +295,10 @@ export function reviewNetworkChange(
     blast_radius: [...blastRadius],
     matched_rules: rules,
     unknown_commands: unknownCommands,
+    operational_guidance: operationalGuidanceForRules(
+      rules,
+      unknownCommands.length > 0,
+    ),
     prechecks,
     stop_conditions: stopConditions,
     verification_plan: checks.map(({ id, description, required }) => ({
@@ -248,7 +312,8 @@ export function reviewNetworkChange(
     verification_token_expires_at: expiresAt,
     limitations: [
       'This is a deterministic advisory review and does not execute commands.',
-      'A manual approval remains mandatory for configuration-changing operations.'
+      'Risk classification never hides documentation or prevents verification.',
+      'Command-specific recognition is strongest for Cisco IOS-XE; unrecognized syntax receives conservative checks.'
     ]
   }
 }

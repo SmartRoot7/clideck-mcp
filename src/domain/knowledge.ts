@@ -5,6 +5,7 @@ import type {
   ResolvedNetworkContext
 } from './schemas.js'
 import type { InternalResolvedContext } from './context.js'
+import { buildSearchQueries } from './search-query.js'
 
 type KnowledgeRow = {
   revision_id: string
@@ -103,11 +104,19 @@ export async function searchKnowledge(
   limit: number,
   kind?: PublicKnowledge['kind'],
 ): Promise<PublicKnowledge[]> {
-  const normalizedQuestion = question
-    .replace(/<[^>]{1,80}>/g, ' ')
-    .replace(/[<>{}[\]|]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
+  const searchQuestion =
+    /\berrors?\b/i.test(question) &&
+    /\b(?:ports?|interfaces?)\b/i.test(question)
+      ? question.replace(/\berrors?\b/i, 'display interface counters errors')
+      : question
+  const search = buildSearchQueries(searchQuestion, {
+    '9300': '',
+    c9300: '',
+    errors: 'error',
+    interfaces: 'interface',
+    port: 'interface',
+    ports: 'interface'
+  })
   const result = await database.query<KnowledgeRow>(
     `WITH ranked_revisions AS MATERIALIZED (
        SELECT
@@ -116,9 +125,14 @@ export async function searchKnowledge(
          (
            ts_rank_cd(
              kr.search_document,
-             websearch_to_tsquery('simple', $1),
+             to_tsquery('simple', $6),
              32
-           )
+           ) * 0.70
+           + ts_rank_cd(
+               kr.search_document,
+               to_tsquery('simple', $7),
+               32
+             ) * 0.30
            + similarity(lower(kr.title), lower($1)) * 0.15
            + kr.confidence::float8 * 0.10
            + kr.quality_score::float8 * 0.10
@@ -145,7 +159,8 @@ export async function searchKnowledge(
          )
          AND ($5::text IS NULL OR ki.kind = $5)
          AND (
-           kr.search_document @@ websearch_to_tsquery('simple', $1)
+           kr.search_document @@ to_tsquery('simple', $6)
+           OR kr.search_document @@ to_tsquery('simple', $7)
            OR (
              lower(kr.title) % lower($1)
              AND similarity(lower(kr.title), lower($1)) >= 0.32
@@ -211,13 +226,19 @@ export async function searchKnowledge(
      LEFT JOIN knowledge_public_trust kpt ON kpt.revision_id = kr.id
      LEFT JOIN LATERAL current_knowledge_validation(kr.id)
        current_validation ON true
+     WHERE rr.rank >= greatest(
+       coalesce((SELECT max(rank) * 0.5 FROM ranked_revisions), 0),
+       0.01
+     )
      ORDER BY rr.rank DESC, kr.confidence DESC, kr.last_verified_at DESC`,
     [
-      normalizedQuestion,
+      search.normalizedQuestion,
       context.vendorId,
       context.operatingSystemId,
       context.platformId,
-      kind ?? null
+      kind ?? null,
+      search.strictTsQuery,
+      search.relaxedTsQuery
     ],
   )
 

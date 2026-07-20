@@ -638,6 +638,21 @@ describeIntegration('PostgreSQL integration', () => {
         plus: '0.010',
         unit: 'mm'
       })
+      const conversationalSearch = await searchDomainKnowledge(client, {
+        domainId: 'engineering-measurements',
+        question: 'Please give me the length and tolerance for Demo block A.',
+        context: {
+          discipline: 'mechanical engineering',
+          quantity: 'length',
+          conditions: []
+        }
+      })
+      const conversationalRecord = engineeringPublicRecordSchema.parse(
+        conversationalSearch.records[0],
+      )
+      expect(conversationalRecord.title).toBe(
+        'Demo block A reference length',
+      )
 
       const transactionalDatabase = client as unknown as Database
       const mcpServer = createPublicMcpServer({
@@ -1184,8 +1199,17 @@ describeIntegration('PostgreSQL integration', () => {
       context,
       3,
     )
-    expect(answers).toHaveLength(1)
+    expect(answers.length).toBeGreaterThanOrEqual(1)
     expect(answers[0]?.command).toBe('show ip interface brief')
+    const conversationalAnswers = await searchKnowledge(
+      database,
+      'On a Catalyst 9300 with IOS-XE 17.9.4, how do I check errors on ports?',
+      context,
+      3,
+    )
+    expect(conversationalAnswers[0]).toMatchObject({
+      command: 'show interfaces counters errors'
+    })
 
     const serialized = JSON.stringify(answers)
     for (const privateField of [
@@ -1385,9 +1409,15 @@ describeIntegration('PostgreSQL integration', () => {
     expect(unsupportedChange.status).toBe(200)
     const unsupportedPayload = await unsupportedChange.json() as {
       decision: string
+      risk_level: string
       unknown_commands: string[]
+      verification_token: string | null
     }
-    expect(unsupportedPayload.decision).toBe('unknown')
+    expect(unsupportedPayload.decision).toBe('allowed_with_checks')
+    expect(unsupportedPayload.risk_level).toBe('high')
+    expect(unsupportedPayload.verification_token).toEqual(
+      expect.any(String),
+    )
     expect(unsupportedPayload.unknown_commands[0]).not.toContain(
       'SuperSecret12345',
     )

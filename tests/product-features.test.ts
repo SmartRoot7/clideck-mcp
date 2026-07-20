@@ -27,6 +27,7 @@ import {
 } from '../src/domain/pipeline-worker.js'
 import { CorePolicyError } from '@clideck/domain-kit'
 import { enforceKnowledgeRisk } from '../src/domain/risk.js'
+import { buildSearchQueries } from '../src/domain/search-query.js'
 import {
   analyzeDeviceSnapshot,
   sanitizeSnapshot
@@ -639,6 +640,27 @@ describe('device snapshot intelligence', () => {
     expect(result.retention).toBe('not_stored')
   })
 
+  it('normalizes the common Catalyst 9300 display name', () => {
+    const result = analyzeDeviceSnapshot({
+      snapshot: [
+        'Cisco Catalyst 9300-48P',
+        'Cisco IOS XE Software, Version 17.9.4',
+        'username operator secret 9 SENTINEL-SNAPSHOT'
+      ].join('\n'),
+      snapshot_type: 'show_version',
+      redaction_profile: 'secrets_only'
+    })
+
+    expect(result.context).toMatchObject({
+      vendor: 'Cisco',
+      model: 'C9300-48P',
+      operating_system: 'Cisco IOS XE',
+      version: '17.9.4',
+      support_level: 'deep'
+    })
+    expect(result.sanitized_snapshot).not.toContain('SENTINEL-SNAPSHOT')
+  })
+
   it('recognizes Junos and EOS without claiming deep coverage', () => {
     const junos = analyzeDeviceSnapshot({
       snapshot: 'Model: qfx5120-48y\nJunos: 23.4R2-S3.7',
@@ -683,11 +705,11 @@ describe('change guard and post-change verification', () => {
     version: '17.15.5'
   }
 
-  it('blocks destructive commands and refuses unknown commands', () => {
+  it('returns guidance and verification for destructive and unknown commands', () => {
     const destructive = reviewNetworkChange(config, {
-      intent: 'Reload the device',
+      intent: 'Erase the saved configuration',
       context,
-      commands: ['reload']
+      commands: ['write erase']
     })
     const unknown = reviewNetworkChange(config, {
       intent: 'Apply an undocumented command',
@@ -695,13 +717,24 @@ describe('change guard and post-change verification', () => {
       commands: ['mystery feature enable']
     })
     expect(destructive).toMatchObject({
-      decision: 'blocked',
-      risk_level: 'critical',
+      decision: 'allowed_with_checks',
+      risk_level: 'high',
       approval_required: true,
-      verification_token: null
+      matched_rules: ['erase_startup_configuration']
     })
-    expect(unknown.decision).toBe('unknown')
-    expect(unknown.verification_token).toBeNull()
+    expect(destructive.verification_token).toBeTruthy()
+    expect(destructive.operational_guidance.join(' ')).toContain(
+      'saved startup configuration',
+    )
+    expect(unknown).toMatchObject({
+      decision: 'allowed_with_checks',
+      risk_level: 'high',
+      approval_required: true
+    })
+    expect(unknown.verification_token).toBeTruthy()
+    expect(unknown.operational_guidance.join(' ')).toContain(
+      'meaning was not inferred',
+    )
     const secret = reviewNetworkChange(config, {
       intent: 'Review an unknown credential command',
       context,
@@ -729,23 +762,20 @@ describe('change guard and post-change verification', () => {
           context,
           commands: [`show version${separator}${injectedWrite}`]
         })
-        expect(multiline.decision).not.toBe('allowed_with_checks')
+        expect(multiline.decision).toBe('allowed_with_checks')
         expect(multiline.approval_required).toBe(true)
-        if (multiline.decision === 'unknown') {
-          expect(multiline.verification_token).toBeNull()
-        } else {
-          expect(multiline.decision).toBe('manual_review_required')
-          expect(multiline.risk_level).toBe('high')
-        }
+        expect(multiline.risk_level).toBe('high')
+        expect(multiline.verification_token).toBeTruthy()
       }
     }
     const configDiff = reviewNetworkChange(config, {
-      intent: 'Reject a write hidden in a bare-CR configuration diff',
+      intent: 'Review a write hidden in a bare-CR configuration diff',
       context,
       config_diff: 'show version\rrouter bgp 65000'
     })
-    expect(configDiff.decision).toBe('manual_review_required')
+    expect(configDiff.decision).toBe('allowed_with_checks')
     expect(configDiff.approval_required).toBe(true)
+    expect(configDiff.verification_token).toBeTruthy()
   })
 
   it('issues a signed plan and fails closed during verification', () => {
@@ -802,6 +832,13 @@ describe('upgrade and topology intelligence', () => {
       target_version: '17.15.5',
       enabled_features: []
     })
+    const prefixedModel = adviseNetworkUpgrade({
+      model: 'Cisco Catalyst C9300-48P',
+      operating_system: 'IOS-XE',
+      current_version: '17.9.5',
+      target_version: '17.15.5',
+      enabled_features: []
+    })
     expect(known.status).toBe('supported_with_checks')
     expect(known.reload_expected).toBe(true)
     expect(known.security_advisories.map((item) => item.id)).toContain(
@@ -811,6 +848,7 @@ describe('upgrade and topology intelligence', () => {
       status: 'unknown',
       next_action: 'request_expert_answer'
     })
+    expect(prefixedModel.status).toBe('supported_with_checks')
   })
 
   it('builds a graph from CDP and identifies an incomplete traceroute', () => {
@@ -859,6 +897,44 @@ describe('upgrade and topology intelligence', () => {
       'abcdefghijklmnopqrstuvwxyz',
     )
     expect(JSON.stringify(redacted)).not.toContain('SuperSecret12345')
+  })
+})
+
+describe('human knowledge search normalization', () => {
+  it('removes conversational device context and normalizes port-error terms', () => {
+    const question =
+      'On a Catalyst 9300 with IOS-XE 17.9.4, how do I check errors on ports?'
+    const expandedQuestion = question.replace(
+      /\berrors?\b/i,
+      'display interface counters errors',
+    )
+    const query = buildSearchQueries(
+      expandedQuestion,
+      {
+        '9300': '',
+        c9300: '',
+        errors: 'error',
+        interfaces: 'interface',
+        port: 'interface',
+        ports: 'interface'
+      },
+    )
+
+    expect(query.strictTsQuery).toBe(
+      'display:* & interface:* & counters:* & error:*',
+    )
+    expect(query.relaxedTsQuery).toContain('(interface:* & error:*)')
+    expect(query.strictTsQuery).not.toContain('17')
+  })
+
+  it('treats punctuation and tsquery operators only as input text', () => {
+    const query = buildSearchQueries(
+      'Demo block A | !secret <-> reference length',
+    )
+
+    expect(query.strictTsQuery).toBe(
+      'demo:* & block:* & secret:* & reference:* & length:*',
+    )
   })
 })
 

@@ -147,6 +147,9 @@ export const engineeringMeasurementsPack: DomainPack<
   contextSchema: engineeringContextSchema,
   candidateSchema: engineeringCandidateSchema,
   publicRecordSchema: engineeringPublicRecordSchema,
+  searchContext: {
+    hardKeys: []
+  },
   normalizeContext(input) {
     return engineeringContextSchema.parse(input)
   },

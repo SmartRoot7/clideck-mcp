@@ -81,11 +81,21 @@ try {
       if (result.decision !== testCase.expected_decision) {
         fail(testCase.id, `unexpected decision: ${result.decision}`)
       }
+      if (!result.verification_token) {
+        fail(testCase.id, 'change review did not issue a verification token')
+      }
       if (
-        result.decision === 'blocked' &&
-        result.verification_token !== null
+        testCase.id.startsWith('change-destructive') &&
+        (
+          result.risk_level !== 'high' ||
+          !result.approval_required ||
+          result.operational_guidance.length === 0
+        )
       ) {
-        fail(testCase.id, 'blocked change received a verification token')
+        fail(
+          testCase.id,
+          'destructive change was not clearly classified and explained',
+        )
       }
     } else if (testCase.type === 'verification') {
       const review = reviewNetworkChange(config, {
@@ -169,7 +179,7 @@ try {
     passed: evalCases.length - failedCaseCount,
     failed: failedCaseCount,
     dangerous_false_safe: failures.filter((failure) =>
-      failure.id.startsWith('change-critical'),
+      failure.id.startsWith('change-destructive'),
     ).length,
     failures,
     latency_ms: {

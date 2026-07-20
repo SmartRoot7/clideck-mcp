@@ -31,10 +31,7 @@ import {
   queryDomainKnowledgeOutputSchema
 } from '../domain/domain-tool-schemas.js'
 import { searchKnowledge } from '../domain/knowledge.js'
-import {
-  analyzeDeviceSnapshot,
-  sanitizeSnapshot
-} from '../domain/snapshot.js'
+import { analyzeDeviceSnapshot } from '../domain/snapshot.js'
 import { recordPublicUsage } from '../domain/telemetry.js'
 import { analyzeNetworkPath } from '../domain/topology.js'
 import {
@@ -581,7 +578,7 @@ export function createPublicMcpServer(
     {
       title: 'Review Network Change',
       description:
-        'Fail-closed deterministic review of IOS-XE commands or a configuration diff. It never executes a command.',
+        'Deterministic advisory review of commands or a configuration diff. It always returns available guidance and never executes a command.',
       inputSchema: changeReviewInputSchema,
       outputSchema: changeReviewOutputSchema,
       annotations: {
@@ -595,32 +592,6 @@ export function createPublicMcpServer(
         dependencies.database,
         input.context,
       )
-      if (
-        resolved.vendor_slug !== 'cisco' ||
-        resolved.operating_system_slug !== 'ios-xe'
-      ) {
-        return {
-          decision: 'unknown' as const,
-          risk_level: 'critical' as const,
-          blast_radius: [],
-          matched_rules: [],
-          unknown_commands: (input.commands ?? []).map((command) =>
-            sanitizeSnapshot(command.slice(0, 240), 'secrets_only').sanitized
-          ),
-          prechecks: [],
-          stop_conditions: [
-            'Stop: deep change-review coverage is currently limited to Cisco IOS-XE.'
-          ],
-          verification_plan: [],
-          rollback: [],
-          approval_required: true,
-          verification_token: null,
-          verification_token_expires_at: null,
-          limitations: [
-            'Create an expert task instead of applying unreviewed commands.'
-          ]
-        }
-      }
       return reviewNetworkChange(dependencies.config, {
         ...input,
         context: {

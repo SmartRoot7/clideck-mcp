@@ -163,12 +163,14 @@ export function fingerprintSnapshot(
       snapshot,
     )
   if (cisco) {
+    const catalystModel =
+      snapshot.match(/\bCatalyst\s+(9300[A-Z0-9-]*)\b/i)?.[1] ?? null
     const model =
       snapshot.match(
         /(?:Model [Nn]umber\s*:|cisco\s+)(C9[0-9A-Z-]{3,})(?:\s|\(|$)/i,
       )?.[1]?.toUpperCase() ??
       snapshot.match(/\b(C9300[A-Z0-9-]*)\b/i)?.[1]?.toUpperCase() ??
-      null
+      (catalystModel ? `C${catalystModel.toUpperCase()}` : null)
     const version =
       snapshot.match(/Cisco IOS XE Software,\s*Version\s+([A-Za-z0-9().-]+)/i)
         ?.[1] ??

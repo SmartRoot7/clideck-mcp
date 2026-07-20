@@ -191,15 +191,15 @@ const changeCases: EvalCase[] = [
       id: `change-high-${index + 1}`,
       type: 'change' as const,
       commands: [command],
-      expected_decision: 'manual_review_required' as const
+      expected_decision: 'allowed_with_checks' as const
     }),
   ),
   ...['write erase', 'format flash:', 'crypto key zeroize rsa', 'no aaa new-model', 'reload'].map(
     (command, index) => ({
-      id: `change-critical-${index + 1}`,
+      id: `change-destructive-${index + 1}`,
       type: 'change' as const,
       commands: [command],
-      expected_decision: 'blocked' as const
+      expected_decision: 'allowed_with_checks' as const
     }),
   )
 ]

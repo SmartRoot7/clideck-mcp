@@ -5,7 +5,10 @@ export function adviseNetworkUpgrade(input: {
   target_version: string
   enabled_features: string[]
 }) {
-  const model = input.model.toUpperCase()
+  const model = input.model
+    .toUpperCase()
+    .replace(/^CISCO\s+/, '')
+    .replace(/^CATALYST\s+/, '')
   const isC9300 = /^C9300(?:L|X|LM)?(?:-|$)/.test(model)
   const isIosXe = /IOS[\s-]?XE/i.test(input.operating_system)
   const supportedCurrent =

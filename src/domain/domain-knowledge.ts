@@ -10,6 +10,7 @@ import {
 
 import type { DatabaseClient } from '../db.js'
 import { getDomainPackRegistry } from './domain-packs.js'
+import { buildSearchQueries } from './search-query.js'
 
 type DatabaseQueryable = Pick<DatabaseClient, 'query'>
 
@@ -383,8 +384,15 @@ export async function searchDomainKnowledge(
   await assertInstalledPack(client, input.domainId)
   const context = pack.normalizeContext(input.context ?? {})
   const limit = Math.max(1, Math.min(input.limit ?? 5, 20))
+  const hardContext = Object.fromEntries(
+    (pack.searchContext?.hardKeys ?? []).flatMap((key) =>
+      Object.hasOwn(context, key) ? [[key, context[key]]] : []
+    ),
+  )
+  const search = buildSearchQueries(input.question)
   const result = await client.query<DomainKnowledgeRow>(
-    `SELECT
+    `WITH scored AS MATERIALIZED (
+     SELECT
        kr.id AS revision_id,
        kr.public_ref,
        kr.revision_number,
@@ -432,10 +440,15 @@ export async function searchDomainKnowledge(
        (
          ts_rank_cd(
            kr.search_document,
-           websearch_to_tsquery('simple', $2)
-         ) * 10 +
+           to_tsquery('simple', $5)
+         ) * 8 +
+         ts_rank_cd(
+           kr.search_document,
+           to_tsquery('simple', $6)
+         ) * 4 +
          similarity(lower(kr.title), lower($2)) * 2 +
-         similarity(lower(kr.summary), lower($2))
+         similarity(lower(kr.summary), lower($2)) +
+         CASE WHEN kr.domain_context @> $3::jsonb THEN 3 ELSE 0 END
        ) AS relevance
      FROM active_knowledge_state release_item
      JOIN knowledge_items ki
@@ -459,18 +472,29 @@ export async function searchDomainKnowledge(
      ) conflicts ON true
      WHERE ki.domain_id = $1
        AND kr.domain_id = $1
-       AND kr.domain_context @> $3::jsonb
+       AND kr.domain_context @> $4::jsonb
        AND (
-         kr.search_document @@ websearch_to_tsquery('simple', $2) OR
+         kr.search_document @@ to_tsquery('simple', $5) OR
+         kr.search_document @@ to_tsquery('simple', $6) OR
          lower(kr.title) % lower($2) OR
          lower(kr.summary) % lower($2)
        )
-     ORDER BY relevance DESC, kr.quality_score DESC, kr.id
-     LIMIT $4`,
+     )
+     SELECT *
+     FROM scored
+     WHERE relevance >= greatest(
+       coalesce((SELECT max(relevance) * 0.5 FROM scored), 0),
+       0.01
+     )
+     ORDER BY relevance DESC, quality_score DESC, revision_id
+     LIMIT $7`,
     [
       input.domainId,
-      input.question.trim(),
+      search.normalizedQuestion,
       JSON.stringify(context),
+      JSON.stringify(hardContext),
+      search.strictTsQuery,
+      search.relaxedTsQuery,
       limit
     ],
   )

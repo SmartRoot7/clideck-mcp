@@ -101,10 +101,7 @@ import {
   upgradeAdvisorInputSchema
 } from '../domain/schemas.js'
 import { activateKnowledgeRelease } from '../domain/publication.js'
-import {
-  analyzeDeviceSnapshot,
-  sanitizeSnapshot
-} from '../domain/snapshot.js'
+import { analyzeDeviceSnapshot } from '../domain/snapshot.js'
 import {
   getPublicStats,
   recordPublicUsage
@@ -672,32 +669,6 @@ export function createApiApp(dependencies: ApiDependencies) {
     )
     if (!parsed.success) return context.json({ error: 'invalid_input' }, 400)
     const resolved = await resolveNetworkContext(database, parsed.data.context)
-    if (
-      resolved.vendor_slug !== 'cisco' ||
-      resolved.operating_system_slug !== 'ios-xe'
-    ) {
-      return context.json({
-        decision: 'unknown',
-        risk_level: 'critical',
-        blast_radius: [],
-        matched_rules: [],
-        unknown_commands: (parsed.data.commands ?? []).map((command) =>
-          sanitizeSnapshot(command.slice(0, 240), 'secrets_only').sanitized
-        ),
-        prechecks: [],
-        stop_conditions: [
-          'Stop: deep change-review coverage is currently limited to Cisco IOS-XE.'
-        ],
-        verification_plan: [],
-        rollback: [],
-        approval_required: true,
-        verification_token: null,
-        verification_token_expires_at: null,
-        limitations: [
-          'Create an expert task instead of applying unreviewed commands.'
-        ]
-      })
-    }
     return context.json(
       reviewNetworkChange(config, {
         ...parsed.data,
