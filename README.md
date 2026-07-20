@@ -1,171 +1,315 @@
 # CliDeck MCP
 
-CliDeck MCP is an **agent-native framework for verified, continuously updated
-MCP knowledge systems**.
+## Verifiable external memory for AI agents
 
-It combines deterministic retrieval, immutable releases, internal provenance,
-quality gates, and a continuous Codex-powered research pipeline. The built-in
-**Network Knowledge** pack is the first production implementation.
-**Engineering Measurements** is a small project-authored proof that the same
-core can support a different technical domain without turning network columns
-into a fake universal schema.
+CliDeck MCP is an open-source framework for building verified, continuously
+updated knowledge systems that AI agents can access through MCP.
+
+A model should not have to memorize every version of every technical manual.
+It needs strong fundamentals, reasoning ability, and the ability to use tools.
+Exact, specialized, and rapidly changing facts can live in an external
+knowledge system and be updated without retraining the model.
+
+CliDeck MCP implements this architecture:
+
+- known questions are answered deterministically, without calling an AI model;
+- unknown questions become high-priority learning tasks;
+- Codex discovers and analyzes official documentation;
+- independent validation passes check applicability and quality;
+- new knowledge is published as immutable revisions;
+- published knowledge is immediately reusable without AI.
+
+**Network Knowledge** is the first production Domain Pack. **Engineering
+Measurements** demonstrates that the same core can support other technical and
+scientific domains.
 
 - Public MCP: `https://mcp.clideck.com/mcp`
-- Live read-only operations demo: `https://mcp.clideck.com/demo`
+- Live read-only demo: `https://mcp.clideck.com/demo`
 - Product page: `https://clideck.com/software/mcp`
-- Runtime: Node.js 24, TypeScript, Hono, Zod 4, MCP TypeScript SDK 1.29
-- Storage: PostgreSQL 16, full-text search, and `pg_trgm`
-- License: Apache-2.0 for code and project-authored fixtures
-
-Known answers never call an AI model. The read path is deterministic,
-version-aware, fast, and explicit when knowledge is missing. AI is used
-asynchronously to discover, analyze, and independently verify candidates before
-the ordinary worker can publish an immutable release.
+- Code license: Apache-2.0
 
 ## Why this project exists
 
-Most knowledge systems either put an LLM in every answer path or require a
-custom ingestion application for every subject. CliDeck MCP separates the
-stable safety/release core from subject-specific **Domain Packs**:
+A general-purpose model may understand networking fundamentals while still
+having outdated or incomplete knowledge about exact commands, operating-system
+versions, restrictions, and operational procedures. Reading hundreds of
+manuals during training does not guarantee a precise answer for a particular
+device and software release.
 
-- Core owns immutable revisions, releases, provenance, conflicts, confidence
-  thresholds, audit, and publication policy.
-- A Domain Pack owns its context schema, record types, payload schema,
-  deterministic validation, and core mapping.
-- Optional providers can add artifacts, spatial data, relations, or lab
-  validation without putting credentials or domain assumptions into core.
+CliDeck MCP separates responsibilities:
 
-Runs through your existing local Codex setup. No separate model API integration
-is required. Subject to your Codex plan and usage limits.
+- the model understands the question, reasons, and selects the appropriate
+  tool;
+- MCP stores exact, structured, and version-aware knowledge;
+- a Domain Pack enforces the rules of its subject area;
+- the core manages publication, history, trust, conflicts, and rollback.
 
-That means a developer can use their authenticated local Codex installation to
-grow a private or public knowledge system without first wiring a separate model
-API. This is an operating option, not a promise of free or unlimited usage.
+This architecture may reduce the need to encode every version of specialized
+documentation directly into model weights. We do not claim proven pretraining
+cost reductions; that would require separate experiments. The practical
+benefit already exists: exact knowledge can be validated and updated
+independently of the model.
 
-## What is included
+## What makes CliDeck MCP different
 
-### Network Knowledge
+### Deterministic answers
 
-The production pack understands vendor, product family, model, operating
-system, version scope, CLI mode, risk, verification, and rollback. Its public
-tools are:
+A known question does not invoke an LLM. PostgreSQL performs version-aware
+retrieval, the Domain Pack validates the result, and MCP returns a structured
+answer.
 
-- `resolve_network_context`
-- `query_network_knowledge`
-- `get_network_workflow`
-- `request_expert_answer`
-- `get_expert_task`
-- `continue_expert_task`
-- `cancel_expert_task`
-- `submit_feedback`
-- `analyze_device_snapshot`
-- `review_network_change`
-- `verify_network_change`
-- `advise_network_upgrade`
-- `analyze_network_path`
+Known answers are therefore:
 
-CliDeck MCP never connects to a network device and never executes a command.
-Raw CLI is processed in memory. An opted-in example is redacted again, isolated,
-expires after 30 days, and is never auto-published.
+- fast;
+- repeatable;
+- inexpensive;
+- verifiable;
+- independent of model-generation variance.
 
-### Generic Domain Pack tools
+If applicable knowledge is unavailable, the system returns `unknown` instead
+of guessing.
 
-These additive tools work through the same release engine:
+### Learning from unknown questions
 
-- `list_knowledge_domains`
-- `describe_knowledge_domain`
-- `query_domain_knowledge`
+An unknown question becomes a maximum-priority knowledge demand:
 
-The generic query validates both its input context and returned record through
-the selected pack. Unknown domains, invalid context, and missing knowledge are
-reported explicitly instead of guessed.
+```text
+Unknown question
+      ↓
+Official-source discovery
+      ↓
+Download and deterministic conversion
+      ↓
+Chunking and extraction
+      ↓
+Independent verification and Deep Review
+      ↓
+Immutable publication
+      ↓
+Instant deterministic reuse
+```
 
-### Engineering Measurements
+A demand is considered learned only after the same deterministic query finds
+an active published revision.
 
-The proof pack contains 16 project-authored records across measurements,
-tolerances, procedures, and conversions. Exact decimal values remain strings,
-units are normalized, and tolerance bounds are checked deterministically. It is
-small by design: it proves the extension contract rather than pretending to be
-a scientific reference database.
+### A continuously running knowledge factory
 
-## Truthful public demo
+The pipeline runs continuously while enabled. Mechanical stages do not consume
+AI tokens:
 
-`/demo` is not a mock dashboard. It runs the exact same compiled
-`apps/admin` frontend bundle as the LAN console:
+- downloading;
+- PDF, HTML, and text conversion;
+- OCR;
+- chunking;
+- hashing;
+- indexing;
+- publication.
 
-- the same 18 pages, navigation, JS, CSS, charts, tables, filters, tooltips,
-  forms, and confirmation dialogs;
-- the same real operational records and totals from the active production
-  database;
-- no login or admin session;
-- all controls remain visible and interactive; dialog-based actions keep their
-  full confirmation flow, while Pause/Resume remains a direct control;
-- the public role turns the final action into a local read-only no-op and never
-  sends a mutation request.
+Luna is used only for work that requires semantic reasoning:
 
-The server replaces source identity — document/manual titles, source URLs,
-locators, evidence fragments, content hashes, and unstructured text that may
-repeat those values — with the literal value `XXXXXXXX` before JSON reaches the
-browser. Tenant ownership and internal task linkage are omitted. IDs, statuses,
-timestamps, counters, releases, Luna runs, tokens, and the rest of the safe
-operational model stay real. Values are not hidden with CSS blur. `/admin` and
-`/demo` select different RBAC runtimes around one `OperationsApp`; there is only
-one visual implementation and one production frontend artifact. The public API
-exposes matching GET models and no mutation route.
+- discovering official sources;
+- analyzing ambiguous material;
+- independent verification;
+- Deep Review;
+- expert tasks.
 
-The Monitor section includes a paginated MCP Requests journal. The local
-super-admin sees sanitized questions, safe answers, caller IP, outcome, latency,
-and learning status. The public demo renders the identical page, but the server
-replaces caller IP and request content with `XXXXXXXX`; safe CliDeck answers
-remain visible. Retention defaults to 30 days and is configured with
-`MCP_REQUEST_LOG_RETENTION_DAYS`.
+Up to four isolated executors lease work atomically. The pipeline can be paused
+and resumed without duplicating tasks or published knowledge.
 
-When a deterministic Network query or workflow returns `unknown`, the server
-deduplicates that question and context into a highest-priority knowledge demand.
-Its priority is preserved through official-source discovery, download,
-conversion, chunking, analysis, verification, and publication. A demand is
-marked learned only after the same deterministic query finds an active revision.
+### No separate model API integration required
+
+The pipeline can run through an existing authenticated local Codex
+installation.
+
+> Runs through your existing local Codex setup. No separate model API
+> integration is required. Subject to your Codex plan and usage limits.
+
+This allows developers to use available capacity in their Codex plan to grow a
+private or public knowledge system without first integrating and funding a
+separate model API.
+
+This is an operating option, not a promise of free or unlimited usage.
+
+### Universal Domain Packs
+
+CliDeck MCP is not limited to network equipment. Subject-specific behavior
+lives in Domain Packs.
+
+The core owns:
+
+- immutable revisions;
+- releases and rollback;
+- provenance;
+- confidence thresholds;
+- conflict handling;
+- audit;
+- publication policy.
+
+A Domain Pack defines:
+
+- domain context;
+- record types;
+- data schemas;
+- normalization;
+- deterministic validation;
+- mapping into a universal knowledge revision.
+
+Developers can scaffold their own pack:
+
+```bash
+pnpm domain:create -- --id marine-science --name "Marine Science"
+pnpm domain:validate -- --id marine-science
+```
+
+The scaffolder creates a manifest, schemas, mapper, fixtures, and tests. Codex
+can help adapt a fork to a new subject without rewriting the trusted
+publication and release core.
+
+Optional providers can add object storage, spatial data, relation graphs, or
+domain-specific laboratory validation.
+
+## Network Knowledge
+
+The first production pack stores network knowledge with explicit context:
+
+- vendor;
+- product family and model;
+- operating system;
+- version scope;
+- CLI mode;
+- risks and prerequisites;
+- verification;
+- rollback;
+- limitations and conflicts.
+
+The public MCP supports:
+
+- device-context resolution;
+- command and diagnostic retrieval;
+- complete operational workflows;
+- expert research tasks;
+- CLI snapshot detection and redaction;
+- planned-change review;
+- post-change verification;
+- upgrade guidance;
+- CDP, LLDP, route, traceroute, and topology analysis;
+- generic queries across other Domain Packs.
+
+Dangerous commands are not hidden. The system returns the available
+information while clearly explaining risk, prerequisites, verification, and
+rollback.
+
+CliDeck MCP provides guidance but never connects to a network device and never
+executes commands.
+
+## Verifiable knowledge
+
+Every published revision must pass:
+
+- Domain Pack schema validation;
+- applicability and version checks;
+- deterministic risk classification;
+- conflict detection;
+- confidence and quality thresholds;
+- internal provenance validation;
+- additional requirements for dangerous procedures.
+
+An official vendor document is sufficient evidence when a specific fragment
+directly supports the published claim.
+
+Published revisions are immutable. Updated information creates a new revision,
+while releases allow the active knowledge state to be switched or rolled back
+atomically.
+
+## Simple infrastructure
+
+PostgreSQL acts as:
+
+- the knowledge store;
+- the full-text search engine;
+- the task queue;
+- the lease manager;
+- the revision store;
+- the release engine;
+- the audit store.
+
+Redis, a vector database, and an external model API are not required
+dependencies.
+
+## Privacy and security
+
+Public MCP responses never expose:
+
+- source URLs;
+- manual titles;
+- evidence fragments;
+- internal source IDs;
+- acquisition-pipeline details;
+- credentials or access tokens.
+
+Minimal internal provenance remains available to the local `super_admin` for
+verification and audit.
+
+Raw CLI is processed in memory. A user example is stored only after explicit
+opt-in, redacted again, isolated, and automatically removed after its retention
+period. It is never published automatically.
+
+## A truthful public demo
+
+`https://mcp.clideck.com/demo` is not a mock dashboard or a separate marketing
+implementation.
+
+The demo uses:
+
+- the same React frontend;
+- the same pages;
+- the same components;
+- the same charts and tables;
+- real production counters;
+- real pipeline and executor states;
+- the same administrative dialogs.
+
+The only differences are enforced by the `public_demo` role:
+
+- source identity and private values are replaced server-side with `XXXXXXXX`;
+- final mutations are not sent;
+- the database, pipeline, and releases cannot be changed.
+
+Sensitive values are removed by the server, not hidden with CSS blur.
 
 ![The real CliDeck MCP production operations dashboard](docs/assets/clideck-mcp-demo.jpg)
 
-## Architecture
+## Current status
 
-```text
-public MCP clients ──> API ──> deterministic domain search ──> active release
-                         │
-                         └──> expert task queue
+The production instance contains more than 66,000 active knowledge revisions.
+Live statistics and current pipeline activity are available in the public demo.
 
-coverage planner ──> discover ──> acquire ──> convert ──> chunk
-                                                  │
-                                                  v
-                                           Luna analyze
-                                                  │
-                                                  v
-                                           Luna verify
-                                                  │
-                                                  v
-ordinary worker ─────────────────────────> immutable publish
+The product evaluation suite contains 250 deterministic scenarios. The current
+result is:
+
+- 250 passed;
+- 0 failed;
+- 0 dangerous false-safe results.
+
+Deep Network Pack coverage is currently concentrated on Cisco Catalyst and
+IOS-XE. Other vendors can be recognized, but their verified knowledge coverage
+varies. The system prefers to return a limitation or `unknown` rather than
+generate an unsupported answer.
+
+Production knowledge and third-party documents are not distributed with the
+open-source repository. The repository contains the framework, schemas,
+scaffolder, tests, and only project-authored or explicitly permitted fixtures.
+
+## Connect
+
+Add the hosted MCP server to Codex:
+
+```bash
+codex mcp add clideck --url https://mcp.clideck.com/mcp
+codex mcp list
 ```
 
-PostgreSQL is the only stateful dependency. Redis, vector databases, and
-external model APIs are not required. Mechanical download, conversion, OCR,
-chunking, hashing, indexing, and publication do not consume AI tokens.
-
-The pipeline runs continuously while enabled. Up to four isolated Luna
-executors atomically lease expert, verification, analysis, or discovery work.
-Pause stops new token-consuming work; Resume continues idempotently.
-
-See [architecture](docs/ARCHITECTURE.md), [security](docs/SECURITY.md), and the
-[Build Week execution log](docs/BUILD_WEEK_EXECUTION_PLAN.md).
-
-## Quick start
-
-Prerequisites:
-
-- Node.js 24
-- pnpm 10 or newer
-- PostgreSQL 16
-- Docker and Docker Compose if you want the included development database
+Run a local instance:
 
 ```bash
 cp .env.example .env
@@ -177,41 +321,14 @@ pnpm build
 pnpm dev:api
 ```
 
-Run the deterministic worker in a second terminal:
+The local MCP endpoint is:
 
-```bash
-pnpm dev:worker
+```text
+http://127.0.0.1:8787/mcp
 ```
 
-Local endpoints:
-
-- MCP: `http://127.0.0.1:8787/mcp`
-- health: `http://127.0.0.1:8787/health`
-- readiness: `http://127.0.0.1:8787/ready`
-- restricted researcher MCP: `http://127.0.0.1:8788/mcp`
-- local admin in development: `http://127.0.0.1:8790/admin`
-
-The included Docker credentials are development-only. Production must use
-separate API, worker, researcher, admin, and quarantine roles.
-
-## Connect from Codex
-
-Codex supports ChatGPT browser login through `codex login`; an API key is not
-required for that login mode. Add the hosted Streamable HTTP server:
-
-```bash
-codex mcp add clideck --url https://mcp.clideck.com/mcp
-codex mcp list
-```
-
-For a local instance:
-
-```bash
-codex mcp add clideck-local --url http://127.0.0.1:8787/mcp
-```
-
-Other MCP clients can connect to the same endpoint with their normal
-Streamable HTTP configuration.
+CliDeck MCP uses Streamable HTTP and is not limited to CliDeck or Codex
+clients. Any compatible MCP client can connect to it.
 
 ## Create your own Domain Pack
 
@@ -222,51 +339,24 @@ pnpm domain:validate -- --id marine-science
 pnpm --filter @clideck/domain-marine-science test
 ```
 
-The scaffolder creates strict schemas, a mapper, a fixture, tests, and a
-manifest compatible with `@clideck/domain-kit`. Then register the local pack
-explicitly and add an additive catalog migration. Core never downloads and
-executes pack code from a URL or an untrusted package.
-
-Read:
+Read the detailed guides:
 
 - [Domain Pack authoring](docs/DOMAIN_PACK_AUTHORING.md)
 - [Adapting a fork with Codex](docs/FORKING_WITH_CODEX.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Security](docs/SECURITY.md)
 - [Data and licensing notice](DATA-NOTICE.md)
 
-## LAN operations console
+## License and data
 
-The full console lives at `https://clideck-mcp.lan/admin`. It is served by a
-separate loopback process behind LAN-only TLS. Authentication is one local
-`super_admin` account with a scrypt password hash and a 12-hour Secure,
-HttpOnly, SameSite-Strict session.
+Apache-2.0 applies to the source code and project-authored sample fixtures.
 
-Run `sudo pnpm admin:setup` once, then follow the
-[LAN admin runbook](docs/lan-admin-operations.md). The public MCP endpoint does
-not expose this listener.
+It does not automatically grant rights to:
 
-## Verification
+- third-party documents;
+- production knowledge;
+- private manuals;
+- user data;
+- datasets imported by an operator.
 
-```bash
-pnpm check
-DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/clideck_mcp_test \
-  pnpm test
-pnpm build
-pnpm eval
-```
-
-The integration database must be isolated and migrated. `pnpm eval` runs 250
-deterministic product/security cases. The required dangerous false-safe result
-is zero.
-
-## Data, provenance, and license
-
-Public MCP answers deliberately exclude source URLs, manual titles, quotations,
-evidence fragments, and internal acquisition details. Minimal internal
-provenance is nevertheless mandatory for every published revision and remains
-restricted to `super_admin`.
-
-The Apache-2.0 license covers source code and explicitly project-authored sample
-fixtures. It does not grant rights to third-party documents, private production
-knowledge, user data, or an operator's imported dataset. Production knowledge
-and source documents are not distributed in this repository. See
-[DATA-NOTICE.md](DATA-NOTICE.md).
+See [DATA-NOTICE.md](DATA-NOTICE.md) for details.
