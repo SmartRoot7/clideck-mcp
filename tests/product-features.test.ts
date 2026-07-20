@@ -213,7 +213,8 @@ describe('deterministic source processing', () => {
     const leasedPayload = withLeasedKnowledgeDemand(storedTaskPayload, {
       question: 'Diagnose MACsec MKA rekey failure on Catalyst 9300',
       tool_name: 'query_network_knowledge',
-      context: { vendor_slug: 'cisco', operating_system_slug: 'ios-xe' }
+      context: { vendor_slug: 'cisco', operating_system_slug: 'ios-xe' },
+      excluded_source_urls: ['https://www.cisco.com/exhausted-source']
     })
 
     expect(storedTaskPayload).not.toHaveProperty('knowledge_demand')
@@ -222,7 +223,8 @@ describe('deterministic source processing', () => {
       knowledge_demand: {
         question: 'Diagnose MACsec MKA rekey failure on Catalyst 9300',
         tool_name: 'query_network_knowledge',
-        context: { vendor_slug: 'cisco', operating_system_slug: 'ios-xe' }
+        context: { vendor_slug: 'cisco', operating_system_slug: 'ios-xe' },
+        excluded_source_urls: ['https://www.cisco.com/exhausted-source']
       }
     })
   })

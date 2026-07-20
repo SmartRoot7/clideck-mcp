@@ -573,6 +573,7 @@ type LeasedKnowledgeDemand = {
   question: string
   tool_name: string
   context: Record<string, unknown>
+  excluded_source_urls: string[]
 }
 
 /**
@@ -591,6 +592,7 @@ export function withLeasedKnowledgeDemand(
       question: demand.question,
       tool_name: demand.tool_name,
       context: demand.context,
+      excluded_source_urls: demand.excluded_source_urls,
     },
   }
 }
@@ -1703,21 +1705,6 @@ async function queueDemandDiscoveryWork(
   )
   const row = demand.rows[0]
   if (!row) return false
-  const exhaustedSources = await client.query<{ canonical_url: string }>(
-    `SELECT canonical_url
-     FROM source_candidates
-     WHERE knowledge_demand_id = $1
-       AND status IN (
-         'completed',
-         'completed_with_exceptions',
-         'duplicate',
-         'rejected',
-         'failed'
-       )
-     ORDER BY completed_at DESC NULLS LAST, updated_at DESC
-     LIMIT 20`,
-    [row.id],
-  )
   const taskId = await insertTask(client, {
     type: 'source_discovery',
     stage: 'discover',
@@ -1739,10 +1726,7 @@ async function queueDemandDiscoveryWork(
       knowledge_demand: {
         question: row.question,
         tool_name: row.tool_name,
-        context: row.context,
-        excluded_source_urls: exhaustedSources.rows.map(
-          (source) => source.canonical_url,
-        )
+        context: row.context
       },
       requirements: {
         public_https_only: true,
@@ -3039,14 +3023,34 @@ export async function claimPipelineTask(
     }
 
     if (task.knowledge_demand_id) {
-      const demand = await client.query<LeasedKnowledgeDemand>(
+      const demand = await client.query<Omit<LeasedKnowledgeDemand, 'excluded_source_urls'>>(
         `SELECT question, tool_name, context
          FROM knowledge_demands
          WHERE id = $1`,
         [task.knowledge_demand_id],
       )
       if (demand.rows[0]) {
-        payload = withLeasedKnowledgeDemand(payload, demand.rows[0])
+        const exhaustedSources = await client.query<{ canonical_url: string }>(
+          `SELECT canonical_url
+           FROM source_candidates
+           WHERE knowledge_demand_id = $1
+             AND status IN (
+               'completed',
+               'completed_with_exceptions',
+               'duplicate',
+               'rejected',
+               'failed'
+             )
+           ORDER BY completed_at DESC NULLS LAST, updated_at DESC
+           LIMIT 20`,
+          [task.knowledge_demand_id],
+        )
+        payload = withLeasedKnowledgeDemand(payload, {
+          ...demand.rows[0],
+          excluded_source_urls: exhaustedSources.rows.map(
+            (source) => source.canonical_url,
+          ),
+        })
       }
     }
 
