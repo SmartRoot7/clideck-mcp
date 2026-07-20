@@ -83,6 +83,8 @@ Ready when active Deep Review work can no longer produce an empty page.
 - `[x]` Verify demo response redaction in JSON and the shared browser UI,
   including protection against question-search inference.
 - `[x]` Verify request analytics reconciliation and Active Sources fallback.
+- `[x]` Add a deterministic semantic-term floor so a context-only FTS match
+  cannot turn an unsupported question into a misleading answer.
 - `[~]` Exercise unknown → official discovery → publication → instant reuse.
 - `[ ]` Deploy only with `./ops/scripts/deploy-production.sh`.
 - `[x]` Do not push GitHub until explicitly requested by the user.

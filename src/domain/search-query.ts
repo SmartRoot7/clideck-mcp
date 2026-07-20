@@ -62,6 +62,10 @@ export function buildSearchQueries(
 
   return {
     normalizedQuestion,
+    // These are normalized, user-intent terms only. Callers can use them as
+    // a deterministic relevance floor after candidate retrieval; the tsquery
+    // strings below remain optimized for PostgreSQL FTS.
+    tokens,
     strictTsQuery: prefixTokens.join(' & '),
     relaxedTsQuery: relaxedQuery(prefixTokens)
   }

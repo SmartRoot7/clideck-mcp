@@ -390,6 +390,14 @@ export async function searchDomainKnowledge(
     ),
   )
   const search = buildSearchQueries(input.question)
+  const minimumSemanticMatches = Math.min(2, search.tokens.length)
+  if (minimumSemanticMatches === 0) {
+    return {
+      domain_id: input.domainId,
+      context: jsonObjectSchema.parse(context),
+      records: []
+    }
+  }
   const result = await client.query<DomainKnowledgeRow>(
     `WITH scored AS MATERIALIZED (
      SELECT
@@ -449,7 +457,15 @@ export async function searchDomainKnowledge(
          similarity(lower(kr.title), lower($2)) * 2 +
          similarity(lower(kr.summary), lower($2)) +
          CASE WHEN kr.domain_context @> $3::jsonb THEN 3 ELSE 0 END
-       ) AS relevance
+       ) AS relevance,
+       (
+         SELECT count(*)::integer
+         FROM unnest($8::text[]) AS semantic_term
+         WHERE kr.search_document @@ to_tsquery(
+           'simple',
+           semantic_term || ':*'
+         )
+       ) AS semantic_matches
      FROM active_knowledge_state release_item
      JOIN knowledge_items ki
        ON ki.id = release_item.knowledge_item_id
@@ -486,6 +502,7 @@ export async function searchDomainKnowledge(
        coalesce((SELECT max(relevance) * 0.5 FROM scored), 0),
        0.01
      )
+       AND semantic_matches >= $9
      ORDER BY relevance DESC, quality_score DESC, revision_id
      LIMIT $7`,
     [
@@ -495,7 +512,9 @@ export async function searchDomainKnowledge(
       JSON.stringify(hardContext),
       search.strictTsQuery,
       search.relaxedTsQuery,
-      limit
+      limit,
+      search.tokens,
+      minimumSemanticMatches
     ],
   )
 

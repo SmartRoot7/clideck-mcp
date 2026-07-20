@@ -1582,6 +1582,22 @@ describeIntegration('PostgreSQL integration', () => {
     )
   })
 
+  it('returns unknown instead of an unrelated context-only network match', async () => {
+    const context = await resolveNetworkContext(database, {
+      vendor: 'Juniper',
+      model: 'EX4400',
+      operating_system: 'Junos',
+      version: '23.4R1'
+    })
+    const answers = await searchKnowledge(
+      database,
+      'Configure EVPN multihoming with ESI-LAG on Juniper EX4400 running Junos 23.4R1',
+      context,
+      3,
+    )
+    expect(answers).toEqual([])
+  })
+
   it('preserves a broad knowledge item when researcher scope is narrower', async () => {
     const unique = randomUUID().replaceAll('-', '')
     const version = `17.15.${Number.parseInt(unique.slice(0, 4), 16)}`

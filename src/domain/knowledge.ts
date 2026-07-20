@@ -50,6 +50,28 @@ type ConflictRow = {
   description: string
 }
 
+function normalizedTerms(value: string | null | undefined): Set<string> {
+  return new Set(value?.toLowerCase().match(/[a-z0-9]+/g) ?? [])
+}
+
+function semanticSearchTerms(
+  tokens: readonly string[],
+  context: InternalResolvedContext,
+): string[] {
+  // Vendor, OS and resolved platform are hard applicability filters. They
+  // must not by themselves make an unrelated command look relevant.
+  const contextTerms = new Set([
+    ...normalizedTerms(context.vendor),
+    ...normalizedTerms(context.vendor_slug),
+    ...normalizedTerms(context.model),
+    ...normalizedTerms(context.platform_slug),
+    ...normalizedTerms(context.operating_system),
+    ...normalizedTerms(context.operating_system_slug),
+    ...normalizedTerms(context.version)
+  ])
+  return tokens.filter((token) => !contextTerms.has(token))
+}
+
 function toPublicKnowledge(
   row: KnowledgeRow,
   context: ResolvedNetworkContext,
@@ -117,6 +139,12 @@ export async function searchKnowledge(
     port: 'interface',
     ports: 'interface'
   })
+  const semanticTerms = semanticSearchTerms(search.tokens, context)
+  // A one-word command lookup such as "reload" has one informative term;
+  // broader questions need two independent subject terms. This eliminates
+  // false positives where only the vendor or a generic word matched.
+  const minimumSemanticMatches = Math.min(2, semanticTerms.length)
+  if (minimumSemanticMatches === 0) return []
   const result = await database.query<KnowledgeRow>(
     `WITH ranked_revisions AS MATERIALIZED (
        SELECT
@@ -141,7 +169,15 @@ export async function searchKnowledge(
                  THEN 0.15
                ELSE 0
              END
-         )::float8 AS rank
+         )::float8 AS rank,
+         (
+           SELECT count(*)::integer
+           FROM unnest($8::text[]) AS semantic_term
+           WHERE kr.search_document @@ to_tsquery(
+             'simple',
+             semantic_term || ':*'
+           )
+         ) AS semantic_matches
        FROM knowledge_revisions kr
        JOIN active_knowledge_state active ON active.revision_id = kr.id
        JOIN knowledge_items ki ON ki.id = active.knowledge_item_id
@@ -230,6 +266,7 @@ export async function searchKnowledge(
        coalesce((SELECT max(rank) * 0.5 FROM ranked_revisions), 0),
        0.01
      )
+       AND rr.semantic_matches >= $9
      ORDER BY rr.rank DESC, kr.confidence DESC, kr.last_verified_at DESC`,
     [
       search.normalizedQuestion,
@@ -240,7 +277,9 @@ export async function searchKnowledge(
         ? Array.isArray(kind) ? kind : [kind]
         : null,
       search.strictTsQuery,
-      search.relaxedTsQuery
+      search.relaxedTsQuery,
+      semanticTerms,
+      minimumSemanticMatches
     ],
   )
 
