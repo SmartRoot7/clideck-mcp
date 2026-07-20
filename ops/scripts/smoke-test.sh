@@ -3,10 +3,22 @@ set -euo pipefail
 
 : "${CLIDECK_MCP_BASE_URL:=http://127.0.0.1:8787}"
 
-curl --fail --silent --show-error "$CLIDECK_MCP_BASE_URL/health" >/dev/null
-curl --fail --silent --show-error "$CLIDECK_MCP_BASE_URL/ready" >/dev/null
+curl_options=(
+  --fail
+  --silent
+  --show-error
+  --retry 3
+  --retry-delay 2
+  --retry-all-errors
+)
+
+printf 'smoke: health and readiness\n' >&2
+curl "${curl_options[@]}" "$CLIDECK_MCP_BASE_URL/health" >/dev/null
+curl "${curl_options[@]}" "$CLIDECK_MCP_BASE_URL/ready" >/dev/null
+
+printf 'smoke: public statistics\n' >&2
 stats="$(
-  curl --fail --silent --show-error \
+  curl "${curl_options[@]}" \
     "$CLIDECK_MCP_BASE_URL/public/v1/stats"
 )"
 if [[ "$(printf '%s\n' "$stats" | jq -r '.coverage.published_knowledge >= 50')" != 'true' ]]; then
@@ -14,8 +26,9 @@ if [[ "$(printf '%s\n' "$stats" | jq -r '.coverage.published_knowledge >= 50')" 
   exit 1
 fi
 
+printf 'smoke: MCP tool discovery\n' >&2
 tools="$(
-  curl --fail --silent --show-error \
+  curl "${curl_options[@]}" \
     --request POST \
     --header 'content-type: application/json' \
     --header 'accept: application/json, text/event-stream' \
@@ -49,8 +62,9 @@ if [[ "$(printf '%s\n' "$tools" | jq \
   exit 1
 fi
 
+printf 'smoke: deterministic knowledge retrieval\n' >&2
 response="$(
-  curl --fail --silent --show-error \
+  curl "${curl_options[@]}" \
     --request POST \
     --header 'content-type: application/json' \
     --header 'accept: application/json, text/event-stream' \
@@ -81,8 +95,9 @@ if [[ "$command" != 'show ip interface brief' ]]; then
   exit 1
 fi
 
+printf 'smoke: snapshot redaction\n' >&2
 snapshot="$(
-  curl --fail --silent --show-error \
+  curl "${curl_options[@]}" \
     --request POST \
     --header 'content-type: application/json' \
     --header 'accept: application/json, text/event-stream' \
@@ -109,8 +124,9 @@ if printf '%s\n' "$snapshot" | jq -e \
   exit 1
 fi
 
+printf 'smoke: destructive-command advisory\n' >&2
 change="$(
-  curl --fail --silent --show-error \
+  curl "${curl_options[@]}" \
     --request POST \
     --header 'content-type: application/json' \
     --header 'accept: application/json, text/event-stream' \
@@ -148,8 +164,9 @@ if [[ "$(printf '%s\n' "$change" | jq -r '.result.structuredContent.verification
   exit 1
 fi
 
+printf 'smoke: upgrade applicability\n' >&2
 upgrade="$(
-  curl --fail --silent --show-error \
+  curl "${curl_options[@]}" \
     --request POST \
     --header 'content-type: application/json' \
     --header 'accept: application/json, text/event-stream' \
