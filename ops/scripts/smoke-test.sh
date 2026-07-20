@@ -135,8 +135,16 @@ change="$(
     }' \
     "$CLIDECK_MCP_BASE_URL/mcp"
 )"
-if [[ "$(printf '%s\n' "$change" | jq -r '.result.structuredContent.decision')" != 'blocked' ]]; then
-  printf 'Dangerous change did not fail closed\n' >&2
+if [[ "$(printf '%s\n' "$change" | jq -r '.result.structuredContent.decision')" != 'allowed_with_checks' ]]; then
+  printf 'Dangerous change did not return advisory guidance\n' >&2
+  exit 1
+fi
+if [[ "$(printf '%s\n' "$change" | jq -r '.result.structuredContent.risk_level')" != 'high' ]]; then
+  printf 'Dangerous change was not classified as high risk\n' >&2
+  exit 1
+fi
+if [[ "$(printf '%s\n' "$change" | jq -r '.result.structuredContent.verification_token | type')" != 'string' ]]; then
+  printf 'Dangerous change did not return a verification token\n' >&2
   exit 1
 fi
 

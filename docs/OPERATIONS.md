@@ -22,29 +22,36 @@ root-owned environment files outside the repository.
 
 ## Release
 
-1. Back up PostgreSQL and verify the previous checkout and knowledge release.
-2. Build, typecheck, run every PostgreSQL integration test without skip, and
-   run the 250-case eval.
-3. Run isolated Batfish/containerlab CI and download its hashed report.
-4. Fetch the exact immutable Git commit on `clideck-mcp.lan`.
-5. Install `poppler-utils` and `tesseract-ocr`, install application
-   dependencies, build, run migrations, and reapply `ops/sql/grants.sql` with
-   the migrator role.
-6. Import only a lab report whose commit equals the deployed commit.
-7. Confirm the pre-import active release contains exactly 51 revisions.
-8. Verify the read-only legacy JSONL manifest and import all 56,747 records with
-   resumable batches. Activate only the single 56,798-revision import release.
-9. Restart researcher, worker, then API.
-10. Verify health, readiness, stats, all fixed admin endpoints, MCP tool
-   discovery, known query, redaction,
-   blocked change, failed verification, upgrade scope, and topology.
-11. Run one public source through acquire, convert, chunk, analyze, verify, and
-   package publication; confirm the next coverage target is immediately queued.
-12. Install and verify `com.clideck.mcp.pipeline`, then disable the old
-   five-minute Codex automation.
-13. Deploy the matching CliDeck site commit and enable the admin feature only
-   when every backend contract returns 200 through bearer + HMAC.
-14. Preserve the previous checkout until smoke tests pass.
+Full production deployment has exactly one supported entry point:
+
+```bash
+ops/scripts/deploy-production.sh
+```
+
+Do not manually reproduce its SSH, archive, migration, grant, symlink, restart,
+or smoke-test steps. The script requires a clean commit on `main` and performs:
+
+1. typecheck and production build;
+2. a clean temporary PostgreSQL migration and seed;
+3. every PostgreSQL integration test without skip;
+4. the 250-case product eval;
+5. an isolated Linux dependency install and build on `clideck-mcp.lan`;
+6. a PostgreSQL and `/etc/clideck-mcp` backup;
+7. additive migrations and least-privilege grants;
+8. an atomic `/opt/clideck-mcp/current` switch;
+9. researcher, worker, API, and admin restart;
+10. local and public health, MCP discovery, retrieval, redaction, destructive
+    advisory, verification-token, and upgrade smoke tests;
+11. automatic application rollback when any post-switch check fails.
+
+The default local credentials file is
+`.secrets/clideck-mcp-server.env`; it is ignored by Git. Override it with
+`CLIDECK_MCP_DEPLOY_SECRETS_FILE` when necessary. The previous immutable
+release and deployment backup are retained for rollback.
+
+Lab validation and initial legacy import are separate one-time release gates;
+they are not repeated by every application deployment. Import only a lab report
+whose commit equals the deployed commit.
 
 Production uses separate API, admin, worker, researcher, and quarantine DB roles.
 The site and backend share their playground token only through secret stores.
