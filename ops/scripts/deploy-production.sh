@@ -94,11 +94,13 @@ commit_sha="$1"
 candidate_directory="/tmp/clideck-mcp-build-$commit_sha"
 release_directory="/opt/clideck-mcp/releases/$commit_sha"
 store_directory="/tmp/clideck-mcp-pnpm-store-$commit_sha"
+build_log="/tmp/clideck-mcp-build-$commit_sha.log"
 
 cleanup_remote_build() {
   status=$?
   trap - EXIT
   rm -rf "$store_directory"
+  rm -f "$build_log"
   rm -f "/tmp/clideck-mcp-$commit_sha.tar.gz"
   if [[ "$status" -ne 0 ]]; then
     rm -rf "$candidate_directory"
@@ -113,11 +115,19 @@ mkdir -p "$candidate_directory"
 mkdir -p "$store_directory"
 tar -xzf "/tmp/clideck-mcp-$commit_sha.tar.gz" -C "$candidate_directory"
 cd "$candidate_directory"
-CI=true pnpm install \
+if ! CI=true pnpm install \
   --frozen-lockfile \
   --store-dir "$store_directory" \
-  --package-import-method=copy
-CI=true pnpm build
+  --package-import-method=copy >"$build_log" 2>&1; then
+  printf 'Remote dependency install failed; last 120 lines follow.\n' >&2
+  tail -n 120 "$build_log" >&2
+  exit 1
+fi
+if ! CI=true pnpm build >>"$build_log" 2>&1; then
+  printf 'Remote production build failed; last 120 lines follow.\n' >&2
+  tail -n 120 "$build_log" >&2
+  exit 1
+fi
 REMOTE_BUILD
 
 printf '==> Backup, atomic switch, smoke test, rollback on failure\n'
