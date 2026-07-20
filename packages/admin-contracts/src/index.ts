@@ -41,7 +41,16 @@ export const pipelineExecutorSchema = z.object({
   work_units: scalarNumberSchema,
   work_unit: z.string(),
   heartbeat_at: nullableStringSchema,
-  lease_until: nullableStringSchema
+  lease_until: nullableStringSchema,
+  status_reason: nullableStringSchema
+})
+
+export const aiCircuitSchema = z.object({
+  task_type: z.string(),
+  reasoning_effort: z.enum(['low', 'medium']),
+  state: z.enum(['cooldown', 'probing']),
+  next_retry_at: timestampSchema,
+  probe_executor_id: nullableStringSchema
 })
 
 export const sourceIntakeStageSchema = z.object({
@@ -241,6 +250,7 @@ export const overviewSchema = z.object({
   deployed_commit_sha: nullableStringSchema,
   processes: z.array(processSchema),
   executors: z.array(pipelineExecutorSchema),
+  ai_circuits: z.array(aiCircuitSchema),
   active_work: activeWorkSchema.nullable(),
   pipeline_funnel: z.array(funnelStageSchema),
   source_intake: z.array(sourceIntakeStageSchema),

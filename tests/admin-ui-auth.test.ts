@@ -375,6 +375,7 @@ function overviewFixture() {
     deployed_commit_sha: 'a'.repeat(40),
     processes: [],
     executors: [],
+    ai_circuits: [],
     active_work: null,
     pipeline_funnel: [],
     source_intake: [],

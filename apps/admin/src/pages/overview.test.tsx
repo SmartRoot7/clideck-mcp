@@ -5,6 +5,7 @@ import { render, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
 import {
+  ExecutorCard,
   PIPELINE_STAGES,
   PipelineRail,
   executorRows
@@ -94,7 +95,8 @@ function overviewFixture(): Overview {
         work_units: 0,
         work_unit: 'tasks',
         heartbeat_at: now,
-        lease_until: null
+        lease_until: null,
+        status_reason: 'circuit_cooldown'
       },
       {
         executor_id: 'pipeline-executor-02',
@@ -107,9 +109,45 @@ function overviewFixture(): Overview {
         work_units: 20,
         work_unit: 'records',
         heartbeat_at: now,
-        lease_until: now
+        lease_until: now,
+        status_reason: 'circuit_probe'
+      },
+      {
+        executor_id: 'pipeline-executor-03',
+        instance_id: 'pipeline-executor-03:instance',
+        state: 'standby',
+        healthy: true,
+        stage: null,
+        task_id: null,
+        task_type: null,
+        work_units: 0,
+        work_unit: 'tasks',
+        heartbeat_at: now,
+        lease_until: null,
+        status_reason: null
+      },
+      {
+        executor_id: 'pipeline-executor-04',
+        instance_id: 'pipeline-executor-04:instance',
+        state: 'running',
+        healthy: true,
+        stage: 'analyze',
+        task_id: '00000000-0000-4000-8000-000000000004',
+        task_type: 'fragment_analysis',
+        work_units: 8,
+        work_unit: 'fragments',
+        heartbeat_at: now,
+        lease_until: now,
+        status_reason: null
       }
     ],
+    ai_circuits: [{
+      task_type: 'candidate_deep_review',
+      reasoning_effort: 'medium',
+      state: 'probing',
+      next_retry_at: now,
+      probe_executor_id: 'pipeline-executor-02'
+    }],
     processes: [{
       worker_name: 'pipeline-executor-01',
       instance_id: 'stale-heartbeat',
@@ -156,16 +194,35 @@ describe('overview pipeline snapshot', () => {
   it('derives executor stages from the authoritative runtime snapshot', () => {
     const rows = executorRows(overviewFixture())
 
-    expect(rows).toHaveLength(2)
+    expect(rows).toHaveLength(4)
     expect(rows[0]).toMatchObject({
       name: 'pipeline-executor-01',
       state: 'standby',
-      stage: '—'
+      stage: '—',
+      statusReason: 'circuit_cooldown'
     })
     expect(rows[1]).toMatchObject({
       name: 'pipeline-executor-02',
       state: 'running',
-      stage: 'deep_review'
+      stage: 'deep_review',
+      statusReason: 'circuit_probe'
     })
+  })
+
+  it('distinguishes cooldown, probe, running and true standby lanes', () => {
+    const rows = executorRows(overviewFixture())
+    const { container } = render(
+      <section>
+        {rows.map((row) => <ExecutorCard key={row.name} {...row} />)}
+      </section>,
+    )
+
+    const cards = [
+      ...container.querySelectorAll<HTMLElement>('article.executor')
+    ]
+    expect(within(cards[0]!).getAllByText('Circuit cooldown')).toHaveLength(2)
+    expect(within(cards[1]!).getAllByText('Probe running')).toHaveLength(2)
+    expect(within(cards[2]!).getAllByText('Standby')).toHaveLength(2)
+    expect(within(cards[3]!).getAllByText('Running')).toHaveLength(2)
   })
 })

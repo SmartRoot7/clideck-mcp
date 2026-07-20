@@ -128,6 +128,10 @@ export function OverviewPage({ overview }: { overview: Overview }) {
       stage.stage === 'deep_low' || stage.stage === 'deep_medium'
     )
     .reduce((total, stage) => total + numberOf(stage.waiting), 0)
+  const mediumCircuit = overview.ai_circuits.find((circuit) =>
+    circuit.task_type === 'candidate_deep_review' &&
+    circuit.reasoning_effort === 'medium'
+  )
 
   return (
     <div className="dashboard-stack">
@@ -266,6 +270,24 @@ export function OverviewPage({ overview }: { overview: Overview }) {
           tone={numberOf(overview.publication_failures_24h) ? 'danger' : 'good'}
         />
       </section>
+
+      {mediumCircuit && (
+        <div className="pipeline-circuit-warning" role="status">
+          <span>
+            <AlertTriangle aria-hidden="true" size={16} />
+            GPT-5.6 Deep Medium temporarily unavailable · other stages
+            continue
+          </span>
+          <Status tone="warning">
+            {mediumCircuit.state === 'probing'
+              ? 'Probe running'
+              : `Next probe ${formatDate(
+                  mediumCircuit.next_retry_at,
+                  false,
+                )}`}
+          </Status>
+        </div>
+      )}
 
       <PipelineRail
         overview={overview}
@@ -826,6 +848,7 @@ type ExecutorView = {
   stage: string
   task: string | null
   work: string
+  statusReason: string | null
 }
 
 export function executorRows(overview: Overview): ExecutorView[] {
@@ -837,17 +860,27 @@ export function executorRows(overview: Overview): ExecutorView[] {
     instance: executor.instance_id ?? 'No heartbeat record',
     stage: executor.stage ?? '—',
     task: executor.task_id,
-    work: `${formatNumber(executor.work_units, 0)} ${executor.work_unit}`
+    work: `${formatNumber(executor.work_units, 0)} ${executor.work_unit}`,
+    statusReason: executor.status_reason
   }))
 }
 
-function ExecutorCard(executor: ExecutorView) {
+export function ExecutorCard(executor: ExecutorView) {
   const active = executor.healthy && executor.state === 'running'
+  const statusLabel =
+    executor.statusReason === 'circuit_probe'
+      ? 'Probe running'
+      : executor.statusReason === 'circuit_cooldown'
+        ? 'Circuit cooldown'
+        : titleCase(executor.state)
   const statusTone =
     executor.state === 'stale'
       ? 'danger'
       : executor.state === 'paused'
         ? 'warning'
+        : executor.statusReason === 'circuit_probe' ||
+            executor.statusReason === 'circuit_cooldown'
+          ? 'warning'
         : active
           ? 'good'
           : 'neutral'
@@ -860,15 +893,15 @@ function ExecutorCard(executor: ExecutorView) {
           </IconTooltip>
           {executor.name}
         </span>
-        <Status tone={statusTone}>{titleCase(executor.state)}</Status>
+        <Status tone={statusTone}>{statusLabel}</Status>
       </header>
       <div className="executor__body">
-        <div className="heartbeat" aria-label={`${titleCase(executor.state)} executor`}>
+        <div className="heartbeat" aria-label={`${statusLabel} executor`}>
           <i /><b />
         </div>
         <dl>
           <div><dt>Stage</dt><dd>{titleCase(executor.stage)}</dd></div>
-          <div><dt>State</dt><dd>{titleCase(executor.state)}</dd></div>
+          <div><dt>State</dt><dd>{statusLabel}</dd></div>
           <div><dt>Batch</dt><dd>{executor.work}</dd></div>
           <div><dt>Heartbeat</dt><dd>{formatDate(executor.heartbeat, false)}</dd></div>
           <div>

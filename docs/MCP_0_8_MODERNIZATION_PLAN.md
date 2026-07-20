@@ -339,26 +339,23 @@ Ready when Deep Medium remains a third, independent quality pass without
 spending capacity on redundant web access or fabricating a claim beyond its
 official evidence.
 
-### M24 — Conservative recovery from repeated Medium platform errors
+### M24 — Scoped recovery from repeated Medium platform errors
 
 - `[x]` Keep normal Medium as the first and highest-priority deep-resolution
   pass.
-- `[x]` After one batch has exhausted repeated `CODEX_PROCESS_FAILED` retries,
-  permit a distinct Luna-low fallback using the same leased official evidence.
-- `[x]` Make the fallback terminal: it may verify only a complete,
-  evidence-supported claim; otherwise it rejects or conflicts rather than
-  cycling back into the failing Medium scope.
-- `[x]` Keep an unsuccessful fallback deferred for a later Medium attempt,
-  rather than creating an immediate retry storm or sending it to a human.
-- `[x]` Treat one fallback `CODEX_PROCESS_FAILED` as exhausted immediately:
-  Medium has already retried that evidence cohort, so five additional identical
-  low-reasoning platform retries have no quality value and only waste tokens.
-- `[~]` Observe fallback activation and the subsequent Medium recovery on
-  production without any relaxation of publication policy.
+- `[x]` Preserve the candidate reservation and official evidence while the
+  scoped circuit admits only one Medium probe.
+- `[x]` Remove the earlier Luna-low fallback. A platform incident must not
+  change the semantic review level, reject a candidate, or make it publishable.
+- `[x]` Convert any queued historical fallback task back to Medium in the
+  scheduler transaction without duplicating its candidate batch.
+- `[x]` Let unrelated Verify, Analyze and Discovery work use every remaining
+  executor lane while the Medium circuit is cooling down.
+- `[~]` Observe the next successful Medium probe and verify that it closes only
+  the matching scoped circuit.
 
-Ready when a transient Medium platform incident cannot strand records forever,
-and the recovery path never publishes a claim that has not passed the existing
-Domain Pack, provenance, version, confidence and risk gates.
+Ready when a transient Medium platform incident consumes at most one probe,
+does not strand unrelated work and cannot alter candidate disposition.
 
 ### M25 — Evidence-sized source fragments
 
@@ -373,6 +370,31 @@ Domain Pack, provenance, version, confidence and risk gates.
 
 Ready when normal documents can fill a related analysis cohort without raising
 the Luna evidence budget or weakening provenance and risk validation.
+
+### M26 — Work-conserving source and circuit recovery
+
+- `[x]` Return `verifying` or `failed` sources with claimable queued fragments
+  to prepared/analyzing lanes.
+- `[x]` Clear fragment reservations only when the owning task is terminal,
+  missing or no longer has a live lease; preserve queued and live reservations.
+- `[x]` Permit due `active` coverage targets and force the oldest non-paused
+  active/covered target when all source buffers are empty.
+- `[x]` Keep exactly one active Discovery task through the existing partial
+  unique task key.
+- `[x]` Add safe Overview circuit telemetry and distinct `Circuit cooldown`,
+  `Probe running` and true `Standby` states to the shared admin/demo UI.
+- `[x]` Verify the change on a fresh PostgreSQL 16 database: 141 backend and
+  integration tests passed without skip; all Domain Pack tests and 15 shared
+  UI tests passed.
+- `[x]` Product eval passed 250/250 with dangerous false-safe 0 and p95
+  210.86 ms; typecheck and production build passed.
+- `[~]` Deploy the clean `main` commit through the canonical script and verify
+  source-lane recovery, Discovery refill, alternative Luna work and candidate
+  conservation on production.
+
+Ready when production no longer shows queued Analyze fragments without a lane,
+an empty source buffer immediately refills, and a Medium incident is visible
+without making the other executors idle.
 
 ## Production verification — 20 July 2026
 

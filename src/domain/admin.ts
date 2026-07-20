@@ -334,6 +334,39 @@ export async function getAdminOverview(
            AND task.lease_until IS NOT NULL
            AND task.lease_until > snapshot.snapshot_at
        ),
+       ai_circuit_runtime AS (
+         SELECT
+           circuit.task_type,
+           circuit.reasoning_effort,
+           CASE
+             WHEN EXISTS (
+               SELECT 1
+               FROM live_tasks task
+               WHERE task.claim_owner = circuit.probe_executor_id
+                 AND task.task_type = circuit.task_type
+                 AND coalesce(
+                   task.requested_reasoning_effort,
+                   'low'
+                 ) = circuit.reasoning_effort
+             ) THEN 'probing'
+             ELSE 'cooldown'
+           END AS state,
+           circuit.open_until AS next_retry_at,
+           CASE
+             WHEN EXISTS (
+               SELECT 1
+               FROM live_tasks task
+               WHERE task.claim_owner = circuit.probe_executor_id
+                 AND task.task_type = circuit.task_type
+                 AND coalesce(
+                   task.requested_reasoning_effort,
+                   'low'
+                 ) = circuit.reasoning_effort
+             ) THEN circuit.probe_executor_id
+             ELSE NULL
+           END AS probe_executor_id
+         FROM pipeline_ai_circuits circuit
+       ),
        queued_publication_sources AS (
          SELECT DISTINCT task.source_candidate_id
          FROM pipeline_tasks task
@@ -353,7 +386,7 @@ export async function getAdminOverview(
            AND (
              target.status IN ('queued', 'failed')
              OR (
-               target.status = 'covered'
+               target.status IN ('active', 'covered')
                AND target.next_check_at <= snapshot.snapshot_at
              )
            )
@@ -558,6 +591,24 @@ export async function getAdminOverview(
            task.stage,
            task.id AS task_id,
            task.task_type,
+           CASE
+             WHEN task.id IS NOT NULL
+               AND EXISTS (
+                 SELECT 1
+                 FROM ai_circuit_runtime circuit
+                 WHERE circuit.state = 'probing'
+                   AND circuit.probe_executor_id =
+                     executor.executor_id
+               ) THEN 'circuit_probe'
+             WHEN task.id IS NULL
+               AND EXISTS (
+                 SELECT 1
+                 FROM ai_circuit_runtime
+               ) THEN 'circuit_cooldown'
+             WHEN task.id IS NULL
+               THEN heartbeat.metadata->>'reason'
+             ELSE NULL
+           END AS status_reason,
            coalesce(
              jsonb_array_length(task.payload->'candidates'),
              jsonb_array_length(task.payload->'fragments'),
@@ -629,12 +680,29 @@ export async function getAdminOverview(
                'work_units', work_units,
                'work_unit', work_unit,
                'heartbeat_at', heartbeat_at,
-               'lease_until', lease_until
+               'lease_until', lease_until,
+               'status_reason', status_reason
              )
              ORDER BY ordinal
            )
            FROM executor_runtime
          ) AS executors,
+         (
+           SELECT coalesce(
+             jsonb_agg(
+               jsonb_build_object(
+                 'task_type', task_type,
+                 'reasoning_effort', reasoning_effort,
+                 'state', state,
+                 'next_retry_at', next_retry_at,
+                 'probe_executor_id', probe_executor_id
+               )
+               ORDER BY task_type, reasoning_effort
+             ),
+             '[]'::jsonb
+           )
+           FROM ai_circuit_runtime
+         ) AS ai_circuits,
          (
            SELECT jsonb_agg(
              jsonb_build_object(
@@ -669,7 +737,7 @@ export async function getAdminOverview(
               AND (
                 target.status IN ('queued', 'failed')
                 OR (
-                  target.status = 'covered'
+                  target.status IN ('active', 'covered')
                   AND target.next_check_at <= now()
                 )
               )) AS waiting,
@@ -1151,6 +1219,10 @@ export async function getAdminOverview(
       )
     ],
     executors: runtimeExecutors,
+    ai_circuits:
+      Array.isArray(runtimeData['ai_circuits'])
+        ? runtimeData['ai_circuits']
+        : [],
     active_work: activeTask.rows[0] ?? null,
     pipeline_funnel:
       Array.isArray(runtimeData['pipeline_funnel'])

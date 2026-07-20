@@ -203,7 +203,15 @@ export function sanitizeDemoOverview(overview: Overview): Overview {
       work_units: executor.work_units,
       work_unit: executor.work_unit,
       heartbeat_at: executor.heartbeat_at,
-      lease_until: executor.lease_until
+      lease_until: executor.lease_until,
+      status_reason: executor.status_reason
+    })),
+    ai_circuits: overview.ai_circuits.map((circuit) => ({
+      task_type: circuit.task_type,
+      reasoning_effort: circuit.reasoning_effort,
+      state: circuit.state,
+      next_retry_at: circuit.next_retry_at,
+      probe_executor_id: circuit.probe_executor_id
     })),
     active_work: overview.active_work
       ? {

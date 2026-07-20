@@ -4550,7 +4550,7 @@ describeIntegration('PostgreSQL integration', () => {
     await database.query('DELETE FROM pipeline_ai_circuits')
   })
 
-  it('uses one conservative Luna-low fallback after repeated Medium platform failures', async () => {
+  it('keeps repeated Medium platform failures on Medium review', async () => {
     const suffix = randomUUID().replaceAll('-', '').slice(0, 12)
     const leaseToken = randomUUID().replaceAll('-', '')
     await database.query(
@@ -4628,7 +4628,8 @@ describeIntegration('PostgreSQL integration', () => {
       `SELECT id, requested_reasoning_effort, payload
        FROM pipeline_tasks
        WHERE task_type = 'candidate_deep_review'
-         AND payload->>'review_pass' = 'fallback_low'
+         AND requested_reasoning_effort = 'medium'
+         AND payload->>'review_pass' = 'medium'
          AND payload->'candidates' @>
            jsonb_build_array(jsonb_build_object('id', $1::text))
        ORDER BY created_at DESC
@@ -4636,11 +4637,9 @@ describeIntegration('PostgreSQL integration', () => {
       [candidate.rows[0]!.id],
     )
     expect(fallback.rows[0]).toMatchObject({
-      requested_reasoning_effort: 'low',
+      requested_reasoning_effort: 'medium',
       payload: {
-        review_pass: 'fallback_low',
-        force_terminal_resolution: true,
-        fallback_reason: 'deep_medium_platform_retry_exhausted'
+        review_pass: 'medium'
       }
     })
     const normalMedium = await database.query<{ count: number }>(
@@ -4652,7 +4651,7 @@ describeIntegration('PostgreSQL integration', () => {
            jsonb_build_array(jsonb_build_object('id', $1::text))`,
       [candidate.rows[0]!.id],
     )
-    expect(normalMedium.rows[0]?.count).toBe(0)
+    expect(normalMedium.rows[0]?.count).toBe(1)
 
     await database.query(
       `UPDATE pipeline_tasks
@@ -4747,7 +4746,8 @@ describeIntegration('PostgreSQL integration', () => {
       `SELECT id
        FROM pipeline_tasks
        WHERE task_type = 'candidate_deep_review'
-         AND payload->>'review_pass' = 'fallback_low'
+         AND requested_reasoning_effort = 'medium'
+         AND payload->>'review_pass' = 'medium'
          AND payload->'candidates' @>
            jsonb_build_array(jsonb_build_object('id', $1::text))
        ORDER BY created_at DESC
@@ -4761,7 +4761,7 @@ describeIntegration('PostgreSQL integration', () => {
               claim_owner = 'pipeline-executor-02',
               lease_token_hash = $2,
               lease_until = now() + interval '5 minutes',
-              attempts = 1,
+              attempts = 5,
               updated_at = now()
         WHERE id = $1`,
       [deferredFallback.rows[0]!.id, sha256(failedLease)],
@@ -4770,30 +4770,228 @@ describeIntegration('PostgreSQL integration', () => {
       pipeline_task_id: deferredFallback.rows[0]!.id,
       lease_token: failedLease,
       failure_code: 'CODEX_PROCESS_FAILED',
-      failure_message: 'The platform returned INTERNAL_ERROR for this fallback.'
+      failure_message:
+        'INTERNAL_ERROR: request could not be completed; retry later.'
     })
-    expect(failedFallback).toMatchObject({ status: 'failed', retrying: false })
+    expect(failedFallback).toMatchObject({ status: 'queued', retrying: true })
     const deferred = await database.query<{
       status: string
       resolution_code: string
       last_technical_failure_code: string
       deferred: boolean
+      reservation_task_id: string | null
     }>(
       `SELECT
          status,
          resolution_code,
          last_technical_failure_code,
-         next_review_at >= now() + interval '23 hours' AS deferred
+         next_review_at >= now() + interval '23 hours' AS deferred,
+         deep_review_task_id AS reservation_task_id
        FROM knowledge_candidates
        WHERE id = $1`,
       [deferredCandidate.rows[0]!.id],
     )
     expect(deferred.rows[0]).toEqual({
       status: 'deep_review',
-      resolution_code: 'deep_medium_fallback_unavailable',
-      last_technical_failure_code: 'DEEP_MEDIUM_FALLBACK_UNAVAILABLE',
-      deferred: true
+      resolution_code: 'deep_medium_platform_retry_exhausted',
+      last_technical_failure_code: 'CODEX_PROCESS_FAILED',
+      deferred: false,
+      reservation_task_id: deferredFallback.rows[0]!.id
     })
+  })
+
+  it('reports circuit cooldown and probe state without diagnostic details', async () => {
+    const suffix = randomUUID().replaceAll('-', '').slice(0, 12)
+    const fingerprint = `sha256:${'e'.repeat(64)}`
+    await database.query(
+      `UPDATE pipeline_tasks
+          SET status = 'cancelled',
+              completed_at = now(),
+              updated_at = now()
+        WHERE status IN ('queued', 'claimed', 'running');
+       DELETE FROM pipeline_ai_circuits;`,
+    )
+    await database.query(
+      `INSERT INTO pipeline_tasks (
+         task_type,
+         stage,
+         status,
+         priority,
+         dedupe_key,
+         payload,
+         claim_owner,
+         lease_token_hash,
+         lease_until,
+         requested_reasoning_effort
+       )
+       VALUES (
+         'candidate_deep_review',
+         'deep_review',
+         'running',
+         96,
+         'overview-circuit-probe-' || $1,
+         '{}'::jsonb,
+         'pipeline-executor-01',
+         decode(repeat('ab', 32), 'hex'),
+         now() + interval '5 minutes',
+         'medium'
+       )`,
+      [suffix],
+    )
+    await database.query(
+      `INSERT INTO pipeline_ai_circuits (
+         task_type,
+         reasoning_effort,
+         diagnostic_fingerprint,
+         open_until,
+         probe_executor_id
+       )
+       VALUES (
+         'candidate_deep_review',
+         'medium',
+         $1,
+         now() + interval '30 seconds',
+         'pipeline-executor-01'
+       )`,
+      [fingerprint],
+    )
+    await database.query(
+      `INSERT INTO worker_heartbeats (
+         worker_name,
+         instance_id,
+         heartbeat_at,
+         metadata
+       )
+       SELECT
+         'pipeline-executor-0' || executor,
+         'overview-circuit-' || executor,
+         now(),
+         jsonb_build_object('status', 'standby')
+       FROM generate_series(1, 4) executor
+       ON CONFLICT (worker_name)
+       DO UPDATE SET
+         instance_id = excluded.instance_id,
+         heartbeat_at = excluded.heartbeat_at,
+          metadata = excluded.metadata;`,
+    )
+
+    const overview = overviewSchema.parse(
+      JSON.parse(JSON.stringify(
+        await getAdminOverview(database, 'a'.repeat(40)),
+      )),
+    )
+    expect(overview.ai_circuits).toEqual([
+      expect.objectContaining({
+        task_type: 'candidate_deep_review',
+        reasoning_effort: 'medium',
+        state: 'probing',
+        probe_executor_id: 'pipeline-executor-01'
+      }),
+    ])
+    expect(overview.executors.find(
+      (executor) => executor.executor_id === 'pipeline-executor-01',
+    )?.status_reason).toBe('circuit_probe')
+    expect(overview.executors.find(
+      (executor) => executor.executor_id === 'pipeline-executor-02',
+    )?.status_reason).toBe('circuit_cooldown')
+    expect(JSON.stringify(overview)).not.toContain(fingerprint)
+
+    await database.query(
+      `UPDATE pipeline_tasks
+          SET status = 'cancelled',
+              completed_at = now(),
+              updated_at = now()
+        WHERE dedupe_key = 'overview-circuit-probe-' || $1;
+      `,
+      [suffix],
+    )
+    await database.query('DELETE FROM pipeline_ai_circuits')
+  })
+
+  it('does not create an agent run when a circuit has no alternative work', async () => {
+    const suffix = randomUUID().replaceAll('-', '').slice(0, 12)
+    await database.query(
+      `UPDATE pipeline_tasks
+          SET status = 'cancelled',
+              completed_at = now(),
+              updated_at = now()
+        WHERE status IN ('queued', 'claimed', 'running');
+       DELETE FROM active_source_slots;
+       DELETE FROM pipeline_ai_circuits;
+       UPDATE source_candidates
+          SET status = 'completed',
+              updated_at = now()
+        WHERE status NOT IN (
+          'completed',
+          'completed_with_exceptions',
+          'duplicate',
+          'rejected'
+        );
+       UPDATE coverage_targets
+          SET status = 'paused',
+              updated_at = now();
+       UPDATE pipeline_settings
+          SET enabled = true,
+              max_concurrent_ai_runs = 4,
+              paused_reason = NULL,
+              pause_requested_at = NULL,
+              updated_at = now(),
+              updated_by = 'no-empty-circuit-run-integration-test';`,
+    )
+    await database.query(
+      `INSERT INTO pipeline_tasks (
+         task_type,
+         stage,
+         status,
+         priority,
+         dedupe_key,
+         payload,
+         requested_reasoning_effort
+       )
+       VALUES (
+         'candidate_deep_review',
+         'deep_review',
+         'queued',
+         96,
+         'no-empty-circuit-run-' || $1,
+         jsonb_build_object('review_pass', 'medium'),
+         'medium'
+       )`,
+      [suffix],
+    )
+    await database.query(
+      `INSERT INTO pipeline_ai_circuits (
+         task_type,
+         reasoning_effort,
+         diagnostic_fingerprint,
+         open_until
+       )
+       VALUES (
+         'candidate_deep_review',
+         'medium',
+         'sha256:' || repeat('f', 64),
+         now() + interval '5 minutes'
+       )`,
+    )
+    const before = await database.query<{ count: number }>(
+      `SELECT count(*)::int AS count FROM agent_runs`,
+    )
+
+    const claim = await claimPipelineTask(
+      database,
+      config,
+      'pipeline-executor-04',
+      'pipeline-executor-04:no-empty-circuit-run',
+    )
+    const after = await database.query<{ count: number }>(
+      `SELECT count(*)::int AS count FROM agent_runs`,
+    )
+
+    expect(claim).toMatchObject({
+      pipeline_state: 'scoped_ai_circuit_open'
+    })
+    expect(after.rows[0]?.count).toBe(before.rows[0]?.count)
+    await database.query('DELETE FROM pipeline_ai_circuits')
   })
 
   it('reclaims an expired circuit probe after its executor disappears', async () => {
@@ -4875,14 +5073,20 @@ describeIntegration('PostgreSQL integration', () => {
 
     await recordAgentRunResult(database, {
       agent_run_id: String(claim['agent_run_id']),
-      status: 'cancelled',
+      status: 'completed',
       input_tokens: 0,
       cached_input_tokens: 0,
       output_tokens: 0,
       reasoning_output_tokens: 0,
-      duration_ms: 1,
-      error_code: 'TEST_CLEANUP',
+      duration_ms: 1
     })
+    const closedCircuit = await database.query<{ count: number }>(
+      `SELECT count(*)::int AS count
+       FROM pipeline_ai_circuits
+       WHERE task_type = 'candidate_deep_review'
+         AND reasoning_effort = 'medium'`,
+    )
+    expect(closedCircuit.rows[0]?.count).toBe(0)
     await database.query(
       `UPDATE pipeline_tasks
           SET status = 'cancelled',
@@ -4891,10 +5095,152 @@ describeIntegration('PostgreSQL integration', () => {
         WHERE id = $1`,
       [String(claim['pipeline_task_id'])],
     )
-    await database.query('DELETE FROM pipeline_ai_circuits')
   })
 
-  it('reserves the next Luna claim for discovery when source supply is empty', async () => {
+  it('returns a verifying source with queued fragments to an analysis lane', async () => {
+    const suffix = randomUUID().replaceAll('-', '')
+    await database.query(
+      `UPDATE pipeline_tasks
+          SET status = 'cancelled',
+              completed_at = now(),
+              updated_at = now()
+        WHERE status IN ('queued', 'claimed', 'running');
+       DELETE FROM active_source_slots;
+       DELETE FROM pipeline_ai_circuits;
+       UPDATE pipeline_settings
+          SET enabled = true,
+              max_concurrent_ai_runs = 4,
+              max_active_sources = 4,
+              paused_reason = NULL,
+              pause_requested_at = NULL,
+              updated_at = now(),
+              updated_by = 'source-lane-recovery-integration-test';`,
+    )
+    const source = await database.query<{ id: string }>(
+      `INSERT INTO source_candidates (
+         coverage_target_id,
+         canonical_url,
+         document_type,
+         title,
+         status,
+         discovered_by,
+         content_hash
+       )
+       VALUES (
+         (SELECT id FROM coverage_targets ORDER BY priority DESC LIMIT 1),
+         $1,
+         'command_reference',
+         'Verifying source lane recovery fixture',
+         'verifying',
+         'integration-test',
+         $2
+       )
+       RETURNING id`,
+      [
+        `https://www.cisco.com/c/en/us/support/lane-${suffix}.html`,
+        sha256Label(`lane-source-${suffix}`)
+      ],
+    )
+    const artifact = await database.query<{ id: string }>(
+      `INSERT INTO source_artifacts (
+         source_candidate_id,
+         media_type,
+         byte_size,
+         content_hash,
+         storage_path,
+         status
+       )
+       VALUES ($1, 'text/plain', 64, $2, '/tmp/lane-fixture', 'chunked')
+       RETURNING id`,
+      [source.rows[0]!.id, sha256Label(`lane-artifact-${suffix}`)],
+    )
+    const terminalReservation = await database.query<{ id: string }>(
+      `INSERT INTO pipeline_tasks (
+         task_type,
+         stage,
+         status,
+         priority,
+         source_candidate_id,
+         dedupe_key,
+         payload,
+         requested_reasoning_effort,
+         completed_at
+       )
+       VALUES (
+         'fragment_analysis',
+         'analyze',
+         'completed',
+         80,
+         $1,
+         $2,
+         '{}'::jsonb,
+         'low',
+         now()
+       )
+       RETURNING id`,
+      [source.rows[0]!.id, `terminal-reservation-${suffix}`],
+    )
+    await database.query(
+      `INSERT INTO source_fragments (
+         source_artifact_id,
+         ordinal,
+         content,
+         content_hash,
+         status,
+         reservation_task_id
+       )
+       VALUES
+         ($1, 0, 'show interfaces counters errors', $2, 'queued', NULL),
+         ($1, 1, 'show interfaces status', $3, 'reserved', $4)`,
+      [
+        artifact.rows[0]!.id,
+        sha256Label(`lane-fragment-a-${suffix}`),
+        sha256Label(`lane-fragment-b-${suffix}`),
+        terminalReservation.rows[0]!.id
+      ],
+    )
+
+    await ensurePipelineWork(database)
+    await ensurePipelineWork(database)
+
+    const recovered = await database.query<{
+      status: string
+      slot_count: number
+      task_count: number
+      reserved_fragments: number
+    }>(
+      `SELECT
+         source.status,
+         (SELECT count(*)::int
+          FROM active_source_slots slot
+          WHERE slot.source_candidate_id = source.id) AS slot_count,
+         (SELECT count(*)::int
+          FROM pipeline_tasks task
+          WHERE task.source_candidate_id = source.id
+            AND task.task_type = 'fragment_analysis'
+            AND task.status IN ('queued', 'claimed', 'running'))
+           AS task_count,
+         (SELECT count(*)::int
+          FROM source_artifacts source_artifact
+          JOIN source_fragments fragment
+            ON fragment.source_artifact_id = source_artifact.id
+          WHERE source_artifact.source_candidate_id = source.id
+            AND fragment.status = 'reserved'
+            AND fragment.reservation_task_id IS NOT NULL)
+           AS reserved_fragments
+       FROM source_candidates source
+       WHERE source.id = $1`,
+      [source.rows[0]!.id],
+    )
+    expect(recovered.rows[0]).toEqual({
+      status: 'analyzing',
+      slot_count: 1,
+      task_count: 1,
+      reserved_fragments: 2
+    })
+  })
+
+  it('reserves one discovery claim when only active targets remain', async () => {
     const suffix = randomUUID().replaceAll('-', '')
     await database.query(
       `UPDATE pipeline_tasks
@@ -4908,7 +5254,7 @@ describeIntegration('PostgreSQL integration', () => {
               updated_at = now()
         WHERE status NOT IN ('completed', 'completed_with_exceptions', 'duplicate', 'rejected');
        UPDATE coverage_targets
-          SET status = 'covered',
+          SET status = 'active',
               next_check_at = now() + interval '1 day',
               updated_at = now();
        UPDATE pipeline_settings
@@ -4950,20 +5296,32 @@ describeIntegration('PostgreSQL integration', () => {
     )
 
     await ensurePipelineWork(database)
+    await ensurePipelineWork(database)
     const reservedDiscovery = await database.query<{
       id: string
       status: string
+      matching_count: number
     }>(
-      `SELECT id, status
-       FROM pipeline_tasks
-       WHERE task_type = 'source_discovery'
-         AND status = 'queued'
-         AND knowledge_demand_id IS NULL
-       ORDER BY created_at DESC
+      `SELECT
+         latest.id,
+         latest.status,
+         (
+           SELECT count(*)::int
+           FROM pipeline_tasks task
+           WHERE task.task_type = 'source_discovery'
+             AND task.status IN ('queued', 'claimed', 'running')
+             AND task.knowledge_demand_id IS NULL
+         ) AS matching_count
+       FROM pipeline_tasks latest
+       WHERE latest.task_type = 'source_discovery'
+         AND latest.status = 'queued'
+         AND latest.knowledge_demand_id IS NULL
+       ORDER BY latest.created_at DESC
        LIMIT 1`,
     )
     expect(reservedDiscovery.rows[0]).toMatchObject({
-      status: 'queued'
+      status: 'queued',
+      matching_count: 1
     })
     expect(deepTasks.rows).toHaveLength(3)
 
