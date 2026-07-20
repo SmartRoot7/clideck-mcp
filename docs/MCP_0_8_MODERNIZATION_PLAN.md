@@ -388,6 +388,10 @@ the Luna evidence budget or weakening provenance and risk validation.
   UI tests passed.
 - `[x]` Product eval passed 250/250 with dangerous false-safe 0 and p95
   210.86 ms; typecheck and production build passed.
+- `[x]` Extend the canonical production role contract so the authenticated
+  admin and read-only demo Overview can read safe scoped-circuit telemetry.
+  The first rollout exposed the missing `clideck_mcp_admin` grant as a
+  permission error; no pipeline or knowledge data was changed by the failure.
 - `[~]` Deploy the clean `main` commit through the canonical script and verify
   source-lane recovery, Discovery refill, alternative Luna work and candidate
   conservation on production.

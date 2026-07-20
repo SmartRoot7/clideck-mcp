@@ -101,7 +101,8 @@ GRANT SELECT ON
   public_stats_cache,
   pipeline_reconciliation_snapshots,
   knowledge_demands,
-  mcp_request_logs
+  mcp_request_logs,
+  pipeline_ai_circuits
 TO clideck_mcp_admin;
 GRANT INSERT ON product_eval_runs TO clideck_mcp_admin;
 GRANT INSERT ON
