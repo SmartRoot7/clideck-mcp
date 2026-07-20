@@ -30,6 +30,39 @@ type CandidateTaskRow = {
   payload: unknown
 }
 
+const evidenceRolePriority = {
+  primary: 3,
+  corroborating: 2,
+  conflict: 1
+} as const
+
+/**
+ * A revision can reference a source document only once. Model output may
+ * legitimately repeat the same document with different evidence roles, but
+ * that must not turn a publishable record into a database constraint failure.
+ * Preserve the strongest role while retaining the original source evidence
+ * model for distinct documents.
+ */
+function uniqueProvenanceDocuments(
+  provenance: CandidateKnowledge['provenance'],
+): CandidateKnowledge['provenance'] {
+  const documents = new Map<string, CandidateKnowledge['provenance'][number]>()
+
+  for (const source of provenance) {
+    const identity = `${source.url}\u0000${source.content_hash}`
+    const existing = documents.get(identity)
+    if (
+      !existing ||
+      evidenceRolePriority[source.evidence_role] >
+        evidenceRolePriority[existing.evidence_role]
+    ) {
+      documents.set(identity, source)
+    }
+  }
+
+  return [...documents.values()]
+}
+
 function scopedResearcherStableKey(candidate: CandidateKnowledge): string {
   const scopeHash = sha256Label([
     candidate.kind,
@@ -122,6 +155,7 @@ export async function createKnowledgeRevision(
   const coreCandidate = enforceCoreCandidatePolicy(
     networkDomainPack.toCoreCandidate(packCandidate),
   )
+  const provenance = uniqueProvenanceDocuments(candidate.provenance)
   const context = await resolveCandidateContext(client, candidate)
   const stableKey = await resolveCandidateStableKey(
     client,
@@ -237,7 +271,7 @@ export async function createKnowledgeRevision(
   )
   const revisionId = revision.rows[0]!.id
 
-  for (const source of candidate.provenance) {
+  for (const source of provenance) {
     const document = await client.query<{ id: string }>(
       `INSERT INTO source_documents (
          domain_id,
@@ -304,11 +338,7 @@ export async function createKnowledgeRevision(
      )`,
     [
       revisionId,
-      new Set(
-        candidate.provenance.map((source) =>
-          `${source.url}\0${source.content_hash}`,
-        ),
-      ).size,
+      provenance.length,
       candidate.confidence_reason,
       candidate.last_verified_at,
       candidate.dangerous

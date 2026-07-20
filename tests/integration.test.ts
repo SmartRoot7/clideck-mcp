@@ -1702,6 +1702,81 @@ describeIntegration('PostgreSQL integration', () => {
     }
   })
 
+  it('deduplicates repeated provenance before linking a revision source', async () => {
+    const unique = randomUUID()
+    const client = await database.connect()
+    await client.query('BEGIN')
+    try {
+      const sourceUrl = `https://example.com/duplicate-provenance/${unique}`
+      const sourceHash = sha256Label(`duplicate-provenance-${unique}`)
+      const candidate = {
+        stable_key: `cisco.ios-xe.duplicate-provenance-${unique}`,
+        kind: 'command' as const,
+        vendor_slug: 'cisco',
+        platform_slug: 'catalyst-9000',
+        operating_system_slug: 'ios-xe',
+        version_min: '17.9.4',
+        version_max: '17.9.4',
+        title: 'Duplicate provenance integration fixture',
+        summary: 'Publishes a read-only command with repeated source evidence.',
+        question_patterns: ['How do I inspect duplicate provenance safely?'],
+        cli_mode: 'privileged EXEC',
+        command: 'show version',
+        procedure: [],
+        prerequisites: ['Use read-only CLI access.'],
+        risks: [],
+        verification: ['Confirm the version information is returned.'],
+        rollback: [],
+        limitations: ['Integration-test fixture.'],
+        dangerous: false,
+        risk_level: 'safe_read_only' as const,
+        confidence: 0.98,
+        quality_score: 0.96,
+        confidence_reason:
+          'The primary source directly supports this bounded read-only command.',
+        last_verified_at: '2026-07-20',
+        provenance: [
+          {
+            url: sourceUrl,
+            document_type: 'command_reference',
+            title: 'Duplicate provenance integration fixture',
+            verified_at: '2026-07-20',
+            content_hash: sourceHash,
+            evidence_fragment: 'show version',
+            evidence_role: 'corroborating' as const
+          },
+          {
+            url: sourceUrl,
+            document_type: 'command_reference',
+            title: 'Duplicate provenance integration fixture',
+            verified_at: '2026-07-20',
+            content_hash: sourceHash,
+            evidence_fragment: 'show version',
+            evidence_role: 'primary' as const
+          }
+        ]
+      }
+
+      const revision = await createKnowledgeRevision(client, candidate)
+      const links = await client.query<{
+        evidence_role: string
+        independent_confirmations: number
+      }>(
+        `SELECT rs.evidence_role, trust.independent_confirmations
+         FROM revision_sources rs
+         JOIN knowledge_public_trust trust ON trust.revision_id = rs.revision_id
+         WHERE rs.revision_id = $1`,
+        [revision.revisionId],
+      )
+      expect(links.rows).toEqual([
+        { evidence_role: 'primary', independent_confirmations: 1 }
+      ])
+    } finally {
+      await client.query('ROLLBACK')
+      client.release()
+    }
+  })
+
   it('exposes safe aggregate stats and protects playground operations', async () => {
     const clientKey = `test-client-${randomUUID().replaceAll('-', '')}`
     const app = createApiApp({
