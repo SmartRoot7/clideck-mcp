@@ -94,7 +94,8 @@ import {
 } from '../src/domain/tasks.js'
 import {
   getPublicStats,
-  refreshPublicStatsCache
+  refreshPublicStatsCache,
+  refreshPublicStatsCacheIfStale
 } from '../src/domain/telemetry.js'
 import { createLogger } from '../src/logger.js'
 import {
@@ -494,6 +495,26 @@ describeIntegration('PostgreSQL integration', () => {
     expect(cached.active_release.sequence).toBe(
       refreshed.active_release.sequence,
     )
+
+    await database.query(
+      `UPDATE public_stats_cache
+          SET refreshed_at = now() - interval '11 minutes',
+              refresh_error_code = NULL
+        WHERE singleton`,
+    )
+    const timeoutDatabase = {
+      connect: database.connect.bind(database),
+      query: ((statement: string | { text?: string }, values?: unknown[]) => {
+        const text = typeof statement === 'string' ? statement : statement.text
+        if (text?.includes('FROM public_active_knowledge')) {
+          return Promise.reject(new Error('Query read timeout'))
+        }
+        return database.query(statement as string, values)
+      }) as Database['query']
+    } as Database
+    expect(await refreshPublicStatsCacheIfStale(timeoutDatabase)).toBe(false)
+    expect((await getPublicStats(database)).cache.stale).toBe(true)
+    await refreshPublicStatsCache(database)
   })
 
   it('does not let manual publish bypass dangerous rollback policy', async () => {

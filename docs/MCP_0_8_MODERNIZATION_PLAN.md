@@ -85,6 +85,8 @@ Ready when active Deep Review work can no longer produce an empty page.
 - `[x]` Verify request analytics reconciliation and Active Sources fallback.
 - `[x]` Add a deterministic semantic-term floor so a context-only FTS match
   cannot turn an unsupported question into a misleading answer.
+- `[x]` Keep the last valid public-stats snapshot during a transient aggregate
+  timeout so deployment and the public endpoint remain available with `stale`.
 - `[~]` Exercise unknown → official discovery → publication → instant reuse.
 - `[ ]` Deploy only with `./ops/scripts/deploy-production.sh`.
 - `[x]` Do not push GitHub until explicitly requested by the user.
