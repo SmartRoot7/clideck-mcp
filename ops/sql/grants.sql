@@ -163,6 +163,7 @@ GRANT SELECT ON
   platforms,
   operating_systems,
   device_models,
+  context_aliases,
   public_active_knowledge,
   public_active_release_summary,
   public_lab_validation_summary,

@@ -24,10 +24,11 @@ describeIntegration('pipeline transition events', () => {
     await database.end()
   })
 
-  it('grants writer roles the conflict-key read required by ON CONFLICT', async () => {
+  it('grants worker roles every read needed by pipeline persistence', async () => {
     const privileges = await database.query<{
       worker: boolean
       researcher: boolean
+      worker_context_aliases: boolean
     }>(
       `SELECT
          has_column_privilege(
@@ -41,11 +42,17 @@ describeIntegration('pipeline transition events', () => {
            'pipeline_transition_events',
            'dedupe_key',
            'SELECT'
-         ) AS researcher`,
+         ) AS researcher,
+         has_table_privilege(
+           'clideck_mcp_worker',
+           'context_aliases',
+           'SELECT'
+         ) AS worker_context_aliases`,
     )
     expect(privileges.rows[0]).toEqual({
       worker: true,
-      researcher: true
+      researcher: true,
+      worker_context_aliases: true
     })
   })
 
