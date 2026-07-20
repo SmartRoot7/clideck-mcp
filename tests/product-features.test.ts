@@ -17,6 +17,7 @@ import {
   discoverySubmissionSchema,
   expertResearchStructuredArtifactSchema,
   applyDeepReviewRepair,
+  getDeterministicRiskDisposition,
   materializeCandidateDeepReviewArtifact,
   materializeCandidateVerificationArtifact,
   normalizeCandidateAnalysisOptionalFields,
@@ -85,6 +86,53 @@ describe('knowledge safety classification', () => {
 
     expect(guarded.dangerous).toBe(true)
     expect(guarded.risk_level).toBe('service_disruptive')
+  })
+
+  it('requires an explicit rollback before a dangerous candidate can be verified', () => {
+    const guarded = enforceKnowledgeRisk({
+      stable_key: 'cisco-iosxe-dangerous-rollback-gate',
+      kind: 'command',
+      vendor_slug: 'cisco',
+      platform_slug: 'catalyst-9300',
+      operating_system_slug: 'ios-xe',
+      version_min: '17.9.0',
+      title: 'Reload a switch without rollback',
+      summary: 'Restarts the network device.',
+      question_patterns: ['How do I reload this Cisco switch?'],
+      cli_mode: 'privileged_exec',
+      command: 'reload',
+      procedure: [],
+      prerequisites: ['Use an approved maintenance window.'],
+      risks: ['Service interruption.'],
+      verification: ['Confirm the device returns to service.'],
+      rollback: [],
+      limitations: [],
+      dangerous: true,
+      risk_level: 'service_disruptive',
+      confidence: 0.99,
+      quality_score: 0.99,
+      confidence_reason:
+        'The structured evidence identifies the command and its effect.',
+      last_verified_at: '2026-07-20',
+      provenance: [{
+        url: 'https://www.cisco.com/example-dangerous',
+        document_type: 'command_reference',
+        title: 'Internal test evidence',
+        verified_at: '2026-07-20',
+        content_hash: `sha256:${'e'.repeat(64)}`,
+        evidence_fragment: 'reload',
+        evidence_role: 'primary'
+      }]
+    })
+
+    expect(getDeterministicRiskDisposition(guarded)).toMatchObject({
+      decision: 'deep_review',
+      finding: expect.stringContaining('rollback')
+    })
+    expect(getDeterministicRiskDisposition({
+      ...guarded,
+      rollback: ['Restore the approved saved configuration if recovery fails.']
+    })).toBeNull()
   })
 
   it('keeps read-only inspection commands safe despite risky words', () => {

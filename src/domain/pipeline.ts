@@ -3766,6 +3766,28 @@ export async function submitCandidateAnalysis(
   return result
 }
 
+export function getDeterministicRiskDisposition(
+  candidate: z.infer<typeof pipelineCandidatePayloadSchema>,
+): {
+  decision: 'conflict' | 'deep_review'
+  finding: string
+} | null {
+  const normalized = enforceKnowledgeRisk(candidate)
+
+  // This is deliberately the same non-negotiable safety invariant enforced by
+  // createKnowledgeRevision at publication time.  Catch it before a candidate
+  // becomes Ready so the mechanical publisher never spends a cycle discovering
+  // that an otherwise "verified" dangerous procedure is incomplete.
+  if (normalized.dangerous && normalized.rollback.length === 0) {
+    return {
+      decision: 'deep_review',
+      finding:
+        'Dangerous candidates require an explicit rollback procedure before they can be verified.'
+    }
+  }
+  return null
+}
+
 async function getDeterministicCandidateDisposition(
   client: DatabaseClient,
   unparsedCandidate: unknown,
@@ -3774,6 +3796,8 @@ async function getDeterministicCandidateDisposition(
   finding: string
 } | null> {
   const candidate = pipelineCandidatePayloadSchema.parse(unparsedCandidate)
+  const riskDisposition = getDeterministicRiskDisposition(candidate)
+  if (riskDisposition) return riskDisposition
 
   try {
     if (candidate.version_min) normalizeVendorVersion(candidate.version_min)

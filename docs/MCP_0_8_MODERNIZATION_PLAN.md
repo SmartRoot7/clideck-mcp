@@ -121,11 +121,22 @@ by unrelated documents, and the next official discovery remains retryable.
 Ready when malformed reviewer provenance cannot reject a whole automatic
 review batch, while a repaired candidate still cannot escape evidence binding.
 
-Verified in production on 20 July 2026: deployment SHA
-`64b36ebe0a3fa31df60bad6a039add65ca904345` is live; a post-deploy aggregate
-found zero new Deep Review provenance-artifact failures. The regression suite
-also proves that an invalid model-supplied provenance hash is discarded while
-the leased provenance remains unchanged.
+Deployed in production on 20 July 2026: SHA
+`64b36ebe0a3fa31df60bad6a039add65ca904345` is live. The regression suite
+proves that an invalid model-supplied provenance hash is discarded while the
+leased provenance remains unchanged. Live observation remains in progress;
+short post-deploy inactivity is not treated as proof of long-run behavior.
+
+### M9 — Early dangerous-record completeness gate
+
+- `[~]` Apply the mandatory rollback check during standard and Deep Review
+  verification, before a record can become Ready.
+- `[~]` Keep publication preflight as the final invariant, but eliminate the
+  avoidable Ready → Deep Review loop for records already known to be incomplete.
+
+Ready when no newly verified dangerous record without rollback reaches the
+mechanical publisher, while dangerous records with an evidence-backed rollback
+remain publishable.
 
 ## Production verification — 20 July 2026
 
