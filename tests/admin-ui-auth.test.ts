@@ -322,6 +322,12 @@ function overviewFixture() {
     candidates_created_24h: 120,
     candidates_verified_24h: 100,
     candidates_deep_resolved_24h: 4,
+    record_outcomes_24h: {
+      rejected: 1,
+      conflict: 2,
+      quarantine: 3,
+      exception: 0
+    },
     pause_pending: false,
     published_records_24h: 2,
     deployed_commit_sha: 'a'.repeat(40),

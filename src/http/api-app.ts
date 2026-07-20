@@ -18,6 +18,7 @@ import {
   labSchema,
   overviewSchema,
   pipelineDetailsSchema,
+  pipelineTransitionsSchema,
   provenanceSchema,
   qualitySchema,
   releasesSchema,
@@ -73,6 +74,7 @@ import {
 } from '../domain/change.js'
 import { resolveNetworkContext } from '../domain/context.js'
 import { searchKnowledge } from '../domain/knowledge.js'
+import { listPipelineTransitions } from '../domain/pipeline-transitions.js'
 import {
   sanitizeDemoActiveSource,
   sanitizeDemoActiveSources,
@@ -154,6 +156,18 @@ function parseHttpContract<T>(
   return schema.parse(JSON.parse(JSON.stringify(value)))
 }
 
+function parseTransitionCursor(value: string | undefined): string | null | undefined {
+  if (value === undefined || value === '') return null
+  if (!/^\d{1,19}$/.test(value)) return undefined
+  try {
+    return BigInt(value) <= 9_223_372_036_854_775_807n
+      ? value
+      : undefined
+  } catch {
+    return undefined
+  }
+}
+
 export function createApiApp(dependencies: ApiDependencies) {
   const {
     config,
@@ -214,7 +228,7 @@ export function createApiApp(dependencies: ApiDependencies) {
     context.json({
       status: 'ok',
       service: 'CliDeck MCP — Network Knowledge',
-      version: '0.7.2'
+      version: '0.7.3'
     }),
   )
 
@@ -343,6 +357,17 @@ export function createApiApp(dependencies: ApiDependencies) {
       await getAdminOverview(adminDatabase, config.deployCommitSha),
     ))),
   )
+
+  app.get('/public/v1/demo/pipeline/transitions', async (context) => {
+    const after = parseTransitionCursor(context.req.query('after'))
+    if (after === undefined) {
+      return context.json({ error: 'invalid_cursor' }, 400)
+    }
+    return context.json(parseHttpContract(
+      pipelineTransitionsSchema,
+      await listPipelineTransitions(adminDatabase, after),
+    ))
+  })
 
   app.get('/public/v1/demo/coverage', async (context) =>
     context.json(parseHttpContract(
@@ -866,6 +891,17 @@ export function createApiApp(dependencies: ApiDependencies) {
     return context.json(
       await getAdminOverview(adminDatabase, config.deployCommitSha),
     )
+  })
+
+  app.get('/admin/v1/pipeline/transitions', async (context) => {
+    const after = parseTransitionCursor(context.req.query('after'))
+    if (after === undefined) {
+      return context.json({ error: 'invalid_cursor' }, 400)
+    }
+    return context.json(parseHttpContract(
+      pipelineTransitionsSchema,
+      await listPipelineTransitions(adminDatabase, after),
+    ))
   })
 
   app.get('/admin/v1/coverage', async (context) =>

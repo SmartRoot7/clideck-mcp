@@ -20,6 +20,7 @@ import {
   mutationAckSchema,
   overviewSchema,
   pipelineDetailsSchema,
+  pipelineTransitionsSchema,
   provenanceSchema,
   qualitySchema,
   releasesSchema,
@@ -206,7 +207,7 @@ export function createAdminUiApp(dependencies: AdminUiDependencies) {
   app.get('/admin/health', (context) => context.json({
     status: 'ok',
     service: 'clideck-mcp-admin',
-    version: '0.6.0'
+    version: '0.7.3'
   }))
 
   function sessionFor(context: {
@@ -396,6 +397,18 @@ export function createAdminUiApp(dependencies: AdminUiDependencies) {
   app.get('/admin/api/v1/overview', (context) =>
     readEndpoint(context, '/admin/v1/overview', overviewSchema),
   )
+  app.get('/admin/api/v1/pipeline/transitions', async (context) => {
+    const after = context.req.query('after')
+    if (after !== undefined && !/^\d{1,19}$/.test(after)) {
+      return context.json({ error: 'invalid_cursor' }, 400)
+    }
+    const suffix = after ? `?after=${after}` : ''
+    return await readEndpoint(
+      context,
+      `/admin/v1/pipeline/transitions${suffix}`,
+      pipelineTransitionsSchema,
+    )
+  })
   app.get('/admin/api/v1/coverage', (context) =>
     readEndpoint(context, '/admin/v1/coverage', coverageTargetsSchema),
   )

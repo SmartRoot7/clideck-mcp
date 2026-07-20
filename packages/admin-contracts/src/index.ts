@@ -111,6 +111,21 @@ export const hourlyPublishedSchema = z.object({
   published: scalarNumberSchema
 })
 
+export const pipelineTransitionSchema = z.object({
+  scope: z.enum(['source', 'record']),
+  from_stage: z.string(),
+  to_stage: z.string(),
+  count: scalarNumberSchema,
+  kind: z.enum(['progress', 'escalation', 'retry', 'terminal']),
+  occurred_at: timestampSchema
+})
+
+export const pipelineTransitionsSchema = z.object({
+  next_cursor: z.string().regex(/^\d+$/),
+  has_more: z.boolean(),
+  transitions: z.array(pipelineTransitionSchema)
+})
+
 export const pipelineErrorSchema = z.object({
   id: z.string(),
   pipeline_task_id: nullableStringSchema,
@@ -195,6 +210,12 @@ export const overviewSchema = z.object({
   candidates_created_24h: scalarNumberSchema,
   candidates_verified_24h: scalarNumberSchema,
   candidates_deep_resolved_24h: scalarNumberSchema,
+  record_outcomes_24h: z.object({
+    rejected: scalarNumberSchema,
+    conflict: scalarNumberSchema,
+    quarantine: scalarNumberSchema,
+    exception: scalarNumberSchema
+  }),
   pause_pending: z.boolean(),
   published_records_24h: scalarNumberSchema,
   deployed_commit_sha: nullableStringSchema,
@@ -659,6 +680,8 @@ export const feedbackRowsSchema = z.array(feedbackSchema)
 
 export type Session = z.infer<typeof sessionSchema>
 export type Overview = z.infer<typeof overviewSchema>
+export type PipelineTransition = z.infer<typeof pipelineTransitionSchema>
+export type PipelineTransitions = z.infer<typeof pipelineTransitionsSchema>
 export type CoverageTarget = z.infer<typeof coverageTargetSchema>
 export type Source = z.infer<typeof sourceSchema>
 export type PipelineDetails = z.infer<typeof pipelineDetailsSchema>

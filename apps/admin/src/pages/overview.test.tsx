@@ -17,6 +17,12 @@ function overviewFixture(): Overview {
     snapshot_at: now,
     prepared_sources: 8,
     prepared_source_target: 8,
+    record_outcomes_24h: {
+      rejected: 12,
+      conflict: 3,
+      quarantine: 4,
+      exception: 1
+    },
     pipeline_funnel: Object.entries(PIPELINE_STAGES).map(
       ([stage, metadata], index) => ({
         stage,
@@ -127,6 +133,8 @@ describe('overview pipeline snapshot', () => {
     expect(screen.queryByText('Queued')).not.toBeInTheDocument()
     expect(screen.queryByText('Done')).not.toBeInTheDocument()
     expect(screen.getByText('5,149')).toBeInTheDocument()
+    expect(screen.getByText('Quarantine')).toBeInTheDocument()
+    expect(screen.getByText('Exception')).toBeInTheDocument()
     const downloadedCard = screen
       .getByLabelText('Downloaded stage help')
       .closest('article')

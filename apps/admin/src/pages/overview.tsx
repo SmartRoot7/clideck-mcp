@@ -27,6 +27,7 @@ import {
 import { useMemo, type CSSProperties } from 'react'
 
 import { Chart } from '../components/chart'
+import { PipelineFlow } from '../components/pipeline-flow'
 import {
   DataTable,
   EmptyState,
@@ -51,7 +52,8 @@ import {
 import {
   useActiveSource,
   useCoverage,
-  usePipeline
+  usePipeline,
+  usePipelineTransitions
 } from '../lib/queries'
 
 export const PIPELINE_STAGES: Record<string, {
@@ -111,6 +113,7 @@ export function OverviewPage({ overview }: { overview: Overview }) {
   const pipelineQuery = usePipeline()
   const sourceQuery = useActiveSource()
   const coverageQuery = useCoverage()
+  const transitionsQuery = usePipelineTransitions()
   const pipeline = pipelineQuery.data
   const source = sourceQuery.data
   const coverage = coverageQuery.data ?? []
@@ -244,7 +247,10 @@ export function OverviewPage({ overview }: { overview: Overview }) {
         />
       </section>
 
-      <PipelineRail overview={overview} />
+      <PipelineRail
+        overview={overview}
+        transitions={transitionsQuery.visibleTransitions}
+      />
 
       <section className="executor-grid" aria-label="Luna executor status">
         {activeExecutors.map((executor) => (
@@ -486,7 +492,13 @@ const RECORD_PIPELINE_STAGES: Record<string, {
   }
 }
 
-export function PipelineRail({ overview }: { overview: Overview }) {
+export function PipelineRail({
+  overview,
+  transitions = []
+}: {
+  overview: Overview
+  transitions?: import('@clideck/admin-contracts').PipelineTransition[]
+}) {
   const acquired = overview.source_intake.find(
     (stage) => stage.stage === 'acquire',
   )
@@ -526,7 +538,7 @@ export function PipelineRail({ overview }: { overview: Overview }) {
       new Date(right.oldest_waiting_at ?? 0).getTime()
     )[0]?.stage
   return (
-    <>
+    <PipelineFlow transitions={transitions}>
       <Panel
         title="Source intake"
         icon={Network}
@@ -571,8 +583,26 @@ export function PipelineRail({ overview }: { overview: Overview }) {
             />
           ))}
         </div>
+        <div className="pipeline-outcomes" aria-label="Knowledge record outcomes">
+          {[
+            ['rejected', 'Rejected', overview.record_outcomes_24h.rejected],
+            ['conflict', 'Conflict', overview.record_outcomes_24h.conflict],
+            ['quarantine', 'Quarantine', overview.record_outcomes_24h.quarantine],
+            ['manual_exception', 'Exception', overview.record_outcomes_24h.exception]
+          ].map(([stage, label, value]) => (
+            <div
+              className={`pipeline-outcome pipeline-outcome--${stage}`}
+              data-pipeline-stage={`record:${stage}`}
+              key={stage}
+            >
+              <span>{label}</span>
+              <strong>{formatNumber(value, 0)}</strong>
+              <small>last 24h</small>
+            </div>
+          ))}
+        </div>
       </Panel>
-    </>
+    </PipelineFlow>
   )
 }
 
@@ -601,7 +631,10 @@ function SourceStageCard({
   const label = metadata?.label ?? titleCase(stage.stage)
   const downloaded = stage.stage === 'downloaded'
   return (
-    <article className={`pipeline-stage ${activeRunnerCount ? 'is-running' : ''} ${bottleneck ? 'is-bottleneck' : ''}`}>
+    <article
+      className={`pipeline-stage ${activeRunnerCount ? 'is-running' : ''} ${bottleneck ? 'is-bottleneck' : ''}`}
+      data-pipeline-stage={`source:${stage.stage}`}
+    >
       <div className="pipeline-stage__top">
         <span>{index + 1}</span>
         <IconTooltip icon={Icon} label={`${label} stage`}>
@@ -652,7 +685,10 @@ function RecordStageCard({
   const Icon = metadata.icon
   const activeRunnerCount = stage.active_executor_ids.length
   return (
-    <article className={`pipeline-stage ${activeRunnerCount ? 'is-running' : ''} ${bottleneck ? 'is-bottleneck' : ''}`}>
+    <article
+      className={`pipeline-stage ${activeRunnerCount ? 'is-running' : ''} ${bottleneck ? 'is-bottleneck' : ''}`}
+      data-pipeline-stage={`record:${stage.stage}`}
+    >
       <div className="pipeline-stage__top">
         <span>{index + 1}</span>
         <IconTooltip icon={Icon} label={`${metadata.label} stage`}>

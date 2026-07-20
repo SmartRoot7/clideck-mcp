@@ -129,6 +129,7 @@ export function sanitizeDemoOverview(overview: Overview): Overview {
     candidates_verified_24h: overview.candidates_verified_24h,
     candidates_deep_resolved_24h:
       overview.candidates_deep_resolved_24h,
+    record_outcomes_24h: overview.record_outcomes_24h,
     pause_pending: overview.pause_pending,
     published_records_24h: overview.published_records_24h,
     deployed_commit_sha: overview.deployed_commit_sha,

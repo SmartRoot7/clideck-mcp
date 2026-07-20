@@ -622,6 +622,75 @@ Verification:
 
 Production verification pending rollout.
 
+## 0.7.3 — Confirmed pipeline transition visualization
+
+### [x] P0.7.3.1 — Transactional transition telemetry
+
+Goal: visualize only status changes that the backend actually committed.
+
+Delivered:
+
+- append-only `pipeline_transition_events` records aggregated source/record
+  transitions in the same PostgreSQL transaction as the corresponding status
+  update;
+- cursor-based admin and public-demo reads expose counts, stages, kinds, and
+  timestamps without task IDs, source identity, fragments, or provenance;
+- the first request primes the cursor without replaying historical activity;
+- cursor pagination, idempotency, every allowed route, and transaction rollback
+  are covered by PostgreSQL integration tests.
+
+### [x] P0.7.3.2 — Shared productive-motion UI
+
+Goal: show where committed work moved without decorative or misleading motion.
+
+Delivered:
+
+- `/admin` and `/demo` use the same `PipelineFlow` component around the same
+  Source Intake and Knowledge Records rails;
+- same-route events are aggregated into a `+N From → To` impulse, at most six
+  routes animate per refresh, and twelve remain in `Last transitions`;
+- terminal outcomes are visible as Rejected, Conflict, Quarantine, and
+  Exception cards;
+- cards remain fixed while a thin orthogonal SVG rail and one compact badge
+  move above them; mobile uses a vertical route;
+- Overview is refreshed successfully before an event becomes visible, so an
+  animation cannot accompany stale counters;
+- initial load, hidden/stale events, unavailable data, and reduced-motion
+  behavior suppress movement appropriately.
+
+Verification:
+
+- clean PostgreSQL 16 migrations 001–019 and grants succeeded;
+- 102 backend/PostgreSQL tests, 14 Domain Pack tests, and 14 admin UI tests
+  passed without skip;
+- Node.js 24 typecheck and production build passed;
+- product eval passed 250/250 with dangerous false-safe 0 and p95 11.46 ms;
+- production dependency audit and diff secret/provenance scan found no issue.
+
+The scheduler observation requested before rollout ran from
+`2026-07-20 00:59:06 UTC` through `2026-07-20 01:53:43 UTC`. It was ended early
+by the explicit request for immediate deployment, so it is not reported as a
+two-hour result. During that bounded interval active knowledge increased to
+64,583, release sequence reached 289, and 567 delta changes were published.
+
+Production deployment and browser QA completed:
+
+- the first production smoke check exposed a least-privilege mismatch:
+  PostgreSQL reads the explicit `dedupe_key` conflict target used by
+  `ON CONFLICT DO NOTHING`, while the worker roles initially had only `INSERT`;
+- migration 019 grants those roles column-level `SELECT` on `dedupe_key` only,
+  and an integration regression verifies both writer roles;
+- cursor ordering uses the numeric identity column rather than its text
+  projection; a regression crosses the `99 → 100` boundary and proves that
+  acknowledged events are neither replayed nor skipped;
+- after the grant, real committed transitions appeared immediately across
+  Acquire, Convert, Chunk, Analyze, Deep Low, and Publish, including a
+  26-record `Ready → Published` transition;
+- the public demo displayed the same production Overview and all real
+  transition history without internal task/source references;
+- browser QA passed at 1920px, 1440px, tablet, mobile, and reduced motion,
+  without horizontal overflow or a separate demo component tree.
+
 ## Final day — release and submission
 
 ### [x] D3.1 — Security and release gate

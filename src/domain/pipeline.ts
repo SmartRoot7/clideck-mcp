@@ -14,6 +14,10 @@ import {
   fillWeightedAiCapacity,
   type WeightedAiStage
 } from './pipeline-scheduler.js'
+import {
+  recordPipelineTransition,
+  recordPipelineTransitions
+} from './pipeline-transitions.js'
 import { candidateRevisionSchema } from './schemas.js'
 import { enforceKnowledgeRisk } from './risk.js'
 
@@ -3247,6 +3251,14 @@ export async function submitSourceDiscovery(
       active_source_id: activeSource.rows[0]?.active_source_id ?? null,
       rejection_reason: input.rejection_reason ?? null
     }
+    await recordPipelineTransition(client, {
+      scope: 'source',
+      fromStage: 'discover',
+      toStage: 'acquire',
+      count: insertedIds.length,
+      kind: 'progress',
+      taskId: task.id
+    })
     await completeTask(client, task, completion)
     return completion
   })
@@ -3410,6 +3422,14 @@ export async function submitCandidateAnalysis(
         reason: entry.reason
       }))
     }
+    await recordPipelineTransition(client, {
+      scope: 'record',
+      fromStage: 'analyze',
+      toStage: 'verify',
+      count: insertedIds.length,
+      kind: 'progress',
+      taskId: task.id
+    })
     await completeTask(client, task, completion)
     return completion
   })
@@ -3685,6 +3705,40 @@ export async function submitCandidateVerification(
           )`,
       [[...allowedCandidateIds]],
     )
+    await recordPipelineTransitions(client, [
+      {
+        scope: 'record',
+        fromStage: 'verify',
+        toStage: 'ready',
+        count: counts.verified,
+        kind: 'progress',
+        taskId: task.id
+      },
+      {
+        scope: 'record',
+        fromStage: 'verify',
+        toStage: 'deep_low',
+        count: counts.deep_review,
+        kind: 'escalation',
+        taskId: task.id
+      },
+      {
+        scope: 'record',
+        fromStage: 'verify',
+        toStage: 'rejected',
+        count: counts.rejected,
+        kind: 'terminal',
+        taskId: task.id
+      },
+      {
+        scope: 'record',
+        fromStage: 'verify',
+        toStage: 'conflict',
+        count: counts.conflict,
+        kind: 'terminal',
+        taskId: task.id
+      }
+    ])
     await completeTask(client, task, counts)
     return counts
   })
@@ -3965,6 +4019,57 @@ export async function submitCandidateDeepReview(
         [task.source_candidate_id],
       )
     }
+    const fromStage = reviewPass === 'medium' ? 'deep_medium' : 'deep_low'
+    await recordPipelineTransitions(client, [
+      {
+        scope: 'record',
+        fromStage,
+        toStage: 'ready',
+        count: counts.verified,
+        kind: 'progress',
+        taskId: task.id
+      },
+      {
+        scope: 'record',
+        fromStage,
+        toStage: 'deep_medium',
+        count: reviewPass === 'low' ? counts.escalated_to_medium : 0,
+        kind: 'escalation',
+        taskId: task.id
+      },
+      {
+        scope: 'record',
+        fromStage,
+        toStage: 'rejected',
+        count: counts.rejected,
+        kind: 'terminal',
+        taskId: task.id
+      },
+      {
+        scope: 'record',
+        fromStage,
+        toStage: 'conflict',
+        count: counts.conflict,
+        kind: 'terminal',
+        taskId: task.id
+      },
+      {
+        scope: 'record',
+        fromStage,
+        toStage: 'quarantine',
+        count: counts.quarantined,
+        kind: 'terminal',
+        taskId: task.id
+      },
+      {
+        scope: 'record',
+        fromStage,
+        toStage: 'manual_exception',
+        count: counts.manual_exception,
+        kind: 'terminal',
+        taskId: task.id
+      }
+    ])
     await completeTask(client, task, counts)
     return counts
   })

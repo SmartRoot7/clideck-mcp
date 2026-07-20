@@ -18,6 +18,7 @@ import {
   labSchema,
   overviewSchema,
   pipelineDetailsSchema,
+  pipelineTransitionsSchema,
   provenanceSchema,
   qualitySchema,
   reviewExceptionDetailSchema,
@@ -1826,6 +1827,10 @@ describeIntegration('PostgreSQL integration', () => {
       }
 
       const overview = await read('/overview', overviewSchema)
+      const transitions = await read(
+        '/pipeline/transitions',
+        pipelineTransitionsSchema,
+      )
       const coverage = await read('/coverage', coverageTargetsSchema)
       const sources = await read('/sources?limit=200', sourcesSchema)
       const pipeline = await read('/pipeline', pipelineDetailsSchema)
@@ -1944,6 +1949,7 @@ describeIntegration('PostgreSQL integration', () => {
 
       const serialized = JSON.stringify({
         overview,
+        transitions,
         coverage,
         sources,
         pipeline,
@@ -1958,6 +1964,7 @@ describeIntegration('PostgreSQL integration', () => {
       })
       expect(serialized).not.toContain(sentinel)
       expect(serialized).not.toContain(sourceUrl)
+      expect(JSON.stringify(transitions)).not.toContain('pipeline_task_id')
       expect(serialized).toContain(sourceId)
       expect(serialized).toContain(taskId)
 
@@ -2123,6 +2130,7 @@ describeIntegration('PostgreSQL integration', () => {
       '/admin/v1/coverage',
       '/admin/v1/sources?limit=25',
       '/admin/v1/pipeline',
+      '/admin/v1/pipeline/transitions',
       '/admin/v1/active-source',
       '/admin/v1/knowledge?limit=25&offset=0',
       '/admin/v1/imports',

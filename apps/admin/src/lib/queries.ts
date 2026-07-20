@@ -11,6 +11,7 @@ import {
   knowledgePageSchema,
   labSchema,
   overviewSchema,
+  pipelineTransitionsSchema,
   pipelineDetailsSchema,
   provenanceSchema,
   qualitySchema,
@@ -22,8 +23,10 @@ import {
 } from '@clideck/admin-contracts'
 import {
   keepPreviousData,
+  useQueryClient,
   useQuery
 } from '@tanstack/react-query'
+import { useEffect, useRef, useState } from 'react'
 
 import { getJson } from './api'
 import { useOperationsRuntime } from './runtime'
@@ -45,6 +48,68 @@ export function useOverview() {
     refetchInterval: 10_000,
     staleTime: 8_000
   })
+}
+
+export function usePipelineTransitions(enabled = true) {
+  const { apiPrefix } = useOperationsRuntime()
+  const queryClient = useQueryClient()
+  const cursorRef = useRef<string | null>(null)
+  const consumedCursorRef = useRef<string | null>(null)
+  const [visibleTransitions, setVisibleTransitions] = useState<
+    NonNullable<ReturnType<typeof pipelineTransitionsSchema.parse>>[
+      'transitions'
+    ]
+  >([])
+  const query = useQuery({
+    queryKey: [apiPrefix, 'pipeline-transitions'],
+    queryFn: () => {
+      const suffix = cursorRef.current === null
+        ? ''
+        : `?after=${encodeURIComponent(cursorRef.current)}`
+      return getJson(
+        `${apiPrefix}/pipeline/transitions${suffix}`,
+        pipelineTransitionsSchema,
+      )
+    },
+    enabled,
+    refetchInterval: enabled ? 5_000 : false,
+    refetchIntervalInBackground: false,
+    staleTime: 0
+  })
+
+  useEffect(() => {
+    const page = query.data
+    if (!page || consumedCursorRef.current === page.next_cursor) return
+    consumedCursorRef.current = page.next_cursor
+    cursorRef.current = page.next_cursor
+    let cancelled = false
+    if (page.transitions.length > 0) {
+      const overviewKey = [apiPrefix, 'overview'] as const
+      const previousUpdatedAt =
+        queryClient.getQueryState(overviewKey)?.dataUpdatedAt ?? 0
+      void queryClient.invalidateQueries({
+        queryKey: overviewKey,
+        refetchType: 'active'
+      }).then(() => {
+        const overviewState = queryClient.getQueryState(overviewKey)
+        if (
+          !cancelled &&
+          overviewState?.status === 'success' &&
+          (overviewState.dataUpdatedAt ?? 0) > previousUpdatedAt
+        ) {
+          setVisibleTransitions(page.transitions)
+        }
+      }).catch(() => {
+        // Suppress the new visual transition when its counters cannot be
+        // synchronized; stale values must never animate.
+      })
+    }
+    return () => {
+      cancelled = true
+    }
+  }, [apiPrefix, query.data, queryClient])
+
+  return { ...query, visibleTransitions }
 }
 
 export function useCoverage(enabled = true) {

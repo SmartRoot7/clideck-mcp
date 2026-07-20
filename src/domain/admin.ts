@@ -238,7 +238,25 @@ export async function getAdminOverview(
           WHERE review_type IN ('deep_low', 'deep_medium')
             AND decision IN ('verified', 'rejected', 'conflict')
             AND created_at >= now() - interval '24 hours')
-           AS candidates_deep_resolved_24h
+           AS candidates_deep_resolved_24h,
+         jsonb_build_object(
+           'rejected',
+             (SELECT count(*)::int FROM knowledge_candidates
+              WHERE status = 'rejected'
+                AND updated_at >= now() - interval '24 hours'),
+           'conflict',
+             (SELECT count(*)::int FROM knowledge_candidates
+              WHERE status = 'conflict'
+                AND updated_at >= now() - interval '24 hours'),
+           'quarantine',
+             (SELECT count(*)::int FROM knowledge_candidates
+              WHERE status = 'quarantined'
+                AND updated_at >= now() - interval '24 hours'),
+           'exception',
+             (SELECT count(*)::int FROM knowledge_candidates
+              WHERE status = 'manual_exception'
+                AND updated_at >= now() - interval '24 hours')
+         ) AS record_outcomes_24h
        FROM active_release ar
        JOIN releases r ON r.id = ar.release_id
        CROSS JOIN pipeline_settings ps

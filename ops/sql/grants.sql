@@ -27,7 +27,8 @@ GRANT SELECT ON
   active_release,
   release_items,
   release_changes,
-  active_knowledge_state
+  active_knowledge_state,
+  pipeline_transition_events
 TO clideck_mcp_api;
 GRANT SELECT, UPDATE ON principals TO clideck_mcp_api;
 GRANT SELECT, INSERT, UPDATE ON expert_tasks TO clideck_mcp_api;
@@ -90,7 +91,8 @@ GRANT SELECT ON
   import_items,
   legacy_revision_metadata,
   admin_audit_events,
-  worker_heartbeats
+  worker_heartbeats,
+  pipeline_transition_events
 TO clideck_mcp_admin;
 GRANT INSERT ON product_eval_runs TO clideck_mcp_admin;
 GRANT INSERT ON
@@ -160,6 +162,7 @@ GRANT SELECT ON
   pipeline_settings,
   pipeline_tasks,
   pipeline_events,
+  pipeline_transition_events,
   knowledge_candidates,
   candidate_verifications,
   agent_runs,
@@ -174,6 +177,7 @@ GRANT INSERT, UPDATE ON
   source_candidates,
   pipeline_tasks,
   pipeline_events,
+  pipeline_transition_events,
   knowledge_candidates
 TO clideck_mcp_worker;
 GRANT INSERT ON candidate_verifications TO clideck_mcp_worker;
@@ -210,6 +214,7 @@ GRANT SELECT ON
   pipeline_settings,
   pipeline_tasks,
   pipeline_events,
+  pipeline_transition_events,
   knowledge_candidates,
   candidate_verifications,
   agent_runs,
@@ -227,6 +232,7 @@ GRANT INSERT ON
   source_candidates,
   pipeline_tasks,
   pipeline_events,
+  pipeline_transition_events,
   knowledge_candidates,
   candidate_verifications,
   agent_runs,
@@ -248,7 +254,8 @@ GRANT DELETE ON active_source_slots TO clideck_mcp_researcher;
 GRANT USAGE, SELECT ON SEQUENCE
   task_messages_id_seq,
   task_public_events_id_seq,
-  pipeline_events_id_seq
+  pipeline_events_id_seq,
+  pipeline_transition_events_id_seq
 TO clideck_mcp_researcher;
 
 GRANT SELECT, INSERT, UPDATE ON

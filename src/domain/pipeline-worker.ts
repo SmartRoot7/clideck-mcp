@@ -41,6 +41,7 @@ import {
   createKnowledgeRevision,
   publishKnowledgeBatch
 } from './publication.js'
+import { recordPipelineTransition } from './pipeline-transitions.js'
 import { enforceKnowledgeRisk } from './risk.js'
 
 const execFileAsync = promisify(execFile)
@@ -841,6 +842,14 @@ async function acquireSource(
         WHERE id = $1`,
         [payload.source_id, downloaded.finalUrl, contentHash],
       )
+      await recordPipelineTransition(client, {
+        scope: 'source',
+        fromStage: 'acquire',
+        toStage: 'downloaded',
+        count: 1,
+        kind: 'progress',
+        taskId: claimed.task.id
+      })
       return {
         duplicate: false,
         byte_size: downloaded.body.byteLength,
@@ -901,6 +910,14 @@ async function convertSource(
         WHERE id = $1`,
       [payload.source_id],
     )
+    await recordPipelineTransition(client, {
+      scope: 'source',
+      fromStage: 'downloaded',
+      toStage: 'convert',
+      count: 1,
+      kind: 'progress',
+      taskId: claimed.task.id
+    })
   })
   return {
     extracted_bytes: Buffer.byteLength(text, 'utf8'),
@@ -962,6 +979,14 @@ async function chunkSource(
         WHERE id = $1`,
       [row.id],
     )
+    await recordPipelineTransition(client, {
+      scope: 'source',
+      fromStage: 'convert',
+      toStage: 'chunk',
+      count: 1,
+      kind: 'progress',
+      taskId: claimed.task.id
+    })
   })
   const fastPath = await runDeterministicFastPath(
     database,
@@ -969,16 +994,26 @@ async function chunkSource(
     row.id,
     payload,
   )
-  await database.query(
-    `UPDATE source_candidates
-        SET status = 'prepared',
-            failure_code = NULL,
-            failure_message = NULL,
-            updated_at = now()
-      WHERE id = $1
-        AND status = 'chunking'`,
-    [payload.source_id],
-  )
+  await withTransaction(database, async (client) => {
+    await client.query(
+      `UPDATE source_candidates
+          SET status = 'prepared',
+              failure_code = NULL,
+              failure_message = NULL,
+              updated_at = now()
+        WHERE id = $1
+          AND status = 'chunking'`,
+      [payload.source_id],
+    )
+    await recordPipelineTransition(client, {
+      scope: 'source',
+      fromStage: 'chunk',
+      toStage: 'analyze',
+      count: fragments.length,
+      kind: 'progress',
+      taskId: claimed.task.id
+    })
+  })
   return {
     fragments_created: fragments.length,
     fragment_bytes: fragments.reduce(
@@ -1077,6 +1112,7 @@ async function runDeterministicFastPath(
       verified_at: verifiedAt
     })
     await withTransaction(database, async (client) => {
+      let batchCandidatesCreated = 0
       for (const entry of result.candidates) {
         const parsed = networkDomainPack.candidateSchema.parse(
           entry.candidate,
@@ -1112,7 +1148,10 @@ async function runDeterministicFastPath(
             candidate.quality_score
           ],
         )
-        if (inserted.rows[0]) candidatesCreated += 1
+        if (inserted.rows[0]) {
+          candidatesCreated += 1
+          batchCandidatesCreated += 1
+        }
       }
       if (result.handled_fragment_ids.length > 0) {
         await client.query(
@@ -1125,6 +1164,15 @@ async function runDeterministicFastPath(
           [result.handled_fragment_ids, artifactId],
         )
       }
+      await recordPipelineTransition(client, {
+        scope: 'record',
+        fromStage: 'analyze',
+        toStage: 'verify',
+        count: batchCandidatesCreated,
+        kind: 'progress',
+        taskId: task.id,
+        dedupeSuffix: `deterministic-fast-path:${lastOrdinal}`
+      })
     })
     for (const fragmentId of result.handled_fragment_ids) {
       handled.add(fragmentId)
@@ -1419,7 +1467,10 @@ async function publishCandidateBatch(
     itemId: string
     revisionId: string
   }> = []
-  let deferred = 0
+  const deferred: Array<{
+    candidateId: string
+    reason: string
+  }> = []
   for (const candidate of candidates.rows) {
     try {
       const created = await withTransaction(database, async (client) => {
@@ -1478,10 +1529,22 @@ async function publishCandidateBatch(
       const message = error instanceof Error ? error.message : ''
       if (message === 'CANDIDATE_ALREADY_PROCESSED') continue
       if (!isCandidatePublicationValidationError(error)) throw error
-      deferred += 1
       const policyCode =
         error instanceof CorePolicyError ? `${error.code}: ` : ''
-      await database.query(
+      deferred.push({
+        candidateId: candidate.id,
+        reason:
+          `Publication preflight rejected candidate: ${policyCode}${message}`
+            .slice(0, 4_000)
+      })
+    }
+  }
+
+  return withTransaction(database, async (client) => {
+    let deferredLow = 0
+    let deferredMedium = 0
+    for (const candidate of deferred) {
+      const updated = await client.query<{ resolution_attempts: number }>(
         `UPDATE knowledge_candidates
             SET status = 'deep_review',
                 publication_task_id = NULL,
@@ -1491,18 +1554,16 @@ async function publishCandidateBatch(
                 next_review_at = now(),
                 updated_at = now()
           WHERE id = $1
-            AND publication_task_id = $2`,
-        [
-          candidate.id,
-          claimed.task.id,
-          `Publication preflight rejected candidate: ${policyCode}${message}`
-            .slice(0, 4_000)
-        ],
+            AND publication_task_id = $2
+          RETURNING resolution_attempts`,
+        [candidate.candidateId, claimed.task.id, candidate.reason],
       )
+      if ((updated.rows[0]?.resolution_attempts ?? 0) > 0) {
+        deferredMedium += 1
+      } else if (updated.rows[0]) {
+        deferredLow += 1
+      }
     }
-  }
-
-  return withTransaction(database, async (client) => {
     const release = revisions.length > 0
       ? await publishKnowledgeBatch(
           client,
@@ -1562,10 +1623,34 @@ async function publishCandidateBatch(
         [revisions.map((revision) => revision.candidateId)],
       )
     }
+    await recordPipelineTransition(client, {
+      scope: 'record',
+      fromStage: 'ready',
+      toStage: 'publish',
+      count: revisions.length,
+      kind: 'progress',
+      taskId: claimed.task.id
+    })
+    await recordPipelineTransition(client, {
+      scope: 'record',
+      fromStage: 'ready',
+      toStage: 'deep_low',
+      count: deferredLow,
+      kind: 'retry',
+      taskId: claimed.task.id
+    })
+    await recordPipelineTransition(client, {
+      scope: 'record',
+      fromStage: 'ready',
+      toStage: 'deep_medium',
+      count: deferredMedium,
+      kind: 'retry',
+      taskId: claimed.task.id
+    })
     return {
       records_reserved: payload.candidate_ids.length,
       records_published: revisions.length,
-      records_deferred_to_deep_review: deferred,
+      records_deferred_to_deep_review: deferred.length,
       release_id: release?.releaseId ?? null,
       release_sequence: release?.sequence ?? null
     }
