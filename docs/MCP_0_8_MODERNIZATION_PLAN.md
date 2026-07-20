@@ -282,6 +282,19 @@ Ready when the journal and its demo projection reconcile, the Overview can
 explain every active source lane, and an unknown request cannot be lost merely
 because one Luna run or official URL failed.
 
+### M20 — Work-conserving scoped circuit recovery
+
+- `[x]` Exclude queued work behind an open, task-type-and-reasoning-specific
+  Codex circuit from capacity accounting.
+- `[x]` Do not create more work for that blocked class until its probe window
+  opens, while Verify, Analyze and Discovery can reserve the released lanes.
+- `[~]` Observe a real Deep Medium circuit on production and confirm that it
+  no longer leaves healthy Luna executors idle while useful upstream work
+  exists.
+
+Ready when an external Deep Medium failure protects tokens without making the
+rest of the four-Luna pipeline appear fully occupied.
+
 ## Production verification — 20 July 2026
 
 - `[x]` Deployed `bc7c950b585bd994efa704e4ca246320fbde05dd` exclusively through

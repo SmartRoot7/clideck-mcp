@@ -2835,6 +2835,24 @@ async function ensureStreamingWorkInTransaction(
       aiTaskTypes
     ],
   )
+  // A scoped circuit protects only the exact failing Luna work class.  Queued
+  // work behind an open circuit is intentionally not claimable, so it must
+  // not consume scheduler capacity either: otherwise a Deep Medium incident
+  // can make the other three executors look "full" while Analyze and Verify
+  // records wait untouched.
+  const blockedCircuits = await client.query<AiCircuitRow>(
+    `SELECT task_type, reasoning_effort, open_until, probe_executor_id
+       FROM pipeline_ai_circuits
+      WHERE open_until > now()
+         OR probe_executor_id IS NOT NULL`,
+  )
+  const isCircuitBlocked = (
+    taskType: PipelineTaskRow['task_type'],
+    reasoningEffort: 'low' | 'medium',
+  ) => blockedCircuits.rows.some((circuit) =>
+    circuit.task_type === taskType &&
+    circuit.reasoning_effort === reasoningEffort,
+  )
   const activeAi = await client.query<{
     scheduler_stage: WeightedAiStage | 'expert' | 'discover'
     count: number
@@ -2854,7 +2872,23 @@ async function ensureStreamingWorkInTransaction(
      FROM pipeline_tasks
      WHERE (
          status IN ('claimed', 'running')
-         OR (status = 'queued' AND available_at <= now())
+         OR (
+           status = 'queued'
+           AND available_at <= now()
+           AND NOT EXISTS (
+             SELECT 1
+             FROM pipeline_ai_circuits circuit
+             WHERE circuit.task_type = pipeline_tasks.task_type
+               AND circuit.reasoning_effort = coalesce(
+                 pipeline_tasks.requested_reasoning_effort,
+                 'low'
+               )
+               AND (
+                 circuit.open_until > now()
+                 OR circuit.probe_executor_id IS NOT NULL
+               )
+           )
+         )
        )
        AND task_type = ANY($1::text[])
      GROUP BY scheduler_stage`,
@@ -2878,8 +2912,18 @@ async function ensureStreamingWorkInTransaction(
     WeightedAiStage,
     () => Promise<boolean>
   > = {
-    deep_medium: () => queueDeepReviewWork(client, 'medium'),
-    deep_low: () => queueDeepReviewWork(client, 'low'),
+    deep_medium: () => isCircuitBlocked(
+      'candidate_deep_review',
+      'medium',
+    )
+      ? Promise.resolve(false)
+      : queueDeepReviewWork(client, 'medium'),
+    deep_low: () => isCircuitBlocked(
+      'candidate_deep_review',
+      'low',
+    )
+      ? Promise.resolve(false)
+      : queueDeepReviewWork(client, 'low'),
     verify: () => queueVerificationFromAnySource(client),
     analyze: () => queueAnalysisFromLanes(client, activeSourceIds)
   }
