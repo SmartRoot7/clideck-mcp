@@ -197,7 +197,7 @@ export function OverviewPage({ overview }: { overview: Overview }) {
           value={`${formatNumber(overview.automatic_resolution_rate, 2)}%`}
           icon={ShieldCheck}
           help="Candidates resolved without becoming ordinary human review work."
-          detail={`${overview.manual_exceptions_24h} manual exceptions / 24h`}
+          detail={`${overview.technical_retries_24h} technical retries · ${overview.manual_exceptions_24h} manual exceptions / 24h`}
           tone={numberOf(overview.automatic_resolution_rate) >= 99.9 ? 'good' : 'warning'}
         />
         <Metric
@@ -587,7 +587,7 @@ export function PipelineRail({
           {[
             ['rejected', 'Rejected', overview.record_outcomes_24h.rejected],
             ['conflict', 'Conflict', overview.record_outcomes_24h.conflict],
-            ['quarantine', 'Quarantine', overview.record_outcomes_24h.quarantine],
+            ['quarantine', 'Evidence pending', overview.record_outcomes_24h.quarantine],
             ['manual_exception', 'Exception', overview.record_outcomes_24h.exception]
           ].map(([stage, label, value]) => (
             <div

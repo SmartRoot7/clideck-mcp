@@ -6,7 +6,7 @@ export type SeedSource = {
 
 export type SeedKnowledge = {
   stableKey: string
-  kind: 'command' | 'diagnostic' | 'change' | 'upgrade'
+  kind: 'command' | 'diagnostic' | 'workflow' | 'change' | 'upgrade'
   title: string
   summary: string
   questionPatterns: string[]
@@ -258,6 +258,300 @@ const verificationKnowledge: SeedKnowledge[] = verificationRows.map(
   }),
 )
 
+const workflowKnowledge: SeedKnowledge[] = [
+  {
+    stableKey: 'cisco.ios-xe.workflow.inspect-existing-trunk',
+    title: 'Inspect an existing trunk before a change',
+    summary:
+      'Establish the current administrative mode, operational trunk state, native VLAN, and allowed VLAN set before changing a Catalyst 9300 trunk.',
+    questionPatterns: [
+      'check existing trunk before change',
+      'inspect trunk allowed vlans',
+      'show current trunk configuration'
+    ],
+    procedure: [
+      'Run show interfaces <interface> switchport.',
+      'Run show interfaces <interface> trunk.',
+      'Run show running-config interface <interface>.',
+      'Stop if the interface is not the expected trunk or its current allow-list cannot be established.'
+    ],
+    verification: [
+      'The three outputs identify the same interface and agree on trunk mode.',
+      'Record the complete current allowed VLAN list and native VLAN.'
+    ],
+    rollback: ['No configuration is changed; rollback is not applicable.'],
+    prerequisites: ['Privileged EXEC access and the exact interface identifier.'],
+    risks: ['Using stale or truncated output can produce an incorrect change plan.'],
+    limitations: ['A port-channel member must be changed through the applicable logical interface policy.'],
+    cliMode: 'privileged EXEC',
+    dangerous: false,
+    confidence: 0.98,
+    qualityScore: 0.97,
+    versionMin: '16.6',
+    source: interfaceReference,
+    evidence: 'IOS-XE operational and running-configuration commands expose trunk mode and allowed VLAN state.'
+  },
+  {
+    stableKey: 'cisco.ios-xe.workflow.add-vlan-to-trunk',
+    title: 'Add a VLAN to a trunk without replacing the allow-list',
+    summary:
+      'Add one VLAN with the additive IOS-XE syntax so the existing allowed VLAN set is preserved.',
+    questionPatterns: [
+      'safely add vlan to existing trunk',
+      'add vlan without replacing trunk list',
+      'switchport trunk allowed vlan add'
+    ],
+    procedure: [
+      'Complete the existing-trunk inspection workflow and confirm VLAN <vlan-id> exists.',
+      'Enter configure terminal and interface <interface>.',
+      'Run switchport trunk allowed vlan add <vlan-id>.',
+      'Exit configuration mode without saving until verification passes.'
+    ],
+    verification: [
+      'Run show interfaces <interface> trunk and confirm the new VLAN and every previously recorded VLAN remain allowed.',
+      'Confirm the VLAN is forwarding where expected and no new spanning-tree inconsistency is reported.'
+    ],
+    rollback: ['Run switchport trunk allowed vlan remove <vlan-id> on the same interface, then repeat the trunk checks.'],
+    prerequisites: ['Recorded current allow-list, existing VLAN, approved interface and maintenance change.'],
+    risks: ['Omitting the add keyword can replace the current allow-list and interrupt multiple VLANs.'],
+    limitations: ['The workflow does not create the VLAN or modify peer devices.'],
+    cliMode: 'interface configuration',
+    dangerous: true,
+    confidence: 0.97,
+    qualityScore: 0.97,
+    versionMin: '16.6',
+    source: interfaceReference,
+    evidence: 'IOS-XE provides an additive allowed-VLAN form that modifies rather than replaces the trunk allow-list.'
+  },
+  {
+    stableKey: 'cisco.ios-xe.workflow.remove-vlan-from-trunk',
+    title: 'Remove one VLAN from a trunk',
+    summary:
+      'Remove only the approved VLAN from an existing trunk while retaining the rest of the allow-list.',
+    questionPatterns: [
+      'remove vlan from trunk safely',
+      'switchport trunk allowed vlan remove',
+      'delete one allowed vlan'
+    ],
+    procedure: [
+      'Record the current trunk allow-list and confirm the target VLAN and interface.',
+      'Confirm no required endpoint or downstream trunk depends on this path.',
+      'Enter interface configuration mode.',
+      'Run switchport trunk allowed vlan remove <vlan-id>.'
+    ],
+    verification: [
+      'Run show interfaces <interface> trunk and confirm only the target VLAN was removed.',
+      'Check spanning-tree and service reachability for VLANs that remain.'
+    ],
+    rollback: ['Run switchport trunk allowed vlan add <vlan-id> and repeat verification.'],
+    prerequisites: ['Approved impact analysis and a recorded original trunk allow-list.'],
+    risks: ['Removing an in-use VLAN interrupts that VLAN across the trunk.'],
+    limitations: ['This does not remove the VLAN from the switch database.'],
+    cliMode: 'interface configuration',
+    dangerous: true,
+    confidence: 0.97,
+    qualityScore: 0.96,
+    versionMin: '16.6',
+    source: interfaceReference,
+    evidence: 'IOS-XE provides a remove form for deleting selected VLANs from an allowed list.'
+  },
+  {
+    stableKey: 'cisco.ios-xe.workflow.verify-trunk-end-to-end',
+    title: 'Verify a VLAN and trunk end to end',
+    summary:
+      'Correlate VLAN existence, trunk allowance, spanning-tree forwarding, and learned forwarding state.',
+    questionPatterns: [
+      'verify vlan trunk end to end',
+      'check vlan forwarding over trunk',
+      'trunk vlan troubleshooting workflow'
+    ],
+    procedure: [
+      'Run show vlan id <vlan-id>.',
+      'Run show interfaces <interface> trunk.',
+      'Run show spanning-tree vlan <vlan-id> interface <interface> detail.',
+      'Run show mac address-table vlan <vlan-id>.'
+    ],
+    verification: [
+      'The VLAN exists and is active.',
+      'The trunk lists the VLAN as allowed and forwarding.',
+      'Spanning tree is not blocking the intended path and expected MAC learning is present.'
+    ],
+    rollback: ['No configuration is changed; rollback is not applicable.'],
+    prerequisites: ['Exact VLAN, interface, and expected peer/path.'],
+    risks: ['Absence of MAC learning alone does not prove failure when endpoints are silent.'],
+    limitations: ['Peer-side state and endpoint policy must be checked separately when not supplied.'],
+    cliMode: 'privileged EXEC',
+    dangerous: false,
+    confidence: 0.97,
+    qualityScore: 0.96,
+    versionMin: '16.6',
+    source: interfaceReference,
+    evidence: 'The IOS-XE operational commands expose VLAN, trunk, spanning-tree, and MAC forwarding state.'
+  },
+  {
+    stableKey: 'cisco.ios-xe.workflow.diagnose-errdisable',
+    title: 'Diagnose an err-disabled interface',
+    summary:
+      'Identify the recorded err-disable cause before attempting recovery.',
+    questionPatterns: [
+      'why is port err-disabled',
+      'diagnose errdisable cause',
+      'err-disabled interface troubleshooting'
+    ],
+    procedure: [
+      'Run show interfaces status err-disabled.',
+      'Run show errdisable recovery.',
+      'Run show logging and filter for the exact interface and err-disable event.',
+      'Inspect the feature-specific state indicated by the logged cause.'
+    ],
+    verification: [
+      'The interface and cause agree across status, recovery state, and logs.',
+      'Do not recover the port until the triggering condition is removed.'
+    ],
+    rollback: ['No configuration is changed during diagnosis.'],
+    prerequisites: ['Exact interface and recent untruncated logs.'],
+    risks: ['Recovering without removing the cause can create repeated flaps or a Layer 2 loop.'],
+    limitations: ['The cause-specific remediation depends on the feature that disabled the port.'],
+    cliMode: 'privileged EXEC',
+    dangerous: false,
+    confidence: 0.97,
+    qualityScore: 0.97,
+    versionMin: '16.6',
+    source: interfaceReference,
+    evidence: 'IOS-XE exposes err-disabled interfaces, causes, and configured recovery behavior.'
+  },
+  {
+    stableKey: 'cisco.ios-xe.workflow.diagnose-port-security',
+    title: 'Diagnose a port-security violation',
+    summary:
+      'Correlate interface port-security state, learned secure addresses, configuration, and violation logs.',
+    questionPatterns: [
+      'diagnose port security violation',
+      'port-security errdisable cause',
+      'show port-security interface'
+    ],
+    procedure: [
+      'Run show port-security interface <interface>.',
+      'Run show port-security address interface <interface>.',
+      'Run show running-config interface <interface>.',
+      'Review logs for the violating address and configured violation action.'
+    ],
+    verification: [
+      'Confirm the violation count, last source address, maximum, learned addresses, and action.',
+      'Compare observed devices with the approved endpoint inventory.'
+    ],
+    rollback: ['No configuration is changed during diagnosis.'],
+    prerequisites: ['Exact interface and authorized endpoint/MAC information.'],
+    risks: ['Clearing or changing secure addresses without identifying the endpoint can weaken access control.'],
+    limitations: ['Dynamic, sticky, and static secure-address behavior must be distinguished.'],
+    cliMode: 'privileged EXEC',
+    dangerous: false,
+    confidence: 0.97,
+    qualityScore: 0.97,
+    versionMin: '16.6',
+    source: interfaceReference,
+    evidence: 'IOS-XE port-security show commands expose violations, limits, actions, and secure addresses.'
+  },
+  {
+    stableKey: 'cisco.ios-xe.workflow.recover-port-security',
+    title: 'Recover a port-security err-disabled interface',
+    summary:
+      'Restore an interface only after the unauthorized or excess secure-address condition has been resolved.',
+    questionPatterns: [
+      'recover port security err-disabled port',
+      'reset port security violation',
+      'bring port up after port-security'
+    ],
+    procedure: [
+      'Complete the port-security diagnosis and remove or authorize the triggering endpoint according to local policy.',
+      'Confirm the intended secure-address configuration before resetting the interface.',
+      'Enter interface configuration mode and run shutdown, then no shutdown.',
+      'Do not save until the interface and security checks pass.'
+    ],
+    verification: [
+      'Run show interfaces status and show port-security interface <interface>.',
+      'Confirm the port is operational, the violation count is not increasing, and only approved secure addresses are present.'
+    ],
+    rollback: ['Run shutdown if violations recur or an unauthorized endpoint remains, then restore the approved security configuration.'],
+    prerequisites: ['Known violation cause, approved endpoint inventory, and console or independent management access.'],
+    risks: ['Re-enabling a port before correcting the cause can reconnect an unauthorized endpoint or trigger repeated err-disable.'],
+    limitations: ['This workflow deliberately does not erase secure addresses automatically.'],
+    cliMode: 'interface configuration',
+    dangerous: true,
+    confidence: 0.96,
+    qualityScore: 0.96,
+    versionMin: '16.6',
+    source: interfaceReference,
+    evidence: 'IOS-XE interface state and port-security commands support cause verification followed by an administrative reset.'
+  },
+  {
+    stableKey: 'cisco.ios-xe.workflow.bpdu-guard-lifecycle',
+    title: 'Configure, verify, disable, or recover BPDU Guard',
+    summary:
+      'Manage interface-level BPDU Guard with an explicit edge-port check and cause-aware recovery.',
+    questionPatterns: [
+      'enable bpdu guard verify disable recover',
+      'bpduguard errdisable recovery',
+      'spanning-tree bpduguard workflow'
+    ],
+    procedure: [
+      'Confirm the interface is an intended edge port and is not connected to a switch or bridge.',
+      'To enable, enter interface configuration and run spanning-tree bpduguard enable.',
+      'To disable the interface-level setting, run no spanning-tree bpduguard enable.',
+      'After a BPDU Guard err-disable event, remove the BPDU source before using shutdown and no shutdown.'
+    ],
+    verification: [
+      'Inspect the running interface configuration and spanning-tree interface detail.',
+      'Confirm no unexpected BPDUs or recurring err-disable events after recovery.'
+    ],
+    rollback: ['Restore the recorded previous BPDU Guard setting; keep the interface shut if an unsafe bridge remains attached.'],
+    prerequisites: ['Confirmed edge-port role and recorded previous spanning-tree state.'],
+    risks: ['Disabling BPDU Guard on an edge port can allow a Layer 2 loop or topology manipulation.'],
+    limitations: ['Global PortFast default behavior can also affect BPDU Guard and must be reviewed separately.'],
+    cliMode: 'interface configuration',
+    dangerous: true,
+    confidence: 0.96,
+    qualityScore: 0.96,
+    versionMin: '16.6',
+    source: interfaceReference,
+    evidence: 'IOS-XE supports interface BPDU Guard configuration and exposes spanning-tree and err-disable state for verification.'
+  },
+  {
+    stableKey: 'cisco.ios-xe.workflow.interface-description',
+    title: 'Change and verify an interface description',
+    summary:
+      'Apply an approved description and verify the exact interface without altering forwarding state.',
+    questionPatterns: [
+      'safely change interface description',
+      'verify interface description change',
+      'description approved text'
+    ],
+    procedure: [
+      'Run show interfaces <interface> description and record the current text and state.',
+      'Enter interface configuration and run description <approved-text>.',
+      'Exit configuration mode and inspect the same interface again.'
+    ],
+    verification: [
+      'The exact approved description appears on the intended interface.',
+      'Administrative and line-protocol state remain unchanged from the baseline.'
+    ],
+    rollback: ['Restore the recorded previous description, or use no description only when the previous state was empty.'],
+    prerequisites: ['Exact interface, approved text, and recorded previous description.'],
+    risks: ['Selecting the wrong interface creates misleading operational documentation.'],
+    limitations: ['Description text does not change forwarding behavior.'],
+    cliMode: 'interface configuration',
+    dangerous: false,
+    confidence: 0.98,
+    qualityScore: 0.97,
+    versionMin: '16.6',
+    source: interfaceReference,
+    evidence: 'IOS-XE supports interface descriptions and read-only commands that expose description and interface state.'
+  }
+].map((entry): SeedKnowledge => ({
+  ...entry,
+  kind: 'workflow'
+}))
+
 const upgradeRows = [
   ['readiness', 'Validate Catalyst 9300 upgrade readiness', 'Confirm model, entitlement, install mode, storage, stack health, power, backup, console access, and image checksum before starting.'],
   ['install-mode', 'Use the IOS-XE install workflow', 'Use the install add, activate, and commit workflow; legacy request platform software commands are deprecated.'],
@@ -323,11 +617,12 @@ export const IOS_XE_SEED_KNOWLEDGE: SeedKnowledge[] = [
   ...commandKnowledge,
   ...changeKnowledge,
   ...verificationKnowledge,
+  ...workflowKnowledge,
   ...upgradeKnowledge
 ]
 
-if (IOS_XE_SEED_KNOWLEDGE.length !== 50) {
+if (IOS_XE_SEED_KNOWLEDGE.length !== 59) {
   throw new Error(
-    `IOS-XE knowledge pack must contain 50 items, got ${IOS_XE_SEED_KNOWLEDGE.length}`,
+    `IOS-XE knowledge pack must contain 59 items, got ${IOS_XE_SEED_KNOWLEDGE.length}`,
   )
 }

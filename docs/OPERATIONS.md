@@ -37,12 +37,16 @@ or smoke-test steps. The script requires a clean commit on `main` and performs:
 4. the 250-case product eval;
 5. an isolated Linux dependency install and build on `clideck-mcp.lan`;
 6. a PostgreSQL and `/etc/clideck-mcp` backup;
-7. additive migrations and least-privilege grants;
-8. an atomic `/opt/clideck-mcp/current` switch;
-9. researcher, worker, API, and admin restart;
-10. local and public health, MCP discovery, retrieval, redaction, destructive
+7. preserve the current pipeline settings, pause Luna, and drain active leases;
+8. additive migrations, least-privilege grants, reconciliation, seed, and
+   public-stats cache priming;
+9. an atomic `/opt/clideck-mcp/current` switch;
+10. researcher, worker, API, and admin restart followed by restoration of the
+    previous pipeline state;
+11. local and public health, MCP discovery, retrieval, redaction, destructive
     advisory, verification-token, and upgrade smoke tests;
-11. automatic application rollback when any post-switch check fails.
+12. automatic application, knowledge-release, environment, and pipeline-state
+    rollback when any post-switch check fails.
 
 The default local credentials file is
 `.secrets/clideck-mcp-server.env`; it is ignored by Git. Override it with

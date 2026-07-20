@@ -27,7 +27,7 @@ export const queryDomainKnowledgeInputSchema = z.strictObject({
   domain_id: domainIdSchema,
   question: z.string().trim().min(3).max(2_000),
   context: jsonObjectSchema,
-  limit: z.number().int().min(1).max(20).default(5)
+  limit: z.number().finite().int().default(5)
 })
 
 export const queryDomainKnowledgeOutputSchema = z.strictObject({

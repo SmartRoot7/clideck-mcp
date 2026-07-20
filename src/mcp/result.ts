@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { isTransientDatabaseError } from '../db.js'
+
 export function textAndStructured<T extends Record<string, unknown>>(value: T) {
   return {
     content: [{ type: 'text' as const, text: JSON.stringify(value) }],
@@ -18,6 +20,10 @@ const publicErrors: Record<string, string> = {
     'Expert task is not waiting for additional input.',
   KNOWLEDGE_REVISION_NOT_FOUND:
     'The referenced active knowledge revision was not found.',
+  VERIFICATION_TOKEN_INVALID:
+    'The verification handle is invalid or has been altered.',
+  VERIFICATION_TOKEN_EXPIRED:
+    'The verification handle has expired. Review the change again.',
   RATE_LIMITED:
     'The privacy-preserving contribution limit has been reached.'
 }
@@ -61,16 +67,24 @@ export function publicToolError(error: unknown) {
       }]
     }
   }
-  const code =
-    error instanceof Error && publicErrors[error.message]
+  const retryable = isTransientDatabaseError(error)
+  const code = retryable
+    ? 'RETRYABLE_INTERNAL_ERROR'
+    : error instanceof Error && publicErrors[error.message]
       ? error.message
       : 'INTERNAL_ERROR'
   const message =
-    publicErrors[code] ??
+    (code === 'RETRYABLE_INTERNAL_ERROR'
+      ? 'A temporary storage error interrupted the request. Retry once with identical inputs.'
+      : publicErrors[code]) ??
     'The request could not be completed. Retry later with the same safe inputs.'
 
   return {
     isError: true,
-    content: [{ type: 'text' as const, text: `${code}: ${message}` }]
+    content: [{ type: 'text' as const, text: `${code}: ${message}` }],
+    _meta: {
+      'clideck/retryable': retryable,
+      ...(retryable ? { 'clideck/retry_after_ms': 200 } : {})
+    }
   }
 }

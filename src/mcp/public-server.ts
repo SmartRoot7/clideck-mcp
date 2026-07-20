@@ -6,7 +6,10 @@ import type {
 } from '@modelcontextprotocol/sdk/experimental/tasks/interfaces.js'
 
 import type { AppConfig } from '../config.js'
-import type { Database } from '../db.js'
+import {
+  type Database,
+  withTransientDatabaseRetry
+} from '../db.js'
 import type { Logger } from '../logger.js'
 import type { Metrics } from '../metrics.js'
 import type { PublicActor } from '../domain/auth.js'
@@ -111,7 +114,21 @@ function wrapTool<TInput, TOutput>(
         )
         if (!rate.allowed) throw new Error('RATE_LIMITED')
       }
-      const output = await operation(input)
+      const retryableTools = new Set([
+        'list_knowledge_domains',
+        'describe_knowledge_domain',
+        'query_domain_knowledge',
+        'resolve_network_context',
+        'query_network_knowledge',
+        'get_network_workflow',
+        'get_expert_task',
+        'analyze_device_snapshot',
+        'advise_network_upgrade',
+        'analyze_network_path'
+      ])
+      const output = retryableTools.has(toolName)
+        ? await withTransientDatabaseRetry(() => operation(input))
+        : await operation(input)
       stopTimer({ outcome: 'success' })
       const publicOutput = output as Record<string, unknown>
       const usageOutcome =
@@ -157,7 +174,7 @@ export function createPublicMcpServer(
   const server = new McpServer(
     {
       name: 'CliDeck MCP — Network Knowledge',
-      version: '0.6.0',
+      version: '0.7.4',
       title: 'CliDeck MCP — Network Knowledge',
       websiteUrl: 'https://clideck.com/software/mcp'
     },
@@ -235,7 +252,7 @@ export function createPublicMcpServer(
         domainId: input.domain_id,
         question: input.question,
         context: input.context,
-        limit: input.limit
+        limit: Math.min(20, Math.max(1, input.limit))
       })
       return {
         domain_id: result.domain_id,
@@ -294,7 +311,7 @@ export function createPublicMcpServer(
         dependencies.database,
         input.question,
         context,
-        input.limit,
+        Math.min(5, Math.max(1, input.limit)),
       )
       const {
         vendorId: _vendorId,
@@ -335,8 +352,8 @@ export function createPublicMcpServer(
         dependencies.database,
         input.goal,
         context,
-        input.limit,
-        'workflow',
+        Math.min(3, Math.max(1, input.limit)),
+        ['workflow', 'change', 'diagnostic'],
       )
       const {
         vendorId: _vendorId,
@@ -403,6 +420,10 @@ export function createPublicMcpServer(
             dependencies.actor,
             input.question,
             input.context,
+            input.idempotency_key,
+            dependencies.actor.kind === 'tenant'
+              ? dependencies.actor.tenantId
+              : dependencies.clientKey,
           )
           const fallbackResult = textAndStructured(
             expert as Record<string, unknown>,
@@ -440,6 +461,10 @@ export function createPublicMcpServer(
             dependencies.actor,
             input.question,
             input.context,
+            input.idempotency_key,
+            dependencies.actor.kind === 'tenant'
+              ? dependencies.actor.tenantId
+              : dependencies.clientKey,
           )
         },
       ),
@@ -592,7 +617,7 @@ export function createPublicMcpServer(
         dependencies.database,
         input.context,
       )
-      return reviewNetworkChange(dependencies.config, {
+      return reviewNetworkChange(dependencies.database, dependencies.config, {
         ...input,
         context: {
           vendor: resolved.vendor,
@@ -619,7 +644,7 @@ export function createPublicMcpServer(
       }
     },
     wrapTool(dependencies, 'verify_network_change', async (input) =>
-      verifyNetworkChange(dependencies.config, input),
+      verifyNetworkChange(dependencies.database, dependencies.config, input),
     ),
   )
 

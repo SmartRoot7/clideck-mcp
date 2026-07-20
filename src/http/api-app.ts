@@ -225,7 +225,7 @@ export function createApiApp(dependencies: ApiDependencies) {
     context.json({
       status: 'ok',
       service: 'CliDeck MCP — Network Knowledge',
-      version: '0.7.3'
+      version: '0.7.4'
     }),
   )
 
@@ -614,7 +614,7 @@ export function createApiApp(dependencies: ApiDependencies) {
       database,
       parsed.data.question,
       resolved,
-      parsed.data.limit,
+      Math.min(5, Math.max(1, parsed.data.limit)),
     )
     const {
       vendorId: _vendorId,
@@ -670,7 +670,7 @@ export function createApiApp(dependencies: ApiDependencies) {
     if (!parsed.success) return context.json({ error: 'invalid_input' }, 400)
     const resolved = await resolveNetworkContext(database, parsed.data.context)
     return context.json(
-      reviewNetworkChange(config, {
+      await reviewNetworkChange(database, config, {
         ...parsed.data,
         context: {
           vendor: resolved.vendor,
@@ -697,7 +697,9 @@ export function createApiApp(dependencies: ApiDependencies) {
     )
     if (!parsed.success) return context.json({ error: 'invalid_input' }, 400)
     try {
-      return context.json(verifyNetworkChange(config, parsed.data))
+      return context.json(
+        await verifyNetworkChange(database, config, parsed.data),
+      )
     } catch (error) {
       if (
         error instanceof Error &&
@@ -772,6 +774,8 @@ export function createApiApp(dependencies: ApiDependencies) {
         { kind: 'anonymous' },
         parsed.data.question,
         parsed.data.context,
+        parsed.data.idempotency_key,
+        clientKey,
       ),
     )
   })

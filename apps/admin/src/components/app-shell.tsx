@@ -251,7 +251,7 @@ const SECTION_COPY: Record<SectionId, string> = {
   quality: 'Confidence, evaluation results, latency and dangerous-safety gates.',
   lab: 'Batfish and containerlab evidence linked to revisions and commits.',
   conflicts: 'Knowledge disagreements that need an explicit audited decision.',
-  'review-exceptions': 'Rare automatic-review outcomes, quarantine and emergency operator controls.',
+  'review-exceptions': 'Rare evidence-refresh cases and emergency operator controls.',
   feedback: 'Operator feedback connected to revisions and expert tasks.',
   tasks: 'Urgent expert work, stage progress, ownership and recovery controls.',
   releases: 'Immutable knowledge packages and the currently active snapshot.',

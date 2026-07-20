@@ -63,10 +63,23 @@ const ciscoContext: NetworkContextInput = {
   version: '17.9.4'
 }
 
-const knowledgeCases: EvalCase[] = IOS_XE_SEED_KNOWLEDGE.flatMap(
+const primaryKnowledgeCases: EvalCase[] = IOS_XE_SEED_KNOWLEDGE.map(
+  (fact, factIndex) => ({
+    id: `knowledge-${factIndex + 1}-1`,
+    type: 'knowledge' as const,
+    question: fact.questionPatterns[0]!,
+    expected_known: true,
+    context: {
+      ...ciscoContext,
+      version: fact.kind === 'upgrade' ? '17.12.4' : '17.9.4'
+    }
+  }),
+)
+
+const additionalKnowledgeCases: EvalCase[] = IOS_XE_SEED_KNOWLEDGE.flatMap(
   (fact, factIndex) =>
-    fact.questionPatterns.map((question, patternIndex) => ({
-      id: `knowledge-${factIndex + 1}-${patternIndex + 1}`,
+    fact.questionPatterns.slice(1).map((question, patternIndex) => ({
+      id: `knowledge-${factIndex + 1}-${patternIndex + 2}`,
       type: 'knowledge' as const,
       question,
       expected_known: true,
@@ -75,7 +88,12 @@ const knowledgeCases: EvalCase[] = IOS_XE_SEED_KNOWLEDGE.flatMap(
         version: fact.kind === 'upgrade' ? '17.12.4' : '17.9.4'
       }
     })),
-)
+).slice(0, 150 - primaryKnowledgeCases.length)
+
+const knowledgeCases: EvalCase[] = [
+  ...primaryKnowledgeCases,
+  ...additionalKnowledgeCases
+]
 
 const unknownQuestions = [
   'configure EVPN VXLAN multisite with intersite multicast',

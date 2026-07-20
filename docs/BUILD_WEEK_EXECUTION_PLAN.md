@@ -13,7 +13,7 @@ Branch policy: `main` only; completed stages are committed and pushed directly.
 
 ## Current focus
 
-`0.7.2 — streaming publication and fully utilized Luna lanes`
+`0.7.4 — knowledge quality and public MCP reliability`
 
 ## Baseline
 
@@ -692,6 +692,51 @@ Production deployment and browser QA completed:
   without horizontal overflow or a separate demo component tree.
 
 ## Final day — release and submission
+
+### [~] CliDeck MCP 0.7.4 — knowledge quality and public MCP reliability
+
+Goal: remove quarantine as a normal terminal state, add operational IOS-XE
+workflows, shorten change-verification credentials, and make public reads
+predictable under load.
+
+Implemented locally:
+
+- medium Deep Review now resolves a supported candidate to verified/conflict or
+  rejects only the unsupported candidate claim; an official vendor passage is
+  sufficient evidence and does not require a second source;
+- omitted candidates, Codex process failures, and exhausted leases remain
+  automatically retryable and reduce their batch size instead of entering
+  quarantine;
+- migration 020 adds short hashed verification sessions, expert-task
+  idempotency, public-stats cache state, reconciliation snapshots, and
+  structured technical retry fields;
+- the reconciliation command snapshots every existing quarantined status before
+  returning it to automatic Deep Review;
+- nine Catalyst 9300 / IOS-XE operational workflows cover trunk inspection,
+  additive VLAN changes, trunk removal and end-to-end checks, err-disable,
+  port-security diagnosis/recovery, BPDU Guard, and interface descriptions;
+- public limit inputs are clamped server-side, topology parsing handles more
+  CDP/LLDP/traceroute forms and refuses self-loops, and transient PostgreSQL
+  failures expose a stable retryable MCP error;
+- `/public/v1/stats` reads one precomputed row; the heavy refresh runs under a
+  worker lock after releases/evals and retains the last successful snapshot;
+- the single production deployment entrypoint now owns pause, lease drain,
+  backup, migration, reconciliation, seed, cache priming, smoke, state restore,
+  and application/knowledge rollback.
+
+Verified locally:
+
+- clean PostgreSQL migrations 001–020 and 59-item authored IOS-XE seed;
+- 23/23 PostgreSQL integration tests without skip, including short reusable
+  handles, tamper/expiry/legacy-token behavior, idempotent expert tasks, cache
+  latency, and automatic retry after a medium-review omission;
+- all 107 backend/PostgreSQL tests and 14 UI tests passed;
+- product eval 250/250, dangerous false-safe 0, p95 10.38 ms;
+- typecheck, unit/UI suites, production build, shell syntax, and diff checks.
+
+Remaining for completion: one local `main` commit, the unified production
+deployment, reconciliation accounting, 20 live MCP acceptance scenarios, and
+production latency/security smoke checks.
 
 ### [x] D3.1 — Security and release gate
 

@@ -28,10 +28,12 @@ GRANT SELECT ON
   release_items,
   release_changes,
   active_knowledge_state,
-  pipeline_transition_events
+  pipeline_transition_events,
+  public_stats_cache
 TO clideck_mcp_api;
 GRANT SELECT, UPDATE ON principals TO clideck_mcp_api;
 GRANT SELECT, INSERT, UPDATE ON expert_tasks TO clideck_mcp_api;
+GRANT SELECT, INSERT, UPDATE ON verification_sessions TO clideck_mcp_api;
 GRANT SELECT, INSERT ON task_messages TO clideck_mcp_api;
 GRANT SELECT, INSERT ON task_public_events TO clideck_mcp_api;
 GRANT INSERT ON feedback TO clideck_mcp_api;
@@ -92,7 +94,10 @@ GRANT SELECT ON
   legacy_revision_metadata,
   admin_audit_events,
   worker_heartbeats,
-  pipeline_transition_events
+  pipeline_transition_events,
+  verification_sessions,
+  public_stats_cache,
+  pipeline_reconciliation_snapshots
 TO clideck_mcp_admin;
 GRANT INSERT ON product_eval_runs TO clideck_mcp_admin;
 GRANT INSERT ON
@@ -135,7 +140,8 @@ GRANT SELECT, INSERT, UPDATE ON
   releases,
   active_release,
   active_knowledge_state,
-  worker_heartbeats
+  worker_heartbeats,
+  public_stats_cache
 TO clideck_mcp_worker;
 GRANT SELECT, INSERT ON
   revision_sources,
@@ -154,6 +160,9 @@ GRANT SELECT ON
   operating_systems,
   device_models,
   public_active_knowledge,
+  public_active_release_summary,
+  public_lab_validation_summary,
+  public_latest_eval_result,
   knowledge_conflicts,
   coverage_targets,
   source_candidates,
@@ -188,6 +197,10 @@ GRANT UPDATE ON
   knowledge_candidates,
   agent_runs,
   source_collections
+TO clideck_mcp_worker;
+GRANT SELECT, INSERT, UPDATE ON public_stats_cache TO clideck_mcp_worker;
+GRANT SELECT, DELETE ON verification_sessions TO clideck_mcp_worker;
+GRANT SELECT, INSERT ON pipeline_reconciliation_snapshots
 TO clideck_mcp_worker;
 GRANT SELECT, UPDATE, DELETE ON snapshot_contributions TO clideck_mcp_worker;
 GRANT UPDATE ON knowledge_public_trust TO clideck_mcp_worker;

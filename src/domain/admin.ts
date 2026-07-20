@@ -162,6 +162,16 @@ export async function getAdminOverview(
           WHERE status = 'manual_exception'
             AND updated_at >= now() - interval '24 hours')
            AS manual_exceptions_24h,
+         (SELECT count(*)::int
+          FROM knowledge_candidates
+          WHERE technical_retry_count > 0
+            AND updated_at >= now() - interval '24 hours')
+           AS technical_retries_24h,
+         (SELECT count(*)::int
+          FROM knowledge_candidates
+          WHERE status = 'rejected'
+            AND updated_at >= now() - interval '24 hours')
+           AS automatic_rejections_24h,
          (SELECT coalesce(avg(
             jsonb_array_length(payload->'fragments')
           ), 0)::numeric(8,2)

@@ -11,6 +11,7 @@ import {
   processNextPipelineTask,
   purgeExpiredSourceArtifacts
 } from '../domain/pipeline-worker.js'
+import { refreshPublicStatsCacheIfStale } from '../domain/telemetry.js'
 import { createLogger } from '../logger.js'
 
 const config = getConfig()
@@ -27,6 +28,7 @@ logger.info({ instanceId }, 'CliDeck MCP worker started')
 try {
   while (!abortController.signal.aborted) {
     await runWorkerMaintenance(database, instanceId)
+    await refreshPublicStatsCacheIfStale(database)
     await purgeExpiredSourceArtifacts(database, logger)
     const processedPipeline = await processNextPipelineTask(
       database,

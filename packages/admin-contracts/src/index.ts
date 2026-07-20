@@ -201,6 +201,8 @@ export const overviewSchema = z.object({
   projected_publications_per_day: scalarNumberSchema,
   automatic_resolution_rate: scalarNumberSchema,
   manual_exceptions_24h: scalarNumberSchema,
+  technical_retries_24h: scalarNumberSchema,
+  automatic_rejections_24h: scalarNumberSchema,
   average_analysis_batch: scalarNumberSchema,
   average_verification_batch: scalarNumberSchema,
   executor_utilization: scalarNumberSchema,

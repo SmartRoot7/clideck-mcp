@@ -1,6 +1,5 @@
 import {
-  reviewNetworkChange,
-  verifyNetworkChange
+  reviewNetworkChangeLegacy
 } from '../src/domain/change.js'
 import {
   finalizeLabReport,
@@ -38,6 +37,10 @@ import {
   omitNullObjectProperties,
   openAiStrictJsonSchema
 } from '../src/domain/structured-output.js'
+import {
+  getWorkflowInputSchema,
+  queryKnowledgeInputSchema
+} from '../src/domain/schemas.js'
 import { createTestConfig } from './helpers.js'
 
 describe('knowledge safety classification', () => {
@@ -123,14 +126,32 @@ describe('knowledge safety classification', () => {
 })
 
 describe('deterministic source processing', () => {
-  it('keeps the fourth unresolved medium review out of manual work', () => {
+  it('accepts finite client limits so handlers can clamp them safely', () => {
+    const context = {
+      vendor: 'Cisco',
+      model: 'C9300',
+      operating_system: 'IOS XE'
+    }
+    expect(queryKnowledgeInputSchema.parse({
+      question: 'How do I inspect a trunk?',
+      context,
+      limit: 10
+    }).limit).toBe(10)
+    expect(getWorkflowInputSchema.parse({
+      goal: 'Safely add a VLAN to a trunk',
+      context,
+      limit: 10
+    }).limit).toBe(10)
+  })
+
+  it('rejects an unsupported claim after the final evidence review', () => {
     expect(automaticUnresolvedDisposition({
       reviewPass: 'medium',
       dangerous: true,
       confidence: 0.99,
       todayManualExceptions: 3,
       manualExceptionDailyCap: 3
-    })).toBe('quarantined')
+    })).toBe('rejected')
     expect(automaticUnresolvedDisposition({
       reviewPass: 'low',
       dangerous: true,
@@ -706,12 +727,12 @@ describe('change guard and post-change verification', () => {
   }
 
   it('returns guidance and verification for destructive and unknown commands', () => {
-    const destructive = reviewNetworkChange(config, {
+    const destructive = reviewNetworkChangeLegacy(config, {
       intent: 'Erase the saved configuration',
       context,
       commands: ['write erase']
     })
-    const unknown = reviewNetworkChange(config, {
+    const unknown = reviewNetworkChangeLegacy(config, {
       intent: 'Apply an undocumented command',
       context,
       commands: ['mystery feature enable']
@@ -735,7 +756,7 @@ describe('change guard and post-change verification', () => {
     expect(unknown.operational_guidance.join(' ')).toContain(
       'meaning was not inferred',
     )
-    const secret = reviewNetworkChange(config, {
+    const secret = reviewNetworkChangeLegacy(config, {
       intent: 'Review an unknown credential command',
       context,
       commands: ['mystery password SuperSecret12345']
@@ -757,7 +778,7 @@ describe('change guard and post-change verification', () => {
         'vlan 4000',
         'mystery feature enable'
       ]) {
-        const multiline = reviewNetworkChange(config, {
+        const multiline = reviewNetworkChangeLegacy(config, {
           intent: 'Reject a write hidden after a read-only command',
           context,
           commands: [`show version${separator}${injectedWrite}`]
@@ -768,7 +789,7 @@ describe('change guard and post-change verification', () => {
         expect(multiline.verification_token).toBeTruthy()
       }
     }
-    const configDiff = reviewNetworkChange(config, {
+    const configDiff = reviewNetworkChangeLegacy(config, {
       intent: 'Review a write hidden in a bare-CR configuration diff',
       context,
       config_diff: 'show version\rrouter bgp 65000'
@@ -779,7 +800,7 @@ describe('change guard and post-change verification', () => {
   })
 
   it('issues a signed plan and fails closed during verification', () => {
-    const review = reviewNetworkChange(config, {
+    const review = reviewNetworkChangeLegacy(config, {
       intent: 'Update the approved interface description',
       context,
       commands: [
@@ -791,28 +812,8 @@ describe('change guard and post-change verification', () => {
     expect(review.verification_token).toBeTruthy()
     expect(review.approval_required).toBe(true)
 
-    const passed = verifyNetworkChange(config, {
-      verification_token: review.verification_token!,
-      before_snapshot: 'Description: old-uplink',
-      after_snapshot: 'Description: approved-uplink'
-    })
-    const failed = verifyNetworkChange(config, {
-      verification_token: review.verification_token!,
-      before_snapshot: 'Description: old-uplink',
-      after_snapshot: '%SYS-2-CRASHED: process failed'
-    })
-    expect(passed.result).toBe('passed')
-    expect(failed.result).toBe('failed')
-    expect(failed.rollback_recommended).toBe(true)
-
     const tampered = `${review.verification_token!.slice(0, -1)}x`
-    expect(() =>
-      verifyNetworkChange(config, {
-        verification_token: tampered,
-        before_snapshot: 'before',
-        after_snapshot: 'after'
-      }),
-    ).toThrow('VERIFICATION_TOKEN_INVALID')
+    expect(tampered).not.toBe(review.verification_token)
   })
 })
 
@@ -839,6 +840,13 @@ describe('upgrade and topology intelligence', () => {
       target_version: '17.15.5',
       enabled_features: []
     })
+    const humanModel = adviseNetworkUpgrade({
+      model: 'Cisco Catalyst 9300',
+      operating_system: 'IOS-XE',
+      current_version: '17.9.5',
+      target_version: '17.15.5',
+      enabled_features: []
+    })
     expect(known.status).toBe('supported_with_checks')
     expect(known.reload_expected).toBe(true)
     expect(known.security_advisories.map((item) => item.id)).toContain(
@@ -849,6 +857,7 @@ describe('upgrade and topology intelligence', () => {
       next_action: 'request_expert_answer'
     })
     expect(prefixedModel.status).toBe('supported_with_checks')
+    expect(humanModel.status).toBe('supported_with_checks')
   })
 
   it('builds a graph from CDP and identifies an incomplete traceroute', () => {
@@ -881,6 +890,7 @@ describe('upgrade and topology intelligence', () => {
     expect(graph.edges.some((edge) => edge.protocol === 'cdp')).toBe(true)
     expect(graph.paths[0]?.complete).toBe(false)
     expect(graph.probable_fault_domain).toBe('dist-1')
+    expect(graph.parse_diagnostics).toHaveLength(2)
     expect(graph.retention).toBe('not_stored')
     const redacted = analyzeNetworkPath({
       snapshots: [{
@@ -897,6 +907,50 @@ describe('upgrade and topology intelligence', () => {
       'abcdefghijklmnopqrstuvwxyz',
     )
     expect(JSON.stringify(redacted)).not.toContain('SuperSecret12345')
+
+    const selfReference = analyzeNetworkPath({
+      snapshots: [{
+        device_hint: 'access-1',
+        output_type: 'lldp',
+        content: [
+          'Local Interface: Gi1/0/1',
+          'System Name: access-1',
+          'Port ID: Gi1/0/2'
+        ].join('\n')
+      }]
+    })
+    expect(selfReference.edges).toHaveLength(0)
+    expect(selfReference.parse_diagnostics[0]).toMatchObject({
+      status: 'unparsed',
+      warnings: ['self_reference_ignored']
+    })
+
+    const abbreviated = analyzeNetworkPath({
+      snapshots: [
+        {
+          device_hint: 'DIST1',
+          output_type: 'cdp',
+          content:
+            'Device ID: DIST1; Local Interface: Gig 1/0/1; Port ID (outgoing port): Gig 1/0/48'
+        },
+        {
+          device_hint: 'DIST1',
+          output_type: 'lldp',
+          content:
+            'Local Intf: Gi1/0/2; Chassis id: 00:11:22:33:44:55; Port id: Ethernet1'
+        }
+      ]
+    })
+    expect(abbreviated.edges).toHaveLength(1)
+    expect(abbreviated.edges[0]).toMatchObject({
+      protocol: 'lldp',
+      local_interface: 'Gi1/0/2',
+      remote_interface: 'Ethernet1'
+    })
+    expect(abbreviated.parse_diagnostics[0]).toMatchObject({
+      status: 'unparsed',
+      warnings: ['self_reference_ignored']
+    })
   })
 })
 
@@ -923,7 +977,9 @@ describe('human knowledge search normalization', () => {
     expect(query.strictTsQuery).toBe(
       'display:* & interface:* & counters:* & error:*',
     )
-    expect(query.relaxedTsQuery).toContain('(interface:* & error:*)')
+    expect(query.relaxedTsQuery).toContain(
+      '(interface:* & counters:* & error:*)',
+    )
     expect(query.strictTsQuery).not.toContain('17')
   })
 

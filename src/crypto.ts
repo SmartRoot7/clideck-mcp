@@ -17,6 +17,12 @@ export function randomUrlToken(bytes = 32): string {
   return randomBytes(bytes).toString('base64url')
 }
 
+export function deriveUrlToken(value: string, key: string): string {
+  return createHmac('sha256', key)
+    .update(value, 'utf8')
+    .digest('base64url')
+}
+
 export function createPublicTaskId(): string {
   return `ekt_${randomUrlToken(24)}`
 }

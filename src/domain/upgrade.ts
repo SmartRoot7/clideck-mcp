@@ -9,7 +9,7 @@ export function adviseNetworkUpgrade(input: {
     .toUpperCase()
     .replace(/^CISCO\s+/, '')
     .replace(/^CATALYST\s+/, '')
-  const isC9300 = /^C9300(?:L|X|LM)?(?:-|$)/.test(model)
+  const isC9300 = /^(?:C)?9300(?:L|X|LM)?(?:-|$)/.test(model)
   const isIosXe = /IOS[\s-]?XE/i.test(input.operating_system)
   const supportedCurrent =
     /^17\.(?:9|12)\./.test(input.current_version)

@@ -37,13 +37,13 @@ export type ResolvedNetworkContext = z.infer<
 export const queryKnowledgeInputSchema = z.object({
   question: boundedText.min(3),
   context: networkContextInputSchema,
-  limit: z.number().int().min(1).max(5).default(3)
+  limit: z.number().finite().int().default(3)
 })
 
 export const getWorkflowInputSchema = z.object({
   goal: boundedText.min(3),
   context: networkContextInputSchema,
-  limit: z.number().int().min(1).max(3).default(1)
+  limit: z.number().finite().int().default(1)
 })
 
 export const publicKnowledgeSchema = z.object({
@@ -110,7 +110,13 @@ export const knowledgeSearchResultSchema = z.object({
 
 export const requestExpertAnswerInputSchema = z.object({
   question: boundedText.min(8),
-  context: networkContextInputSchema
+  context: networkContextInputSchema,
+  idempotency_key: z.string()
+    .trim()
+    .min(8)
+    .max(128)
+    .regex(/^[A-Za-z0-9._:-]+$/)
+    .optional()
 })
 
 export const taskCredentialsSchema = z.object({
@@ -459,6 +465,14 @@ export const networkPathOutputSchema = z.object({
   probable_fault_domain: z.string().nullable(),
   findings: z.array(z.string()),
   unparsed_inputs: z.array(z.string()),
+  parse_diagnostics: z.array(z.object({
+    snapshot_index: z.number().int().nonnegative(),
+    requested_type: z.enum(['auto', 'cdp', 'lldp', 'route', 'traceroute']),
+    detected_type: z.enum(['cdp', 'lldp', 'route', 'traceroute']).nullable(),
+    status: z.enum(['parsed', 'partial', 'unparsed']),
+    records_parsed: z.number().int().nonnegative(),
+    warnings: z.array(z.string())
+  })),
   retention: z.literal('not_stored'),
   limitations: z.array(z.string())
 })

@@ -66,7 +66,7 @@ export function ReviewExceptionsPage() {
           tone={manual.length > 3 ? 'danger' : manual.length ? 'warning' : 'good'}
         />
         <Metric
-          label="Quarantined"
+          label="Evidence pending"
           value={quarantine.length}
           icon={ArchiveX}
           help="Candidates with insufficient evidence. They are retried automatically after a source refresh or seven days."
@@ -82,14 +82,14 @@ export function ReviewExceptionsPage() {
           label="Daily human cap"
           value="3"
           icon={ShieldAlert}
-          help="A fourth unresolved root cause remains quarantined instead of becoming user work."
+          help="A source refresh is already scheduled because the current extracted evidence is incomplete."
         />
       </section>
 
       <Panel
         title="Review exceptions"
         icon={ShieldAlert}
-        help="This screen is an emergency option, not a normal queue. Most unresolved candidates remain in automatic quarantine."
+        help="This is an emergency screen. Technical failures retry automatically, and unsupported claims are rejected rather than assigned to an operator."
         action={
           <select
             aria-label="Exception status"
@@ -98,7 +98,7 @@ export function ReviewExceptionsPage() {
           >
             <option value="">All outcomes</option>
             <option value="manual_exception">Manual exceptions</option>
-            <option value="quarantined">Quarantine</option>
+            <option value="quarantined">Evidence pending</option>
           </select>
         }
       >

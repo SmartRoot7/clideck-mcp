@@ -369,7 +369,8 @@ export async function publishKnowledgeBatch(
      FROM unnest($2::uuid[], $3::uuid[])
        AS batch(knowledge_item_id, revision_id)
      LEFT JOIN active_knowledge_state active
-       ON active.knowledge_item_id = batch.knowledge_item_id`,
+       ON active.knowledge_item_id = batch.knowledge_item_id
+     WHERE active.revision_id IS DISTINCT FROM batch.revision_id`,
     [
       releaseId,
       uniqueItems.map((item) => item.itemId),
@@ -388,6 +389,9 @@ export async function publishKnowledgeBatch(
        $1
      FROM unnest($2::uuid[], $3::uuid[])
        AS batch(knowledge_item_id, revision_id)
+     LEFT JOIN active_knowledge_state active_current
+       ON active_current.knowledge_item_id = batch.knowledge_item_id
+     WHERE active_current.revision_id IS DISTINCT FROM batch.revision_id
      ON CONFLICT (knowledge_item_id) DO UPDATE SET
        revision_id = excluded.revision_id,
        activated_release_id = excluded.activated_release_id,
@@ -837,6 +841,8 @@ export async function runWorkerMaintenance(
           SET status = 'expired',
               lease_token_hash = NULL,
               lease_until = NULL,
+              idempotency_scope_hash = NULL,
+              idempotency_key_hash = NULL,
               completed_at = now(),
               updated_at = now()
         WHERE expires_at <= now()
@@ -874,6 +880,10 @@ export async function runWorkerMaintenance(
     await client.query(
       `DELETE FROM snapshot_contributions
        WHERE expires_at <= now()`,
+    )
+    await client.query(
+      `DELETE FROM verification_sessions
+       WHERE expires_at < now() - interval '1 day'`,
     )
   })
 }

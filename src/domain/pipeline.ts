@@ -553,15 +553,9 @@ export function automaticUnresolvedDisposition(input: {
   confidence: number
   todayManualExceptions: number
   manualExceptionDailyCap: number
-}): 'deep_review' | 'manual_exception' | 'quarantined' {
+}): 'deep_review' | 'rejected' {
   if (input.reviewPass === 'low') return 'deep_review'
-  const highValue = input.dangerous || input.confidence >= 0.98
-  return (
-    highValue &&
-    input.todayManualExceptions < input.manualExceptionDailyCap
-  )
-    ? 'manual_exception'
-    : 'quarantined'
+  return 'rejected'
 }
 
 async function recordEvent(
@@ -771,6 +765,22 @@ async function reconcileExpiredAndCompletedWork(
                   WHEN $2 THEN 'Deep-review lease attempts were exhausted; candidate remains automatically retryable.'
                   ELSE resolution_reason
                 END,
+                resolution_code = CASE
+                  WHEN $2 THEN 'deep_lease_exhausted'
+                  ELSE resolution_code
+                END,
+                deep_review_batch_limit = CASE
+                  WHEN $2 THEN greatest(1, deep_review_batch_limit / 2)
+                  ELSE deep_review_batch_limit
+                END,
+                technical_retry_count = CASE
+                  WHEN $2 THEN least(20, technical_retry_count + 1)
+                  ELSE technical_retry_count
+                END,
+                last_technical_failure_code = CASE
+                  WHEN $2 THEN 'deep_lease_exhausted'
+                  ELSE last_technical_failure_code
+                END,
                 updated_at = now()
           WHERE deep_review_task_id = $1
             AND status = 'deep_review'`,
@@ -907,6 +917,7 @@ async function queueDeepReviewWork(
     resolution_attempts: number
     resolution_reason: string | null
     resolution_code: string | null
+    deep_review_batch_limit: number
   }>(
     `SELECT
        kc.id,
@@ -914,7 +925,8 @@ async function queueDeepReviewWork(
        pt.source_candidate_id,
        kc.resolution_attempts,
        kc.resolution_reason,
-       kc.resolution_code
+       kc.resolution_code,
+       kc.deep_review_batch_limit
      FROM knowledge_candidates kc
      JOIN pipeline_tasks pt ON pt.id = kc.pipeline_task_id
      WHERE kc.status IN ('deep_review', 'quarantined')
@@ -981,12 +993,13 @@ async function queueDeepReviewWork(
        AND coalesce(kc.resolution_code, 'unspecified') =
            coalesce($3::text, 'unspecified')
      ORDER BY kc.created_at
-     LIMIT 20
+     LIMIT $4
      FOR UPDATE OF kc SKIP LOCKED`,
     [
       first.source_candidate_id,
       reviewPass,
-      first.resolution_code
+      first.resolution_code,
+      first.deep_review_batch_limit
     ],
   )
   if (batch.rows.length === 0) return false
@@ -3947,12 +3960,12 @@ export async function submitCandidateDeepReview(
                   'deep_unresolved'
                 ),
                 next_review_at = CASE
-                  WHEN $2 = 'quarantined'
-                  THEN now() + interval '7 days'
                   WHEN $2 = 'deep_review'
                   THEN now()
                   ELSE NULL
                 END,
+                deep_review_batch_limit = 20,
+                last_technical_failure_code = NULL,
                 updated_at = now()
           WHERE id = $1
             AND deep_review_task_id = $8`,
@@ -3984,28 +3997,24 @@ export async function submitCandidateDeepReview(
     if (omitted.length > 0) {
       await client.query(
         `UPDATE knowledge_candidates
-            SET status = CASE
-                  WHEN $3 = 'low' THEN 'deep_review'
-                  ELSE 'quarantined'
-                END,
+            SET status = 'deep_review',
                 deep_review_task_id = NULL,
-                resolution_attempts = resolution_attempts + 1,
                 resolution_reason =
                   'Deep reviewer omitted the leased candidate.',
                 resolution_code = 'deep_reviewer_omitted',
-                next_review_at = CASE
-                  WHEN $3 = 'low' THEN now()
-                  ELSE now() + interval '7 days'
-                END,
+                next_review_at = now(),
+                deep_review_batch_limit =
+                  greatest(1, deep_review_batch_limit / 2),
+                technical_retry_count =
+                  least(20, technical_retry_count + 1),
+                last_technical_failure_code = 'deep_reviewer_omitted',
                 updated_at = now()
           WHERE id = ANY($1::uuid[])
             AND deep_review_task_id = $2`,
-        [omitted, task.id, reviewPass],
+        [omitted, task.id],
       )
       if (reviewPass === 'low') {
         counts.escalated_to_medium += omitted.length
-      } else {
-        counts.quarantined += omitted.length
       }
     }
     if (task.source_candidate_id && counts.verified > 0) {
@@ -4194,23 +4203,25 @@ export async function failPipelineTask(
       if (task.task_type === 'candidate_deep_review') {
         await client.query(
           `UPDATE knowledge_candidates
-              SET status = CASE
-                    WHEN $2 THEN 'deep_review'
-                    ELSE 'quarantined'
-                  END,
-                  deep_review_task_id = CASE
-                    WHEN $2 THEN $1
-                    ELSE NULL
-                  END,
+              SET status = 'deep_review',
+                  deep_review_task_id = CASE WHEN $2 THEN $1 ELSE NULL END,
                   resolution_code = coalesce(
                     resolution_code,
                     'deep_process_failure'
                   ),
                   resolution_reason = $3,
-                  next_review_at = CASE
-                    WHEN $2 THEN now()
-                    ELSE now() + interval '7 days'
+                  next_review_at = CASE WHEN $2 THEN now()
+                    ELSE now() + least(
+                      interval '5 minutes',
+                      interval '15 seconds' *
+                        power(2, least(4, technical_retry_count))
+                    )
                   END,
+                  deep_review_batch_limit =
+                    greatest(1, deep_review_batch_limit / 2),
+                  technical_retry_count =
+                    least(20, technical_retry_count + 1),
+                  last_technical_failure_code = 'deep_process_failure',
                   updated_at = now()
             WHERE deep_review_task_id = $1`,
           [task.id, retrying, input.failure_message],

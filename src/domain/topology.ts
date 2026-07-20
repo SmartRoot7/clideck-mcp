@@ -29,8 +29,8 @@ function stableId(kind: string, label: string): string {
 }
 
 function autoType(content: string): Protocol | null {
-  if (/Device ID:|Port ID \(outgoing port\)/i.test(content)) return 'cdp'
-  if (/Local Intf:|System Name:|Chassis id:/i.test(content)) return 'lldp'
+  if (/Device ID\s*:|Port ID \(outgoing port\)|Device ID\s+Local Intrfce/i.test(content)) return 'cdp'
+  if (/Local (?:Intf|Interface)\s*:|System Name\s*:|Chassis id\s*:/i.test(content)) return 'lldp'
   if (/traceroute to|^\s*\d+\s+(?:\S+\s+)?\(?\d{1,3}(?:\.\d{1,3}){3}/mi.test(content)) {
     return 'traceroute'
   }
@@ -38,6 +38,16 @@ function autoType(content: string): Protocol | null {
     return 'route'
   }
   return null
+}
+
+function sameIdentity(left: string, right: string): boolean {
+  const normalize = (value: string) =>
+    value
+      .trim()
+      .replace(/[;,]+$/g, '')
+      .toLowerCase()
+      .replace(/\.(?:local|lan)$/i, '')
+  return normalize(left) === normalize(right)
 }
 
 function addNode(
@@ -62,18 +72,23 @@ function parseCdp(
   content: string,
   nodes: Map<string, GraphNode>,
   edges: GraphEdge[],
-): number {
+): { parsed: number; selfLoops: number } {
   const localId = addNode(nodes, localLabel, 'device')
-  const blocks = content.split(/(?=Device ID:)/i)
+  const blocks = content.split(/(?=Device ID\s*:)/i)
   let parsed = 0
+  let selfLoops = 0
   for (const block of blocks) {
-    const remote = block.match(/Device ID:\s*(\S+)/i)?.[1]
+    const remote = block.match(/Device ID\s*:\s*([^\s;,]+)/i)?.[1]
     if (!remote) continue
     const platform = block.match(/Platform:\s*([^,\r\n]+)/i)?.[1]?.trim()
     const address = block.match(/IP address:\s*(\S+)/i)?.[1]
-    const localInterface = block.match(/Interface:\s*([^,\r\n]+)/i)?.[1]?.trim()
+    const localInterface = block.match(/(?:Interface|Local Interface)\s*:\s*([^,;\r\n]+)/i)?.[1]?.trim()
     const remoteInterface =
-      block.match(/Port ID \(outgoing port\):\s*([^\r\n]+)/i)?.[1]?.trim()
+      block.match(/Port ID \(outgoing port\)\s*:\s*([^;\r\n]+)/i)?.[1]?.trim()
+    if (sameIdentity(localLabel, remote)) {
+      selfLoops += 1
+      continue
+    }
     const remoteId = addNode(nodes, remote, 'device', {
       ...(platform ? { platform } : {}),
       ...(address ? { management_address: address } : {})
@@ -88,7 +103,29 @@ function parseCdp(
     })
     parsed += 1
   }
-  return parsed
+  if (parsed === 0) {
+    for (const line of content.split(/\r?\n/)) {
+      if (/Device ID\s+Local Intrfce|^-{3,}/i.test(line)) continue
+      const columns = line.trim().split(/\s{2,}|\t+/)
+      if (columns.length < 3 || !columns[0] || !columns[1]) continue
+      const remote = columns[0]
+      if (sameIdentity(localLabel, remote)) {
+        selfLoops += 1
+        continue
+      }
+      const remoteId = addNode(nodes, remote, 'device')
+      edges.push({
+        id: stableId('edge', `${localId}:${remoteId}:cdp:${columns[1]}`),
+        source: localId,
+        target: remoteId,
+        local_interface: columns[1] ?? null,
+        remote_interface: columns.at(-1) ?? null,
+        protocol: 'cdp'
+      })
+      parsed += 1
+    }
+  }
+  return { parsed, selfLoops }
 }
 
 function parseLldp(
@@ -96,19 +133,24 @@ function parseLldp(
   content: string,
   nodes: Map<string, GraphNode>,
   edges: GraphEdge[],
-): number {
+): { parsed: number; selfLoops: number } {
   const localId = addNode(nodes, localLabel, 'device')
-  const blocks = content.split(/-{4,}|(?=Local Intf:)/)
+  const blocks = content.split(/-{4,}|(?=Local (?:Intf|Interface)\s*:)/i)
   let parsed = 0
+  let selfLoops = 0
   for (const block of blocks) {
-    const localInterface = block.match(/Local Intf:\s*([^\r\n]+)/i)?.[1]?.trim()
+    const localInterface = block.match(/Local (?:Intf|Interface)\s*:\s*([^;\r\n]+)/i)?.[1]?.trim()
     const remote =
-      block.match(/System Name:\s*([^\r\n]+)/i)?.[1]?.trim() ??
-      block.match(/Chassis id:\s*([^\r\n]+)/i)?.[1]?.trim()
+      block.match(/System Name\s*:\s*([^;\r\n]+)/i)?.[1]?.trim() ??
+      block.match(/Chassis id\s*:\s*([^;\r\n]+)/i)?.[1]?.trim()
     if (!remote) continue
-    const remoteInterface = block.match(/Port id:\s*([^\r\n]+)/i)?.[1]?.trim()
+    const remoteInterface = block.match(/Port (?:id|ID)\s*:\s*([^;\r\n]+)/i)?.[1]?.trim()
     const address =
       block.match(/Management Address(?:es)?:?\s*([^\s\r\n]+)/i)?.[1]
+    if (sameIdentity(localLabel, remote)) {
+      selfLoops += 1
+      continue
+    }
     const remoteId = addNode(nodes, remote, 'device', {
       ...(address ? { management_address: address } : {})
     })
@@ -122,7 +164,7 @@ function parseLldp(
     })
     parsed += 1
   }
-  return parsed
+  return { parsed, selfLoops }
 }
 
 function parseTraceroute(
@@ -136,7 +178,7 @@ function parseTraceroute(
   let previous = sourceId
   let parsed = 0
   let incomplete = false
-  for (const line of content.split(/\r?\n/)) {
+  for (const line of content.replace(/;\s*(?=\d+\s+)/g, '\n').split(/\r?\n/)) {
     const hopNumber = line.match(/^\s*(\d+)\s+/)?.[1]
     if (!hopNumber) continue
     if (/\*\s+\*\s+\*/.test(line)) {
@@ -251,8 +293,16 @@ export function analyzeNetworkPath(input: {
     complete: boolean
   }> = []
   let probableFaultDomain: string | null = null
+  const parseDiagnostics: Array<{
+    snapshot_index: number
+    requested_type: string
+    detected_type: Protocol | null
+    status: 'parsed' | 'partial' | 'unparsed'
+    records_parsed: number
+    warnings: string[]
+  }> = []
 
-  for (const untrustedSnapshot of input.snapshots) {
+  for (const [snapshotIndex, untrustedSnapshot] of input.snapshots.entries()) {
     const snapshot = {
       ...untrustedSnapshot,
       device_hint: sanitizeSnapshot(
@@ -269,10 +319,15 @@ export function analyzeNetworkPath(input: {
         ? autoType(snapshot.content)
         : snapshot.output_type
     let parsed = 0
+    const warnings: string[] = []
     if (type === 'cdp') {
-      parsed = parseCdp(snapshot.device_hint, snapshot.content, nodes, edges)
+      const result = parseCdp(snapshot.device_hint, snapshot.content, nodes, edges)
+      parsed = result.parsed
+      if (result.selfLoops > 0) warnings.push('self_reference_ignored')
     } else if (type === 'lldp') {
-      parsed = parseLldp(snapshot.device_hint, snapshot.content, nodes, edges)
+      const result = parseLldp(snapshot.device_hint, snapshot.content, nodes, edges)
+      parsed = result.parsed
+      if (result.selfLoops > 0) warnings.push('self_reference_ignored')
     } else if (type === 'route') {
       parsed = parseRoutes(snapshot.device_hint, snapshot.content, nodes, edges)
     } else if (type === 'traceroute') {
@@ -284,29 +339,52 @@ export function analyzeNetworkPath(input: {
       )
       parsed = trace.parsed
       if (trace.hops.length > 1) {
+        const requestedDestination = input.destination
+          ? sanitizeSnapshot(
+              input.destination,
+              'secrets_only',
+            ).sanitized
+          : undefined
+        const lastLabel = nodes.get(trace.hops.at(-1)!)?.label
         paths.push({
           source: input.source
             ? sanitizeSnapshot(input.source, 'secrets_only').sanitized
             : snapshot.device_hint,
-          destination:
-            (input.destination
-              ? sanitizeSnapshot(
-                  input.destination,
-                  'secrets_only',
-                ).sanitized
-              : undefined) ??
-            nodes.get(trace.hops.at(-1)!)?.label ??
-            'unknown',
+          destination: requestedDestination ?? lastLabel ?? 'unknown',
           hops: trace.hops,
-          complete: !trace.incomplete
+          complete:
+            !trace.incomplete &&
+            (
+              !requestedDestination ||
+              Boolean(lastLabel && sameIdentity(lastLabel, requestedDestination)) ||
+              Boolean(
+                requestedDestination &&
+                nodes.get(trace.hops.at(-1)!)?.attributes['address'] ===
+                  requestedDestination,
+              )
+            )
         })
       }
       if (trace.incomplete && trace.hops.length >= 2) {
-        probableFaultDomain =
-          nodes.get(trace.hops.at(-2)!)?.label ?? snapshot.device_hint
+        const precedingNode = nodes.get(trace.hops.at(-2)!)
+        if (precedingNode && precedingNode.kind !== 'unknown') {
+          probableFaultDomain = precedingNode.label
+        }
       }
     }
     if (!type || parsed === 0) unparsedInputs.push(snapshot.device_hint)
+    parseDiagnostics.push({
+      snapshot_index: snapshotIndex,
+      requested_type: snapshot.output_type,
+      detected_type: type,
+      status: parsed === 0
+        ? 'unparsed'
+        : warnings.length > 0
+          ? 'partial'
+          : 'parsed',
+      records_parsed: parsed,
+      warnings
+    })
   }
 
   const deduplicatedEdges = [
@@ -329,6 +407,7 @@ export function analyzeNetworkPath(input: {
     probable_fault_domain: probableFaultDomain,
     findings,
     unparsed_inputs: unparsedInputs,
+    parse_diagnostics: parseDiagnostics,
     retention: 'not_stored' as const,
     limitations: [
       'The graph represents only the supplied snapshots and is not a live digital twin.',

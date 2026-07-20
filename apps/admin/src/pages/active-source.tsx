@@ -71,7 +71,7 @@ export function ActiveSourcePage() {
                 <footer>
                   <span>{formatNumber(lane.candidates_verified, 0)} verified</span>
                   <span>{formatNumber(lane.candidates_deep_review, 0)} deep</span>
-                  <span>{formatNumber(lane.candidates_quarantined, 0)} quarantine</span>
+                  <span>{formatNumber(lane.candidates_quarantined, 0)} evidence pending</span>
                 </footer>
               </article>
             )

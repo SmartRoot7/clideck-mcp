@@ -46,10 +46,52 @@ BACKUP_DIRECTORY="$backup_directory" \
 tar -C /etc -czf "$backup_directory/etc-clideck-mcp.tar.gz" clideck-mcp
 
 switched=0
+pipeline_state_captured=0
+pipeline_state_json=''
+previous_active_release=''
+
+restore_pipeline_state() {
+  if [[ "$pipeline_state_captured" -ne 1 ]]; then
+    return
+  fi
+  psql "$DATABASE_URL" \
+    --set=ON_ERROR_STOP=1 \
+    --set=deployment_pipeline_state="$pipeline_state_json" <<'SQL'
+UPDATE pipeline_settings
+SET enabled =
+      (:'deployment_pipeline_state'::jsonb ->> 'enabled')::boolean,
+    paused_reason = nullif(
+      :'deployment_pipeline_state'::jsonb ->> 'paused_reason',
+      ''
+    ),
+    pause_requested_at = CASE
+      WHEN (:'deployment_pipeline_state'::jsonb ->> 'enabled')::boolean
+        THEN NULL
+      ELSE pause_requested_at
+    END,
+    max_concurrent_ai_runs =
+      (:'deployment_pipeline_state'::jsonb ->> 'max_concurrent_ai_runs')::smallint,
+    max_deep_review_runs =
+      (:'deployment_pipeline_state'::jsonb ->> 'max_concurrent_ai_runs')::smallint,
+    control_generation = control_generation + 1,
+    updated_at = now(),
+    updated_by = 'deploy-production'
+WHERE singleton;
+SQL
+}
+
 rollback_on_error() {
   status=$?
   trap - ERR
   set +e
+  if [[ -n "$previous_active_release" &&
+        -f "$release_directory/dist/cli/activate-release.js" ]]; then
+    (
+      cd "$release_directory"
+      /usr/local/bin/node dist/cli/activate-release.js \
+        "$previous_active_release"
+    )
+  fi
   if [[ "$switched" -eq 1 ]]; then
     temporary_link="${current_link}.rollback.$$"
     ln -s "$previous_release" "$temporary_link"
@@ -64,6 +106,7 @@ rollback_on_error() {
       clideck-mcp-api \
       clideck-mcp-admin
   fi
+  restore_pipeline_state
   printf 'Deployment failed; production was %s\n' \
     "$([[ "$switched" -eq 1 ]] && printf 'rolled back' || printf 'not switched')" \
     >&2
@@ -87,6 +130,10 @@ for required_path in \
   dist/entrypoints/worker.js \
   dist/entrypoints/researcher.js \
   dist/cli/migrate.js \
+  dist/cli/seed.js \
+  dist/cli/reconcile-074.js \
+  dist/cli/refresh-public-stats.js \
+  dist/cli/activate-release.js \
   dist-admin/index.html \
   ops/sql/grants.sql \
   ops/scripts/smoke-test.sh; do
@@ -100,6 +147,59 @@ set -a
 # shellcheck disable=SC1091
 source "$config_directory/migrator.env"
 set +a
+
+pipeline_state_json="$(
+  psql "$DATABASE_URL" --tuples-only --no-align --set=ON_ERROR_STOP=1 \
+    --command="SELECT json_build_object(
+      'enabled', enabled,
+      'paused_reason', paused_reason,
+      'max_concurrent_ai_runs', max_concurrent_ai_runs
+    )::text FROM pipeline_settings WHERE singleton"
+)"
+previous_active_release="$(
+  psql "$DATABASE_URL" --tuples-only --no-align --set=ON_ERROR_STOP=1 \
+    --command="SELECT release_id::text FROM active_release WHERE singleton"
+)"
+pipeline_state_captured=1
+printf '%s\n' "$pipeline_state_json" > "$backup_directory/pipeline-state.json"
+printf '%s\n' "$previous_active_release" \
+  > "$backup_directory/previous-active-release.txt"
+
+psql "$DATABASE_URL" --set=ON_ERROR_STOP=1 <<'SQL'
+UPDATE pipeline_settings
+SET enabled = false,
+    paused_reason = 'Production deployment in progress',
+    pause_requested_at = now(),
+    control_generation = control_generation + 1,
+    updated_at = now(),
+    updated_by = 'deploy-production'
+WHERE singleton;
+SQL
+
+for _attempt in {1..20}; do
+  active_ai="$(
+    psql "$DATABASE_URL" --tuples-only --no-align --set=ON_ERROR_STOP=1 \
+      --command="SELECT count(*) FROM pipeline_tasks
+        WHERE task_type IN (
+          'expert_research',
+          'candidate_deep_review',
+          'candidate_verification',
+          'fragment_analysis',
+          'source_discovery'
+        )
+        AND status IN ('claimed', 'running')
+        AND lease_until > now()"
+  )"
+  if [[ "$active_ai" -eq 0 ]]; then
+    break
+  fi
+  sleep 1
+done
+if [[ "$active_ai" -ne 0 ]]; then
+  printf 'Timed out waiting for %s active Luna lease(s)\n' "$active_ai" >&2
+  exit 1
+fi
+
 (
   cd "$release_directory"
   /usr/local/bin/node dist/cli/migrate.js
@@ -108,6 +208,13 @@ sudo -u postgres psql \
   --dbname=clideck_mcp \
   --set=ON_ERROR_STOP=1 \
   < "$release_directory/ops/sql/grants.sql"
+
+(
+  cd "$release_directory"
+  /usr/local/bin/node dist/cli/reconcile-074.js
+  /usr/local/bin/node dist/cli/seed.js
+  /usr/local/bin/node dist/cli/refresh-public-stats.js
+)
 
 set_deployed_sha() {
   environment_file="$1"
@@ -151,6 +258,8 @@ systemctl is-active --quiet \
 
 CLIDECK_MCP_BASE_URL=http://127.0.0.1:8787 \
   "$release_directory/ops/scripts/smoke-test.sh"
+
+restore_pipeline_state
 
 if [[ "$(readlink -f "$current_link")" != "$release_directory" ]]; then
   printf 'Atomic release switch did not persist\n' >&2

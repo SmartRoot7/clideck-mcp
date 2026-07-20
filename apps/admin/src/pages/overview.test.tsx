@@ -133,7 +133,7 @@ describe('overview pipeline snapshot', () => {
     expect(screen.queryByText('Queued')).not.toBeInTheDocument()
     expect(screen.queryByText('Done')).not.toBeInTheDocument()
     expect(screen.getByText('5,149')).toBeInTheDocument()
-    expect(screen.getByText('Quarantine')).toBeInTheDocument()
+    expect(screen.getByText('Evidence pending')).toBeInTheDocument()
     expect(screen.getByText('Exception')).toBeInTheDocument()
     const downloadedCard = screen
       .getByLabelText('Downloaded stage help')

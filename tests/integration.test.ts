@@ -50,6 +50,11 @@ import {
   searchDomainKnowledge
 } from '../src/domain/domain-knowledge.js'
 import {
+  reviewNetworkChange,
+  reviewNetworkChangeLegacy,
+  verifyNetworkChange
+} from '../src/domain/change.js'
+import {
   getPublicRevision,
   searchKnowledge
 } from '../src/domain/knowledge.js'
@@ -86,6 +91,10 @@ import {
   getExpertTask,
   submitFeedback
 } from '../src/domain/tasks.js'
+import {
+  getPublicStats,
+  refreshPublicStatsCache
+} from '../src/domain/telemetry.js'
 import { createLogger } from '../src/logger.js'
 import {
   createTestConfig,
@@ -146,6 +155,145 @@ describeIntegration('PostgreSQL integration', () => {
   afterAll(async () => {
     await database.end()
   }, 30_000)
+
+  it('uses reusable short verification handles and cached public stats', async () => {
+    const workflowContext = await resolveNetworkContext(database, {
+      vendor: 'Cisco',
+      model: 'C9300',
+      operating_system: 'IOS XE',
+      version: '17.9.4'
+    })
+    const workflowExpectations = [
+      ['check the existing trunk before a change', 'Inspect an existing trunk'],
+      ['safely add VLAN 200 without replacing the existing trunk list', 'Add a VLAN'],
+      ['remove VLAN 200 from a trunk safely', 'Remove one VLAN'],
+      ['verify a VLAN and trunk end to end', 'Verify a VLAN and trunk'],
+      ['diagnose why an interface is err-disabled', 'Diagnose an err-disabled'],
+      ['diagnose a port-security violation', 'Diagnose a port-security'],
+      ['recover a port-security err-disabled interface', 'Recover a port-security'],
+      ['enable verify disable and recover BPDU Guard', 'Configure, verify, disable'],
+      ['safely change and verify an interface description', 'Change and verify']
+    ] as const
+    for (const [question, expectedTitle] of workflowExpectations) {
+      const workflows = await searchKnowledge(
+        database,
+        question,
+        workflowContext,
+        3,
+        ['workflow', 'change', 'diagnostic'],
+      )
+      expect(
+        workflows.some(
+          (workflow) =>
+            workflow.kind === 'workflow' &&
+            workflow.title.includes(expectedTitle) &&
+            workflow.rollback.length > 0,
+        ),
+      ).toBe(true)
+    }
+
+    const review = await reviewNetworkChange(database, config, {
+      intent: 'Change an approved interface description',
+      context: {
+        vendor: 'Cisco',
+        model: 'C9300',
+        operating_system: 'IOS XE',
+        version: '17.9.4'
+      },
+      commands: [
+        'interface GigabitEthernet1/0/1',
+        'description approved-uplink'
+      ]
+    })
+    expect(review.verification_token).toMatch(/^vfy_[A-Za-z0-9_-]{43}$/)
+    expect(review.verification_token.length).toBeLessThan(60)
+
+    const first = await verifyNetworkChange(database, config, {
+      verification_token: review.verification_token,
+      before_snapshot: 'Description: old-uplink',
+      after_snapshot: 'Description: approved-uplink'
+    })
+    const retry = await verifyNetworkChange(database, config, {
+      verification_token: review.verification_token,
+      before_snapshot: 'Description: old-uplink',
+      after_snapshot: 'Description: approved-uplink'
+    })
+    expect(first.result).toBe('passed')
+    expect(retry.result).toBe('passed')
+    await expect(
+      verifyNetworkChange(database, config, {
+        verification_token: `${review.verification_token.slice(0, -1)}x`,
+        before_snapshot: 'before',
+        after_snapshot: 'after'
+      }),
+    ).rejects.toThrow('VERIFICATION_TOKEN_INVALID')
+    await database.query(
+      `UPDATE verification_sessions
+          SET expires_at = now() - interval '1 second'
+        WHERE token_hash = $1`,
+      [sha256(review.verification_token)],
+    )
+    await expect(
+      verifyNetworkChange(database, config, {
+        verification_token: review.verification_token,
+        before_snapshot: 'before',
+        after_snapshot: 'after'
+      }),
+    ).rejects.toThrow('VERIFICATION_TOKEN_EXPIRED')
+    const legacyReview = reviewNetworkChangeLegacy(config, {
+      intent: 'Legacy verification compatibility',
+      context: {
+        vendor: 'Cisco',
+        operating_system: 'IOS XE'
+      },
+      commands: ['show version']
+    })
+    await expect(
+      verifyNetworkChange(database, config, {
+        verification_token: legacyReview.verification_token,
+        before_snapshot: 'Version 17.9.4',
+        after_snapshot: 'Version 17.9.4'
+      }),
+    ).resolves.toMatchObject({ result: 'passed' })
+
+    const uniqueKey = `integration-${randomUUID()}`
+    const taskOne = await createExpertTask(
+      database,
+      config,
+      { kind: 'anonymous' },
+      'Research an unsupported integration scenario',
+      {
+        vendor: 'Juniper',
+        model: 'EX4400',
+        operating_system: 'Junos'
+      },
+      uniqueKey,
+      'integration-client',
+    )
+    const taskTwo = await createExpertTask(
+      database,
+      config,
+      { kind: 'anonymous' },
+      'Research an unsupported integration scenario',
+      {
+        vendor: 'Juniper',
+        model: 'EX4400',
+        operating_system: 'Junos'
+      },
+      uniqueKey,
+      'integration-client',
+    )
+    expect(taskTwo.task_id).toBe(taskOne.task_id)
+    expect(taskTwo.access_token).toBe(taskOne.access_token)
+
+    const refreshed = await refreshPublicStatsCache(database)
+    const cacheStartedAt = performance.now()
+    const cached = await getPublicStats(database)
+    expect(performance.now() - cacheStartedAt).toBeLessThan(100)
+    expect(cached.active_release.sequence).toBe(
+      refreshed.active_release.sequence,
+    )
+  })
 
   it('does not let manual publish bypass dangerous rollback policy', async () => {
     const unique = randomUUID()
@@ -3229,12 +3377,60 @@ describeIntegration('PostgreSQL integration', () => {
       const mediumPayload = mediumReview['payload'] as {
         candidates: Array<{ id: string }>
       }
-      await submitCandidateDeepReview(
+      const omittedMedium = await submitCandidateDeepReview(
         database,
         config,
         {
           pipeline_task_id: String(mediumReview['pipeline_task_id']),
           lease_token: String(mediumReview['lease_token']),
+          decisions: []
+        },
+        'independent-integration-medium-reviewer',
+      )
+      expect(omittedMedium).toMatchObject({
+        quarantined: 0,
+        manual_exception: 0
+      })
+      const retryableOmission = await database.query<{
+        status: string
+        resolution_code: string
+        deep_review_batch_limit: number
+      }>(
+        `SELECT status, resolution_code, deep_review_batch_limit
+         FROM knowledge_candidates
+         WHERE id = $1`,
+        [mediumPayload.candidates[0]!.id],
+      )
+      expect(retryableOmission.rows[0]).toMatchObject({
+        status: 'deep_review',
+        resolution_code: 'deep_reviewer_omitted',
+        deep_review_batch_limit: 10
+      })
+      await recordAgentRunResult(database, {
+        agent_run_id: String(mediumReview['agent_run_id']),
+        status: 'completed',
+        input_tokens: 180,
+        cached_input_tokens: 0,
+        output_tokens: 20,
+        reasoning_output_tokens: 10,
+        duration_ms: 40
+      })
+
+      const retriedMediumReview = await claimPipelineTask(
+        database,
+        config,
+        'integration-pipeline-coordinator',
+      )
+      expect(retriedMediumReview).toMatchObject({
+        task_type: 'candidate_deep_review',
+        requested_reasoning_effort: 'medium'
+      })
+      await submitCandidateDeepReview(
+        database,
+        config,
+        {
+          pipeline_task_id: String(retriedMediumReview['pipeline_task_id']),
+          lease_token: String(retriedMediumReview['lease_token']),
           decisions: [{
             candidate_id: mediumPayload.candidates[0]!.id,
             decision: 'rejected',
@@ -3249,7 +3445,7 @@ describeIntegration('PostgreSQL integration', () => {
         'independent-integration-medium-reviewer',
       )
       await recordAgentRunResult(database, {
-        agent_run_id: String(mediumReview['agent_run_id']),
+        agent_run_id: String(retriedMediumReview['agent_run_id']),
         status: 'completed',
         input_tokens: 180,
         cached_input_tokens: 0,

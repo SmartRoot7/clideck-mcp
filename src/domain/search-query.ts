@@ -24,15 +24,24 @@ function uniqueTokens(
   )
 }
 
-function pairwiseQuery(tokens: string[]): string {
+function relaxedQuery(tokens: string[]): string {
   if (tokens.length === 1) return tokens[0]!
-  const pairs: string[] = []
+  const width = tokens.length >= 3 ? 3 : 2
+  const combinations: string[] = []
   for (let left = 0; left < tokens.length; left += 1) {
     for (let right = left + 1; right < tokens.length; right += 1) {
-      pairs.push(`(${tokens[left]} & ${tokens[right]})`)
+      if (width === 2) {
+        combinations.push(`(${tokens[left]} & ${tokens[right]})`)
+        continue
+      }
+      for (let third = right + 1; third < tokens.length; third += 1) {
+        combinations.push(
+          `(${tokens[left]} & ${tokens[right]} & ${tokens[third]})`,
+        )
+      }
     }
   }
-  return pairs.join(' | ')
+  return combinations.join(' | ')
 }
 
 export function buildSearchQueries(
@@ -54,6 +63,6 @@ export function buildSearchQueries(
   return {
     normalizedQuestion,
     strictTsQuery: prefixTokens.join(' & '),
-    relaxedTsQuery: pairwiseQuery(prefixTokens)
+    relaxedTsQuery: relaxedQuery(prefixTokens)
   }
 }

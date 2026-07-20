@@ -22,7 +22,7 @@ const LABELS: Record<string, string> = {
   deep_low: 'Deep Low',
   deep_medium: 'Deep Medium',
   manual_exception: 'Exception',
-  quarantine: 'Quarantine',
+  quarantine: 'Evidence pending',
   publish: 'Published'
 }
 

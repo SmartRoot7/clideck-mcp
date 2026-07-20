@@ -102,7 +102,7 @@ export async function searchKnowledge(
   question: string,
   context: InternalResolvedContext,
   limit: number,
-  kind?: PublicKnowledge['kind'],
+  kind?: PublicKnowledge['kind'] | PublicKnowledge['kind'][],
 ): Promise<PublicKnowledge[]> {
   const searchQuestion =
     /\berrors?\b/i.test(question) &&
@@ -157,7 +157,7 @@ export async function searchKnowledge(
            OR kr.platform_id IS NULL
            OR kr.platform_id = $4
          )
-         AND ($5::text IS NULL OR ki.kind = $5)
+         AND ($5::text[] IS NULL OR ki.kind = ANY($5))
          AND (
            kr.search_document @@ to_tsquery('simple', $6)
            OR kr.search_document @@ to_tsquery('simple', $7)
@@ -236,7 +236,9 @@ export async function searchKnowledge(
       context.vendorId,
       context.operatingSystemId,
       context.platformId,
-      kind ?? null,
+      kind
+        ? Array.isArray(kind) ? kind : [kind]
+        : null,
       search.strictTsQuery,
       search.relaxedTsQuery
     ],

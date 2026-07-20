@@ -1,6 +1,7 @@
 import type { AppConfig } from '../config.js'
 import {
   createPublicTaskId,
+  deriveUrlToken,
   randomUrlToken,
   sha256,
   sha256Label
@@ -78,55 +79,99 @@ export async function createExpertTask(
   actor: PublicActor,
   question: string,
   context: NetworkContextInput,
+  idempotencyKey?: string,
+  idempotencyScope?: string,
 ): Promise<PublicTaskStatus & { access_token?: string }> {
   const publicId = createPublicTaskId()
+  const scopeHash = idempotencyKey
+    ? sha256(
+        idempotencyScope ??
+        (actor.kind === 'tenant' ? actor.tenantId : 'anonymous'),
+      )
+    : null
+  const keyHash = idempotencyKey ? sha256(idempotencyKey) : null
   const accessToken =
-    actor.kind === 'anonymous' ? randomUrlToken(32) : undefined
+    actor.kind === 'anonymous'
+      ? idempotencyKey
+        ? deriveUrlToken(
+            `expert-access:${idempotencyScope ?? 'anonymous'}:${idempotencyKey}`,
+            config.verificationSigningKey,
+          )
+        : randomUrlToken(32)
+      : undefined
 
-  const result = await database.query<TaskRow>(
+  const result = await database.query<TaskRow & { created: boolean }>(
     `INSERT INTO expert_tasks (
        public_id,
        access_token_hash,
        tenant_id,
        question,
        network_context,
-       expires_at
+       expires_at,
+       idempotency_scope_hash,
+       idempotency_key_hash
      ) VALUES (
        $1,
        $2,
        $3,
        $4,
        $5::jsonb,
-       now() + make_interval(mins => $6::int)
+       now() + make_interval(mins => $6::int),
+       $7,
+       $8
      )
+     ON CONFLICT (idempotency_scope_hash, idempotency_key_hash)
+       WHERE idempotency_scope_hash IS NOT NULL
+         AND idempotency_key_hash IS NOT NULL
+     DO UPDATE SET
+       idempotency_scope_hash = expert_tasks.idempotency_scope_hash
      RETURNING
        id, public_id, tenant_id, status, created_at, expires_at,
-       input_request, result_revision_id, failure_code, failure_message`,
+       input_request, result_revision_id, failure_code, failure_message,
+       (xmax = 0) AS created`,
     [
       publicId,
       accessToken ? sha256(accessToken) : null,
       actor.kind === 'tenant' ? actor.tenantId : null,
       question,
       JSON.stringify(context),
-      config.anonymousTaskTtlMinutes
+      config.anonymousTaskTtlMinutes,
+      scopeHash,
+      keyHash
     ],
   )
 
   const task = toPublicTaskStatus(result.rows[0]!)
-  await database.query(
+  if (result.rows[0]!.created) await database.query(
     `INSERT INTO task_public_events (
        task_id, stage, progress_percent, public_message
      )
      VALUES ($1, 'queued', 5, 'Research task queued for deterministic review.')`,
     [result.rows[0]!.id],
   )
-  task.milestones = [{
-    stage: 'queued',
-    progress_percent: 5,
-    message: 'Research task queued for deterministic review.',
-    created_at: task.created_at
-  }]
-  task.progress_percent = 5
+  if (result.rows[0]!.created) {
+    task.milestones = [{
+      stage: 'queued',
+      progress_percent: 5,
+      message: 'Research task queued for deterministic review.',
+      created_at: task.created_at
+    }]
+    task.progress_percent = 5
+  } else {
+    const presentation = await loadTaskPresentation(
+      database,
+      result.rows[0]!,
+    )
+    Object.assign(
+      task,
+      toPublicTaskStatus(
+        result.rows[0]!,
+        null,
+        presentation.events,
+        presentation.releaseSequence,
+      ),
+    )
+  }
   return accessToken ? { ...task, access_token: accessToken } : task
 }
 

@@ -1,7 +1,10 @@
 import { performance } from 'node:perf_hooks'
 
 import { sha256Label } from '../crypto.js'
-import { reviewNetworkChange, verifyNetworkChange } from '../domain/change.js'
+import {
+  reviewNetworkChangeLegacy,
+  verifyNetworkChange
+} from '../domain/change.js'
 import { resolveNetworkContext } from '../domain/context.js'
 import { searchKnowledge } from '../domain/knowledge.js'
 import { analyzeDeviceSnapshot } from '../domain/snapshot.js'
@@ -68,7 +71,7 @@ try {
         fail(testCase.id, 'sentinel secret survived redaction')
       }
     } else if (testCase.type === 'change') {
-      const result = reviewNetworkChange(config, {
+      const result = reviewNetworkChangeLegacy(config, {
         intent: 'Evaluate a bounded network change',
         context: {
           vendor: 'Cisco',
@@ -98,7 +101,7 @@ try {
         )
       }
     } else if (testCase.type === 'verification') {
-      const review = reviewNetworkChange(config, {
+      const review = reviewNetworkChangeLegacy(config, {
         intent: 'Evaluate deterministic post-change verification',
         context: {
           vendor: 'Cisco',
@@ -111,7 +114,7 @@ try {
       if (!review.verification_token) {
         fail(testCase.id, 'review did not issue a verification token')
       } else {
-        const result = verifyNetworkChange(config, {
+        const result = await verifyNetworkChange(database, config, {
           verification_token: review.verification_token,
           before_snapshot: testCase.before_snapshot,
           after_snapshot: testCase.after_snapshot
@@ -150,7 +153,9 @@ try {
           content: testCase.content
         }],
         source: 'source-device',
-        destination: 'destination'
+        destination:
+          testCase.content.match(/traceroute to\s+(\S+)/i)?.[1] ??
+          'destination'
       })
       if (result.nodes.length < testCase.minimum_nodes) {
         fail(testCase.id, `only ${result.nodes.length} nodes parsed`)

@@ -159,8 +159,79 @@ if [[ "$(printf '%s\n' "$change" | jq -r '.result.structuredContent.risk_level')
   printf 'Dangerous change was not classified as high risk\n' >&2
   exit 1
 fi
-if [[ "$(printf '%s\n' "$change" | jq -r '.result.structuredContent.verification_token | type')" != 'string' ]]; then
+verification_handle="$(
+  printf '%s\n' "$change" |
+    jq -r '.result.structuredContent.verification_token'
+)"
+if [[ ! "$verification_handle" =~ ^vfy_[A-Za-z0-9_-]{43}$ ]]; then
   printf 'Dangerous change did not return a verification token\n' >&2
+  exit 1
+fi
+
+printf 'smoke: reusable short verification handle\n' >&2
+verification_request="$(
+  jq -n --arg token "$verification_handle" '{
+    jsonrpc:"2.0",
+    id:4,
+    method:"tools/call",
+    params:{
+      name:"verify_network_change",
+      arguments:{
+        verification_token:$token,
+        before_snapshot:"reload state: before",
+        after_snapshot:"reload state: after"
+      }
+    }
+  }'
+)"
+for _verification_attempt in 1 2; do
+  verification="$(
+    curl "${curl_options[@]}" \
+      --request POST \
+      --header 'content-type: application/json' \
+      --header 'accept: application/json, text/event-stream' \
+      --header 'mcp-protocol-version: 2025-11-25' \
+      --data "$verification_request" \
+      "$CLIDECK_MCP_BASE_URL/mcp"
+  )"
+  if [[ "$(printf '%s\n' "$verification" |
+    jq -r '.result.structuredContent.result')" != 'passed' ]]; then
+    printf 'Short verification handle failed on attempt %s\n' \
+      "$_verification_attempt" >&2
+    exit 1
+  fi
+done
+
+printf 'smoke: operational workflow and tolerant limit\n' >&2
+workflow="$(
+  curl "${curl_options[@]}" \
+    --request POST \
+    --header 'content-type: application/json' \
+    --header 'accept: application/json, text/event-stream' \
+    --header 'mcp-protocol-version: 2025-11-25' \
+    --data '{
+      "jsonrpc":"2.0",
+      "id":5,
+      "method":"tools/call",
+      "params":{
+        "name":"get_network_workflow",
+        "arguments":{
+          "goal":"recover a port-security err-disabled interface",
+          "context":{
+            "vendor":"Cisco",
+            "model":"C9300",
+            "operating_system":"IOS XE",
+            "version":"17.15.5"
+          },
+          "limit":10
+        }
+      }
+    }' \
+    "$CLIDECK_MCP_BASE_URL/mcp"
+)"
+if [[ "$(printf '%s\n' "$workflow" |
+  jq -r '.result.structuredContent.unknown')" != 'false' ]]; then
+  printf 'Port-security operational workflow was not found\n' >&2
   exit 1
 fi
 

@@ -313,6 +313,8 @@ function overviewFixture() {
     projected_publications_per_day: 48,
     automatic_resolution_rate: 100,
     manual_exceptions_24h: 0,
+    technical_retries_24h: 0,
+    automatic_rejections_24h: 0,
     average_analysis_batch: 12,
     average_verification_batch: 32,
     executor_utilization: 88,

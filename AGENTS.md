@@ -14,8 +14,9 @@
 - Do not reproduce the deployment as ad hoc SSH, SCP, migration, symlink, or
   systemctl commands.
 - The script owns preflight tests, PostgreSQL backup, the Linux build, additive
-  migrations, grants, atomic release switching, service restart, smoke tests,
-  and automatic application rollback.
+  migrations, grants, pipeline pause/restore, reconciliation, stats priming,
+  atomic release switching, service restart, smoke tests, and automatic
+  application plus knowledge-release rollback.
 - A production release must be a clean commit from `main`. Do not deploy a
   dirty working tree.
 

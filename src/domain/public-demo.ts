@@ -118,6 +118,8 @@ export function sanitizeDemoOverview(overview: Overview): Overview {
       overview.projected_publications_per_day,
     automatic_resolution_rate: overview.automatic_resolution_rate,
     manual_exceptions_24h: overview.manual_exceptions_24h,
+    technical_retries_24h: overview.technical_retries_24h,
+    automatic_rejections_24h: overview.automatic_rejections_24h,
     average_analysis_batch: overview.average_analysis_batch,
     average_verification_batch: overview.average_verification_batch,
     executor_utilization: overview.executor_utilization,

@@ -1,5 +1,12 @@
 import type { AppConfig } from '../config.js'
-import { sha256Label, signPayload, verifySignedPayload } from '../crypto.js'
+import {
+  randomUrlToken,
+  sha256,
+  sha256Label,
+  signPayload,
+  verifySignedPayload
+} from '../crypto.js'
+import type { Database } from '../db.js'
 import type { NetworkContextInput } from './schemas.js'
 import { sanitizeSnapshot } from './snapshot.js'
 
@@ -169,7 +176,7 @@ function operationalGuidanceForRules(
   return [...guidance]
 }
 
-export function reviewNetworkChange(
+function buildNetworkChangeReview(
   config: AppConfig,
   input: {
     intent: string
@@ -284,12 +291,13 @@ export function reviewNetworkChange(
     checks,
     rollback
   }
-  const verificationToken = signPayload(
+  const legacyVerificationToken = signPayload(
     payload as unknown as Record<string, unknown>,
     config.verificationSigningKey,
   )
 
   return {
+    verification_payload: payload,
     decision,
     risk_level: riskLevel,
     blast_radius: [...blastRadius],
@@ -308,7 +316,7 @@ export function reviewNetworkChange(
     })),
     rollback,
     approval_required: hasWrite || unknownCommands.length > 0,
-    verification_token: verificationToken,
+    verification_token: legacyVerificationToken,
     verification_token_expires_at: expiresAt,
     limitations: [
       'This is a deterministic advisory review and does not execute commands.',
@@ -316,6 +324,54 @@ export function reviewNetworkChange(
       'Command-specific recognition is strongest for Cisco IOS-XE; unrecognized syntax receives conservative checks.'
     ]
   }
+}
+
+export async function reviewNetworkChange(
+  database: Database,
+  config: AppConfig,
+  input: {
+    intent: string
+    context: NetworkContextInput
+    commands?: string[] | undefined
+    config_diff?: string | undefined
+  },
+) {
+  const review = buildNetworkChangeReview(config, input)
+  const verificationToken = `vfy_${randomUrlToken(32)}`
+  await database.query(
+    `INSERT INTO verification_sessions (
+       token_hash, payload, expires_at
+     )
+     VALUES ($1, $2::jsonb, $3::timestamptz)`,
+    [
+      sha256(verificationToken),
+      JSON.stringify(review.verification_payload),
+      review.verification_payload.expires_at
+    ],
+  )
+  const { verification_payload: _privatePayload, ...publicReview } = review
+  return {
+    ...publicReview,
+    verification_token: verificationToken
+  }
+}
+
+/**
+ * Kept for deterministic unit/eval fixtures. Public transports always use the
+ * database-backed short handle returned by reviewNetworkChange.
+ */
+export function reviewNetworkChangeLegacy(
+  config: AppConfig,
+  input: {
+    intent: string
+    context: NetworkContextInput
+    commands?: string[] | undefined
+    config_diff?: string | undefined
+  },
+) {
+  const { verification_payload: _privatePayload, ...review } =
+    buildNetworkChangeReview(config, input)
+  return review
 }
 
 function parseVerificationPayload(
@@ -338,7 +394,43 @@ function parseVerificationPayload(
   return parsed as unknown as VerificationPayload
 }
 
-export function verifyNetworkChange(
+async function loadVerificationPayload(
+  database: Database,
+  config: AppConfig,
+  token: string,
+): Promise<VerificationPayload> {
+  if (!token.startsWith('vfy_')) {
+    return parseVerificationPayload(token, config.verificationSigningKey)
+  }
+  const result = await database.query<{ payload: VerificationPayload }>(
+    `UPDATE verification_sessions
+        SET use_count = use_count + 1,
+            last_used_at = now()
+      WHERE token_hash = $1
+        AND expires_at > now()
+      RETURNING payload`,
+    [sha256(token)],
+  )
+  if (result.rows[0]) return result.rows[0].payload
+
+  const expired = await database.query<{ exists: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1
+       FROM verification_sessions
+       WHERE token_hash = $1
+         AND expires_at <= now()
+     ) AS exists`,
+    [sha256(token)],
+  )
+  throw new Error(
+    expired.rows[0]?.exists
+      ? 'VERIFICATION_TOKEN_EXPIRED'
+      : 'VERIFICATION_TOKEN_INVALID',
+  )
+}
+
+export async function verifyNetworkChange(
+  database: Database,
   config: AppConfig,
   input: {
     verification_token: string
@@ -346,9 +438,10 @@ export function verifyNetworkChange(
     after_snapshot: string
   },
 ) {
-  const payload = parseVerificationPayload(
+  const payload = await loadVerificationPayload(
+    database,
+    config,
     input.verification_token,
-    config.verificationSigningKey,
   )
   const before = sanitizeSnapshot(input.before_snapshot, 'secrets_only').sanitized
   const after = sanitizeSnapshot(input.after_snapshot, 'secrets_only').sanitized
