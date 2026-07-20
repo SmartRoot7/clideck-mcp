@@ -96,18 +96,30 @@ Ready when production smoke checks pass and the deployed SHA is recorded here.
 
 ### M7 — Exact-demand relevance gate
 
-- `[~]` Reject a demand-linked source after deterministic conversion when it
+- `[x]` Reject a demand-linked source after deterministic conversion when it
   contains none of the question's specific technical terms; generic vendor,
   platform and operational wording is not enough.
-- `[~]` Keep a fast-path or Luna candidate only when its structured result
+- `[x]` Keep a fast-path or Luna candidate only when its structured result
   retains at least one demand-specific term; otherwise it cannot consume the
   urgent learning path or be published as its answer.
-- `[~]` When every linked source is terminal and the exact query remains
+- `[x]` When every linked source is terminal and the exact query remains
   unknown, return the demand to the priority queue with an explicit reason
   instead of leaving it in `processing`.
 
 Ready when an unknown production question cannot be falsely treated as learned
 by unrelated documents, and the next official discovery remains retryable.
+
+### M8 — Deep-review provenance binding
+
+- `[~]` Treat provenance as immutable leased evidence during Deep Review. The
+  reviewer may repair the claim, but cannot create, replace or invalidate a
+  source URL, evidence fragment or content hash.
+- `[~]` Accept a structurally useful repaired candidate even when the model
+  redundantly returns malformed provenance, then restore the original evidence
+  before applying the strict Domain Pack and risk checks.
+
+Ready when malformed reviewer provenance cannot reject a whole automatic
+review batch, while a repaired candidate still cannot escape evidence binding.
 
 ## Production verification — 20 July 2026
 

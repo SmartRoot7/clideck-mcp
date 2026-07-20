@@ -467,7 +467,9 @@ candidate, repair the candidate to that narrower claim. If the claim remains
 unsupported after the bounded medium pass, reject that candidate rather than
 the source document. The medium pass must not return unresolved.
 Return every zero-based candidate_index exactly once. repaired_candidate must be
-a complete candidate object when changed, otherwise null:
+a complete candidate object when changed, otherwise null. Do not include or
+edit provenance in repaired_candidate: the server preserves the leased
+document identity, content hash and evidence fragment unchanged.
 {"decisions":[{"candidate_index":0,"decision":"verified|rejected|conflict|unresolved",
 "confidence":0.0,"quality_score":0.0,"findings":["..."],
 "repaired_candidate":null}]}

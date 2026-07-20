@@ -319,14 +319,26 @@ const candidateDeepReviewDecisionShape = {
   confidence: z.number().min(0).max(1),
   quality_score: z.number().min(0).max(1),
   findings: z.array(z.string().trim().min(1).max(1_000)).max(30)
-    .default([]),
-  repaired_candidate: pipelineCandidatePayloadSchema.nullable().default(null)
+    .default([])
+}
+
+// Deep review may repair the structured claim, but not its source identity or
+// evidence. The authoritative provenance is restored from the leased candidate
+// on the server before the normal strict candidate schema is applied.
+const candidateDeepReviewRepairShape = pipelineCandidatePayloadSchema
+  .omit({ provenance: true })
+  .nullable()
+  .default(null)
+
+const candidateDeepReviewSubmissionDecisionShape = {
+  ...candidateDeepReviewDecisionShape,
+  repaired_candidate: candidateDeepReviewRepairShape
 }
 
 const candidateDeepReviewArtifactShape = {
   decisions: z.array(z.object({
     candidate_id: z.string().uuid(),
-    ...candidateDeepReviewDecisionShape
+    ...candidateDeepReviewSubmissionDecisionShape
   })).min(1).max(20)
 }
 
@@ -340,7 +352,7 @@ export const candidateDeepReviewSubmissionSchema =
 export const candidateDeepReviewAgentArtifactSchema = z.object({
   decisions: z.array(z.object({
     candidate_index: z.number().int().min(0).max(19),
-    ...candidateDeepReviewDecisionShape
+    ...candidateDeepReviewSubmissionDecisionShape
   })).min(1).max(20)
 })
 
@@ -371,6 +383,19 @@ export function materializeCandidateDeepReviewArtifact(
       }
     })
   })
+}
+
+export function applyDeepReviewRepair(
+  originalCandidate: unknown,
+  repairedCandidate: Record<string, unknown>,
+): z.infer<typeof pipelineCandidatePayloadSchema> {
+  const original = pipelineCandidatePayloadSchema.parse(originalCandidate)
+  return enforceKnowledgeRisk(
+    pipelineCandidatePayloadSchema.parse({
+      ...repairedCandidate,
+      provenance: original.provenance
+    }),
+  )
 }
 
 export function materializeCandidateVerificationArtifact(
@@ -4120,10 +4145,9 @@ export async function submitCandidateDeepReview(
       let validationFinding: string | null = null
       if (decision.repaired_candidate) {
         try {
-          const repaired = enforceKnowledgeRisk(
-            pipelineCandidatePayloadSchema.parse(
-              decision.repaired_candidate,
-            ),
+          const repaired = applyDeepReviewRepair(
+            row.payload,
+            decision.repaired_candidate as Record<string, unknown>,
           )
           candidatePayload = repaired
           repairedPayloadHash = sha256Label(JSON.stringify(repaired))

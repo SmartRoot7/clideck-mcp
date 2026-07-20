@@ -16,6 +16,8 @@ import {
   discoveryArtifactSchema,
   discoverySubmissionSchema,
   expertResearchStructuredArtifactSchema,
+  applyDeepReviewRepair,
+  materializeCandidateDeepReviewArtifact,
   materializeCandidateVerificationArtifact,
   normalizeCandidateAnalysisOptionalFields,
   normalizeCandidateAnalysisStableKeys
@@ -332,6 +334,60 @@ describe('deterministic source processing', () => {
         findings: []
       }]
     }, candidateIds).decisions).toHaveLength(1)
+  })
+
+  it('preserves trusted provenance when a deep reviewer repairs a candidate', () => {
+    const original = {
+      stable_key: 'cisco-ios-xe-macsec-rekey-repair',
+      kind: 'workflow',
+      vendor_slug: 'cisco',
+      operating_system_slug: 'ios-xe',
+      title: 'Diagnose MACsec rekey state',
+      summary: 'Checks the bounded MACsec rekey state.',
+      question_patterns: ['How do I diagnose MACsec rekey state?'],
+      procedure: ['Inspect the current MACsec state.'],
+      prerequisites: [],
+      risks: [],
+      verification: ['Confirm the rekey state is visible.'],
+      rollback: [],
+      limitations: [],
+      dangerous: false,
+      risk_level: 'safe_read_only',
+      confidence: 0.9,
+      quality_score: 0.9,
+      confidence_reason: 'The leased evidence supports the bounded check.',
+      last_verified_at: '2026-07-20',
+      provenance: [{
+        url: 'https://www.cisco.com/example-macsec',
+        document_type: 'configuration_guide',
+        title: 'Trusted leased source',
+        verified_at: '2026-07-20',
+        content_hash: `sha256:${'d'.repeat(64)}`,
+        evidence_fragment: 'MACsec rekey state.',
+        evidence_role: 'primary'
+      }]
+    }
+    const materialized = materializeCandidateDeepReviewArtifact({
+      decisions: [{
+        candidate_index: 0,
+        decision: 'verified',
+        confidence: 0.96,
+        quality_score: 0.95,
+        findings: ['The claim was narrowed to the leased evidence.'],
+        repaired_candidate: {
+          ...original,
+          title: 'Repair MACsec rekey state',
+          provenance: [{ content_hash: 'not-a-valid-hash' }]
+        }
+      }]
+    }, ['00000000-0000-4000-8000-000000000001'])
+
+    const repaired = applyDeepReviewRepair(
+      original,
+      materialized.decisions[0]!.repaired_candidate!,
+    )
+    expect(repaired.title).toBe('Repair MACsec rekey state')
+    expect(repaired.provenance).toEqual(original.provenance)
   })
 
   it('canonicalizes mechanical stable-key separators before validation', () => {
