@@ -77,11 +77,7 @@ export function codexExecutorArguments(input: {
       '--disable',
       feature
     ]),
-    ...(webResearchTasks.has(input.taskType) ||
-      (
-        input.taskType === 'candidate_deep_review' &&
-        input.reasoning === 'medium'
-      )
+    ...(webResearchTasks.has(input.taskType)
       ? ['--enable', 'standalone_web_search']
       : ['--disable', 'standalone_web_search']),
     '-m',

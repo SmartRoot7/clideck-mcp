@@ -325,6 +325,20 @@ out that they need automated repair.
 Ready when a normal canonical redirect cannot consume a retry, poison a source
 lane or inflate the mechanical-failure metric.
 
+### M23 — Evidence-first Deep Medium review
+
+- `[x]` Disable web search for Deep Medium: it receives the authoritative
+  fragment and its role is to resolve the candidate against that evidence, not
+  to seek a redundant second source.
+- `[x]` Make the prompt explicit: a directly supporting official manufacturer
+  document is sufficient; unsupported claims are narrowed or rejected.
+- `[~]` Observe Deep Medium process-failure rate and tokens per resolved record
+  after removal of the unnecessary external research capability.
+
+Ready when Deep Medium remains a third, independent quality pass without
+spending capacity on redundant web access or fabricating a claim beyond its
+official evidence.
+
 ## Production verification — 20 July 2026
 
 - `[x]` Deployed `bc7c950b585bd994efa704e4ca246320fbde05dd` exclusively through

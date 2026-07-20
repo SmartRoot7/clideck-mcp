@@ -93,7 +93,7 @@ describe('parallel Luna runtime', () => {
       .toBe('--disable')
   })
 
-  it('allows medium reasoning only for automatic deep review', () => {
+  it('allows medium reasoning only for automatic deep review without web search', () => {
     const common = {
       model: pipelineModel,
       reasoning: 'medium',
@@ -112,7 +112,7 @@ describe('parallel Luna runtime', () => {
     expect(deepReview).toContain('model_reasoning_effort="medium"')
     expect(
       deepReview[deepReview.indexOf('standalone_web_search') - 1]
-    ).toBe('--enable')
+    ).toBe('--disable')
   })
 
   it('rejects generated artifacts that contain a real secret', () => {
