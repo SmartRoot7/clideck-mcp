@@ -18,6 +18,7 @@ import {
   expertResearchStructuredArtifactSchema,
   applyDeepReviewRepair,
   getDeterministicRiskDisposition,
+  isRetryableCodexPlatformArtifactFailure,
   shouldReduceDeepReviewBatchOnFailure,
   stripUntrustedDeepReviewProvenance,
   materializeCandidateDeepReviewArtifact,
@@ -179,6 +180,12 @@ describe('knowledge safety classification', () => {
 
 describe('deterministic source processing', () => {
   it('does not shrink deep-review batches for a retryable platform error', () => {
+    expect(isRetryableCodexPlatformArtifactFailure(
+      'INTERNAL_ERROR: The request could not be completed. Retry later with the same safe inputs.',
+    )).toBe(true)
+    expect(isRetryableCodexPlatformArtifactFailure(
+      'The artifact has an invalid candidate index.',
+    )).toBe(false)
     expect(shouldReduceDeepReviewBatchOnFailure(
       'AGENT_ARTIFACT_REJECTED',
       'The generated artifact failed validation or submission: INTERNAL_ERROR: The request could not be completed. Retry later with the same safe inputs.',

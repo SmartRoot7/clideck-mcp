@@ -654,6 +654,19 @@ export function shouldReduceDeepReviewBatchOnFailure(
   )
 }
 
+/**
+ * The Codex CLI may exit successfully while emitting a structured
+ * `INTERNAL_ERROR` instead of the requested artifact.  This is a temporary
+ * platform failure, not a malformed knowledge record; it must use the same
+ * circuit-breaker path as a failed Codex process.
+ */
+export function isRetryableCodexPlatformArtifactFailure(
+  failureMessage: string,
+): boolean {
+  return /\bINTERNAL_ERROR\b[\s\S]{0,240}\b(?:request could not be completed|retry later)\b/i
+    .test(failureMessage)
+}
+
 async function recordEvent(
   client: DatabaseClient,
   input: {

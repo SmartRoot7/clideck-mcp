@@ -163,6 +163,18 @@ silently degrading it to one-record Luna runs.
 Ready when the local executor process start time follows the deployment and
 new Deep Review runs no longer reject echoed provenance hashes.
 
+### M12 — Circuit-breaker for structured platform failures
+
+- `[~]` Classify Codex `INTERNAL_ERROR` output as a retryable platform failure
+  even when the CLI exits with code zero.
+- `[~]` Feed its stable diagnostic fingerprint into the existing circuit
+  breaker, rather than treating it as a malformed knowledge artifact.
+- `[~]` Keep a real schema or index error distinct, so a smaller batch is still
+  available when it can improve artifact completeness.
+
+Ready when four matching platform failures open the existing short cooldown and
+the next successful executor closes it without losing or weakening a record.
+
 ## Production verification — 20 July 2026
 
 - `[x]` Deployed `bc7c950b585bd994efa704e4ca246320fbde05dd` exclusively through

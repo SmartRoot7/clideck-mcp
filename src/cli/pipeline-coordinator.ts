@@ -21,6 +21,7 @@ import {
   expertResearchStructuredArtifactSchema,
   materializeCandidateVerificationArtifact,
   materializeCandidateDeepReviewArtifact,
+  isRetryableCodexPlatformArtifactFailure,
   normalizeCandidateAnalysisOptionalFields,
   normalizeCandidateAnalysisStableKeys
 } from '../domain/pipeline.js'
@@ -1057,16 +1058,26 @@ async function main(): Promise<void> {
         runOutcome?.exitCode === 0 &&
         !runOutcome.timedOut &&
         !artifactSubmitted
+      const artifactFailureSummary = artifactRejected
+        ? safeErrorSummary(error)
+        : ''
+      const retryablePlatformArtifact =
+        artifactRejected &&
+        isRetryableCodexPlatformArtifactFailure(artifactFailureSummary)
       const failureCode = launchFailed
         ? 'AGENT_LAUNCH_FAILED'
-        : artifactRejected
+        : retryablePlatformArtifact
+          ? 'CODEX_PROCESS_FAILED'
+          : artifactRejected
           ? 'AGENT_ARTIFACT_REJECTED'
           : 'AGENT_REPORTING_FAILED'
       const failureMessage = launchFailed
         ? 'The ephemeral Codex process could not start.'
+        : retryablePlatformArtifact
+          ? 'The ephemeral Codex process reported a retryable platform error before producing an accepted artifact.'
         : artifactRejected
           ? `The generated artifact failed validation or submission: ${
-            safeErrorSummary(error)
+            artifactFailureSummary
           }`
           : 'The ephemeral AI run could not report its result to the pipeline.'
       process.stderr.write(
@@ -1101,6 +1112,14 @@ async function main(): Promise<void> {
                 ? {
                     diagnosticFingerprint:
                       runOutcome.diagnosticFingerprint
+                  }
+                : {}),
+              ...(retryablePlatformArtifact
+                ? {
+                    diagnosticCode: 'CODEX_PROCESS_FAILED',
+                    diagnosticFingerprint: `sha256:${createHash('sha256')
+                      .update(artifactFailureSummary.toLowerCase())
+                      .digest('hex')}`
                   }
                 : {})
             }
