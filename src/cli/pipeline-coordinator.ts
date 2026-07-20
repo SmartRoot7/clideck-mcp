@@ -374,6 +374,9 @@ guide merely because it covers the same product: a returned page must visibly
 contain at least one demand-specific technical term in its title, URL or
 substantive content. If a broad guide is needed, choose its direct leaf page
 or chapter for the requested feature instead.
+If knowledge_demand includes excluded_source_urls, those official documents
+were already processed without resolving the question. Do not return any of
+them again; find a distinct, directly relevant official leaf page instead.
 {"sources":[{"canonical_url":"https://...","document_type":"...",
 "title":"...","document_version":"version or null","document_date":"YYYY-MM-DD or null"}],
 "rejection_reason":null}

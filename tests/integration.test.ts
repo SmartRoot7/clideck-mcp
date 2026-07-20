@@ -410,12 +410,12 @@ describeIntegration('PostgreSQL integration', () => {
       const state = await client.query<{
         status: string
         last_error_code: string
-        retry_scheduled: boolean
+        retry_ready: boolean
       }>(
         `SELECT
            status,
            last_error_code,
-           next_retry_at > now() AS retry_scheduled
+           next_retry_at <= now() AS retry_ready
          FROM knowledge_demands
          WHERE id = $1`,
         [demand.rows[0]!.id],
@@ -423,7 +423,7 @@ describeIntegration('PostgreSQL integration', () => {
       expect(state.rows).toEqual([{
         status: 'unresolved',
         last_error_code: 'DEMAND_SOURCE_UNRELATED',
-        retry_scheduled: true
+        retry_ready: true
       }])
     } finally {
       await client.query('ROLLBACK').catch(() => undefined)

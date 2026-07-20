@@ -1703,6 +1703,21 @@ async function queueDemandDiscoveryWork(
   )
   const row = demand.rows[0]
   if (!row) return false
+  const exhaustedSources = await client.query<{ canonical_url: string }>(
+    `SELECT canonical_url
+     FROM source_candidates
+     WHERE knowledge_demand_id = $1
+       AND status IN (
+         'completed',
+         'completed_with_exceptions',
+         'duplicate',
+         'rejected',
+         'failed'
+       )
+     ORDER BY completed_at DESC NULLS LAST, updated_at DESC
+     LIMIT 20`,
+    [row.id],
+  )
   const taskId = await insertTask(client, {
     type: 'source_discovery',
     stage: 'discover',
@@ -1724,7 +1739,10 @@ async function queueDemandDiscoveryWork(
       knowledge_demand: {
         question: row.question,
         tool_name: row.tool_name,
-        context: row.context
+        context: row.context,
+        excluded_source_urls: exhaustedSources.rows.map(
+          (source) => source.canonical_url,
+        )
       },
       requirements: {
         public_https_only: true,
@@ -2133,7 +2151,12 @@ export async function reconcileCompletedSources(
               ) THEN 'DEMAND_SOURCE_UNRELATED'
               ELSE 'KNOWLEDGE_STILL_UNKNOWN'
             END,
-            next_retry_at = now() + interval '5 minutes',
+            -- A terminal document without an answer is feedback, not a reason
+            -- to leave an urgent user question idle. The next discovery gets
+            -- the completed URLs as exclusions, while an actual no-result
+            -- discovery still applies its longer backoff when it submits zero
+            -- distinct official sources.
+            next_retry_at = now(),
             last_seen_at = now()
       WHERE demand.status IN ('acquiring', 'processing')
         AND EXISTS (

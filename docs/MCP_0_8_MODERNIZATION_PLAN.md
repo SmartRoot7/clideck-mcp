@@ -218,6 +218,21 @@ Ready when a demand-linked analysis run can create a relevant candidate from a
 ranked official fragment, and an unknown question becomes `published` only when
 that candidate passes the existing verification and release policy.
 
+### M16 — Immediate, non-repeating demand recovery
+
+- `[~]` Resume high-priority discovery as soon as a fully processed official
+  source yields no answer, instead of holding the user question in a fixed
+  delay.
+- `[~]` Supply the next discovery lease with the bounded list of already
+  exhausted official URLs, so it must seek a distinct document rather than
+  cycling over the same source.
+- `[~]` Retain the longer backoff only when a discovery run itself finds no
+  new qualifying official source, which prevents empty Luna loops.
+
+Ready when a rejected or non-answering source immediately leads to a distinct
+official-source attempt, while a genuine no-result search stays bounded and
+does not consume repeated AI runs.
+
 ## Production verification — 20 July 2026
 
 - `[x]` Deployed `bc7c950b585bd994efa704e4ca246320fbde05dd` exclusively through
