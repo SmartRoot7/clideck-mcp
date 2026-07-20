@@ -233,6 +233,19 @@ Ready when a rejected or non-answering source immediately leads to a distinct
 official-source attempt, while a genuine no-result search stays bounded and
 does not consume repeated AI runs.
 
+### M17 — Adaptive protection from repeated Codex platform failures
+
+- `[~]` Treat a repeated identical `CODEX_PROCESS_FAILED` fingerprint as a
+  platform incident rather than a sequence of independent knowledge failures.
+- `[~]` Increase the circuit cooldown from the measured recurrence of that
+  fingerprint, bounded by a short recovery probe instead of a permanent stop.
+- `[~]` Close the circuit immediately after a successful probe, preserving the
+  work-conserving four-Luna pipeline when the platform recovers.
+
+Ready when a persistent external failure cannot repeatedly burn full Deep
+Review runs, while one successful probe restores normal automatic work without
+manual intervention.
+
 ## Production verification — 20 July 2026
 
 - `[x]` Deployed `bc7c950b585bd994efa704e4ca246320fbde05dd` exclusively through

@@ -693,6 +693,20 @@ export function isRetryableCodexPlatformArtifactFailure(
     .test(failureMessage)
 }
 
+/**
+ * Slow retries only for a repeating, fingerprinted platform incident. A
+ * one-off process failure remains retryable immediately; repeated identical
+ * failures increasingly protect the token budget until a single probe proves
+ * the platform has recovered.
+ */
+export function codexCircuitCooldownSeconds(
+  matchingFailures: number,
+): number {
+  if (matchingFailures < 4) return 0
+  const escalation = Math.floor((matchingFailures - 4) / 4)
+  return Math.min(300, 30 * (2 ** escalation))
+}
+
 async function recordEvent(
   client: DatabaseClient,
   input: {
@@ -3319,9 +3333,23 @@ export async function recordAgentRunResult(
     input.diagnostic_code === 'CODEX_PROCESS_FAILED' &&
     input.diagnostic_fingerprint
   ) {
+    const failures = await database.query<{ count: number }>(
+      `SELECT count(*)::int AS count
+       FROM agent_runs
+       WHERE status = 'failed'
+         AND diagnostic_code = 'CODEX_PROCESS_FAILED'
+         AND diagnostic_fingerprint = $1
+         AND completed_at >= now() - interval '15 minutes'`,
+      [input.diagnostic_fingerprint],
+    )
+    const cooldownSeconds = codexCircuitCooldownSeconds(
+      failures.rows[0]?.count ?? 0,
+    )
     await database.query(
       `UPDATE pipeline_settings settings
-          SET ai_circuit_open_until = now() + interval '30 seconds',
+          SET ai_circuit_open_until = now() + make_interval(
+                secs => greatest(30, $3::int)
+              ),
               ai_circuit_reason = $1,
               ai_circuit_probe_executor_id = NULL,
               updated_at = now(),
@@ -3329,16 +3357,9 @@ export async function recordAgentRunResult(
         WHERE settings.singleton
           AND (
             settings.ai_circuit_probe_executor_id = $2
-            OR 4 <= (
-              SELECT count(*)
-              FROM agent_runs run
-              WHERE run.status = 'failed'
-                AND run.diagnostic_code = 'CODEX_PROCESS_FAILED'
-                AND run.diagnostic_fingerprint = $1
-                AND run.completed_at >= now() - interval '2 minutes'
-            )
+            OR $3::int > 0
           )`,
-      [input.diagnostic_fingerprint, executorId],
+      [input.diagnostic_fingerprint, executorId, cooldownSeconds],
     )
   }
   return {

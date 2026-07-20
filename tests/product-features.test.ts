@@ -9,6 +9,7 @@ import {
   bindCandidateAnalysisProvenanceHashes,
   boundFragmentAnalysisBatch,
   automaticUnresolvedDisposition,
+  codexCircuitCooldownSeconds,
   candidateAnalysisArtifactSchema,
   candidateDeepReviewAgentArtifactSchema,
   candidateVerificationAgentArtifactSchema,
@@ -180,6 +181,18 @@ describe('knowledge safety classification', () => {
 })
 
 describe('deterministic source processing', () => {
+  it('backs off repeated identical Codex platform failures adaptively', () => {
+    expect(codexCircuitCooldownSeconds(0)).toBe(0)
+    expect(codexCircuitCooldownSeconds(3)).toBe(0)
+    expect(codexCircuitCooldownSeconds(4)).toBe(30)
+    expect(codexCircuitCooldownSeconds(7)).toBe(30)
+    expect(codexCircuitCooldownSeconds(8)).toBe(60)
+    expect(codexCircuitCooldownSeconds(12)).toBe(120)
+    expect(codexCircuitCooldownSeconds(16)).toBe(240)
+    expect(codexCircuitCooldownSeconds(20)).toBe(300)
+    expect(codexCircuitCooldownSeconds(100)).toBe(300)
+  })
+
   it('does not shrink deep-review batches for a retryable platform error', () => {
     expect(isRetryableCodexPlatformArtifactFailure(
       'INTERNAL_ERROR: The request could not be completed. Retry later with the same safe inputs.',
