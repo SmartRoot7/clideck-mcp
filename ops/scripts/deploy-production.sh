@@ -81,19 +81,35 @@ set -Eeuo pipefail
 commit_sha="$1"
 candidate_directory="/tmp/clideck-mcp-build-$commit_sha"
 release_directory="/opt/clideck-mcp/releases/$commit_sha"
+store_directory="/tmp/clideck-mcp-pnpm-store-$commit_sha"
+
+cleanup_remote_build() {
+  status=$?
+  trap - EXIT
+  rm -rf "$store_directory"
+  rm -f "/tmp/clideck-mcp-$commit_sha.tar.gz"
+  if [[ "$status" -ne 0 ]]; then
+    rm -rf "$candidate_directory"
+  fi
+  exit "$status"
+}
+trap cleanup_remote_build EXIT
 
 if [[ -d "$release_directory" ]]; then
-  rm -f "/tmp/clideck-mcp-$commit_sha.tar.gz"
   exit 0
 fi
 
 rm -rf "$candidate_directory"
+rm -rf "$store_directory"
 mkdir -p "$candidate_directory"
+mkdir -p "$store_directory"
 tar -xzf "/tmp/clideck-mcp-$commit_sha.tar.gz" -C "$candidate_directory"
 cd "$candidate_directory"
-CI=true pnpm install --frozen-lockfile
+CI=true pnpm install \
+  --frozen-lockfile \
+  --store-dir "$store_directory" \
+  --package-import-method=copy
 CI=true pnpm build
-rm -f "/tmp/clideck-mcp-$commit_sha.tar.gz"
 REMOTE_BUILD
 
 printf '==> Backup, atomic switch, smoke test, rollback on failure\n'
