@@ -1418,41 +1418,74 @@ async function queueDiscoveryWork(client: DatabaseClient): Promise<boolean> {
   )
   if (activeDiscovery.rows[0]?.exists) return false
 
-  const targetResult = await client.query<{
-    id: string
-    vendor_slug: string
-    product_family: string | null
-    model: string | null
-    operating_system_slug: string
-    version_branch: string | null
-    document_role: string
-    priority: number
-  }>(
-    `SELECT
-       id,
-       vendor_slug,
-       product_family,
-       model,
-       operating_system_slug,
-       version_branch,
-       document_role,
-       priority
-     FROM coverage_targets
-     WHERE status <> 'paused'
-       AND (
-         status IN ('queued', 'failed')
-         OR (
-           status = 'covered'
-           AND next_check_at <= now()
+  // A fully covered catalog can have every target scheduled for a later
+  // refresh. Requeue one target and select it in the same scheduler pass so a
+  // drained source buffer never leaves a Luna lane empty for an extra cycle.
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const targetResult = await client.query<{
+      id: string
+      vendor_slug: string
+      product_family: string | null
+      model: string | null
+      operating_system_slug: string
+      version_branch: string | null
+      document_role: string
+      priority: number
+    }>(
+      `SELECT
+         id,
+         vendor_slug,
+         product_family,
+         model,
+         operating_system_slug,
+         version_branch,
+         document_role,
+         priority
+       FROM coverage_targets
+       WHERE status <> 'paused'
+         AND (
+           status IN ('queued', 'failed')
+           OR (
+             status = 'covered'
+             AND next_check_at <= now()
+           )
          )
-       )
-     ORDER BY priority DESC, next_check_at, updated_at
-     LIMIT 1
-     FOR UPDATE SKIP LOCKED`,
-  )
-  const target = targetResult.rows[0]
-  if (!target) {
-    await client.query(
+       ORDER BY priority DESC, next_check_at, updated_at
+       LIMIT 1
+       FOR UPDATE SKIP LOCKED`,
+    )
+    const target = targetResult.rows[0]
+    if (target) {
+      await client.query(
+        `UPDATE coverage_targets
+            SET status = 'discovering',
+                last_discovered_at = now(),
+                updated_at = now()
+          WHERE id = $1`,
+        [target.id],
+      )
+      return Boolean(await insertTask(client, {
+        type: 'source_discovery',
+        stage: 'discover',
+        priority: Math.min(
+          aiPriorities.discover,
+          Math.max(1, target.priority),
+        ),
+        dedupeKey: `coverage:${target.id}:discover`,
+        coverageTargetId: target.id,
+        payload: {
+          coverage_target: target,
+          requirements: {
+            public_https_only: true,
+            official_vendor_sources_only: true,
+            no_authenticated_sources: true,
+            source_urls_are_internal: true
+          }
+        }
+      }))
+    }
+
+    const requeued = await client.query<{ id: string }>(
       `UPDATE coverage_targets
           SET status = 'queued',
               next_check_at = now(),
@@ -1463,38 +1496,12 @@ async function queueDiscoveryWork(client: DatabaseClient): Promise<boolean> {
           WHERE status = 'covered'
           ORDER BY next_check_at, priority DESC
           LIMIT 1
-        )`,
+        )
+        RETURNING id`,
     )
-    return false
+    if (!requeued.rows[0]) return false
   }
-
-  await client.query(
-    `UPDATE coverage_targets
-        SET status = 'discovering',
-            last_discovered_at = now(),
-            updated_at = now()
-      WHERE id = $1`,
-    [target.id],
-  )
-  return Boolean(await insertTask(client, {
-    type: 'source_discovery',
-    stage: 'discover',
-    priority: Math.min(
-      aiPriorities.discover,
-      Math.max(1, target.priority),
-    ),
-    dedupeKey: `coverage:${target.id}:discover`,
-    coverageTargetId: target.id,
-    payload: {
-      coverage_target: target,
-      requirements: {
-        public_https_only: true,
-        official_vendor_sources_only: true,
-        no_authenticated_sources: true,
-        source_urls_are_internal: true
-      }
-    }
-  }))
+  return false
 }
 
 async function queueDemandDiscoveryWork(
@@ -1764,6 +1771,29 @@ async function maintainPreparedSourceBuffer(
     available -= 1
     if (available <= 0) break
   }
+}
+
+async function sourceSupplyNeedsDiscovery(
+  client: DatabaseClient,
+  target: number,
+): Promise<boolean> {
+  if (target <= 0) return false
+  const supply = await client.query<{ count: number }>(
+    `SELECT count(*)::int AS count
+     FROM source_candidates
+     WHERE status IN (
+       'discovered',
+       'approved',
+       'acquiring',
+       'acquired',
+       'converting',
+       'converted',
+       'chunking',
+       'prepared',
+       'analyzing'
+     )`,
+  )
+  return (supply.rows[0]?.count ?? 0) < target
 }
 
 async function reconcileSourceLanes(
@@ -2412,6 +2442,17 @@ async function ensureStreamingWorkInTransaction(
   // A real unanswered MCP request outranks background coverage and record
   // refinement. Expert work remains the next highest class.
   await queueDemandDiscoveryWork(client)
+
+  // Keep one future Luna claim available for intake whenever the prepared
+  // supply falls below its target. Without this reservation an endless Deep
+  // Review backlog can consume every lane and leave no documents ready when
+  // it finally drains. Existing runs are never interrupted.
+  if (await sourceSupplyNeedsDiscovery(
+    client,
+    pipeline.prepared_source_target,
+  )) {
+    await queueDiscoveryWork(client)
+  }
   await queueExpertWork(client)
   // Tasks can survive an application deployment. Normalize every unclaimed
   // AI task so an older numeric priority cannot defeat the current policy.

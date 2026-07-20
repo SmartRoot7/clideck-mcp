@@ -4227,4 +4227,91 @@ describeIntegration('PostgreSQL integration', () => {
       null,
     )
   })
+
+  it('reserves the next Luna claim for discovery when source supply is empty', async () => {
+    const suffix = randomUUID().replaceAll('-', '')
+    await database.query(
+      `UPDATE pipeline_tasks
+          SET status = 'cancelled',
+              completed_at = now(),
+              updated_at = now()
+        WHERE status IN ('queued', 'claimed', 'running');
+       DELETE FROM active_source_slots;
+       UPDATE source_candidates
+          SET status = 'completed',
+              updated_at = now()
+        WHERE status NOT IN ('completed', 'completed_with_exceptions', 'duplicate', 'rejected');
+       UPDATE coverage_targets
+          SET status = 'covered',
+              next_check_at = now() + interval '1 day',
+              updated_at = now();
+       UPDATE pipeline_settings
+          SET enabled = true,
+              max_concurrent_ai_runs = 4,
+              prepared_source_target = 8,
+              paused_reason = NULL,
+              pause_requested_at = NULL,
+              updated_at = now(),
+              updated_by = 'supply-reservation-integration-test'`,
+    )
+    const deepTasks = await database.query<{ id: string }>(
+      `INSERT INTO pipeline_tasks (
+         task_type,
+         stage,
+         status,
+         priority,
+         dedupe_key,
+         payload,
+         claim_owner,
+         lease_token_hash,
+         lease_until,
+         requested_reasoning_effort
+       )
+       SELECT
+         'candidate_deep_review',
+         'deep_review',
+         'running',
+         92,
+         'supply-reservation:' || $1 || ':' || lane,
+         '{}'::jsonb,
+         'integration-deep-' || lane,
+         decode(repeat(lpad(to_hex(lane), 2, '0'), 32), 'hex'),
+         now() + interval '1 hour',
+         'low'
+       FROM generate_series(1, 3) AS lane
+       RETURNING id`,
+      [suffix],
+    )
+
+    await ensurePipelineWork(database)
+    const reservedDiscovery = await database.query<{
+      id: string
+      status: string
+    }>(
+      `SELECT id, status
+       FROM pipeline_tasks
+       WHERE task_type = 'source_discovery'
+         AND status = 'queued'
+         AND knowledge_demand_id IS NULL
+       ORDER BY created_at DESC
+       LIMIT 1`,
+    )
+    expect(reservedDiscovery.rows[0]).toMatchObject({
+      status: 'queued'
+    })
+    expect(deepTasks.rows).toHaveLength(3)
+
+    await database.query(
+      `UPDATE pipeline_tasks
+          SET status = 'cancelled',
+              completed_at = now(),
+              updated_at = now()
+        WHERE id = ANY($1::uuid[])
+           OR id = $2`,
+      [
+        deepTasks.rows.map((task) => task.id),
+        reservedDiscovery.rows[0]!.id
+      ],
+    )
+  })
 })
