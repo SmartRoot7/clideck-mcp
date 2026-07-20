@@ -4761,7 +4761,7 @@ describeIntegration('PostgreSQL integration', () => {
               claim_owner = 'pipeline-executor-02',
               lease_token_hash = $2,
               lease_until = now() + interval '5 minutes',
-              attempts = 5,
+              attempts = 1,
               updated_at = now()
         WHERE id = $1`,
       [deferredFallback.rows[0]!.id, sha256(failedLease)],

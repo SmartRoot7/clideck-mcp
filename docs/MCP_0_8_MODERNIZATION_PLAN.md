@@ -350,6 +350,9 @@ official evidence.
   cycling back into the failing Medium scope.
 - `[x]` Keep an unsuccessful fallback deferred for a later Medium attempt,
   rather than creating an immediate retry storm or sending it to a human.
+- `[x]` Treat one fallback `CODEX_PROCESS_FAILED` as exhausted immediately:
+  Medium has already retried that evidence cohort, so five additional identical
+  low-reasoning platform retries have no quality value and only waste tokens.
 - `[~]` Observe fallback activation and the subsequent Medium recovery on
   production without any relaxation of publication policy.
 

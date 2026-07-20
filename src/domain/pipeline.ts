@@ -5058,9 +5058,19 @@ export async function failPipelineTask(
       'SOURCE_HTTP_404',
       'SOURCE_HTTP_410'
     ])
+    // A fallback exists only after its Medium predecessor already exhausted
+    // repeated platform retries. Retrying the same low-reasoning prompt five
+    // more times after an INTERNAL_ERROR has been observed in production
+    // spends tokens without producing a new artifact. Defer one such failure
+    // to the next Medium window; artifact/schema failures keep normal retries.
+    const fallbackPlatformFailure =
+      task.task_type === 'candidate_deep_review' &&
+      deepReviewModeFromTask(task) === 'fallback_low' &&
+      input.failure_code === 'CODEX_PROCESS_FAILED'
     const retrying =
       (task.attempts ?? 1) < 5 &&
-      !terminalFailureCodes.has(input.failure_code)
+      !terminalFailureCodes.has(input.failure_code) &&
+      !fallbackPlatformFailure
     const demandDisposition = demandFailureDisposition({
       hasDemand: task.knowledge_demand_id !== null,
       taskType: task.task_type,
