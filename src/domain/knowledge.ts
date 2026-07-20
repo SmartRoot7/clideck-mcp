@@ -50,6 +50,11 @@ type ConflictRow = {
   description: string
 }
 
+const nonSemanticSearchTerms = new Set([
+  'add', 'change', 'configure', 'configuration', 'create', 'delete',
+  'disable', 'enable', 'manage', 'remove', 'running', 'set', 'setup', 'show'
+])
+
 function normalizedTerms(value: string | null | undefined): Set<string> {
   return new Set(value?.toLowerCase().match(/[a-z0-9]+/g) ?? [])
 }
@@ -69,7 +74,9 @@ function semanticSearchTerms(
     ...normalizedTerms(context.operating_system_slug),
     ...normalizedTerms(context.version)
   ])
-  return tokens.filter((token) => !contextTerms.has(token))
+  return tokens.filter(
+    (token) => !contextTerms.has(token) && !nonSemanticSearchTerms.has(token),
+  )
 }
 
 function toPublicKnowledge(
