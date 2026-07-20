@@ -2860,6 +2860,27 @@ export async function claimPipelineTask(
     ) {
       throw new Error('PIPELINE_LUNA_CONFIGURATION_REQUIRED')
     }
+    // A deployment or local supervisor restart can terminate the sole circuit
+    // probe after it has reserved the circuit but before it can submit a
+    // result.  Do not let that dead reservation suppress the work class
+    // indefinitely. A reservation remains intact while its exact AI task has
+    // a live lease, so this cannot create two concurrent probes.
+    await client.query(
+      `UPDATE pipeline_ai_circuits circuit
+          SET probe_executor_id = NULL,
+              updated_at = now()
+        WHERE circuit.probe_executor_id IS NOT NULL
+          AND NOT EXISTS (
+            SELECT 1
+            FROM pipeline_tasks task
+            WHERE task.claim_owner = circuit.probe_executor_id
+              AND task.task_type = circuit.task_type
+              AND coalesce(task.requested_reasoning_effort, 'low') =
+                  circuit.reasoning_effort
+              AND task.status IN ('claimed', 'running')
+              AND task.lease_until > now()
+          )`,
+    )
     // A Codex incident is isolated to the exact Luna work class that exposed
     // it.  Deep Medium may be paused while useful discovery, analysis and
     // verification continue to fill and advance the knowledge pipeline.

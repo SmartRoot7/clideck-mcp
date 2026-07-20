@@ -740,6 +740,10 @@ Verified locally:
 - compact-repair regressions prove that a strict-output null cannot erase an
   existing field, provenance cannot be replaced, and an allowed explicit clear
   remains narrowly scoped.
+- scoped AI circuits now reclaim a probe reservation after a deploy or
+  supervisor restart only when its exact executor has no live matching lease;
+  this prevents an expired Medium probe from starving the entire Medium queue
+  while retaining the single-probe safety invariant.
 
 Remaining for completion: one local `main` commit, the unified production
 deployment, reconciliation accounting, 20 live MCP acceptance scenarios, and

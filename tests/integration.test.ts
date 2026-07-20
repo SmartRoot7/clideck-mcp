@@ -4435,6 +4435,104 @@ describeIntegration('PostgreSQL integration', () => {
     await database.query('DELETE FROM pipeline_ai_circuits')
   })
 
+  it('reclaims an expired circuit probe after its executor disappears', async () => {
+    const suffix = randomUUID().replaceAll('-', '').slice(0, 12)
+    const fingerprint = `sha256:${'c'.repeat(64)}`
+    await database.query(
+      `UPDATE pipeline_tasks
+          SET status = 'cancelled',
+              completed_at = now(),
+              updated_at = now()
+        WHERE status IN ('queued', 'claimed', 'running');
+       DELETE FROM pipeline_ai_circuits;
+       UPDATE pipeline_settings
+          SET enabled = true,
+              max_concurrent_ai_runs = 1,
+              paused_reason = NULL,
+              pause_requested_at = NULL,
+              updated_at = now(),
+              updated_by = 'stale-circuit-probe-integration-test';`,
+    )
+    await database.query(
+      `INSERT INTO pipeline_tasks (
+         task_type,
+         stage,
+         status,
+         priority,
+         dedupe_key,
+         payload,
+         requested_reasoning_effort
+       )
+       VALUES (
+         'candidate_deep_review',
+         'deep_review',
+         'queued',
+         200,
+         'stale-circuit-probe-' || $1,
+         '{}'::jsonb,
+         'medium'
+       );`,
+      [suffix],
+    )
+    await database.query(
+      `INSERT INTO pipeline_ai_circuits (
+         task_type,
+         reasoning_effort,
+         diagnostic_fingerprint,
+         open_until,
+         probe_executor_id
+       )
+       VALUES (
+         'candidate_deep_review',
+         'medium',
+         $1,
+         now() - interval '1 second',
+         'pipeline-executor-dead'
+       );`,
+      [fingerprint],
+    )
+
+    const claim = await claimPipelineTask(
+      database,
+      config,
+      'pipeline-executor-02',
+      'pipeline-executor-02:stale-circuit-probe',
+    )
+    expect(claim).toMatchObject({
+      task_type: 'candidate_deep_review',
+      requested_reasoning_effort: 'medium'
+    })
+    const circuit = await database.query<{
+      probe_executor_id: string | null
+    }>(
+      `SELECT probe_executor_id
+       FROM pipeline_ai_circuits
+       WHERE task_type = 'candidate_deep_review'
+         AND reasoning_effort = 'medium'`,
+    )
+    expect(circuit.rows[0]?.probe_executor_id).toBe('pipeline-executor-02')
+
+    await recordAgentRunResult(database, {
+      agent_run_id: String(claim['agent_run_id']),
+      status: 'cancelled',
+      input_tokens: 0,
+      cached_input_tokens: 0,
+      output_tokens: 0,
+      reasoning_output_tokens: 0,
+      duration_ms: 1,
+      error_code: 'TEST_CLEANUP',
+    })
+    await database.query(
+      `UPDATE pipeline_tasks
+          SET status = 'cancelled',
+              completed_at = now(),
+              updated_at = now()
+        WHERE id = $1`,
+      [String(claim['pipeline_task_id'])],
+    )
+    await database.query('DELETE FROM pipeline_ai_circuits')
+  })
+
   it('reserves the next Luna claim for discovery when source supply is empty', async () => {
     const suffix = randomUUID().replaceAll('-', '')
     await database.query(
