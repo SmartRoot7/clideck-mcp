@@ -94,6 +94,21 @@ Ready when active Deep Review work can no longer produce an empty page.
 
 Ready when production smoke checks pass and the deployed SHA is recorded here.
 
+### M7 — Exact-demand relevance gate
+
+- `[~]` Reject a demand-linked source after deterministic conversion when it
+  contains none of the question's specific technical terms; generic vendor,
+  platform and operational wording is not enough.
+- `[~]` Keep a fast-path or Luna candidate only when its structured result
+  retains at least one demand-specific term; otherwise it cannot consume the
+  urgent learning path or be published as its answer.
+- `[~]` When every linked source is terminal and the exact query remains
+  unknown, return the demand to the priority queue with an explicit reason
+  instead of leaving it in `processing`.
+
+Ready when an unknown production question cannot be falsely treated as learned
+by unrelated documents, and the next official discovery remains retryable.
+
 ## Production verification — 20 July 2026
 
 - `[x]` Deployed `bc7c950b585bd994efa704e4ca246320fbde05dd` exclusively through

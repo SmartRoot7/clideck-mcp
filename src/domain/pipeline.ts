@@ -18,6 +18,7 @@ import {
   recordPipelineTransition,
   recordPipelineTransitions
 } from './pipeline-transitions.js'
+import { isRelevantToKnowledgeDemand } from './knowledge-demand-relevance.js'
 import { candidateRevisionSchema } from './schemas.js'
 import { enforceKnowledgeRisk } from './risk.js'
 
@@ -1906,7 +1907,7 @@ async function reconcileSourceLanes(
   return active.rows.map((row) => row.source_candidate_id)
 }
 
-async function reconcileCompletedSources(
+export async function reconcileCompletedSources(
   client: DatabaseClient,
 ): Promise<void> {
   await client.query(
@@ -1972,13 +1973,23 @@ async function reconcileCompletedSources(
   await client.query(
     `UPDATE knowledge_demands demand
         SET status = 'unresolved',
-            last_error_code = 'KNOWLEDGE_STILL_UNKNOWN',
-            next_retry_at = now() + interval '15 minutes',
+            last_error_code = CASE
+              WHEN EXISTS (
+                SELECT 1
+                FROM source_candidates rejected_source
+                WHERE rejected_source.knowledge_demand_id = demand.id
+                  AND rejected_source.failure_code = 'DEMAND_TERM_NOT_FOUND'
+              ) THEN 'DEMAND_SOURCE_UNRELATED'
+              ELSE 'KNOWLEDGE_STILL_UNKNOWN'
+            END,
+            next_retry_at = now() + interval '5 minutes',
             last_seen_at = now()
-      FROM source_candidates source
-      WHERE source.id = demand.source_candidate_id
-        AND source.status IN ('completed', 'completed_with_exceptions')
-        AND demand.status IN ('acquiring', 'processing')
+      WHERE demand.status IN ('acquiring', 'processing')
+        AND EXISTS (
+          SELECT 1
+          FROM source_candidates linked_source
+          WHERE linked_source.knowledge_demand_id = demand.id
+        )
         AND NOT EXISTS (
           SELECT 1
           FROM source_candidates linked_source
@@ -3553,6 +3564,14 @@ export async function submitCandidateAnalysis(
     if (task.task_type !== 'fragment_analysis') {
       throw new Error('PIPELINE_TASK_TYPE_INVALID')
     }
+    const demandQuestion = task.knowledge_demand_id
+      ? (await client.query<{ question: string }>(
+          `SELECT question
+           FROM knowledge_demands
+           WHERE id = $1`,
+          [task.knowledge_demand_id],
+        )).rows[0]?.question ?? null
+      : null
     const allowedFragmentIds = new Set(
       (
         Array.isArray(task.payload['fragments'])
@@ -3591,6 +3610,7 @@ export async function submitCandidateAnalysis(
     )
     const sourceIdentity = pipelineSourcePayloadSchema.parse(task.payload)
     const insertedIds: string[] = []
+    let demandIrrelevantCandidates = 0
     for (const submission of input.candidates) {
       if (!allowedFragmentIds.has(submission.fragment_id)) {
         throw new Error('PIPELINE_FRAGMENT_NOT_IN_TASK')
@@ -3617,6 +3637,15 @@ export async function submitCandidateAnalysis(
           evidence_fragment: evidence.evidence_fragment,
           evidence_role: 'primary' as const
         }]
+      }
+      if (
+        demandQuestion &&
+        !isRelevantToKnowledgeDemand(demandQuestion, [
+          JSON.stringify(candidate)
+        ])
+      ) {
+        demandIrrelevantCandidates += 1
+        continue
       }
       const serialized = JSON.stringify(candidate)
       const inserted = await client.query<{ id: string }>(
@@ -3689,6 +3718,7 @@ export async function submitCandidateAnalysis(
     }
     const completion = {
       candidates_created: insertedIds.length,
+      demand_irrelevant_candidates_ignored: demandIrrelevantCandidates,
       fragments_analyzed: submittedFragmentIds.length,
       fragments_without_candidates: rejectedFragmentIds.length,
       rejection_reasons: input.rejected_fragments.map((entry) => ({

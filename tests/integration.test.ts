@@ -34,7 +34,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 
 import { createPublicTaskId, sha256, sha256Label } from '../src/crypto.js'
-import type { Database } from '../src/db.js'
+import type { Database, DatabaseClient } from '../src/db.js'
 import {
   actOnReviewException,
   actOnSource,
@@ -75,6 +75,7 @@ import {
   failPipelineTask,
   heartbeatPipelineTask,
   pausePipelineForSystemFailure,
+  reconcileCompletedSources,
   recordAgentRunResult,
   submitCandidateAnalysis,
   submitCandidateDeepReview,
@@ -354,6 +355,78 @@ describeIntegration('PostgreSQL integration', () => {
       expect(forbiddenMutation.status).toBe(405)
     } finally {
       await client.query('ROLLBACK')
+      client.release()
+    }
+  })
+
+  it('returns an exhausted demand to the retryable queue when every linked source is terminal', async () => {
+    const client = await database.connect()
+    const suffix = randomUUID()
+    try {
+      await client.query('BEGIN')
+      const target = await client.query<{ id: string }>(
+        `INSERT INTO coverage_targets (
+           vendor_slug, product_family, model, operating_system_slug,
+           version_branch, document_role, priority, status, next_check_at
+         )
+         VALUES (
+           'cisco', $1, 'C9300', 'ios-xe', '17.15',
+           'configuration', 100, 'active', now()
+         )
+         RETURNING id`,
+        [`demand-reconcile-${suffix}`],
+      )
+      const demand = await client.query<{ id: string }>(
+        `INSERT INTO knowledge_demands (
+           demand_key, domain_id, tool_name, question, context,
+           status, priority, coverage_target_id
+         )
+         VALUES (
+           $1, 'network', 'get_network_workflow',
+           'Diagnose MACsec MKA rekey failure',
+           '{"vendor_slug":"cisco","operating_system_slug":"ios-xe"}'::jsonb,
+           'processing', 120, $2
+         )
+         RETURNING id`,
+        [sha256(`demand-reconcile-${suffix}`), target.rows[0]!.id],
+      )
+      await client.query(
+        `INSERT INTO source_candidates (
+           coverage_target_id, canonical_url, document_type, title, status,
+           discovered_by, knowledge_demand_id, failure_code
+         )
+         VALUES (
+           $1, $2, 'configuration guide', 'Unrelated guide', 'rejected',
+           'integration-test', $3, 'DEMAND_TERM_NOT_FOUND'
+         )`,
+        [
+          target.rows[0]!.id,
+          `https://example.com/demand-reconcile-${suffix}`,
+          demand.rows[0]!.id
+        ],
+      )
+
+      await reconcileCompletedSources(client as unknown as DatabaseClient)
+      const state = await client.query<{
+        status: string
+        last_error_code: string
+        retry_scheduled: boolean
+      }>(
+        `SELECT
+           status,
+           last_error_code,
+           next_retry_at > now() AS retry_scheduled
+         FROM knowledge_demands
+         WHERE id = $1`,
+        [demand.rows[0]!.id],
+      )
+      expect(state.rows).toEqual([{
+        status: 'unresolved',
+        last_error_code: 'DEMAND_SOURCE_UNRELATED',
+        retry_scheduled: true
+      }])
+    } finally {
+      await client.query('ROLLBACK').catch(() => undefined)
       client.release()
     }
   })

@@ -33,6 +33,10 @@ import { safePublicLookup } from '../security/url-policy.js'
 import { resolveNetworkContext } from './context.js'
 import { searchKnowledge } from './knowledge.js'
 import {
+  assessKnowledgeDemandRelevance,
+  isRelevantToKnowledgeDemand
+} from './knowledge-demand-relevance.js'
+import {
   claimMechanicalPipelineTask,
   completeMechanicalPipelineTask,
   failPipelineTask,
@@ -69,6 +73,20 @@ const allowedMediaTypes = new Set([
 type ClaimedMechanicalTask = {
   task: PipelineTaskRow
   leaseToken: string
+}
+
+async function demandQuestionForTask(
+  database: Database,
+  knowledgeDemandId: string | null,
+): Promise<string | null> {
+  if (!knowledgeDemandId) return null
+  const result = await database.query<{ question: string }>(
+    `SELECT question
+     FROM knowledge_demands
+     WHERE id = $1`,
+    [knowledgeDemandId],
+  )
+  return result.rows[0]?.question ?? null
 }
 
 async function reconcilePublishedKnowledgeDemands(
@@ -956,6 +974,43 @@ async function convertSource(
   const converted = await convertArtifact(row.storage_path, row.media_type)
   const text = converted.text.trim()
   if (!text) throw new Error('SOURCE_CONVERSION_EMPTY')
+  const demandQuestion = await demandQuestionForTask(
+    database,
+    claimed.task.knowledge_demand_id,
+  )
+  const demandRelevance = demandQuestion
+    ? assessKnowledgeDemandRelevance(demandQuestion, [
+        payload.title,
+        payload.canonical_url,
+        text
+      ])
+    : null
+  if (
+    demandRelevance &&
+    demandRelevance.terms.length > 0 &&
+    demandRelevance.matchedTerms.length === 0
+  ) {
+    await withTransaction(database, async (client) => {
+      await client.query(
+        `UPDATE source_candidates
+            SET status = 'rejected',
+                failure_code = 'DEMAND_TERM_NOT_FOUND',
+                failure_message =
+                  'Converted source does not contain a demand-specific technical term.',
+                updated_at = now()
+          WHERE id = $1`,
+        [payload.source_id],
+      )
+    })
+    return {
+      rejected_as_unrelated: true,
+      demand_terms_considered: demandRelevance.terms.length,
+      matched_demand_terms: 0,
+      converter: row.media_type === 'application/pdf'
+        ? 'pdftotext_with_local_ocr_fallback'
+        : 'deterministic_text'
+    }
+  }
   const textPath = `${row.storage_path}.txt`
   const tempPath = `${textPath}.${randomUUID()}.tmp`
   await writeFile(tempPath, text, { mode: 0o640 })
@@ -1120,6 +1175,10 @@ async function runDeterministicFastPath(
   )
   const target = context.rows[0]
   if (!target) return { candidatesCreated: 0, fragmentsHandled: 0 }
+  const demandQuestion = await demandQuestionForTask(
+    database,
+    task.knowledge_demand_id,
+  )
 
   const inputSource = {
     canonical_url: source.canonical_url,
@@ -1179,6 +1238,7 @@ async function runDeterministicFastPath(
       context: extractionContext,
       verified_at: verifiedAt
     })
+    const demandRelevantFragments = new Set<string>()
     await withTransaction(database, async (client) => {
       let batchCandidatesCreated = 0
       for (const entry of result.candidates) {
@@ -1190,6 +1250,15 @@ async function runDeterministicFastPath(
         const candidate = enforceKnowledgeRisk(
           pipelineCandidatePayloadSchema.parse(parsed),
         )
+        if (
+          demandQuestion &&
+          !isRelevantToKnowledgeDemand(demandQuestion, [
+            JSON.stringify(candidate)
+          ])
+        ) {
+          continue
+        }
+        demandRelevantFragments.add(entry.fragment_id)
         const serialized = JSON.stringify(candidate)
         const inserted = await client.query<{ id: string }>(
           `INSERT INTO knowledge_candidates (
@@ -1221,7 +1290,12 @@ async function runDeterministicFastPath(
           batchCandidatesCreated += 1
         }
       }
-      if (result.handled_fragment_ids.length > 0) {
+      const handledFragmentIds = demandQuestion
+        ? result.handled_fragment_ids.filter((id) =>
+            demandRelevantFragments.has(id),
+          )
+        : result.handled_fragment_ids
+      if (handledFragmentIds.length > 0) {
         await client.query(
           `UPDATE source_fragments
               SET status = 'analyzed',
@@ -1229,7 +1303,7 @@ async function runDeterministicFastPath(
             WHERE id = ANY($1::uuid[])
               AND source_artifact_id = $2
               AND status = 'queued'`,
-          [result.handled_fragment_ids, artifactId],
+          [handledFragmentIds, artifactId],
         )
       }
       await recordPipelineTransition(client, {
@@ -1242,7 +1316,12 @@ async function runDeterministicFastPath(
         dedupeSuffix: `deterministic-fast-path:${lastOrdinal}`
       })
     })
-    for (const fragmentId of result.handled_fragment_ids) {
+    const handledFragmentIds = demandQuestion
+      ? result.handled_fragment_ids.filter((id) =>
+          demandRelevantFragments.has(id),
+        )
+      : result.handled_fragment_ids
+    for (const fragmentId of handledFragmentIds) {
       handled.add(fragmentId)
     }
   }
