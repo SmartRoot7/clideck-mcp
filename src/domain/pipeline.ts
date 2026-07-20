@@ -4360,7 +4360,12 @@ export async function failPipelineTask(
     const terminalFailureCodes = new Set([
       'EXPERT_NO_VERIFIED_ANSWER',
       'PIPELINE_EXPLICIT_REJECTION',
-      'SOURCE_POLICY_REJECTED'
+      'SOURCE_POLICY_REJECTED',
+      // These responses identify a permanently unavailable document. Retrying
+      // the exact URL only burns a mechanical worker slot; the scheduler can
+      // immediately select a replacement official source instead.
+      'SOURCE_HTTP_404',
+      'SOURCE_HTTP_410'
     ])
     const retrying =
       (task.attempts ?? 1) < 5 &&

@@ -4314,4 +4314,51 @@ describeIntegration('PostgreSQL integration', () => {
       ],
     )
   })
+
+  it('does not retry permanently missing source URLs', async () => {
+    const leaseToken = randomUUID()
+    const task = await database.query<{ id: string }>(
+      `INSERT INTO pipeline_tasks (
+         task_type,
+         stage,
+         status,
+         priority,
+         dedupe_key,
+         payload,
+         claim_owner,
+         lease_token_hash,
+         lease_until,
+         attempts
+       )
+       VALUES (
+         'source_acquisition',
+         'acquire',
+         'running',
+         70,
+         $1,
+         '{}'::jsonb,
+         'terminal-source-integration-test',
+         $2,
+         now() + interval '1 hour',
+         1
+       )
+       RETURNING id`,
+      [
+        `terminal-source:${randomUUID()}`,
+        sha256(leaseToken)
+      ],
+    )
+
+    const failed = await failPipelineTask(database, {
+      pipeline_task_id: task.rows[0]!.id,
+      lease_token: leaseToken,
+      failure_code: 'SOURCE_HTTP_404',
+      failure_message: 'Synthetic official document returned HTTP 404.'
+    })
+    expect(failed).toMatchObject({
+      status: 'failed',
+      retrying: false,
+      failure_code: 'SOURCE_HTTP_404'
+    })
+  })
 })
