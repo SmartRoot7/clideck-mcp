@@ -95,10 +95,6 @@ cleanup_remote_build() {
 }
 trap cleanup_remote_build EXIT
 
-if [[ -d "$release_directory" ]]; then
-  exit 0
-fi
-
 rm -rf "$candidate_directory"
 rm -rf "$store_directory"
 mkdir -p "$candidate_directory"

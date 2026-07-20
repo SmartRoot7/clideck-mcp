@@ -114,17 +114,7 @@ rollback_on_error() {
 }
 trap rollback_on_error ERR
 
-if [[ ! -d "$release_directory" ]]; then
-  if [[ -z "$candidate_directory" || ! -d "$candidate_directory" ]]; then
-    printf 'Built candidate directory is required for a new release\n' >&2
-    exit 1
-  fi
-  mv "$candidate_directory" "$release_directory"
-  chown -R root:clideck_mcp "$release_directory"
-  chmod -R g+rwX,o-rwx "$release_directory"
-fi
-
-for required_path in \
+required_release_paths=(
   dist/entrypoints/api.js \
   dist/entrypoints/admin.js \
   dist/entrypoints/worker.js \
@@ -136,12 +126,46 @@ for required_path in \
   dist/cli/activate-release.js \
   dist-admin/index.html \
   ops/sql/grants.sql \
-  ops/scripts/smoke-test.sh; do
-  if [[ ! -e "$release_directory/$required_path" ]]; then
-    printf 'Release artifact is incomplete: %s\n' "$required_path" >&2
+  ops/scripts/smoke-test.sh
+)
+
+release_is_complete() {
+  local path
+  for path in "${required_release_paths[@]}"; do
+    if [[ ! -e "$release_directory/$path" ]]; then
+      return 1
+    fi
+  done
+  return 0
+}
+
+if [[ -d "$release_directory" ]] && ! release_is_complete; then
+  incomplete_directory="${release_directory}.incomplete-${timestamp}-$$"
+  printf 'Preserving incomplete release as %s\n' "$incomplete_directory" >&2
+  mv "$release_directory" "$incomplete_directory"
+fi
+
+if [[ ! -d "$release_directory" ]]; then
+  if [[ -z "$candidate_directory" || ! -d "$candidate_directory" ]]; then
+    printf 'Built candidate directory is required for a new release\n' >&2
     exit 1
   fi
-done
+  mv "$candidate_directory" "$release_directory"
+  chown -R root:clideck_mcp "$release_directory"
+  chmod -R g+rwX,o-rwx "$release_directory"
+fi
+
+if ! release_is_complete; then
+  printf 'Release artifact is incomplete after installation\n' >&2
+  exit 1
+fi
+
+# The build phase always creates a fresh candidate.  When this exact SHA was
+# already deployed successfully, keep the verified release and discard only
+# that temporary, SHA-addressed candidate directory.
+if [[ -n "$candidate_directory" && -d "$candidate_directory" ]]; then
+  rm -rf "$candidate_directory"
+fi
 
 set -a
 # shellcheck disable=SC1091
