@@ -4550,6 +4550,252 @@ describeIntegration('PostgreSQL integration', () => {
     await database.query('DELETE FROM pipeline_ai_circuits')
   })
 
+  it('uses one conservative Luna-low fallback after repeated Medium platform failures', async () => {
+    const suffix = randomUUID().replaceAll('-', '').slice(0, 12)
+    const leaseToken = randomUUID().replaceAll('-', '')
+    await database.query(
+      `UPDATE pipeline_tasks
+          SET status = 'cancelled',
+              completed_at = now(),
+              updated_at = now()
+        WHERE status IN ('queued', 'claimed', 'running');
+       DELETE FROM pipeline_ai_circuits;
+       UPDATE pipeline_settings
+          SET enabled = true,
+              max_concurrent_ai_runs = 2,
+              paused_reason = NULL,
+              pause_requested_at = NULL,
+              updated_at = now(),
+              updated_by = 'medium-fallback-integration-test';`,
+    )
+    const target = await database.query<{ id: string }>(
+      `SELECT id FROM coverage_targets ORDER BY priority DESC, created_at LIMIT 1`,
+    )
+    const source = await database.query<{ id: string }>(
+      `INSERT INTO source_candidates (
+         coverage_target_id, canonical_url, document_type, title, status,
+         discovered_by
+       )
+       VALUES (
+         $1, 'https://example.invalid/fallback-' || $2,
+         'configuration_guide', 'Fallback test source', 'completed',
+         'integration-test'
+       )
+       RETURNING id`,
+      [target.rows[0]!.id, suffix],
+    )
+    const parent = await database.query<{ id: string }>(
+      `INSERT INTO pipeline_tasks (
+         task_type, stage, status, priority, source_candidate_id, dedupe_key, payload,
+         requested_reasoning_effort, completed_at
+       )
+       VALUES (
+         'fragment_analysis', 'analyze', 'completed', 1, $1,
+         'medium-fallback-parent-' || $2, '{}'::jsonb, 'low', now()
+       )
+       RETURNING id`,
+      [source.rows[0]!.id, suffix],
+    )
+    const candidate = await database.query<{ id: string }>(
+      `INSERT INTO knowledge_candidates (
+         pipeline_task_id, stable_key, payload, content_hash, status,
+         dangerous, confidence, quality_score, resolution_attempts,
+         resolution_code, resolution_reason, next_review_at,
+         deep_review_batch_limit, technical_retry_count,
+         last_technical_failure_code
+       )
+       VALUES (
+         $1, 'fallback.platform.' || $2, '{}'::jsonb, $3,
+         'deep_review', false, 0.8, 0.8, 1,
+         'deep_medium_platform_retry_exhausted',
+         'Repeated Medium platform failures.', now(), 1, 4,
+         'CODEX_PROCESS_FAILED'
+       )
+       RETURNING id`,
+      [
+        parent.rows[0]!.id,
+        suffix,
+        sha256Label(`medium-fallback-candidate:${suffix}`),
+      ],
+    )
+
+    await ensurePipelineWork(database)
+    const fallback = await database.query<{
+      id: string
+      requested_reasoning_effort: string
+      payload: Record<string, unknown>
+    }>(
+      `SELECT id, requested_reasoning_effort, payload
+       FROM pipeline_tasks
+       WHERE task_type = 'candidate_deep_review'
+         AND payload->>'review_pass' = 'fallback_low'
+         AND payload->'candidates' @>
+           jsonb_build_array(jsonb_build_object('id', $1::text))
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [candidate.rows[0]!.id],
+    )
+    expect(fallback.rows[0]).toMatchObject({
+      requested_reasoning_effort: 'low',
+      payload: {
+        review_pass: 'fallback_low',
+        force_terminal_resolution: true,
+        fallback_reason: 'deep_medium_platform_retry_exhausted'
+      }
+    })
+    const normalMedium = await database.query<{ count: number }>(
+      `SELECT count(*)::int AS count
+       FROM pipeline_tasks
+       WHERE task_type = 'candidate_deep_review'
+         AND requested_reasoning_effort = 'medium'
+         AND payload->'candidates' @>
+           jsonb_build_array(jsonb_build_object('id', $1::text))`,
+      [candidate.rows[0]!.id],
+    )
+    expect(normalMedium.rows[0]?.count).toBe(0)
+
+    await database.query(
+      `UPDATE pipeline_tasks
+          SET status = 'running',
+              claim_owner = 'pipeline-executor-01',
+              lease_token_hash = $2,
+              lease_until = now() + interval '5 minutes',
+              attempts = 1,
+              updated_at = now()
+        WHERE id = $1`,
+      [fallback.rows[0]!.id, sha256(leaseToken)],
+    )
+    const result = await submitCandidateDeepReview(
+      database,
+      config,
+      {
+        pipeline_task_id: fallback.rows[0]!.id,
+        lease_token: leaseToken,
+        decisions: [{
+          candidate_id: candidate.rows[0]!.id,
+          decision: 'unresolved',
+          confidence: 0.1,
+          quality_score: 0.1,
+          findings: ['The exact official evidence did not support the claim.'],
+          repaired_candidate: null
+        }]
+      },
+      'medium-fallback-integration-reviewer',
+    )
+    expect(result).toMatchObject({ rejected: 1, escalated_to_medium: 0 })
+    const stored = await database.query<{
+      status: string
+      review_type: string
+    }>(
+      `SELECT candidate.status, verification.review_type
+       FROM knowledge_candidates candidate
+       JOIN candidate_verifications verification
+         ON verification.knowledge_candidate_id = candidate.id
+       WHERE candidate.id = $1
+       ORDER BY verification.created_at DESC
+       LIMIT 1`,
+      [candidate.rows[0]!.id],
+    )
+    expect(stored.rows[0]).toEqual({
+      status: 'rejected',
+      review_type: 'deep_medium'
+    })
+    const transition = await database.query<{
+      from_stage: string
+      to_stage: string
+      item_count: number
+    }>(
+      `SELECT from_stage, to_stage, item_count
+       FROM pipeline_transition_events
+       WHERE pipeline_task_id = $1
+         AND from_stage = 'deep_medium'
+         AND to_stage = 'rejected'
+       ORDER BY occurred_at DESC
+       LIMIT 1`,
+      [fallback.rows[0]!.id],
+    )
+    expect(transition.rows[0]).toEqual({
+      from_stage: 'deep_medium',
+      to_stage: 'rejected',
+      item_count: 1
+    })
+
+    const deferredCandidate = await database.query<{ id: string }>(
+      `INSERT INTO knowledge_candidates (
+         pipeline_task_id, stable_key, payload, content_hash, status,
+         dangerous, confidence, quality_score, resolution_attempts,
+         resolution_code, resolution_reason, next_review_at,
+         deep_review_batch_limit, technical_retry_count,
+         last_technical_failure_code
+       )
+       VALUES (
+         $1, 'fallback.defer.' || $2, '{}'::jsonb, $3,
+         'deep_review', false, 0.8, 0.8, 1,
+         'deep_medium_platform_retry_exhausted',
+         'Repeated Medium platform failures.', now(), 1, 4,
+         'CODEX_PROCESS_FAILED'
+       )
+       RETURNING id`,
+      [
+        parent.rows[0]!.id,
+        suffix,
+        sha256Label(`medium-fallback-deferred:${suffix}`),
+      ],
+    )
+    await ensurePipelineWork(database)
+    const deferredFallback = await database.query<{ id: string }>(
+      `SELECT id
+       FROM pipeline_tasks
+       WHERE task_type = 'candidate_deep_review'
+         AND payload->>'review_pass' = 'fallback_low'
+         AND payload->'candidates' @>
+           jsonb_build_array(jsonb_build_object('id', $1::text))
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [deferredCandidate.rows[0]!.id],
+    )
+    const failedLease = randomUUID().replaceAll('-', '')
+    await database.query(
+      `UPDATE pipeline_tasks
+          SET status = 'running',
+              claim_owner = 'pipeline-executor-02',
+              lease_token_hash = $2,
+              lease_until = now() + interval '5 minutes',
+              attempts = 5,
+              updated_at = now()
+        WHERE id = $1`,
+      [deferredFallback.rows[0]!.id, sha256(failedLease)],
+    )
+    const failedFallback = await failPipelineTask(database, {
+      pipeline_task_id: deferredFallback.rows[0]!.id,
+      lease_token: failedLease,
+      failure_code: 'CODEX_PROCESS_FAILED',
+      failure_message: 'The platform returned INTERNAL_ERROR for this fallback.'
+    })
+    expect(failedFallback).toMatchObject({ status: 'failed', retrying: false })
+    const deferred = await database.query<{
+      status: string
+      resolution_code: string
+      last_technical_failure_code: string
+      deferred: boolean
+    }>(
+      `SELECT
+         status,
+         resolution_code,
+         last_technical_failure_code,
+         next_review_at >= now() + interval '23 hours' AS deferred
+       FROM knowledge_candidates
+       WHERE id = $1`,
+      [deferredCandidate.rows[0]!.id],
+    )
+    expect(deferred.rows[0]).toEqual({
+      status: 'deep_review',
+      resolution_code: 'deep_medium_fallback_unavailable',
+      last_technical_failure_code: 'DEEP_MEDIUM_FALLBACK_UNAVAILABLE',
+      deferred: true
+    })
+  })
+
   it('reclaims an expired circuit probe after its executor disappears', async () => {
     const suffix = randomUUID().replaceAll('-', '').slice(0, 12)
     const fingerprint = `sha256:${'c'.repeat(64)}`

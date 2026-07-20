@@ -711,11 +711,16 @@ const requiredPipelineReasoning = 'low'
 const aiPriorities = {
   expert: 100,
   deepMedium: 96,
+  // A platform fallback remains downstream of Verify/Analyze, but normal
+  // Medium review always has the first chance to run.  The fallback is only
+  // eligible after that exact Medium work has exhausted technical retries.
+  deepMediumFallback: 95,
   deepLow: 92,
   verify: 88,
   analyze: 80,
   discover: 50
 } as const
+const mediumPlatformFallbackRetryThreshold = 4
 const maxFragmentAnalysisBatchBytes = 65_536
 const maxFragmentAnalysisBatchSize = 16
 
@@ -1179,9 +1184,24 @@ async function queueExpertWork(client: DatabaseClient): Promise<boolean> {
   return Boolean(id)
 }
 
+type DeepReviewMode = 'low' | 'medium' | 'fallback_low'
+
+function deepReviewModeFromTask(task: Pick<
+  PipelineTaskRow,
+  'requested_reasoning_effort' | 'payload'
+>): DeepReviewMode {
+  if (
+    task.requested_reasoning_effort === 'low' &&
+    task.payload['review_pass'] === 'fallback_low'
+  ) {
+    return 'fallback_low'
+  }
+  return task.requested_reasoning_effort === 'medium' ? 'medium' : 'low'
+}
+
 async function queueDeepReviewWork(
   client: DatabaseClient,
-  reviewPass: 'low' | 'medium',
+  reviewMode: DeepReviewMode,
 ): Promise<boolean> {
   const seed = await client.query<{
     id: string
@@ -1214,10 +1234,21 @@ async function queueDeepReviewWork(
          OR kc.next_review_at <= now()
        )
        AND (
-         CASE WHEN $1 = 'medium'
-           THEN kc.resolution_attempts > 0
-           ELSE kc.resolution_attempts = 0
-         END
+         ($1 = 'low' AND kc.resolution_attempts = 0)
+         OR (
+           $1 = 'medium'
+           AND kc.resolution_attempts > 0
+           AND NOT (
+             kc.technical_retry_count >= $2
+             AND kc.last_technical_failure_code = 'CODEX_PROCESS_FAILED'
+           )
+         )
+         OR (
+           $1 = 'fallback_low'
+           AND kc.resolution_attempts > 0
+           AND kc.technical_retry_count >= $2
+           AND kc.last_technical_failure_code = 'CODEX_PROCESS_FAILED'
+         )
        )
      ORDER BY
        CASE WHEN source.knowledge_demand_id IS NOT NULL THEN 0 ELSE 1 END,
@@ -1226,7 +1257,7 @@ async function queueDeepReviewWork(
        kc.created_at
      LIMIT 1
      FOR UPDATE OF kc SKIP LOCKED`,
-    [reviewPass],
+    [reviewMode, mediumPlatformFallbackRetryThreshold],
   )
   const first = seed.rows[0]
   if (!first) return false
@@ -1258,10 +1289,21 @@ async function queueDeepReviewWork(
        AND kc.deep_review_task_id IS NULL
        AND pt.source_candidate_id IS NOT DISTINCT FROM $1::uuid
        AND (
-         CASE WHEN $2 = 'medium'
-           THEN kc.resolution_attempts > 0
-           ELSE kc.resolution_attempts = 0
-         END
+         ($2 = 'low' AND kc.resolution_attempts = 0)
+         OR (
+           $2 = 'medium'
+           AND kc.resolution_attempts > 0
+           AND NOT (
+             kc.technical_retry_count >= $6
+             AND kc.last_technical_failure_code = 'CODEX_PROCESS_FAILED'
+           )
+         )
+         OR (
+           $2 = 'fallback_low'
+           AND kc.resolution_attempts > 0
+           AND kc.technical_retry_count >= $6
+           AND kc.last_technical_failure_code = 'CODEX_PROCESS_FAILED'
+         )
        )
        AND (
          kc.status = 'deep_review'
@@ -1276,10 +1318,11 @@ async function queueDeepReviewWork(
      FOR UPDATE OF kc SKIP LOCKED`,
     [
       first.source_candidate_id,
-      reviewPass,
+      reviewMode,
       first.resolution_code,
       first.deep_review_batch_limit,
-      first.deep_review_batch_limit
+      first.deep_review_batch_limit,
+      mediumPlatformFallbackRetryThreshold
     ],
   )
   if (batch.rows.length === 0) return false
@@ -1287,21 +1330,31 @@ async function queueDeepReviewWork(
   const taskId = await insertTask(client, {
     type: 'candidate_deep_review',
     stage: 'deep_review',
-    priority: reviewPass === 'medium'
+    priority: reviewMode === 'medium'
       ? (first.knowledge_demand_id ? 120 : aiPriorities.deepMedium)
-      : (first.knowledge_demand_id ? 120 : aiPriorities.deepLow),
-    dedupeKey: `deep-review:${reviewPass}:${sha256Label(
+      : reviewMode === 'fallback_low'
+        ? (first.knowledge_demand_id
+          ? 120
+          : aiPriorities.deepMediumFallback)
+        : (first.knowledge_demand_id ? 120 : aiPriorities.deepLow),
+    dedupeKey: `deep-review:${reviewMode}:${sha256Label(
       candidateIds.join(','),
     )}`,
     sourceId: first.source_candidate_id,
     knowledgeDemandId: first.knowledge_demand_id,
     payload: {
-      review_pass: reviewPass,
+      review_pass: reviewMode,
+      ...(reviewMode === 'fallback_low'
+        ? {
+            force_terminal_resolution: true,
+            fallback_reason: 'deep_medium_platform_retry_exhausted'
+          }
+        : {}),
       batch_limit: first.deep_review_batch_limit,
       resolution_code: first.resolution_code,
       candidates: batch.rows
     },
-    reasoningEffort: reviewPass
+    reasoningEffort: reviewMode === 'medium' ? 'medium' : 'low'
   })
   if (!taskId) return false
   await client.query(
@@ -2811,27 +2864,32 @@ async function ensureStreamingWorkInTransaction(
           WHEN task_type = 'expert_research' THEN $1::smallint
           WHEN task_type = 'candidate_deep_review'
             AND requested_reasoning_effort = 'medium' THEN $2::smallint
-          WHEN task_type = 'candidate_deep_review' THEN $3::smallint
-          WHEN task_type = 'candidate_verification' THEN $4::smallint
-          WHEN task_type = 'fragment_analysis' THEN $5::smallint
-          ELSE $6::smallint
+          WHEN task_type = 'candidate_deep_review'
+            AND payload->>'review_pass' = 'fallback_low' THEN $3::smallint
+          WHEN task_type = 'candidate_deep_review' THEN $4::smallint
+          WHEN task_type = 'candidate_verification' THEN $5::smallint
+          WHEN task_type = 'fragment_analysis' THEN $6::smallint
+          ELSE $7::smallint
         END,
         updated_at = now()
       WHERE status = 'queued'
-        AND task_type = ANY($7::text[])
+        AND task_type = ANY($8::text[])
         AND priority IS DISTINCT FROM CASE
           WHEN knowledge_demand_id IS NOT NULL THEN 120::smallint
           WHEN task_type = 'expert_research' THEN $1::smallint
           WHEN task_type = 'candidate_deep_review'
             AND requested_reasoning_effort = 'medium' THEN $2::smallint
-          WHEN task_type = 'candidate_deep_review' THEN $3::smallint
-          WHEN task_type = 'candidate_verification' THEN $4::smallint
-          WHEN task_type = 'fragment_analysis' THEN $5::smallint
-          ELSE $6::smallint
+          WHEN task_type = 'candidate_deep_review'
+            AND payload->>'review_pass' = 'fallback_low' THEN $3::smallint
+          WHEN task_type = 'candidate_deep_review' THEN $4::smallint
+          WHEN task_type = 'candidate_verification' THEN $5::smallint
+          WHEN task_type = 'fragment_analysis' THEN $6::smallint
+          ELSE $7::smallint
         END`,
     [
       aiPriorities.expert,
       aiPriorities.deepMedium,
+      aiPriorities.deepMediumFallback,
       aiPriorities.deepLow,
       aiPriorities.verify,
       aiPriorities.analyze,
@@ -2865,7 +2923,10 @@ async function ensureStreamingWorkInTransaction(
        CASE
          WHEN task_type = 'expert_research' THEN 'expert'
          WHEN task_type = 'candidate_deep_review'
-           AND requested_reasoning_effort = 'medium'
+           AND (
+             requested_reasoning_effort = 'medium'
+             OR payload->>'review_pass' = 'fallback_low'
+           )
            THEN 'deep_medium'
          WHEN task_type = 'candidate_deep_review' THEN 'deep_low'
          WHEN task_type = 'candidate_verification' THEN 'verify'
@@ -2916,12 +2977,21 @@ async function ensureStreamingWorkInTransaction(
     WeightedAiStage,
     () => Promise<boolean>
   > = {
-    deep_medium: () => isCircuitBlocked(
-      'candidate_deep_review',
-      'medium',
-    )
-      ? Promise.resolve(false)
-      : queueDeepReviewWork(client, 'medium'),
+    deep_medium: async () => {
+      if (
+        !isCircuitBlocked('candidate_deep_review', 'medium') &&
+        await queueDeepReviewWork(client, 'medium')
+      ) {
+        return true
+      }
+      // A scoped Medium circuit must not strand a batch forever. After the
+      // candidate has exhausted repeated *technical* Medium attempts, use a
+      // separate Luna-low pass against the same official evidence. It is
+      // explicitly terminal: verify only a fully supported claim, otherwise
+      // reject/conflict; it can never silently escalate a risky claim.
+      return !isCircuitBlocked('candidate_deep_review', 'low') &&
+        queueDeepReviewWork(client, 'fallback_low')
+    },
     deep_low: () => isCircuitBlocked(
       'candidate_deep_review',
       'low',
@@ -4604,12 +4674,10 @@ export async function submitCandidateDeepReview(
     if (task.task_type !== 'candidate_deep_review') {
       throw new Error('PIPELINE_TASK_TYPE_INVALID')
     }
-    const reviewPass =
-      task.requested_reasoning_effort === 'medium'
-        ? 'medium'
-        : 'low'
+    const reviewMode = deepReviewModeFromTask(task)
+    const reviewPass = reviewMode === 'medium' ? 'medium' : 'low'
     const reviewType =
-      reviewPass === 'medium' ? 'deep_medium' : 'deep_low'
+      reviewMode === 'low' ? 'deep_low' : 'deep_medium'
     const allowedCandidateIds = new Set(
       (
         Array.isArray(task.payload['candidates'])
@@ -4729,6 +4797,12 @@ export async function submitCandidateDeepReview(
         | 'manual_exception'
       if (requestedDecision !== 'unresolved') {
         finalStatus = requestedDecision
+      } else if (reviewMode === 'fallback_low') {
+        // The fallback is only created after the same Medium batch exhausted
+        // repeated platform retries. A valid low-result may verify a claim,
+        // but an unresolved result is conservatively terminal rather than
+        // returning to the same failing Medium loop.
+        finalStatus = 'rejected'
       } else if (reviewPass === 'low') {
         finalStatus = automaticUnresolvedDisposition({
           reviewPass,
@@ -4857,7 +4931,7 @@ export async function submitCandidateDeepReview(
             AND deep_review_task_id = $2`,
         [omitted, task.id],
       )
-      if (reviewPass === 'low') {
+      if (reviewMode === 'low') {
         counts.escalated_to_medium += omitted.length
       }
     }
@@ -4880,9 +4954,9 @@ export async function submitCandidateDeepReview(
               AND coalesce(candidate.resolution_code, 'unspecified') =
                   coalesce($4::text, 'unspecified')
               AND (
-                CASE WHEN $5 = 'medium'
-                  THEN candidate.resolution_attempts > 0
-                  ELSE candidate.resolution_attempts = 0
+                CASE WHEN $5 = 'low'
+                  THEN candidate.resolution_attempts = 0
+                ELSE candidate.resolution_attempts > 0
                 END
               )`,
           [
@@ -4890,7 +4964,7 @@ export async function submitCandidateDeepReview(
             task.source_candidate_id,
             taskBatchLimit,
             cohortResolutionCode,
-            reviewPass,
+            reviewMode,
           ],
         )
       }
@@ -4906,7 +4980,7 @@ export async function submitCandidateDeepReview(
         [task.source_candidate_id],
       )
     }
-    const fromStage = reviewPass === 'medium' ? 'deep_medium' : 'deep_low'
+    const fromStage = reviewMode === 'low' ? 'deep_low' : 'deep_medium'
     await recordPipelineTransitions(client, [
       {
         scope: 'record',
@@ -4920,7 +4994,7 @@ export async function submitCandidateDeepReview(
         scope: 'record',
         fromStage,
         toStage: 'deep_medium',
-        count: reviewPass === 'low' ? counts.escalated_to_medium : 0,
+        count: reviewMode === 'low' ? counts.escalated_to_medium : 0,
         kind: 'escalation',
         taskId: task.id
       },
@@ -4998,6 +5072,10 @@ export async function failPipelineTask(
         input.failure_code,
         input.failure_message,
       )
+    const exhaustedDeepReviewFallback =
+      task.task_type === 'candidate_deep_review' &&
+      deepReviewModeFromTask(task) === 'fallback_low' &&
+      !retrying
     await client.query(
       `UPDATE pipeline_tasks
           SET status = $4,
@@ -5134,12 +5212,16 @@ export async function failPipelineTask(
           `UPDATE knowledge_candidates
               SET status = 'deep_review',
                   deep_review_task_id = CASE WHEN $2 THEN $1 ELSE NULL END,
-                  resolution_code = coalesce(
-                    resolution_code,
-                    'deep_process_failure'
-                  ),
+                  resolution_code = CASE WHEN $6::boolean
+                    THEN 'deep_medium_fallback_unavailable'
+                    ELSE coalesce(
+                      resolution_code,
+                      'deep_process_failure'
+                    )
+                  END,
                   resolution_reason = $3,
                   next_review_at = CASE WHEN $2 THEN now()
+                    WHEN $6::boolean THEN now() + interval '24 hours'
                     ELSE now() + least(
                       interval '5 minutes',
                       interval '15 seconds' *
@@ -5153,7 +5235,10 @@ export async function failPipelineTask(
                     END,
                 technical_retry_count =
                   least(20, technical_retry_count + 1),
-                last_technical_failure_code = $5,
+                last_technical_failure_code = CASE WHEN $6::boolean
+                  THEN 'DEEP_MEDIUM_FALLBACK_UNAVAILABLE'
+                  ELSE $5
+                END,
                 updated_at = now()
             WHERE deep_review_task_id = $1`,
           [
@@ -5161,7 +5246,8 @@ export async function failPipelineTask(
             retrying,
             input.failure_message,
             reduceDeepReviewBatch,
-            input.failure_code
+            input.failure_code,
+            exhaustedDeepReviewFallback
           ],
         )
       }

@@ -339,6 +339,24 @@ Ready when Deep Medium remains a third, independent quality pass without
 spending capacity on redundant web access or fabricating a claim beyond its
 official evidence.
 
+### M24 — Conservative recovery from repeated Medium platform errors
+
+- `[x]` Keep normal Medium as the first and highest-priority deep-resolution
+  pass.
+- `[x]` After one batch has exhausted repeated `CODEX_PROCESS_FAILED` retries,
+  permit a distinct Luna-low fallback using the same leased official evidence.
+- `[x]` Make the fallback terminal: it may verify only a complete,
+  evidence-supported claim; otherwise it rejects or conflicts rather than
+  cycling back into the failing Medium scope.
+- `[x]` Keep an unsuccessful fallback deferred for a later Medium attempt,
+  rather than creating an immediate retry storm or sending it to a human.
+- `[~]` Observe fallback activation and the subsequent Medium recovery on
+  production without any relaxation of publication policy.
+
+Ready when a transient Medium platform incident cannot strand records forever,
+and the recovery path never publishes a claim that has not passed the existing
+Domain Pack, provenance, version, confidence and risk gates.
+
 ## Production verification — 20 July 2026
 
 - `[x]` Deployed `bc7c950b585bd994efa704e4ca246320fbde05dd` exclusively through

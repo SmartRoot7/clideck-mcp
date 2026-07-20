@@ -491,6 +491,11 @@ repair the candidate to that narrower claim. If the supplied evidence cannot
 support the claim, reject that candidate rather than the source document. A
 separate high-priority discovery task handles a genuine source gap. The medium
 pass must not return unresolved.
+${task.payload['force_terminal_resolution'] === true ? `
+This is a terminal low-reasoning fallback after repeated transient Medium
+platform failures. It does not relax any quality rule: return verified only
+when the exact leased evidence supports the complete claim; otherwise return
+rejected or conflict. Never return unresolved in this fallback.` : ''}
 Do not return verified for a dangerous candidate with an empty rollback array.
 Repair it with an explicit evidence-supported rollback or irreversible recovery
 boundary; if that cannot be supported, reject it. Never invent rollback text.

@@ -856,7 +856,8 @@ export async function getAdminOverview(
            (SELECT count(*)::int
             FROM knowledge_candidates candidate
             JOIN live task ON task.id = candidate.deep_review_task_id
-            WHERE task.requested_reasoning_effort = 'low'),
+            WHERE task.requested_reasoning_effort = 'low'
+              AND coalesce(task.payload->>'review_pass', '') <> 'fallback_low'),
            (SELECT count(*)::int FROM candidate_verifications
             WHERE review_type = 'deep_low'
               AND created_at >= now() - interval '24 hours'),
@@ -880,6 +881,7 @@ export async function getAdminOverview(
              SELECT DISTINCT claim_owner FROM live
              WHERE task_type = 'candidate_deep_review'
                AND requested_reasoning_effort = 'low'
+               AND coalesce(payload->>'review_pass', '') <> 'fallback_low'
                AND claim_owner IS NOT NULL
            )
          UNION ALL
@@ -897,7 +899,10 @@ export async function getAdminOverview(
            (SELECT count(*)::int
             FROM knowledge_candidates candidate
             JOIN live task ON task.id = candidate.deep_review_task_id
-            WHERE task.requested_reasoning_effort = 'medium'),
+            WHERE (
+              task.requested_reasoning_effort = 'medium'
+              OR task.payload->>'review_pass' = 'fallback_low'
+            )),
            (SELECT count(*)::int FROM candidate_verifications
             WHERE review_type = 'deep_medium'
               AND created_at >= now() - interval '24 hours'),
@@ -919,7 +924,10 @@ export async function getAdminOverview(
            ARRAY(
              SELECT DISTINCT claim_owner FROM live
              WHERE task_type = 'candidate_deep_review'
-               AND requested_reasoning_effort = 'medium'
+               AND (
+                 requested_reasoning_effort = 'medium'
+                 OR payload->>'review_pass' = 'fallback_low'
+               )
                AND claim_owner IS NOT NULL
            )
          UNION ALL
