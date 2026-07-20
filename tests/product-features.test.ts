@@ -18,6 +18,7 @@ import {
   expertResearchStructuredArtifactSchema,
   applyDeepReviewRepair,
   getDeterministicRiskDisposition,
+  shouldReduceDeepReviewBatchOnFailure,
   materializeCandidateDeepReviewArtifact,
   materializeCandidateVerificationArtifact,
   normalizeCandidateAnalysisOptionalFields,
@@ -176,6 +177,21 @@ describe('knowledge safety classification', () => {
 })
 
 describe('deterministic source processing', () => {
+  it('does not shrink deep-review batches for a retryable platform error', () => {
+    expect(shouldReduceDeepReviewBatchOnFailure(
+      'AGENT_ARTIFACT_REJECTED',
+      'The generated artifact failed validation or submission: INTERNAL_ERROR: The request could not be completed. Retry later with the same safe inputs.',
+    )).toBe(false)
+    expect(shouldReduceDeepReviewBatchOnFailure(
+      'CODEX_PROCESS_FAILED',
+      'The ephemeral Codex process failed before producing an artifact.',
+    )).toBe(false)
+    expect(shouldReduceDeepReviewBatchOnFailure(
+      'AGENT_ARTIFACT_REJECTED',
+      'The generated artifact failed validation: every candidate index must be returned exactly once.',
+    )).toBe(true)
+  })
+
   it('accepts finite client limits so handlers can clamp them safely', () => {
     const context = {
       vendor: 'Cisco',

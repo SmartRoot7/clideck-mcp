@@ -585,6 +585,22 @@ export function automaticUnresolvedDisposition(input: {
   return 'rejected'
 }
 
+/**
+ * A smaller Deep Review batch is a quality recovery mechanism, not a generic
+ * retry penalty.  An omitted candidate or malformed structured artifact can
+ * be caused by an over-large response; a transient Codex/platform failure
+ * cannot.  Shrinking for the latter silently turns healthy 10–20-record work
+ * into expensive one-record runs without improving the next attempt.
+ */
+export function shouldReduceDeepReviewBatchOnFailure(
+  failureCode: string,
+  failureMessage: string,
+): boolean {
+  if (failureCode !== 'AGENT_ARTIFACT_REJECTED') return false
+  return !/\bINTERNAL_ERROR\b|retry later with the same safe inputs/i
+    .test(failureMessage)
+}
+
 async function recordEvent(
   client: DatabaseClient,
   input: {
@@ -4448,6 +4464,12 @@ export async function failPipelineTask(
     const retrying =
       (task.attempts ?? 1) < 5 &&
       !terminalFailureCodes.has(input.failure_code)
+    const reduceDeepReviewBatch =
+      task.task_type === 'candidate_deep_review' &&
+      shouldReduceDeepReviewBatchOnFailure(
+        input.failure_code,
+        input.failure_message,
+      )
     await client.query(
       `UPDATE pipeline_tasks
           SET status = $4,
@@ -4593,13 +4615,22 @@ export async function failPipelineTask(
                     )
                   END,
                   deep_review_batch_limit =
-                    greatest(1, deep_review_batch_limit / 2),
-                  technical_retry_count =
-                    least(20, technical_retry_count + 1),
-                  last_technical_failure_code = 'deep_process_failure',
-                  updated_at = now()
+                    CASE WHEN $4::boolean
+                      THEN greatest(1, deep_review_batch_limit / 2)
+                      ELSE deep_review_batch_limit
+                    END,
+                technical_retry_count =
+                  least(20, technical_retry_count + 1),
+                last_technical_failure_code = $5,
+                updated_at = now()
             WHERE deep_review_task_id = $1`,
-          [task.id, retrying, input.failure_message],
+          [
+            task.id,
+            retrying,
+            input.failure_message,
+            reduceDeepReviewBatch,
+            input.failure_code
+          ],
         )
       }
       if (nonBlockingAiStage) {

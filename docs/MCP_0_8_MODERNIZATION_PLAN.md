@@ -141,6 +141,16 @@ Ready when no newly verified dangerous record without rollback reaches the
 mechanical publisher, while dangerous records with an evidence-backed rollback
 remain publishable.
 
+### M10 — Preserve Deep Review throughput across transient failures
+
+- `[~]` Preserve the current Deep Review batch size when Codex reports a
+  retryable internal/platform error.
+- `[~]` Continue reducing a batch only after a malformed structured artifact
+  or an explicit omission, where a smaller response can improve completeness.
+
+Ready when a transient failure retries the same evidence batch without
+silently degrading it to one-record Luna runs.
+
 ## Production verification — 20 July 2026
 
 - `[x]` Deployed `bc7c950b585bd994efa704e4ca246320fbde05dd` exclusively through
