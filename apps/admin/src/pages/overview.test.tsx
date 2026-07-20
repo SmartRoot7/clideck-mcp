@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom/vitest'
 
 import type { Overview } from '@clideck/admin-contracts'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -15,6 +15,8 @@ const now = new Date('2026-07-19T21:00:00.000Z').toISOString()
 function overviewFixture(): Overview {
   return {
     snapshot_at: now,
+    prepared_sources: 8,
+    prepared_source_target: 8,
     pipeline_funnel: Object.entries(PIPELINE_STAGES).map(
       ([stage, metadata], index) => ({
         stage,
@@ -70,7 +72,9 @@ function overviewFixture(): Overview {
       rejected_24h: 1,
       oldest_waiting_at: index ? now : null,
       active_executor_ids:
-        stage === 'deep_medium' ? ['pipeline-executor-02'] : []
+        stage === 'deep_medium'
+          ? ['pipeline-executor-02', 'pipeline-executor-03']
+          : []
     })) as Overview['record_pipeline'],
     executors: [
       {
@@ -119,10 +123,26 @@ describe('overview pipeline snapshot', () => {
     expect(screen.getAllByText('Waiting')).toHaveLength(10)
     expect(screen.getAllByText('In flight')).toHaveLength(10)
     expect(screen.getAllByText('Output')).toHaveLength(5)
-    expect(screen.getAllByText('Failed')).toHaveLength(5)
+    expect(screen.getAllByText('Failed')).toHaveLength(6)
     expect(screen.queryByText('Queued')).not.toBeInTheDocument()
     expect(screen.queryByText('Done')).not.toBeInTheDocument()
     expect(screen.getByText('5,149')).toBeInTheDocument()
+    const downloadedCard = screen
+      .getByLabelText('Downloaded stage help')
+      .closest('article')
+    expect(downloadedCard).not.toBeNull()
+    expect(within(downloadedCard!).getByText('Buffered')).toBeInTheDocument()
+    expect(within(downloadedCard!).getByText('Target')).toBeInTheDocument()
+    expect(
+      within(downloadedCard!).getByText('Downloaded / 24h'),
+    ).toBeInTheDocument()
+    expect(within(downloadedCard!).getAllByText('8')).toHaveLength(2)
+    const analyzeRunner = screen.getByLabelText('1 active runner on Analyze')
+    const deepRunner = screen.getByLabelText('2 active runners on Deep Medium')
+    expect(analyzeRunner).toBeInTheDocument()
+    expect(deepRunner).toBeInTheDocument()
+    expect(analyzeRunner.closest('article')).toHaveClass('is-running')
+    expect(deepRunner.closest('article')).toHaveClass('is-running')
   })
 
   it('derives executor stages from the authoritative runtime snapshot', () => {

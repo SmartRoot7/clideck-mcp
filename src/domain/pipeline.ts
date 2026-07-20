@@ -10,6 +10,10 @@ import type { Database, DatabaseClient } from '../db.js'
 import { withTransaction } from '../db.js'
 import { assertSafeProvenanceUrl } from '../security/url-policy.js'
 import { normalizeVendorVersion } from '../version.js'
+import {
+  fillWeightedAiCapacity,
+  type WeightedAiStage
+} from './pipeline-scheduler.js'
 import { candidateRevisionSchema } from './schemas.js'
 import { enforceKnowledgeRisk } from './risk.js'
 
@@ -503,8 +507,8 @@ const requiredPipelineReasoning = 'low'
 const aiPriorities = {
   expert: 100,
   deepMedium: 96,
-  verify: 90,
-  deepLow: 85,
+  deepLow: 92,
+  verify: 88,
   analyze: 80,
   discover: 50
 } as const
@@ -2201,66 +2205,112 @@ async function ensureStreamingWorkInTransaction(
 
   // Expert work is always materialized first so it owns the next free lane.
   await queueExpertWork(client)
-  const activeAi = await client.query<{ count: number }>(
-    `SELECT count(*)::int AS count
+  // Tasks can survive an application deployment. Normalize every unclaimed
+  // AI task so an older numeric priority cannot defeat the current policy.
+  await client.query(
+    `UPDATE pipeline_tasks
+        SET priority = CASE
+          WHEN task_type = 'expert_research' THEN $1::smallint
+          WHEN task_type = 'candidate_deep_review'
+            AND requested_reasoning_effort = 'medium' THEN $2::smallint
+          WHEN task_type = 'candidate_deep_review' THEN $3::smallint
+          WHEN task_type = 'candidate_verification' THEN $4::smallint
+          WHEN task_type = 'fragment_analysis' THEN $5::smallint
+          ELSE $6::smallint
+        END,
+        updated_at = now()
+      WHERE status = 'queued'
+        AND task_type = ANY($7::text[])
+        AND priority IS DISTINCT FROM CASE
+          WHEN task_type = 'expert_research' THEN $1::smallint
+          WHEN task_type = 'candidate_deep_review'
+            AND requested_reasoning_effort = 'medium' THEN $2::smallint
+          WHEN task_type = 'candidate_deep_review' THEN $3::smallint
+          WHEN task_type = 'candidate_verification' THEN $4::smallint
+          WHEN task_type = 'fragment_analysis' THEN $5::smallint
+          ELSE $6::smallint
+        END`,
+    [
+      aiPriorities.expert,
+      aiPriorities.deepMedium,
+      aiPriorities.deepLow,
+      aiPriorities.verify,
+      aiPriorities.analyze,
+      aiPriorities.discover,
+      aiTaskTypes
+    ],
+  )
+  const activeAi = await client.query<{
+    scheduler_stage: WeightedAiStage | 'expert' | 'discover'
+    count: number
+  }>(
+    `SELECT
+       CASE
+         WHEN task_type = 'expert_research' THEN 'expert'
+         WHEN task_type = 'candidate_deep_review'
+           AND requested_reasoning_effort = 'medium'
+           THEN 'deep_medium'
+         WHEN task_type = 'candidate_deep_review' THEN 'deep_low'
+         WHEN task_type = 'candidate_verification' THEN 'verify'
+         WHEN task_type = 'fragment_analysis' THEN 'analyze'
+         ELSE 'discover'
+       END AS scheduler_stage,
+       count(*)::int AS count
      FROM pipeline_tasks
-     WHERE status IN ('queued', 'claimed', 'running')
+     WHERE (
+         status IN ('claimed', 'running')
+         OR (status = 'queued' AND available_at <= now())
+       )
        AND task_type = ANY($1::text[])
-       AND available_at <= now()`,
+     GROUP BY scheduler_stage`,
     [aiTaskTypes],
   )
-  let occupied = activeAi.rows[0]?.count ?? 0
-  const hasCapacity = () =>
-    occupied < pipeline.max_concurrent_ai_runs
-  const reserve = async (
-    queue: () => Promise<boolean>,
-  ): Promise<boolean> => {
-    if (!hasCapacity()) return false
-    const queued = await queue()
-    if (queued) occupied += 1
-    return queued
+  const activeCounts: Record<WeightedAiStage, number> = {
+    deep_medium: 0,
+    deep_low: 0,
+    verify: 0,
+    analyze: 0
+  }
+  let occupied = 0
+  for (const row of activeAi.rows) {
+    occupied += row.count
+    if (row.scheduler_stage in activeCounts) {
+      activeCounts[row.scheduler_stage as WeightedAiStage] = row.count
+    }
   }
 
-  // Guarantee progress for medium, standard verification and extraction
-  // whenever all three backlogs are present.
-  await reserve(() => queueDeepReviewWork(client, 'medium'))
-  await reserve(() => queueVerificationFromAnySource(client))
-  await reserve(() => queueAnalysisFromLanes(client, activeSourceIds))
+  const queueByStage: Record<
+    WeightedAiStage,
+    () => Promise<boolean>
+  > = {
+    deep_medium: () => queueDeepReviewWork(client, 'medium'),
+    deep_low: () => queueDeepReviewWork(client, 'low'),
+    verify: () => queueVerificationFromAnySource(client),
+    analyze: () => queueAnalysisFromLanes(client, activeSourceIds)
+  }
+  const allocation = await fillWeightedAiCapacity({
+    concurrency: pipeline.max_concurrent_ai_runs,
+    occupied,
+    activeByStage: activeCounts,
+    queueStage: (stage) => queueByStage[stage]()
+  })
+  occupied = allocation.occupied
 
-  while (hasCapacity()) {
-    let queued = await reserve(() =>
-      queueDeepReviewWork(client, 'medium')
+  // Discovery is intentionally last and limited to one lane. Mechanical
+  // collection expansion keeps the source buffer useful without displacing
+  // records that are already closer to publication.
+  if (occupied < pipeline.max_concurrent_ai_runs) {
+    const sourceBuffer = await client.query<{ count: number }>(
+      `SELECT count(*)::int AS count
+       FROM source_candidates
+       WHERE status IN ('discovered', 'approved')`,
     )
-    if (!queued) {
-      queued = await reserve(() =>
-        queueVerificationFromAnySource(client)
-      )
+    if (
+      (sourceBuffer.rows[0]?.count ?? 0) <
+      pipeline.source_buffer_target
+    ) {
+      await queueDiscoveryWork(client)
     }
-    if (!queued) {
-      queued = await reserve(() =>
-        queueDeepReviewWork(client, 'low')
-      )
-    }
-    if (!queued) {
-      queued = await reserve(() =>
-        queueAnalysisFromLanes(client, activeSourceIds)
-      )
-    }
-    if (!queued) queued = await reserve(() => queueExpertWork(client))
-    if (!queued) {
-      const sourceBuffer = await client.query<{ count: number }>(
-        `SELECT count(*)::int AS count
-         FROM source_candidates
-         WHERE status IN ('discovered', 'approved')`,
-      )
-      if (
-        (sourceBuffer.rows[0]?.count ?? 0) <
-        pipeline.source_buffer_target
-      ) {
-        queued = await reserve(() => queueDiscoveryWork(client))
-      }
-    }
-    if (!queued) break
   }
 }
 

@@ -12,6 +12,7 @@ import {
   Boxes,
   Clock3,
   Database,
+  Download,
   FileCheck2,
   Gauge,
   Layers3,
@@ -67,6 +68,12 @@ export const PIPELINE_STAGES: Record<string, {
     label: 'Acquire',
     icon: Database,
     waitingHelp: 'approved sources waiting to be downloaded'
+  },
+  downloaded: {
+    label: 'Downloaded',
+    icon: Download,
+    waitingHelp:
+      'downloaded documents held in the prepared analysis buffer'
   },
   convert: {
     label: 'Convert',
@@ -480,6 +487,28 @@ const RECORD_PIPELINE_STAGES: Record<string, {
 }
 
 export function PipelineRail({ overview }: { overview: Overview }) {
+  const acquired = overview.source_intake.find(
+    (stage) => stage.stage === 'acquire',
+  )
+  const sourceStages = overview.source_intake.flatMap((stage) =>
+    stage.stage === 'acquire'
+      ? [
+          stage,
+          {
+            stage: 'downloaded',
+            unit: 'documents',
+            waiting: overview.prepared_sources,
+            in_flight: 0,
+            processed_24h: acquired?.output_24h ?? 0,
+            output_24h: acquired?.output_24h ?? 0,
+            failed_24h: acquired?.failed_24h ?? 0,
+            oldest_waiting_at: null,
+            active_executor_ids: [],
+            active_worker_count: 0
+          }
+        ]
+      : [stage],
+  )
   const sourceBottleneck = [...overview.source_intake]
     .filter((stage) =>
       numberOf(stage.waiting) > 0 && stage.oldest_waiting_at
@@ -505,8 +534,8 @@ export function PipelineRail({ overview }: { overview: Overview }) {
         className="pipeline-rail-panel"
         action={sourceBottleneck ? <Status tone="warning">Bottleneck · {titleCase(sourceBottleneck)}</Status> : null}
       >
-        <div className="pipeline-rail pipeline-rail--five">
-          {overview.source_intake.map((stage, index) => {
+        <div className="pipeline-rail pipeline-rail--six">
+          {sourceStages.map((stage, index) => {
             const metadata = PIPELINE_STAGES[stage.stage] ?? {
               label: titleCase(stage.stage),
               icon: Layers3,
@@ -519,6 +548,7 @@ export function PipelineRail({ overview }: { overview: Overview }) {
                 index={index}
                 metadata={metadata}
                 bottleneck={stage.stage === sourceBottleneck}
+                preparedSourceTarget={overview.prepared_source_target}
               />
             )
           })}
@@ -550,37 +580,59 @@ function SourceStageCard({
   stage,
   index,
   metadata,
-  bottleneck
+  bottleneck,
+  preparedSourceTarget
 }: {
   stage: Overview['source_intake'][number]
   index: number
   metadata: (typeof PIPELINE_STAGES)[string]
   bottleneck: boolean
+  preparedSourceTarget: string | number
 }) {
   const Icon = metadata?.icon ?? Layers3
-  const inFlight = numberOf(stage.in_flight)
   const runners = [
     ...stage.active_executor_ids,
     ...(numberOf(stage.active_worker_count) > 0
       ? [`${stage.active_worker_count} mechanical`]
       : [])
   ]
+  const activeRunnerCount =
+    stage.active_executor_ids.length + numberOf(stage.active_worker_count)
+  const label = metadata?.label ?? titleCase(stage.stage)
+  const downloaded = stage.stage === 'downloaded'
   return (
-    <article className={`pipeline-stage ${inFlight ? 'is-running' : ''} ${bottleneck ? 'is-bottleneck' : ''}`}>
+    <article className={`pipeline-stage ${activeRunnerCount ? 'is-running' : ''} ${bottleneck ? 'is-bottleneck' : ''}`}>
       <div className="pipeline-stage__top">
         <span>{index + 1}</span>
-        <IconTooltip icon={Icon} label={`${metadata?.label ?? stage.stage} stage`}>
+        <IconTooltip icon={Icon} label={`${label} stage`}>
           {metadata?.waitingHelp}. Output shows newly created {stage.unit}
           during the rolling last 24 hours. {runners.length
             ? `Active: ${runners.join(', ')}.`
             : 'No active runner.'}
         </IconTooltip>
-        <strong>{metadata?.label ?? titleCase(stage.stage)}</strong>
+        <strong>{label}</strong>
+        {activeRunnerCount > 0 && (
+          <RunnerBadge count={activeRunnerCount} stage={label} />
+        )}
       </div>
       <dl>
-        <div><dt>Waiting</dt><dd>{formatNumber(stage.waiting, 0)}</dd></div>
-        <div><dt>In flight</dt><dd>{formatNumber(stage.in_flight, 0)}</dd></div>
-        <div><dt>Output</dt><dd>{formatNumber(stage.output_24h, 0)}</dd></div>
+        <div>
+          <dt>{downloaded ? 'Buffered' : 'Waiting'}</dt>
+          <dd>{formatNumber(stage.waiting, 0)}</dd>
+        </div>
+        <div>
+          <dt>{downloaded ? 'Target' : 'In flight'}</dt>
+          <dd>
+            {formatNumber(
+              downloaded ? preparedSourceTarget : stage.in_flight,
+              0,
+            )}
+          </dd>
+        </div>
+        <div>
+          <dt>{downloaded ? 'Downloaded / 24h' : 'Output'}</dt>
+          <dd>{formatNumber(stage.output_24h, 0)}</dd>
+        </div>
         <div><dt>Failed</dt><dd>{formatNumber(stage.failed_24h, 0)}</dd></div>
       </dl>
     </article>
@@ -598,9 +650,9 @@ function RecordStageCard({
 }) {
   const metadata = RECORD_PIPELINE_STAGES[stage.stage]!
   const Icon = metadata.icon
-  const inFlight = numberOf(stage.in_flight)
+  const activeRunnerCount = stage.active_executor_ids.length
   return (
-    <article className={`pipeline-stage ${inFlight ? 'is-running' : ''} ${bottleneck ? 'is-bottleneck' : ''}`}>
+    <article className={`pipeline-stage ${activeRunnerCount ? 'is-running' : ''} ${bottleneck ? 'is-bottleneck' : ''}`}>
       <div className="pipeline-stage__top">
         <span>{index + 1}</span>
         <IconTooltip icon={Icon} label={`${metadata.label} stage`}>
@@ -610,6 +662,9 @@ function RecordStageCard({
             : 'No Luna currently assigned.'}
         </IconTooltip>
         <strong>{metadata.label}</strong>
+        {activeRunnerCount > 0 && (
+          <RunnerBadge count={activeRunnerCount} stage={metadata.label} />
+        )}
       </div>
       <dl>
         <div><dt>Waiting</dt><dd>{formatNumber(stage.waiting, 0)}</dd></div>
@@ -618,6 +673,25 @@ function RecordStageCard({
         <div><dt>{numberOf(stage.escalated_24h) ? 'Escalated' : 'Rejected'}</dt><dd>{formatNumber(numberOf(stage.escalated_24h) || numberOf(stage.rejected_24h), 0)}</dd></div>
       </dl>
     </article>
+  )
+}
+
+function RunnerBadge({
+  count,
+  stage
+}: {
+  count: number
+  stage: string
+}) {
+  return (
+    <span
+      className="pipeline-stage__activity"
+      aria-label={`${count} active ${count === 1 ? 'runner' : 'runners'} on ${stage}`}
+      title={`${count} active ${count === 1 ? 'runner' : 'runners'}`}
+    >
+      <i aria-hidden="true" />
+      {count}
+    </span>
   )
 }
 

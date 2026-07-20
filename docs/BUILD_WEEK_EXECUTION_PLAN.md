@@ -592,6 +592,36 @@ Delivered:
 
 Verification pending browser QA and production rollout.
 
+### [~] P0.7.2.4 — Downstream-weighted Luna scheduling
+
+Goal: prioritize knowledge nearest publication without starving Verify,
+Analyze, or future source supply.
+
+Delivered:
+
+- Ready records keep the highest deterministic publication priority;
+- Luna priority is Expert, Deep Medium, Deep Low, Verify, Analyze, then
+  Discover/Refresh;
+- four available lanes use a downstream-weighted split: `2/1/1` for three
+  waiting stages, `3/1` for two stages, or all four for the only useful stage;
+- existing paid runs are never preempted; the mix converges as lanes finish;
+- queued tasks from an older deployment have their numeric priority normalized
+  before claiming;
+- Source Intake now shows Downloaded as a real sixth rail card, and every
+  running stage displays the number of assigned Luna or mechanical workers.
+
+Verification:
+
+- weighted allocation unit coverage includes Deep Low + Verify + Analyze,
+  Deep Medium dominance, two-stage and single-stage saturation, and convergence
+  from the previous Analyze-heavy allocation;
+- 95 backend/PostgreSQL tests, 14 Domain Pack tests, and 11 admin UI tests
+  passed on a newly migrated database;
+- typecheck, production build, 250/250 product eval, dangerous false-safe 0,
+  dependency audit, and diff validation passed.
+
+Production verification pending rollout.
+
 ## Final day — release and submission
 
 ### [x] D3.1 — Security and release gate
