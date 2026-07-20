@@ -665,6 +665,43 @@ const mechanicalTaskTypes: PipelineTaskRow['task_type'][] = [
   'candidate_publication',
   'source_publication'
 ]
+
+const nonBlockingAiTaskTypes: PipelineTaskRow['task_type'][] = [
+  'fragment_analysis',
+  'candidate_verification',
+  'candidate_deep_review'
+]
+
+const sourceReplacementTaskTypes: PipelineTaskRow['task_type'][] = [
+  'source_discovery',
+  'source_refresh',
+  'source_acquisition',
+  'source_conversion',
+  'source_chunking'
+]
+
+/**
+ * An unanswered MCP request is a durable learning goal, not a one-shot AI
+ * task.  A technical or structural failure in a source-derived AI pass must
+ * leave that goal in processing while the candidate is automatically retried.
+ * A terminal source failure instead immediately permits a fresh official
+ * discovery attempt, never a 15-minute dead end.
+ */
+export function demandFailureDisposition(input: {
+  hasDemand: boolean
+  taskType: PipelineTaskRow['task_type']
+  retrying: boolean
+}): 'normal' | 'keep_processing' | 'restart_discovery' {
+  if (!input.hasDemand) return 'normal'
+  if (nonBlockingAiTaskTypes.includes(input.taskType)) {
+    return 'keep_processing'
+  }
+  if (!input.retrying && sourceReplacementTaskTypes.includes(input.taskType)) {
+    return 'restart_discovery'
+  }
+  return 'normal'
+}
+
 const requiredPipelineModel = 'gpt-5.6-luna'
 const requiredPipelineReasoning = 'low'
 const aiPriorities = {
@@ -1756,6 +1793,45 @@ async function queueDiscoveryWork(client: DatabaseClient): Promise<boolean> {
   return false
 }
 
+/**
+ * Older versions could mark a demand failed after an AI lease exhausted even
+ * though its candidate was already scheduled for another automatic Deep
+ * Review.  Recover those durable learning goals without fabricating an answer
+ * or creating a duplicate source-discovery task.
+ */
+async function reconcileTechnicalDemandFailures(
+  client: DatabaseClient,
+): Promise<void> {
+  await client.query(
+    `UPDATE knowledge_demands demand
+        SET status = 'processing',
+            next_retry_at = now(),
+            last_seen_at = now()
+      WHERE demand.status = 'failed'
+        AND demand.last_error_code = ANY($1::text[])
+        AND EXISTS (
+          SELECT 1
+          FROM source_candidates source
+          JOIN pipeline_tasks origin
+            ON origin.source_candidate_id = source.id
+          JOIN knowledge_candidates candidate
+            ON candidate.pipeline_task_id = origin.id
+          WHERE source.knowledge_demand_id = demand.id
+            AND candidate.status IN ('analyzed', 'deep_review')
+        )`,
+    [[
+      'CODEX_PROCESS_FAILED',
+      'AGENT_LAUNCH_FAILED',
+      'AGENT_RUN_TIMEOUT',
+      'LEASE_EXPIRED',
+      'LEASE_ATTEMPTS_EXHAUSTED',
+      'EMPTY_AGENT_RUN',
+      'AGENT_ARTIFACT_REJECTED',
+      'AGENT_REPORTING_FAILED'
+    ]],
+  )
+}
+
 async function queueDemandDiscoveryWork(
   client: DatabaseClient,
 ): Promise<boolean> {
@@ -2690,6 +2766,7 @@ async function ensureStreamingWorkInTransaction(
   }
 
   await reconcileCompletedSources(client)
+  await reconcileTechnicalDemandFailures(client)
   await maintainPreparedSourceBuffer(
     client,
     pipeline.prepared_source_target,
@@ -4819,6 +4896,11 @@ export async function failPipelineTask(
     const retrying =
       (task.attempts ?? 1) < 5 &&
       !terminalFailureCodes.has(input.failure_code)
+    const demandDisposition = demandFailureDisposition({
+      hasDemand: task.knowledge_demand_id !== null,
+      taskType: task.task_type,
+      retrying
+    })
     const reduceDeepReviewBatch =
       task.task_type === 'candidate_deep_review' &&
       shouldReduceDeepReviewBatchOnFailure(
@@ -4858,18 +4940,23 @@ export async function failPipelineTask(
       await client.query(
         `UPDATE knowledge_demands
             SET status = CASE
+                  WHEN $7 = 'keep_processing' THEN 'processing'
                   WHEN NOT $2 THEN 'failed'
                   WHEN $5 = ANY($6::text[]) THEN 'discovering'
                   WHEN $5 = 'source_acquisition' THEN 'acquiring'
                   ELSE 'processing'
                 END,
                 discovery_task_id = CASE
+                  WHEN $7 = 'restart_discovery' THEN NULL
                   WHEN $5 = ANY($6::text[]) AND $2 THEN $3
                   WHEN $5 = ANY($6::text[]) THEN NULL
                   ELSE discovery_task_id
                 END,
                 last_error_code = $4,
-                next_retry_at = CASE WHEN $2
+                next_retry_at = CASE
+                  WHEN $7 IN ('keep_processing', 'restart_discovery')
+                    THEN now()
+                  WHEN $2
                   THEN now()
                   ELSE now() + interval '15 minutes'
                 END,
@@ -4881,7 +4968,8 @@ export async function failPipelineTask(
           task.id,
           input.failure_code,
           task.task_type,
-          ['source_discovery', 'source_refresh']
+          ['source_discovery', 'source_refresh'],
+          demandDisposition
         ],
       )
     }
@@ -4921,11 +5009,9 @@ export async function failPipelineTask(
       )
     }
     if (task.source_candidate_id) {
-      const nonBlockingAiStage = [
-        'fragment_analysis',
-        'candidate_verification',
-        'candidate_deep_review'
-      ].includes(task.task_type)
+      const nonBlockingAiStage = nonBlockingAiTaskTypes.includes(
+        task.task_type,
+      )
       if (task.task_type === 'fragment_analysis') {
         await client.query(
           `UPDATE source_fragments

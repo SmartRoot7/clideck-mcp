@@ -1,5 +1,5 @@
 import type {
-  ActiveSourceDetail,
+  ActiveSourceLane,
   CoverageTarget,
   Overview,
   PipelineDetails
@@ -24,7 +24,7 @@ import {
   Waypoints,
   type LucideIcon
 } from 'lucide-react'
-import { useMemo, type CSSProperties } from 'react'
+import { useMemo } from 'react'
 
 import { Chart } from '../components/chart'
 import { PipelineFlow } from '../components/pipeline-flow'
@@ -50,7 +50,7 @@ import {
   toneFor
 } from '../lib/format'
 import {
-  useActiveSource,
+  useActiveSources,
   useCoverage,
   usePipeline,
   usePipelineTransitions
@@ -111,11 +111,11 @@ export const PIPELINE_STAGES: Record<string, {
 
 export function OverviewPage({ overview }: { overview: Overview }) {
   const pipelineQuery = usePipeline()
-  const sourceQuery = useActiveSource()
+  const sourceLanesQuery = useActiveSources()
   const coverageQuery = useCoverage()
   const transitionsQuery = usePipelineTransitions()
   const pipeline = pipelineQuery.data
-  const source = sourceQuery.data
+  const sourceLanes = sourceLanesQuery.data ?? []
   const coverage = coverageQuery.data ?? []
   const publishedOption = usePublishedOption(overview)
   const activityOption = useActivityOption(overview)
@@ -282,9 +282,9 @@ export function OverviewPage({ overview }: { overview: Overview }) {
       </section>
 
       <div className="overview-grid">
-        <ActiveSourceCard
-          source={source}
-          loading={sourceQuery.isLoading}
+        <ActiveSourcesCard
+          lanes={sourceLanes}
+          loading={sourceLanesQuery.isLoading}
         />
         <Panel
           title="30-day publication trend"
@@ -883,11 +883,11 @@ function ExecutorCard(executor: ExecutorView) {
   )
 }
 
-function ActiveSourceCard({
-  source,
+function ActiveSourcesCard({
+  lanes,
   loading
 }: {
-  source: ActiveSourceDetail | undefined
+  lanes: ActiveSourceLane[]
   loading: boolean
 }) {
   if (loading) return (
@@ -895,43 +895,63 @@ function ActiveSourceCard({
       <LoadingState />
     </Panel>
   )
-  if (!source) return (
+  if (!lanes.length) return (
     <Panel title="Active source progress" icon={FileCheck2} help="Current document processing progress from acquisition through publication.">
-      <EmptyState>No source is active right now.</EmptyState>
+      <EmptyState>No document currently occupies an analysis lane. Downstream records can still be in Verify, Deep Review or Publish.</EmptyState>
     </Panel>
   )
-  const total = numberOf(source.source.fragments_total)
-  const completed = numberOf(source.source.fragments_completed)
-  const candidates = numberOf(source.source.candidates_total)
-  const verified = numberOf(source.source.candidates_verified)
-  const percent = total ? (completed / total) * 100 : 0
   return (
     <Panel
       title="Active source progress"
       icon={FileCheck2}
-      help="The current source, its extracted fragments and how much verified knowledge is ready for package publication."
-      action={<Status>{source.source.status}</Status>}
+      help="Every active document lane. The stage and Luna count come from the same live task leases as the executor cards, so this panel never relies on an old heartbeat."
+      action={<Status tone="good">{lanes.length} live</Status>}
     >
-      <div className="active-source-title">
-        <strong>{source.source.title}</strong>
-        <span>{source.source.vendor_slug} · {source.source.operating_system_slug}</span>
-      </div>
-      <div className="source-progress">
-        <div className="source-progress__ring" style={{ '--value': `${percent * 3.6}deg` } as CSSProperties}>
-          <strong>{Math.round(percent)}%</strong>
-          <span>overall</span>
-        </div>
-        <div className="source-progress__rows">
-          <ProgressRow label="Fragments" current={completed} total={total} />
-          <ProgressRow label="Candidates" current={candidates} total={Math.max(candidates, total)} />
-          <ProgressRow label="Verified" current={verified} total={Math.max(candidates, 1)} />
-        </div>
-      </div>
-      <div className="source-meta">
-        <span>Document · {titleCase(source.source.document_role)}</span>
-        <span>Updated · {formatDate(source.source.updated_at)}</span>
+      <div className="overview-source-lanes">
+        {lanes.map((lane) => (
+          <ActiveSourceLaneCard key={lane.id} lane={lane} />
+        ))}
       </div>
     </Panel>
+  )
+}
+
+function ActiveSourceLaneCard({ lane }: { lane: ActiveSourceLane }) {
+  const total = numberOf(lane.fragments_total)
+  const completed = numberOf(lane.fragments_completed)
+  const candidates = numberOf(lane.candidates_total)
+  const verified = numberOf(lane.candidates_verified)
+  const lunaCount = lane.active_executor_ids.length
+  const workerCount = numberOf(lane.active_worker_count)
+  const liveCount = lunaCount + workerCount
+  const stage = lane.active_stage ?? (
+    numberOf(lane.candidates_deep_review) > 0
+      ? 'Deep review'
+      : completed >= total && total > 0
+        ? 'Verify & publish'
+        : 'Waiting for analysis'
+  )
+  return (
+    <article className="overview-source-lane">
+      <header>
+        <span>Lane {formatNumber(lane.slot_number, 0)}</span>
+        <Status tone={liveCount > 0 ? 'good' : 'neutral'}>
+          {liveCount > 0 ? `${liveCount} active` : titleCase(lane.status)}
+        </Status>
+      </header>
+      <strong title={lane.title}>{lane.title}</strong>
+      <small>{lane.vendor_slug} · {lane.operating_system_slug ?? 'Vendor-level'}</small>
+      <div className="overview-source-lane__stage">
+        <span>{titleCase(stage)}</span>
+        {lunaCount > 0 && <b>{lunaCount} Luna</b>}
+        {workerCount > 0 && <b>{workerCount} worker</b>}
+      </div>
+      <ProgressRow label="Fragments" current={completed} total={total} />
+      <footer>
+        <span>{formatNumber(candidates, 0)} candidates</span>
+        <span>{formatNumber(verified, 0)} verified</span>
+      </footer>
+    </article>
   )
 }
 

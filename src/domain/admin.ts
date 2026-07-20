@@ -1429,6 +1429,11 @@ export async function getActiveSources(database: Database) {
          AS candidates_deep_review,
        coalesce(progress.candidates_quarantined, 0)::int
          AS candidates_quarantined,
+       progress.active_stage,
+       coalesce(progress.active_executor_ids, ARRAY[]::text[])
+         AS active_executor_ids,
+       coalesce(progress.active_worker_count, 0)::int
+         AS active_worker_count,
        source.updated_at
      FROM active_source_slots slots
      JOIN source_candidates source
@@ -1460,7 +1465,50 @@ export async function getActiveSources(database: Database) {
          ) AS candidates_deep_review,
          count(candidate.id) FILTER (
            WHERE candidate.status = 'quarantined'
-         ) AS candidates_quarantined
+         ) AS candidates_quarantined,
+         (
+           SELECT live.stage
+           FROM pipeline_tasks live
+           WHERE live.source_candidate_id = source.id
+             AND live.status IN ('claimed', 'running')
+             AND live.lease_until > now()
+           ORDER BY
+             CASE live.status WHEN 'running' THEN 0 ELSE 1 END,
+             live.priority DESC,
+             live.created_at
+           LIMIT 1
+         ) AS active_stage,
+         ARRAY(
+           SELECT DISTINCT live.claim_owner
+           FROM pipeline_tasks live
+           WHERE live.source_candidate_id = source.id
+             AND live.status IN ('claimed', 'running')
+             AND live.lease_until > now()
+             AND live.task_type IN (
+               'expert_research',
+               'source_discovery',
+               'source_refresh',
+               'fragment_analysis',
+               'candidate_verification',
+               'candidate_deep_review'
+             )
+             AND live.claim_owner IS NOT NULL
+           ORDER BY live.claim_owner
+         ) AS active_executor_ids,
+         (
+           SELECT count(*)::int
+           FROM pipeline_tasks live
+           WHERE live.source_candidate_id = source.id
+             AND live.status IN ('claimed', 'running')
+             AND live.lease_until > now()
+             AND live.task_type IN (
+               'source_acquisition',
+               'source_conversion',
+               'source_chunking',
+               'candidate_publication',
+               'source_publication'
+             )
+         ) AS active_worker_count
        FROM pipeline_tasks task
        LEFT JOIN knowledge_candidates candidate
          ON candidate.pipeline_task_id = task.id

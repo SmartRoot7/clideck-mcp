@@ -485,6 +485,9 @@ export const activeSourceLaneSchema = z.object({
   candidates_verified: scalarNumberSchema,
   candidates_deep_review: scalarNumberSchema,
   candidates_quarantined: scalarNumberSchema,
+  active_stage: nullableStringSchema,
+  active_executor_ids: z.array(z.string()),
+  active_worker_count: scalarNumberSchema,
   updated_at: timestampSchema
 })
 

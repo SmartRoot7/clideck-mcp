@@ -14,6 +14,7 @@ import {
   candidateDeepReviewAgentArtifactSchema,
   candidateVerificationAgentArtifactSchema,
   candidateVerificationArtifactSchema,
+  demandFailureDisposition,
   discoveryArtifactSchema,
   discoverySubmissionSchema,
   expertResearchStructuredArtifactSchema,
@@ -249,6 +250,34 @@ describe('deterministic source processing', () => {
         excluded_source_urls: ['https://www.cisco.com/exhausted-source']
       }
     })
+  })
+
+  it('keeps an unanswered request alive through automatic AI recovery', () => {
+    expect(demandFailureDisposition({
+      hasDemand: true,
+      taskType: 'candidate_deep_review',
+      retrying: false
+    })).toBe('keep_processing')
+    expect(demandFailureDisposition({
+      hasDemand: true,
+      taskType: 'fragment_analysis',
+      retrying: true
+    })).toBe('keep_processing')
+    expect(demandFailureDisposition({
+      hasDemand: true,
+      taskType: 'source_acquisition',
+      retrying: false
+    })).toBe('restart_discovery')
+    expect(demandFailureDisposition({
+      hasDemand: true,
+      taskType: 'source_discovery',
+      retrying: true
+    })).toBe('normal')
+    expect(demandFailureDisposition({
+      hasDemand: false,
+      taskType: 'candidate_deep_review',
+      retrying: false
+    })).toBe('normal')
   })
 
   it('accepts finite client limits so handlers can clamp them safely', () => {

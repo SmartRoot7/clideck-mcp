@@ -261,6 +261,27 @@ Ready when a Deep Medium platform incident cannot starve high-quality upstream
 knowledge work or urgent discovery, while the failing scope remains protected
 from a token-spending retry storm.
 
+### M19 — Clear request learning and live-source visibility
+
+- `[~]` Keep the local MCP journal as the complete operational record: safe
+  input/output, exact client address for the local super admin, pagination,
+  filters and automatic retention.  The public demo uses the identical page
+  but replaces request values and client addresses with `XXXXXXXX`, while
+  retaining the real safe response.
+- `[~]` Keep the Overview request chart based on the same journal: requests,
+  answered results, unknowns entering learning, and structured errors.
+- `[~]` Display all four source lanes on Overview, each with its true live
+  stage, Luna/worker count, fragment progress and candidate/verified totals.
+  The values come from current task leases rather than inferred heartbeats.
+- `[~]` Treat an unknown request as a durable priority-120 learning goal.  A
+  recoverable analysis/verification/Deep Review failure must keep that goal in
+  automatic processing; a terminal document failure immediately permits a
+  fresh official-source discovery instead of a long delay.
+
+Ready when the journal and its demo projection reconcile, the Overview can
+explain every active source lane, and an unknown request cannot be lost merely
+because one Luna run or official URL failed.
+
 ## Production verification — 20 July 2026
 
 - `[x]` Deployed `bc7c950b585bd994efa704e4ca246320fbde05dd` exclusively through

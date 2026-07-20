@@ -238,6 +238,16 @@ code { font-size: .78rem; color: #344054; }
 .active-source-title { display: flex; flex-direction: column; gap: 4px; margin-bottom: 15px; }
 .active-source-title strong { font-size: .85rem; }
 .active-source-title span, .source-meta { color: var(--muted); font-size: .68rem; }
+.overview-source-lanes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.overview-source-lane { display: grid; gap: 7px; min-width: 0; padding: 12px; border: 1px solid #e5eaf2; border-radius: 10px; background: linear-gradient(145deg, #fff, #f8faff); }
+.overview-source-lane > header, .overview-source-lane > footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.overview-source-lane > header > span { color: var(--muted); font-size: .61rem; font-weight: 760; letter-spacing: .06em; text-transform: uppercase; }
+.overview-source-lane > strong { overflow: hidden; color: #182230; font-size: .72rem; text-overflow: ellipsis; white-space: nowrap; }
+.overview-source-lane > small, .overview-source-lane > footer { color: var(--muted); font-size: .61rem; }
+.overview-source-lane > footer { padding-top: 5px; border-top: 1px solid #edf0f5; }
+.overview-source-lane__stage { display: flex; align-items: center; gap: 5px; min-width: 0; color: #526277; font-size: .62rem; }
+.overview-source-lane__stage > span { overflow: hidden; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.overview-source-lane__stage > b { flex: 0 0 auto; padding: 2px 5px; border-radius: 99px; background: #e8f2ff; color: #175cd3; font-size: .56rem; }
 .source-progress { display: grid; grid-template-columns: 104px 1fr; gap: 22px; align-items: center; }
 .source-progress__ring {
   --value: 0deg; width: 98px; aspect-ratio: 1; border-radius: 50%; display: grid; place-content: center; text-align: center;
@@ -490,6 +500,7 @@ code { font-size: .78rem; color: #344054; }
   .panel__header { align-items: flex-start; }
   .panel-actions { flex-wrap: wrap; }
   .metric-grid--four, .hero-metrics, .executor-grid, .source-lanes, .overview-grid { grid-template-columns: 1fr; }
+  .overview-source-lanes { grid-template-columns: 1fr; }
   .metric { min-height: 97px; }
   .pipeline-rail { grid-template-columns: 1fr; }
   .pipeline-rail--five { grid-template-columns: 1fr; }
