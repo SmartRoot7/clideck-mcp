@@ -239,12 +239,27 @@ does not consume repeated AI runs.
   platform incident rather than a sequence of independent knowledge failures.
 - `[~]` Increase the circuit cooldown from the measured recurrence of that
   fingerprint, bounded by a short recovery probe instead of a permanent stop.
-- `[~]` Close the circuit immediately after a successful probe, preserving the
-  work-conserving four-Luna pipeline when the platform recovers.
+- `[~]` Close the affected circuit immediately after a successful same-scope
+  probe, preserving the work-conserving four-Luna pipeline when the platform
+  recovers.
 
 Ready when a persistent external failure cannot repeatedly burn full Deep
 Review runs, while one successful probe restores normal automatic work without
 manual intervention.
+
+### M18 — Isolate an AI incident without idling useful work
+
+- `[~]` Scope a circuit to the exact AI task type and reasoning level that
+  repeatedly failed, rather than pausing the entire Luna pool.
+- `[~]` Keep the blocked scope to one recovery probe after its cooldown while
+  discovery, analysis and verification claims remain eligible for the other
+  executor lanes.
+- `[~]` Verify with PostgreSQL integration that four failed Deep Medium runs
+  still allow the next executor to claim Analyze work, with no duplicate lease.
+
+Ready when a Deep Medium platform incident cannot starve high-quality upstream
+knowledge work or urgent discovery, while the failing scope remains protected
+from a token-spending retry storm.
 
 ## Production verification — 20 July 2026
 
@@ -277,6 +292,10 @@ manual intervention.
 - **Error**: the tool returned a structured public error.
 - **Learning demand**: a deduplicated unknown question plus its validated
   context, queued at the highest pipeline priority.
+- **Evidence**: the authoritative source fragment that directly supports the
+  specific claim, model and version. A clear official manufacturer document is
+  sufficient evidence; the system must not require a second source merely to
+  publish a correctly extracted record.
 - **Raw input**: never stored. All persisted inputs are redacted, depth/size
   bounded JSON projections.
 

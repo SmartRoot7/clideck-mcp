@@ -4301,6 +4301,140 @@ describeIntegration('PostgreSQL integration', () => {
     )
   })
 
+  it('isolates a repeated Deep Medium platform failure from other Luna work', async () => {
+    const suffix = randomUUID().replaceAll('-', '').slice(0, 12)
+    const fingerprint = `sha256:${'d'.repeat(64)}`
+    await database.query(
+      `UPDATE pipeline_tasks
+          SET status = 'cancelled',
+              completed_at = now(),
+              updated_at = now()
+        WHERE status IN ('queued', 'claimed', 'running');
+       DELETE FROM pipeline_ai_circuits;
+       UPDATE pipeline_settings
+          SET enabled = true,
+              max_concurrent_ai_runs = 1,
+              paused_reason = NULL,
+              pause_requested_at = NULL,
+              updated_at = now(),
+              updated_by = 'scoped-circuit-integration-test';`,
+    )
+    await database.query(
+      `INSERT INTO pipeline_tasks (
+         task_type,
+         stage,
+         status,
+         priority,
+         dedupe_key,
+         payload,
+         requested_reasoning_effort
+       )
+       SELECT
+         'candidate_deep_review',
+         'deep_review',
+         'queued',
+         200,
+         'scoped-circuit-deep-' || $1 || '-' || value::text,
+         '{}'::jsonb,
+         'medium'
+       FROM generate_series(1, 4) value`,
+      [suffix],
+    )
+
+    for (let index = 0; index < 4; index += 1) {
+      const claim = await claimPipelineTask(
+        database,
+        config,
+        'pipeline-executor-01',
+        'pipeline-executor-01:scoped-circuit',
+      )
+      expect(claim['task_type']).toBe('candidate_deep_review')
+      await recordAgentRunResult(database, {
+        agent_run_id: String(claim['agent_run_id']),
+        status: 'failed',
+        input_tokens: 1,
+        cached_input_tokens: 0,
+        output_tokens: 0,
+        reasoning_output_tokens: 0,
+        duration_ms: 1,
+        error_code: 'CODEX_PROCESS_FAILED',
+        diagnostic_code: 'CODEX_PROCESS_FAILED',
+        diagnostic_fingerprint: fingerprint,
+      })
+      await database.query(
+        `UPDATE pipeline_tasks
+            SET status = 'cancelled',
+                completed_at = now(),
+                updated_at = now()
+          WHERE id = $1`,
+        [String(claim['pipeline_task_id'])],
+      )
+    }
+
+    const circuit = await database.query<{
+      task_type: string
+      reasoning_effort: string
+    }>(
+      `SELECT task_type, reasoning_effort
+       FROM pipeline_ai_circuits
+       WHERE task_type = 'candidate_deep_review'
+         AND reasoning_effort = 'medium'
+         AND open_until > now()`,
+    )
+    expect(circuit.rows).toEqual([
+      { task_type: 'candidate_deep_review', reasoning_effort: 'medium' },
+    ])
+
+    await database.query(
+      `INSERT INTO pipeline_tasks (
+         task_type,
+         stage,
+         status,
+         priority,
+         dedupe_key,
+         payload,
+         requested_reasoning_effort
+       )
+       VALUES (
+         'fragment_analysis',
+         'analyze',
+         'queued',
+         180,
+         'scoped-circuit-analysis-' || $1,
+         '{}'::jsonb,
+         'low'
+       )`,
+      [suffix],
+    )
+    const usefulClaim = await claimPipelineTask(
+      database,
+      config,
+      'pipeline-executor-02',
+      'pipeline-executor-02:scoped-circuit',
+    )
+    expect(usefulClaim['task_type']).toBe('fragment_analysis')
+
+    await recordAgentRunResult(database, {
+      agent_run_id: String(usefulClaim['agent_run_id']),
+      status: 'cancelled',
+      input_tokens: 0,
+      cached_input_tokens: 0,
+      output_tokens: 0,
+      reasoning_output_tokens: 0,
+      duration_ms: 1,
+      error_code: 'TEST_CLEANUP',
+    })
+    await database.query(
+      `UPDATE pipeline_tasks
+          SET status = 'cancelled',
+              completed_at = now(),
+              updated_at = now()
+        WHERE id = $1`,
+      [String(usefulClaim['pipeline_task_id'])],
+    )
+    await database.query('DELETE FROM pipeline_ai_circuits')
+  })
+
   it('reserves the next Luna claim for discovery when source supply is empty', async () => {
     const suffix = randomUUID().replaceAll('-', '')
     await database.query(

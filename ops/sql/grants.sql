@@ -249,6 +249,7 @@ GRANT SELECT ON
   active_source_slots,
   source_collections,
   worker_heartbeats,
+  pipeline_ai_circuits,
   vendors,
   platforms,
   operating_systems,
@@ -278,9 +279,11 @@ GRANT UPDATE ON
   active_source_slots,
   agent_runs,
   worker_heartbeats,
+  pipeline_ai_circuits,
   knowledge_demands
 TO clideck_mcp_researcher;
 GRANT DELETE ON active_source_slots TO clideck_mcp_researcher;
+GRANT DELETE ON pipeline_ai_circuits TO clideck_mcp_researcher;
 GRANT USAGE, SELECT ON SEQUENCE
   task_messages_id_seq,
   task_public_events_id_seq,

@@ -707,6 +707,19 @@ export function codexCircuitCooldownSeconds(
   return Math.min(300, 30 * (2 ** escalation))
 }
 
+type AiCircuitRow = {
+  task_type: PipelineTaskRow['task_type']
+  reasoning_effort: 'low' | 'medium'
+  open_until: string | Date
+  probe_executor_id: string | null
+}
+
+function isAiTaskType(
+  taskType: PipelineTaskRow['task_type'],
+): boolean {
+  return aiTaskTypes.includes(taskType)
+}
+
 async function recordEvent(
   client: DatabaseClient,
   input: {
@@ -2768,19 +2781,13 @@ export async function claimPipelineTask(
       reasoning_effort: string
       max_concurrent_ai_runs: number
       max_deep_review_runs: number
-      ai_circuit_open_until: string | Date | null
-      ai_circuit_reason: string | null
-      ai_circuit_probe_executor_id: string | null
     }>(
       `SELECT
          enabled,
          ai_model,
          reasoning_effort,
          max_concurrent_ai_runs,
-         max_deep_review_runs,
-         ai_circuit_open_until,
-         ai_circuit_reason,
-         ai_circuit_probe_executor_id
+         max_deep_review_runs
        FROM pipeline_settings
        WHERE singleton
        FOR UPDATE`,
@@ -2801,49 +2808,14 @@ export async function claimPipelineTask(
     ) {
       throw new Error('PIPELINE_LUNA_CONFIGURATION_REQUIRED')
     }
-    const circuitUntil = pipeline.ai_circuit_open_until
-      ? new Date(pipeline.ai_circuit_open_until)
-      : null
-    if (circuitUntil && circuitUntil.getTime() > Date.now()) {
-      await recordExecutorHeartbeat(
-        client,
-        researcherId,
-        researcherInstanceId,
-        {
-          status: 'standby',
-          reason: 'ai_circuit_open',
-          retry_at: circuitUntil.toISOString()
-        },
-      )
-      return {
-        enabled: true,
-        pipeline_state: 'ai_circuit_open',
-        retry_at: circuitUntil.toISOString()
-      }
-    }
-    if (pipeline.ai_circuit_reason) {
-      if (
-        pipeline.ai_circuit_probe_executor_id &&
-        pipeline.ai_circuit_probe_executor_id !== researcherId
-      ) {
-        return {
-          enabled: true,
-          pipeline_state: 'ai_circuit_probe_in_progress'
-        }
-      }
-      await client.query(
-        `UPDATE pipeline_settings
-            SET ai_circuit_probe_executor_id = $1,
-                updated_at = now(),
-                updated_by = 'ai-circuit-probe'
-          WHERE singleton
-            AND (
-              ai_circuit_probe_executor_id IS NULL
-              OR ai_circuit_probe_executor_id = $1
-            )`,
-        [researcherId],
-      )
-    }
+    // A Codex incident is isolated to the exact Luna work class that exposed
+    // it.  Deep Medium may be paused while useful discovery, analysis and
+    // verification continue to fill and advance the knowledge pipeline.
+    const circuits = await client.query<AiCircuitRow>(
+      `SELECT task_type, reasoning_effort, open_until, probe_executor_id
+       FROM pipeline_ai_circuits
+       FOR UPDATE`,
+    )
     const runningAi = await client.query<{ count: number }>(
       `SELECT count(*)::int AS count
        FROM pipeline_tasks
@@ -2887,6 +2859,19 @@ export async function claimPipelineTask(
        WHERE status = 'queued'
          AND available_at <= now()
          AND task_type = ANY($1::text[])
+         AND NOT EXISTS (
+           SELECT 1
+           FROM pipeline_ai_circuits circuit
+           WHERE circuit.task_type = pipeline_tasks.task_type
+             AND circuit.reasoning_effort = coalesce(
+               pipeline_tasks.requested_reasoning_effort,
+               'low'
+             )
+             AND (
+               circuit.open_until > now()
+               OR circuit.probe_executor_id IS NOT NULL
+             )
+         )
          AND (
            task_type NOT IN ('source_discovery', 'source_refresh')
            OR knowledge_demand_id IS NOT NULL
@@ -2936,9 +2921,14 @@ export async function claimPipelineTask(
       )
       return {
         enabled: true,
-        pipeline_state: activeMechanical.rows[0]
-          ? 'pipeline_work_in_progress'
-          : 'scheduler_refill',
+        pipeline_state: circuits.rows.some((circuit) =>
+          new Date(circuit.open_until).getTime() > Date.now() ||
+          circuit.probe_executor_id !== null,
+        )
+          ? 'scoped_ai_circuit_open'
+          : activeMechanical.rows[0]
+            ? 'pipeline_work_in_progress'
+            : 'scheduler_refill',
         ...(activeMechanical.rows[0]
           ? {
               active_task_type: activeMechanical.rows[0].task_type,
@@ -2946,6 +2936,28 @@ export async function claimPipelineTask(
             }
           : {})
       }
+    }
+
+    const taskReasoning = task.requested_reasoning_effort ?? 'low'
+    const expiredCircuit = circuits.rows.find((circuit) =>
+      circuit.task_type === task.task_type &&
+      circuit.reasoning_effort === taskReasoning &&
+      circuit.probe_executor_id === null &&
+      new Date(circuit.open_until).getTime() <= Date.now(),
+    )
+    if (expiredCircuit) {
+      const probe = await client.query<{ task_type: string }>(
+        `UPDATE pipeline_ai_circuits
+            SET probe_executor_id = $3,
+                updated_at = now()
+          WHERE task_type = $1
+            AND reasoning_effort = $2
+            AND probe_executor_id IS NULL
+            AND open_until <= now()
+          RETURNING task_type`,
+        [task.task_type, taskReasoning, researcherId],
+      )
+      if (!probe.rows[0]) throw new Error('AI_CIRCUIT_PROBE_NOT_AVAILABLE')
     }
 
     const leaseToken = randomUrlToken()
@@ -2980,7 +2992,7 @@ export async function claimPipelineTask(
        FROM pipeline_settings
        WHERE singleton
        RETURNING id`,
-      [task.id, task.requested_reasoning_effort ?? 'low'],
+      [task.id, taskReasoning],
     )
     await client.query(
       `UPDATE agent_runs
@@ -2995,7 +3007,7 @@ export async function claimPipelineTask(
       {
         status: 'running',
         model: pipeline.ai_model,
-        reasoning_effort: task.requested_reasoning_effort ?? 'low',
+        reasoning_effort: taskReasoning,
         task_id: task.id,
         task_type: task.task_type,
         stage: task.stage
@@ -3279,8 +3291,10 @@ export async function recordAgentRunResult(
   const result = await database.query<{
     id: string
     executor_id: string | null
+    task_type: PipelineTaskRow['task_type'] | null
+    reasoning_effort: 'low' | 'medium'
   }>(
-    `UPDATE agent_runs
+    `UPDATE agent_runs run
         SET status = $2,
             input_tokens = $3,
             cached_input_tokens = $4,
@@ -3294,12 +3308,17 @@ export async function recordAgentRunResult(
             published_revisions = coalesce((
               SELECT (pt.result->>'revisions_published')::int
               FROM pipeline_tasks pt
-              WHERE pt.id = agent_runs.pipeline_task_id
+              WHERE pt.id = run.pipeline_task_id
             ), 0),
             completed_at = now()
-      WHERE id = $1
-        AND status = 'running'
-      RETURNING id, executor_id`,
+      FROM pipeline_tasks task
+      WHERE run.id = $1
+        AND run.status = 'running'
+        AND task.id = run.pipeline_task_id
+      RETURNING run.id,
+                run.executor_id,
+                task.task_type,
+                run.reasoning_effort`,
     [
       input.agent_run_id,
       input.status,
@@ -3316,51 +3335,76 @@ export async function recordAgentRunResult(
   )
   if (!result.rows[0]) throw new Error('AGENT_RUN_NOT_RUNNING')
   const executorId = result.rows[0].executor_id
-  if (input.status === 'completed' && executorId) {
+  const taskType = result.rows[0].task_type
+  const reasoningEffort = result.rows[0].reasoning_effort
+  if (
+    input.status === 'completed' &&
+    executorId &&
+    taskType &&
+    isAiTaskType(taskType)
+  ) {
     await database.query(
-      `UPDATE pipeline_settings
-          SET ai_circuit_open_until = NULL,
-              ai_circuit_reason = NULL,
-              ai_circuit_probe_executor_id = NULL,
-              updated_at = now(),
-              updated_by = 'ai-circuit-recovered'
-        WHERE singleton
-          AND ai_circuit_probe_executor_id = $1`,
-      [executorId],
+      `DELETE FROM pipeline_ai_circuits
+       WHERE task_type = $1
+         AND reasoning_effort = $2
+         AND probe_executor_id = $3`,
+      [taskType, reasoningEffort, executorId],
     )
   } else if (
     input.status === 'failed' &&
     input.diagnostic_code === 'CODEX_PROCESS_FAILED' &&
-    input.diagnostic_fingerprint
+    input.diagnostic_fingerprint &&
+    taskType &&
+    isAiTaskType(taskType)
   ) {
     const failures = await database.query<{ count: number }>(
       `SELECT count(*)::int AS count
-       FROM agent_runs
-       WHERE status = 'failed'
-         AND diagnostic_code = 'CODEX_PROCESS_FAILED'
-         AND diagnostic_fingerprint = $1
-         AND completed_at >= now() - interval '15 minutes'`,
-      [input.diagnostic_fingerprint],
+       FROM agent_runs run
+       JOIN pipeline_tasks task ON task.id = run.pipeline_task_id
+       WHERE run.status = 'failed'
+         AND run.diagnostic_code = 'CODEX_PROCESS_FAILED'
+         AND run.diagnostic_fingerprint = $1
+         AND task.task_type = $2
+         AND run.reasoning_effort = $3
+         AND run.completed_at >= now() - interval '15 minutes'`,
+      [input.diagnostic_fingerprint, taskType, reasoningEffort],
     )
     const cooldownSeconds = codexCircuitCooldownSeconds(
       failures.rows[0]?.count ?? 0,
     )
-    await database.query(
-      `UPDATE pipeline_settings settings
-          SET ai_circuit_open_until = now() + make_interval(
-                secs => greatest(30, $3::int)
-              ),
-              ai_circuit_reason = $1,
-              ai_circuit_probe_executor_id = NULL,
-              updated_at = now(),
-              updated_by = 'ai-circuit-breaker'
-        WHERE settings.singleton
-          AND (
-            settings.ai_circuit_probe_executor_id = $2
-            OR $3::int > 0
-          )`,
-      [input.diagnostic_fingerprint, executorId, cooldownSeconds],
-    )
+    if (cooldownSeconds > 0) {
+      await database.query(
+        `INSERT INTO pipeline_ai_circuits (
+           task_type,
+           reasoning_effort,
+           diagnostic_fingerprint,
+           open_until,
+           probe_executor_id
+         )
+         VALUES (
+           $1,
+           $2,
+           $3,
+           now() + make_interval(secs => $4::int),
+           NULL
+         )
+         ON CONFLICT (task_type, reasoning_effort)
+         DO UPDATE SET
+           diagnostic_fingerprint = excluded.diagnostic_fingerprint,
+           open_until = greatest(
+             pipeline_ai_circuits.open_until,
+             excluded.open_until
+           ),
+           probe_executor_id = NULL,
+           updated_at = now()`,
+        [
+          taskType,
+          reasoningEffort,
+          input.diagnostic_fingerprint,
+          cooldownSeconds,
+        ],
+      )
+    }
   }
   return {
     agent_run_id: result.rows[0].id,
