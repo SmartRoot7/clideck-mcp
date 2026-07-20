@@ -253,21 +253,21 @@ describe('deterministic source processing', () => {
     ).toBe(false)
   })
 
-  it('bounds every AI analysis batch by evidence bytes', () => {
+  it('uses the safe evidence budget for large related analysis fragments', () => {
     const fragments = [
       { id: 'one', content: 'a'.repeat(30_000) },
       { id: 'two', content: 'b'.repeat(30_000) },
       { id: 'three', content: 'c'.repeat(30_000) }
     ]
     const selected = boundFragmentAnalysisBatch(fragments)
-    expect(selected.map((fragment) => fragment.id)).toEqual(['one'])
+    expect(selected.map((fragment) => fragment.id)).toEqual(['one', 'two'])
     expect(
       selected.reduce(
         (bytes, fragment) =>
           bytes + Buffer.byteLength(fragment.content, 'utf8'),
         0,
       ),
-    ).toBe(30_000)
+    ).toBe(60_000)
   })
 
   it('batches small related fragments into one AI run', () => {

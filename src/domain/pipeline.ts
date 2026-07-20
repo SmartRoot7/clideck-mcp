@@ -594,7 +594,6 @@ const aiPriorities = {
 } as const
 const maxFragmentAnalysisBatchBytes = 65_536
 const maxFragmentAnalysisBatchSize = 16
-const maxCombinedFragmentBytes = 16_384
 
 export function boundFragmentAnalysisBatch<
   T extends { content: string }
@@ -607,9 +606,6 @@ export function boundFragmentAnalysisBatch<
   for (const fragment of fragments) {
     if (selected.length >= maxFragmentAnalysisBatchSize) break
     const fragmentBytes = Buffer.byteLength(fragment.content, 'utf8')
-    if (selected.length > 0 && fragmentBytes > maxCombinedFragmentBytes) {
-      break
-    }
     if (
       selected.length > 0 &&
       selectedBytes + fragmentBytes > maxBytes
@@ -618,7 +614,6 @@ export function boundFragmentAnalysisBatch<
     }
     selected.push(fragment)
     selectedBytes += fragmentBytes
-    if (fragmentBytes > maxCombinedFragmentBytes) break
   }
   return selected
 }

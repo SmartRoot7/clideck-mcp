@@ -175,6 +175,17 @@ new Deep Review runs no longer reject echoed provenance hashes.
 Ready when four matching platform failures open the existing short cooldown and
 the next successful executor closes it without losing or weakening a record.
 
+### M13 — Fill the safe analysis evidence budget
+
+- `[~]` Remove the obsolete per-fragment 16 KiB stop condition from analysis
+  batching; retain the hard 64 KiB aggregate evidence limit and 16-fragment
+  record limit.
+- `[~]` Permit two normal 30 KiB converted fragments in one Luna analysis run
+  when their combined evidence remains below the hard budget.
+
+Ready when live median analysis batch size rises above one for normal converted
+documents, without any artifact-size, quality or safety regression.
+
 ## Production verification — 20 July 2026
 
 - `[x]` Deployed `bc7c950b585bd994efa704e4ca246320fbde05dd` exclusively through
