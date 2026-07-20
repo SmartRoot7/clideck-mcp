@@ -111,15 +111,21 @@ by unrelated documents, and the next official discovery remains retryable.
 
 ### M8 — Deep-review provenance binding
 
-- `[~]` Treat provenance as immutable leased evidence during Deep Review. The
+- `[x]` Treat provenance as immutable leased evidence during Deep Review. The
   reviewer may repair the claim, but cannot create, replace or invalidate a
   source URL, evidence fragment or content hash.
-- `[~]` Accept a structurally useful repaired candidate even when the model
+- `[x]` Accept a structurally useful repaired candidate even when the model
   redundantly returns malformed provenance, then restore the original evidence
   before applying the strict Domain Pack and risk checks.
 
 Ready when malformed reviewer provenance cannot reject a whole automatic
 review batch, while a repaired candidate still cannot escape evidence binding.
+
+Verified in production on 20 July 2026: deployment SHA
+`64b36ebe0a3fa31df60bad6a039add65ca904345` is live; a post-deploy aggregate
+found zero new Deep Review provenance-artifact failures. The regression suite
+also proves that an invalid model-supplied provenance hash is discarded while
+the leased provenance remains unchanged.
 
 ## Production verification — 20 July 2026
 
