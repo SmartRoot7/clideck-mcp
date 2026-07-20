@@ -2,8 +2,9 @@
 
 ## Current focus
 
-`[~]` Deploy the validated request journal, analytics and demand-driven
-learning loop, then exercise the production unknown-to-answer path.
+`[~]` Observe the production demand-driven loop through analysis, verification
+and publication, then use only measured quality or throughput gaps for the
+next improvement.
 
 ## Scope and completion journal
 
@@ -88,10 +89,30 @@ Ready when active Deep Review work can no longer produce an empty page.
 - `[x]` Keep the last valid public-stats snapshot during a transient aggregate
   timeout so deployment and the public endpoint remain available with `stale`.
 - `[~]` Exercise unknown → official discovery → publication → instant reuse.
-- `[ ]` Deploy only with `./ops/scripts/deploy-production.sh`.
+- `[x]` Deploy only with `./ops/scripts/deploy-production.sh`.
 - `[x]` Do not push GitHub until explicitly requested by the user.
 
 Ready when production smoke checks pass and the deployed SHA is recorded here.
+
+## Production verification — 20 July 2026
+
+- `[x]` Deployed `bc7c950b585bd994efa704e4ca246320fbde05dd` exclusively through
+  `./ops/scripts/deploy-production.sh`. Health, public statistics, MCP tool
+  discovery, deterministic retrieval, redaction, Change Guard, short
+  verification handles, operational workflow and upgrade smoke checks passed.
+- `[x]` Verified request observability on production: 54 public MCP tool calls
+  in the rolling 24-hour window were recorded at the point of check; 53 were
+  answered, one was an explicit unknown and there were no structured errors.
+  The local admin journal retains the validated client address; demo JSON
+  replaces the client address and request data with `XXXXXXXX` while retaining
+  the actual sanitized response.
+- `[x]` Exercised one new supported-context unknown request. It created exactly
+  one learning demand at priority `120`, was claimed before background work,
+  and completed Discover → Acquire → Convert → Chunk into a prepared official
+  source. It holds an active source slot and a high-priority analysis batch.
+- `[~]` The same demand has not yet reached publication at this observation
+  point. Do not treat discovery or a prepared source as a knowledge answer;
+  verify a repeat query only after a release makes a validated revision active.
 
 ## Operational definitions
 
