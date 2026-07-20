@@ -107,7 +107,7 @@ set +a
 sudo -u postgres psql \
   --dbname=clideck_mcp \
   --set=ON_ERROR_STOP=1 \
-  --file="$release_directory/ops/sql/grants.sql"
+  < "$release_directory/ops/sql/grants.sql"
 
 set_deployed_sha() {
   environment_file="$1"
