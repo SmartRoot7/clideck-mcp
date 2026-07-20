@@ -5,6 +5,11 @@
 CliDeck MCP is an open-source framework for building verified, continuously
 updated knowledge systems that AI agents can access through MCP.
 
+> **Built with Codex and GPT-5.6.** Codex was the primary engineering
+> environment for the project, while GPT-5.6 Luna powers its asynchronous
+> knowledge-growth pipeline. Published answers remain deterministic and do not
+> call a model at read time.
+
 A model should not have to memorize every version of every technical manual.
 It needs strong fundamentals, reasoning ability, and the ability to use tools.
 Exact, specialized, and rapidly changing facts can live in an external
@@ -14,7 +19,7 @@ CliDeck MCP implements this architecture:
 
 - known questions are answered deterministically, without calling an AI model;
 - unknown questions become high-priority learning tasks;
-- Codex discovers and analyzes official documentation;
+- Codex and GPT-5.6 discover and analyze official documentation;
 - independent validation passes check applicability and quality;
 - new knowledge is published as immutable revisions;
 - published knowledge is immediately reusable without AI.
@@ -92,7 +97,7 @@ Instant deterministic reuse
 A demand is considered learned only after the same deterministic query finds
 an active published revision.
 
-### A continuously running knowledge factory
+### A continuously running Codex knowledge factory
 
 The pipeline runs continuously while enabled. Mechanical stages do not consume
 AI tokens:
@@ -105,7 +110,8 @@ AI tokens:
 - indexing;
 - publication.
 
-Luna is used only for work that requires semantic reasoning:
+GPT-5.6 Luna runs through isolated, ephemeral Codex sessions and is used only
+for work that requires semantic reasoning:
 
 - discovering official sources;
 - analyzing ambiguous material;
@@ -114,7 +120,10 @@ Luna is used only for work that requires semantic reasoning:
 - expert tasks.
 
 Up to four isolated executors lease work atomically. The pipeline can be paused
-and resumed without duplicating tasks or published knowledge.
+and resumed without duplicating tasks or published knowledge. Routine
+discovery, analysis, verification, and Deep Review use GPT-5.6 Luna with low
+reasoning effort. Medium reasoning is reserved for unresolved Deep Review
+cases, rather than being spent on every record.
 
 ### No separate model API integration required
 
@@ -129,6 +138,46 @@ private or public knowledge system without first integrating and funding a
 separate model API.
 
 This is an operating option, not a promise of free or unlimited usage.
+
+## How Codex and GPT-5.6 were used
+
+Codex was not added at the end as a code-generation demo. It was the primary
+engineering workspace and collaborator throughout the project, from the first
+architecture decisions to the running production system.
+
+During development, Codex and GPT-5.6 were used to:
+
+- translate product goals into the MCP, worker, researcher, and admin
+  architecture;
+- define trust boundaries, immutable revision contracts, release rollback, and
+  privacy controls;
+- implement the TypeScript services, PostgreSQL migrations, Domain Pack SDK,
+  scaffolder, and local operations dashboard;
+- design and test the continuous multi-executor pipeline;
+- build security tests, deterministic evaluations, browser tests, and
+  production smoke checks;
+- inspect real pipeline telemetry and correct throughput, reliability, and
+  data-conservation defects;
+- create the canonical backup, migration, deployment, health-check, and
+  rollback workflow.
+
+Codex and GPT-5.6 are also part of the product's operation:
+
+1. A known question is answered by deterministic PostgreSQL retrieval and
+   Domain Pack validation, with no model call.
+2. An unknown question creates a prioritized learning demand.
+3. Isolated Codex executions pinned to GPT-5.6 Luna
+   (`gpt-5.6-luna`) discover official material, analyze ambiguous fragments,
+   verify candidates, and perform Deep Review.
+4. The core—not the model—enforces schemas, applicability, risk, conflicts,
+   provenance, confidence, and immutable publication.
+5. Once published, the new answer becomes instantly reusable without another
+   GPT-5.6 call.
+
+This separation is deliberate: **Codex and GPT-5.6 propose and review new
+knowledge; the deterministic core decides what is allowed to become active
+knowledge.** CliDeck MCP is therefore not a wrapper that asks an LLM a question
+and trusts whatever text comes back.
 
 ### Universal Domain Packs
 
@@ -162,8 +211,8 @@ pnpm domain:validate -- --id marine-science
 ```
 
 The scaffolder creates a manifest, schemas, mapper, fixtures, and tests. Codex
-can help adapt a fork to a new subject without rewriting the trusted
-publication and release core.
+and GPT-5.6 can help adapt a fork to a new subject without rewriting the
+trusted publication and release core.
 
 Optional providers can add object storage, spatial data, relation graphs, or
 domain-specific laboratory validation.
