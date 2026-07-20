@@ -183,6 +183,7 @@ GRANT SELECT ON
   active_source_slots,
   source_collections,
   knowledge_demands,
+  pipeline_ai_circuits,
   mcp_request_logs
 TO clideck_mcp_worker;
 GRANT INSERT, UPDATE, DELETE ON active_source_slots
