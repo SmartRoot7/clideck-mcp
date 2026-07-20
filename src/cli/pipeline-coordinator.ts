@@ -495,12 +495,17 @@ Do not return verified for a dangerous candidate with an empty rollback array.
 Repair it with an explicit evidence-supported rollback or irreversible recovery
 boundary; if that cannot be supported, reject it. Never invent rollback text.
 Return every zero-based candidate_index exactly once. repaired_candidate must be
-a complete candidate object when changed, otherwise null. Do not include or
-edit provenance in repaired_candidate: the server preserves the leased
-document identity, content hash and evidence fragment unchanged.
+null when the original candidate needs no repair. When a repair is needed,
+return a compact patch rather than a full candidate. The strict output schema
+requires every field inside changes: put a new value only for a field that must
+change and put null for every unchanged field. Use clear only to remove one of
+platform_slug, version_min, version_max, cli_mode or command. Never put the
+same field in both changes and clear. Do not include or edit provenance: the
+server preserves the leased document identity, content hash and evidence
+fragment unchanged.
 {"decisions":[{"candidate_index":0,"decision":"verified|rejected|conflict|unresolved",
 "confidence":0.0,"quality_score":0.0,"findings":["..."],
-"repaired_candidate":null}]}
+"repaired_candidate":"null, or the strict compact repair object"}]}
 `,
     expert_research: `
 Research the bounded expert question using only public official sources. Create

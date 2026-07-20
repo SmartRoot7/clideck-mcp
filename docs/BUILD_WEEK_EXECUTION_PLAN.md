@@ -704,6 +704,10 @@ Implemented locally:
 - medium Deep Review now resolves a supported candidate to verified/conflict or
   rejects only the unsupported candidate claim; an official vendor passage is
   sufficient evidence and does not require a second source;
+- Deep Review repair now transmits only a validated compact patch, not a full
+  duplicate candidate: server-held provenance and unchanged fields are
+  preserved, explicit null means no change, and only five nullable
+  applicability/CLI fields may be explicitly cleared;
 - omitted candidates, Codex process failures, and exhausted leases remain
   automatically retryable and reduce their batch size instead of entering
   quarantine;
@@ -733,6 +737,9 @@ Verified locally:
 - all 107 backend/PostgreSQL tests and 14 UI tests passed;
 - product eval 250/250, dangerous false-safe 0, p95 10.38 ms;
 - typecheck, unit/UI suites, production build, shell syntax, and diff checks.
+- compact-repair regressions prove that a strict-output null cannot erase an
+  existing field, provenance cannot be replaced, and an allowed explicit clear
+  remains narrowly scoped.
 
 Remaining for completion: one local `main` commit, the unified production
 deployment, reconciliation accounting, 20 live MCP acceptance scenarios, and

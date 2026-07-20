@@ -22,6 +22,7 @@ import {
   isRelevantToKnowledgeDemand,
   knowledgeDemandTermPatterns
 } from './knowledge-demand-relevance.js'
+import { omitNullObjectProperties } from './structured-output.js'
 import { candidateRevisionSchema } from './schemas.js'
 import { enforceKnowledgeRisk } from './risk.js'
 
@@ -326,10 +327,43 @@ const candidateDeepReviewDecisionShape = {
 }
 
 // Deep review may repair the structured claim, but not its source identity or
-// evidence. The authoritative provenance is restored from the leased candidate
-// on the server before the normal strict candidate schema is applied.
-const candidateDeepReviewRepairShape = pipelineCandidatePayloadSchema
-  .omit({ provenance: true })
+// evidence. Returning a full candidate for a one-field repair was the largest
+// Medium Review response surface and made single-record reviews needlessly
+// expensive. The server retains the leased candidate and applies only a
+// validated patch before the normal strict Domain Pack and risk checks.
+const deepReviewClearableFields = [
+  'platform_slug',
+  'version_min',
+  'version_max',
+  'cli_mode',
+  'command'
+] as const
+
+const candidateDeepReviewRepairPatchSchema = z.object({
+  changes: pipelineCandidatePayloadSchema
+    .omit({ provenance: true })
+    .partial(),
+  clear: z.array(z.enum(deepReviewClearableFields)).max(
+    deepReviewClearableFields.length,
+  ).default([])
+}).superRefine((repair, context) => {
+  if (Object.keys(repair.changes).length === 0 && repair.clear.length === 0) {
+    context.addIssue({
+      code: 'custom',
+      message: 'A deep-review repair must change or clear at least one field.',
+    })
+  }
+  for (const field of repair.clear) {
+    if (repair.changes[field] !== undefined && repair.changes[field] !== null) {
+      context.addIssue({
+        code: 'custom',
+        message: `A deep-review field cannot be changed and cleared: ${field}.`,
+      })
+    }
+  }
+})
+
+const candidateDeepReviewRepairShape = candidateDeepReviewRepairPatchSchema
   .nullable()
   .default(null)
 
@@ -391,18 +425,22 @@ export function stripUntrustedDeepReviewProvenance(
       }
       const decision = unparsedDecision as Record<string, unknown>
       const repaired = decision['repaired_candidate']
-      if (
-        !repaired ||
-        typeof repaired !== 'object' ||
-        Array.isArray(repaired)
-      ) {
+      if (!repaired || typeof repaired !== 'object' || Array.isArray(repaired)) {
         return decision
       }
-      const { provenance: _untrustedProvenance, ...repairedWithoutProvenance } =
-        repaired as Record<string, unknown>
+      const repair = repaired as Record<string, unknown>
+      const changes = repair['changes']
+      if (!changes || typeof changes !== 'object' || Array.isArray(changes)) {
+        return decision
+      }
+      const { provenance: _untrustedProvenance, ...safeChanges } =
+        changes as Record<string, unknown>
       return {
         ...decision,
-        repaired_candidate: repairedWithoutProvenance
+        repaired_candidate: {
+          ...repair,
+          changes: safeChanges
+        }
       }
     })
   }
@@ -439,12 +477,26 @@ export function materializeCandidateDeepReviewArtifact(
 
 export function applyDeepReviewRepair(
   originalCandidate: unknown,
-  repairedCandidate: Record<string, unknown>,
+  repairedCandidate: unknown,
 ): z.infer<typeof pipelineCandidatePayloadSchema> {
   const original = pipelineCandidatePayloadSchema.parse(originalCandidate)
+  // Structured-output wires encode optional patch fields as explicit null.
+  // Normalize here too, rather than relying on the coordinator, so every
+  // server-side caller has identical no-op semantics for null.
+  const repair = candidateDeepReviewRepairPatchSchema.parse(
+    omitNullObjectProperties(repairedCandidate),
+  )
+  const changes = Object.fromEntries(
+    Object.entries(repair.changes).filter(([, value]) => value !== null),
+  )
+  const repaired = {
+    ...original,
+    ...changes
+  } as Record<string, unknown>
+  for (const field of repair.clear) delete repaired[field]
   return enforceKnowledgeRisk(
     pipelineCandidatePayloadSchema.parse({
-      ...repairedCandidate,
+      ...repaired,
       provenance: original.provenance
     }),
   )

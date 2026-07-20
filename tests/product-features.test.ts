@@ -489,9 +489,10 @@ describe('deterministic source processing', () => {
         quality_score: 0.95,
         findings: ['The claim was narrowed to the leased evidence.'],
         repaired_candidate: {
-          ...original,
-          title: 'Repair MACsec rekey state',
-          provenance: [{ content_hash: 'not-a-valid-hash' }]
+          changes: {
+            title: 'Repair MACsec rekey state'
+          },
+          clear: []
         }
       }]
     }, ['00000000-0000-4000-8000-000000000001'])
@@ -509,8 +510,11 @@ describe('deterministic source processing', () => {
       decisions: [{
         candidate_index: 0,
         repaired_candidate: {
-          title: 'Echoed repair',
-          provenance: [{ content_hash: 'invalid-untrusted-hash' }]
+          changes: {
+            title: 'Echoed repair',
+            provenance: [{ content_hash: 'invalid-untrusted-hash' }]
+          },
+          clear: []
         }
       }]
     }) as {
@@ -518,8 +522,102 @@ describe('deterministic source processing', () => {
     }
 
     expect(sanitized.decisions[0]!.repaired_candidate).toEqual({
-      title: 'Echoed repair'
+      changes: {
+        title: 'Echoed repair'
+      },
+      clear: []
     })
+  })
+
+  it('applies a compact repair without erasing unchanged fields', () => {
+    const original = {
+      stable_key: 'cisco-ios-xe-compact-repair',
+      kind: 'command',
+      vendor_slug: 'cisco',
+      operating_system_slug: 'ios-xe',
+      version_max: '17.12.9',
+      title: 'Show interface status',
+      summary: 'Displays the current status of switch interfaces.',
+      question_patterns: ['How do I show interface status?'],
+      cli_mode: 'privileged_exec',
+      command: 'show interfaces status',
+      procedure: [],
+      prerequisites: [],
+      risks: [],
+      verification: ['Confirm that the expected interface is listed.'],
+      rollback: [],
+      limitations: [],
+      dangerous: false,
+      risk_level: 'safe_read_only',
+      confidence: 0.9,
+      quality_score: 0.9,
+      confidence_reason: 'The official command reference supports this check.',
+      last_verified_at: '2026-07-20',
+      provenance: [{
+        url: 'https://www.cisco.com/example-status',
+        document_type: 'command_reference',
+        title: 'Trusted leased source',
+        verified_at: '2026-07-20',
+        content_hash: `sha256:${'e'.repeat(64)}`,
+        evidence_fragment: 'show interfaces status displays interface status.',
+        evidence_role: 'primary'
+      }]
+    }
+
+    const repaired = applyDeepReviewRepair(original, {
+      changes: {
+        title: 'Show Catalyst interface status',
+        version_max: null
+      },
+      clear: []
+    })
+    expect(repaired.title).toBe('Show Catalyst interface status')
+    expect(repaired.version_max).toBe('17.12.9')
+    expect(repaired.command).toBe('show interfaces status')
+    expect(repaired.provenance).toEqual(original.provenance)
+  })
+
+  it('allows only an explicit narrow clear in a compact repair', () => {
+    const original = {
+      stable_key: 'cisco-ios-xe-clear-repair',
+      kind: 'command',
+      vendor_slug: 'cisco',
+      operating_system_slug: 'ios-xe',
+      version_max: '17.12.9',
+      title: 'Show interface counters',
+      summary: 'Displays interface counters.',
+      question_patterns: ['How do I show interface counters?'],
+      cli_mode: 'privileged_exec',
+      command: 'show interfaces counters errors',
+      procedure: [],
+      prerequisites: [],
+      risks: [],
+      verification: ['Confirm that counters are returned.'],
+      rollback: [],
+      limitations: [],
+      dangerous: false,
+      risk_level: 'safe_read_only',
+      confidence: 0.9,
+      quality_score: 0.9,
+      confidence_reason: 'The official command reference supports this check.',
+      last_verified_at: '2026-07-20',
+      provenance: [{
+        url: 'https://www.cisco.com/example-counters',
+        document_type: 'command_reference',
+        title: 'Trusted leased source',
+        verified_at: '2026-07-20',
+        content_hash: `sha256:${'f'.repeat(64)}`,
+        evidence_fragment: 'show interfaces counters errors displays counters.',
+        evidence_role: 'primary'
+      }]
+    }
+    const repaired = applyDeepReviewRepair(original, {
+      changes: {},
+      clear: ['version_max']
+    })
+    expect(repaired.version_max).toBeUndefined()
+    expect(repaired.command).toBe('show interfaces counters errors')
+    expect(repaired.provenance).toEqual(original.provenance)
   })
 
   it('canonicalizes mechanical stable-key separators before validation', () => {
