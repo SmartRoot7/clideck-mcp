@@ -356,12 +356,61 @@ export const candidateDeepReviewAgentArtifactSchema = z.object({
   })).min(1).max(20)
 })
 
+/**
+ * Deep Review is allowed to repair a candidate's operational fields, but it
+ * never owns source identity or evidence.  Luna occasionally echoes the
+ * leased provenance object despite the output contract explicitly prohibiting
+ * it.  Do not let an invalid echoed content hash discard an otherwise useful
+ * review batch: remove it before validation and restore the authoritative
+ * provenance from the leased row in applyDeepReviewRepair().
+ */
+export function stripUntrustedDeepReviewProvenance(
+  unparsedArtifact: unknown,
+): unknown {
+  if (
+    !unparsedArtifact ||
+    typeof unparsedArtifact !== 'object' ||
+    Array.isArray(unparsedArtifact)
+  ) {
+    return unparsedArtifact
+  }
+  const artifact = unparsedArtifact as Record<string, unknown>
+  if (!Array.isArray(artifact['decisions'])) return unparsedArtifact
+  return {
+    ...artifact,
+    decisions: artifact['decisions'].map((unparsedDecision) => {
+      if (
+        !unparsedDecision ||
+        typeof unparsedDecision !== 'object' ||
+        Array.isArray(unparsedDecision)
+      ) {
+        return unparsedDecision
+      }
+      const decision = unparsedDecision as Record<string, unknown>
+      const repaired = decision['repaired_candidate']
+      if (
+        !repaired ||
+        typeof repaired !== 'object' ||
+        Array.isArray(repaired)
+      ) {
+        return decision
+      }
+      const { provenance: _untrustedProvenance, ...repairedWithoutProvenance } =
+        repaired as Record<string, unknown>
+      return {
+        ...decision,
+        repaired_candidate: repairedWithoutProvenance
+      }
+    })
+  }
+}
+
 export function materializeCandidateDeepReviewArtifact(
   unparsedArtifact: unknown,
   candidateIds: string[],
 ): z.infer<typeof candidateDeepReviewArtifactSchema> {
   const artifact = candidateDeepReviewAgentArtifactSchema.parse(
-    unparsedArtifact,
+    stripUntrustedDeepReviewProvenance(unparsedArtifact),
   )
   const indexes = new Set(
     artifact.decisions.map((decision) => decision.candidate_index),
@@ -597,8 +646,12 @@ export function shouldReduceDeepReviewBatchOnFailure(
   failureMessage: string,
 ): boolean {
   if (failureCode !== 'AGENT_ARTIFACT_REJECTED') return false
-  return !/\bINTERNAL_ERROR\b|retry later with the same safe inputs/i
-    .test(failureMessage)
+  return !(
+    /\bINTERNAL_ERROR\b|retry later with the same safe inputs/i
+      .test(failureMessage) ||
+    /repaired_candidate\.provenance(?:\.\d+)?\.content_hash/i
+      .test(failureMessage)
+  )
 }
 
 async function recordEvent(

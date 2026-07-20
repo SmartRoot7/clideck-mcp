@@ -37,11 +37,23 @@ remote_host="$CLIDECK_MCP_USER@$CLIDECK_MCP_HOST"
 temporary_directory="$(mktemp -d)"
 test_database="clideck_mcp_deploy_${short_sha}_$$"
 test_database_created=0
+pipeline_pool_was_running=0
+pipeline_pool_stopped=0
+pipeline_pool_restarted=0
 
 cleanup() {
   status=$?
   trap - EXIT INT TERM
   set +e
+  # The Luna coordinators are long-lived TypeScript processes.  A production
+  # checkout switch alone cannot update code already loaded in their memory.
+  # If deployment fails after the pool was stopped, restore the prior local
+  # service so an unsuccessful release cannot leave the pipeline stranded.
+  if [[ "$pipeline_pool_was_running" -eq 1 && \
+        "$pipeline_pool_stopped" -eq 1 && \
+        "$pipeline_pool_restarted" -eq 0 ]]; then
+    pnpm pipeline:pool-start >/dev/null 2>&1 || true
+  fi
   if [[ "$test_database_created" -eq 1 ]]; then
     dropdb --if-exists "$test_database" >/dev/null 2>&1
   fi
@@ -109,6 +121,17 @@ CI=true pnpm build
 REMOTE_BUILD
 
 printf '==> Backup, atomic switch, smoke test, rollback on failure\n'
+# Stop the local Luna pool only after every local and remote build gate has
+# passed.  The remote rollout pauses the database pipeline and waits for its
+# leases; stopping here guarantees that no executor can submit an artifact
+# produced by an older in-memory coordinator after the release is switched.
+if pnpm pipeline:pool-status >/dev/null 2>&1; then
+  pipeline_pool_was_running=1
+  printf '==> Stop local Luna pool before checkout switch\n'
+  pnpm pipeline:pool-stop
+  pipeline_pool_stopped=1
+fi
+
 if [[ -n "${CLIDECK_MCP_PASSWORD:-}" ]]; then
   ssh -o ConnectTimeout=10 "$remote_host" \
     "if test -f /tmp/clideck-mcp-build-$commit_sha/ops/scripts/deploy-production-remote.sh; then sudo -S -p '' /bin/bash /tmp/clideck-mcp-build-$commit_sha/ops/scripts/deploy-production-remote.sh '$commit_sha' '/tmp/clideck-mcp-build-$commit_sha'; else sudo -S -p '' /bin/bash /opt/clideck-mcp/releases/$commit_sha/ops/scripts/deploy-production-remote.sh '$commit_sha' '/tmp/clideck-mcp-build-$commit_sha'; fi" \
@@ -116,6 +139,13 @@ if [[ -n "${CLIDECK_MCP_PASSWORD:-}" ]]; then
 else
   ssh -o ConnectTimeout=10 "$remote_host" \
     "if test -f /tmp/clideck-mcp-build-$commit_sha/ops/scripts/deploy-production-remote.sh; then sudo -n /bin/bash /tmp/clideck-mcp-build-$commit_sha/ops/scripts/deploy-production-remote.sh '$commit_sha' '/tmp/clideck-mcp-build-$commit_sha'; else sudo -n /bin/bash /opt/clideck-mcp/releases/$commit_sha/ops/scripts/deploy-production-remote.sh '$commit_sha' '/tmp/clideck-mcp-build-$commit_sha'; fi"
+fi
+
+if [[ "$pipeline_pool_was_running" -eq 1 ]]; then
+  printf '==> Start local Luna pool on %s\n' "$commit_sha"
+  pnpm pipeline:pool-start
+  pipeline_pool_restarted=1
+  pnpm pipeline:pool-status >/dev/null
 fi
 
 curl --fail --silent --show-error https://mcp.clideck.com/health >/dev/null

@@ -114,18 +114,18 @@ by unrelated documents, and the next official discovery remains retryable.
 - `[x]` Treat provenance as immutable leased evidence during Deep Review. The
   reviewer may repair the claim, but cannot create, replace or invalidate a
   source URL, evidence fragment or content hash.
-- `[x]` Accept a structurally useful repaired candidate even when the model
+- `[~]` Accept a structurally useful repaired candidate even when the model
   redundantly returns malformed provenance, then restore the original evidence
   before applying the strict Domain Pack and risk checks.
 
 Ready when malformed reviewer provenance cannot reject a whole automatic
 review batch, while a repaired candidate still cannot escape evidence binding.
 
-Deployed in production on 20 July 2026: SHA
-`64b36ebe0a3fa31df60bad6a039add65ca904345` is live. The regression suite
-proves that an invalid model-supplied provenance hash is discarded while the
-leased provenance remains unchanged. Live observation remains in progress;
-short post-deploy inactivity is not treated as proof of long-run behavior.
+The code and regression suite prove that an invalid model-supplied provenance
+hash is discarded while the leased provenance remains unchanged. Production
+observation found that the long-lived local Luna pool was still executing an
+older in-memory coordinator after remote deployment, so this is not yet marked
+as live-verified. M11 makes a pool restart part of the single deployment path.
 
 ### M9 — Early dangerous-record completeness gate
 
@@ -150,6 +150,18 @@ remain publishable.
 
 Ready when a transient failure retries the same evidence batch without
 silently degrading it to one-record Luna runs.
+
+### M11 — Deploy the coordinator code that was actually reviewed
+
+- `[~]` Stop a running local Luna pool after the full preflight succeeds and
+  before the remote rollout pauses and switches production.
+- `[~]` Restart that pool only after the remote release and smoke tests succeed,
+  so every executor loads the exact committed coordinator source.
+- `[~]` Restore a previously running local pool in the deployment cleanup path
+  if a rollout fails, without changing an intentionally stopped pool.
+
+Ready when the local executor process start time follows the deployment and
+new Deep Review runs no longer reject echoed provenance hashes.
 
 ## Production verification — 20 July 2026
 

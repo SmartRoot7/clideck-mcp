@@ -19,6 +19,7 @@ import {
   applyDeepReviewRepair,
   getDeterministicRiskDisposition,
   shouldReduceDeepReviewBatchOnFailure,
+  stripUntrustedDeepReviewProvenance,
   materializeCandidateDeepReviewArtifact,
   materializeCandidateVerificationArtifact,
   normalizeCandidateAnalysisOptionalFields,
@@ -190,6 +191,10 @@ describe('deterministic source processing', () => {
       'AGENT_ARTIFACT_REJECTED',
       'The generated artifact failed validation: every candidate index must be returned exactly once.',
     )).toBe(true)
+    expect(shouldReduceDeepReviewBatchOnFailure(
+      'AGENT_ARTIFACT_REJECTED',
+      'The generated artifact failed validation: decisions.0.repaired_candidate.provenance.0.content_hash: Invalid string: must match pattern.',
+    )).toBe(false)
   })
 
   it('accepts finite client limits so handlers can clamp them safely', () => {
@@ -452,6 +457,24 @@ describe('deterministic source processing', () => {
     )
     expect(repaired.title).toBe('Repair MACsec rekey state')
     expect(repaired.provenance).toEqual(original.provenance)
+  })
+
+  it('removes echoed deep-review provenance before it reaches validation', () => {
+    const sanitized = stripUntrustedDeepReviewProvenance({
+      decisions: [{
+        candidate_index: 0,
+        repaired_candidate: {
+          title: 'Echoed repair',
+          provenance: [{ content_hash: 'invalid-untrusted-hash' }]
+        }
+      }]
+    }) as {
+      decisions: Array<{ repaired_candidate?: Record<string, unknown> }>
+    }
+
+    expect(sanitized.decisions[0]!.repaired_candidate).toEqual({
+      title: 'Echoed repair'
+    })
   })
 
   it('canonicalizes mechanical stable-key separators before validation', () => {
