@@ -744,6 +744,10 @@ Verified locally:
   supervisor restart only when its exact executor has no live matching lease;
   this prevents an expired Medium probe from starving the entire Medium queue
   while retaining the single-probe safety invariant.
+- after a complete Deep Review artifact, an unreserved cohort recovers its
+  batch limit gradually (1 → 2 → 4 → 8 → 16 → 20); malformed/omitted output
+  still shrinks only its affected batch, and every widened result passes the
+  same Domain Pack, risk, version, conflict, and publication gates.
 
 Remaining for completion: one local `main` commit, the unified production
 deployment, reconciliation accounting, 20 live MCP acceptance scenarios, and

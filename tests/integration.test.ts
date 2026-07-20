@@ -3802,6 +3802,85 @@ describeIntegration('PostgreSQL integration', () => {
         reasoning_output_tokens: 10,
         duration_ms: 40
       })
+      await database.query(
+        `UPDATE knowledge_candidates
+            SET deep_review_batch_limit = 1
+          WHERE id = $1`,
+        [mediumPayload.candidates[0]!.id],
+      )
+      const siblings = await database.query<{ id: string }>(
+        `INSERT INTO knowledge_candidates (
+           pipeline_task_id,
+           source_fragment_id,
+           stable_key,
+           payload,
+           content_hash,
+           status,
+           dangerous,
+           confidence,
+           quality_score,
+           resolution_attempts,
+           resolution_code,
+           resolution_reason,
+           next_review_at,
+           deep_review_batch_limit,
+           technical_retry_count
+         )
+         SELECT
+           pipeline_task_id,
+           source_fragment_id,
+           stable_key || '-batch-ramp-' || generated.ordinal::text,
+           payload,
+           'sha256:' || encode(
+             digest($2 || generated.ordinal::text, 'sha256'),
+             'hex'
+           ),
+           'deep_review',
+           dangerous,
+           confidence,
+           quality_score,
+           1,
+           'deep_reviewer_omitted',
+           'Synthetic sibling for Deep Review batch-ramp coverage.',
+           now(),
+           1,
+           0
+         FROM knowledge_candidates
+         CROSS JOIN generate_series(1, 5) AS generated(ordinal)
+         WHERE id = $1
+         RETURNING id`,
+        [
+          mediumPayload.candidates[0]!.id,
+          `deep-review-batch-ramp:${sourceId}`,
+        ],
+      )
+      // submitCandidateDeepReview eagerly queues the retry before this test
+      // lowers the cohort limit. Clear that stale reservation so the next
+      // scheduler cycle is forced to build a fresh one-record batch.
+      await database.query(
+        `UPDATE pipeline_tasks
+            SET status = 'cancelled',
+                completed_at = now(),
+                updated_at = now()
+          WHERE source_candidate_id = $1
+            AND task_type = 'candidate_deep_review'
+            AND requested_reasoning_effort = 'medium'
+            AND status = 'queued'`,
+        [sourceId],
+      )
+      await database.query(
+        `UPDATE knowledge_candidates
+            SET deep_review_task_id = NULL,
+                updated_at = now()
+          WHERE id = ANY($1::uuid[])
+            AND status = 'deep_review'`,
+        [
+          [
+            mediumPayload.candidates[0]!.id,
+            ...siblings.rows.map((sibling) => sibling.id),
+          ],
+        ],
+      )
 
       const retriedMediumReview = await claimPipelineTask(
         database,
@@ -3811,6 +3890,10 @@ describeIntegration('PostgreSQL integration', () => {
       expect(retriedMediumReview).toMatchObject({
         task_type: 'candidate_deep_review',
         requested_reasoning_effort: 'medium'
+      })
+      expect(retriedMediumReview['payload']).toMatchObject({
+        batch_limit: 1,
+        resolution_code: 'deep_reviewer_omitted'
       })
       await submitCandidateDeepReview(
         database,
@@ -3830,6 +3913,38 @@ describeIntegration('PostgreSQL integration', () => {
           }]
         },
         'independent-integration-medium-reviewer',
+      )
+      const widenedSiblings = await database.query<{
+        widened: number
+      }>(
+        `SELECT count(*) FILTER (
+           WHERE deep_review_batch_limit = 2
+         )::int AS widened
+         FROM knowledge_candidates
+         WHERE id = ANY($1::uuid[])`,
+        [siblings.rows.map((sibling) => sibling.id)],
+      )
+      expect(widenedSiblings.rows[0]?.widened).toBeGreaterThan(0)
+      await database.query(
+        `UPDATE pipeline_tasks
+            SET status = 'cancelled',
+                completed_at = now(),
+                updated_at = now()
+          WHERE id = ANY(
+            SELECT DISTINCT deep_review_task_id
+            FROM knowledge_candidates
+            WHERE id = ANY($1::uuid[])
+              AND deep_review_task_id IS NOT NULL
+          )`,
+        [siblings.rows.map((sibling) => sibling.id)],
+      )
+      await database.query(
+        `UPDATE knowledge_candidates
+            SET status = 'rejected',
+                deep_review_task_id = NULL,
+                updated_at = now()
+          WHERE id = ANY($1::uuid[])`,
+        [siblings.rows.map((sibling) => sibling.id)],
       )
       await recordAgentRunResult(database, {
         agent_run_id: String(retriedMediumReview['agent_run_id']),

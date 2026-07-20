@@ -733,6 +733,21 @@ export function shouldReduceDeepReviewBatchOnFailure(
 }
 
 /**
+ * Batch shrinking is only useful when an artifact actually proves the current
+ * response is too large. Once a complete, schema-valid pass succeeds at the
+ * current size, recover capacity gradually. This prevents an old omitted
+ * candidate from pinning an entire source cohort to one-record Luna runs.
+ */
+export function nextDeepReviewBatchLimitAfterCleanPass(
+  currentBatchLimit: number,
+  handledRecords: number,
+): number {
+  const current = Math.min(20, Math.max(1, Math.trunc(currentBatchLimit)))
+  if (Math.trunc(handledRecords) < current) return current
+  return Math.min(20, current * 2)
+}
+
+/**
  * The Codex CLI may exit successfully while emitting a structured
  * `INTERNAL_ERROR` instead of the requested artifact.  This is a temporary
  * platform failure, not a malformed knowledge record; it must use the same
@@ -1214,6 +1229,7 @@ async function queueDeepReviewWork(
        )
        AND coalesce(kc.resolution_code, 'unspecified') =
            coalesce($3::text, 'unspecified')
+       AND kc.deep_review_batch_limit = $5
      ORDER BY kc.created_at
      LIMIT $4
      FOR UPDATE OF kc SKIP LOCKED`,
@@ -1221,6 +1237,7 @@ async function queueDeepReviewWork(
       first.source_candidate_id,
       reviewPass,
       first.resolution_code,
+      first.deep_review_batch_limit,
       first.deep_review_batch_limit
     ],
   )
@@ -1239,6 +1256,8 @@ async function queueDeepReviewWork(
     knowledgeDemandId: first.knowledge_demand_id,
     payload: {
       review_pass: reviewPass,
+      batch_limit: first.deep_review_batch_limit,
+      resolution_code: first.resolution_code,
       candidates: batch.rows
     },
     reasoningEffort: reviewPass
@@ -4445,6 +4464,14 @@ export async function submitCandidateDeepReview(
       quarantined: 0,
       manual_exception: 0
     }
+    const configuredBatchLimit = Number(task.payload['batch_limit'])
+    const taskBatchLimit = Number.isInteger(configuredBatchLimit)
+      ? Math.min(20, Math.max(1, configuredBatchLimit))
+      : Math.min(20, Math.max(1, allowedCandidateIds.size))
+    let cohortResolutionCode = typeof task.payload['resolution_code'] ===
+      'string'
+      ? task.payload['resolution_code']
+      : null
     for (const decision of input.decisions) {
       if (!allowedCandidateIds.has(decision.candidate_id)) {
         throw new Error('PIPELINE_CANDIDATE_NOT_IN_TASK')
@@ -4453,8 +4480,9 @@ export async function submitCandidateDeepReview(
         payload: unknown
         dangerous: boolean
         resolution_reason: string | null
+        resolution_code: string | null
       }>(
-        `SELECT payload, dangerous, resolution_reason
+        `SELECT payload, dangerous, resolution_reason, resolution_code
          FROM knowledge_candidates
          WHERE id = $1
            AND deep_review_task_id = $2
@@ -4466,6 +4494,11 @@ export async function submitCandidateDeepReview(
       if (!row) {
         throw new Error('PIPELINE_CANDIDATE_RESERVATION_INVALID')
       }
+
+      // Tasks created before batch metadata was added remain valid after an
+      // application rollout. Read the server-owned candidate code as a
+      // compatibility fallback rather than silently skipping recovery.
+      cohortResolutionCode ??= row.resolution_code
 
       let candidatePayload = row.payload
       let repairedPayloadHash: string | null = null
@@ -4607,6 +4640,7 @@ export async function submitCandidateDeepReview(
                   ELSE NULL
                 END,
                 deep_review_batch_limit = 20,
+                technical_retry_count = 0,
                 last_technical_failure_code = NULL,
                 updated_at = now()
           WHERE id = $1
@@ -4657,6 +4691,40 @@ export async function submitCandidateDeepReview(
       )
       if (reviewPass === 'low') {
         counts.escalated_to_medium += omitted.length
+      }
+    }
+    if (omitted.length === 0) {
+      const recoveredBatchLimit = nextDeepReviewBatchLimitAfterCleanPass(
+        taskBatchLimit,
+        allowedCandidateIds.size,
+      )
+      if (recoveredBatchLimit > taskBatchLimit) {
+        await client.query(
+          `UPDATE knowledge_candidates candidate
+              SET deep_review_batch_limit = $1,
+                  updated_at = now()
+             FROM pipeline_tasks candidate_task
+            WHERE candidate.pipeline_task_id = candidate_task.id
+              AND candidate_task.source_candidate_id IS NOT DISTINCT FROM $2::uuid
+              AND candidate.status IN ('deep_review', 'quarantined')
+              AND candidate.deep_review_task_id IS NULL
+              AND candidate.deep_review_batch_limit = $3
+              AND coalesce(candidate.resolution_code, 'unspecified') =
+                  coalesce($4::text, 'unspecified')
+              AND (
+                CASE WHEN $5 = 'medium'
+                  THEN candidate.resolution_attempts > 0
+                  ELSE candidate.resolution_attempts = 0
+                END
+              )`,
+          [
+            recoveredBatchLimit,
+            task.source_candidate_id,
+            taskBatchLimit,
+            cohortResolutionCode,
+            reviewPass,
+          ],
+        )
       }
     }
     if (task.source_candidate_id && counts.verified > 0) {

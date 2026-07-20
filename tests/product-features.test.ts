@@ -18,6 +18,7 @@ import {
   discoverySubmissionSchema,
   expertResearchStructuredArtifactSchema,
   applyDeepReviewRepair,
+  nextDeepReviewBatchLimitAfterCleanPass,
   getDeterministicRiskDisposition,
   isRetryableCodexPlatformArtifactFailure,
   shouldReduceDeepReviewBatchOnFailure,
@@ -216,6 +217,14 @@ describe('deterministic source processing', () => {
       'AGENT_ARTIFACT_REJECTED',
       'The generated artifact failed validation: decisions.0.repaired_candidate.provenance.0.content_hash: Invalid string: must match pattern.',
     )).toBe(false)
+  })
+
+  it('recovers Deep Review capacity only after a complete clean batch', () => {
+    expect(nextDeepReviewBatchLimitAfterCleanPass(1, 1)).toBe(2)
+    expect(nextDeepReviewBatchLimitAfterCleanPass(2, 2)).toBe(4)
+    expect(nextDeepReviewBatchLimitAfterCleanPass(10, 10)).toBe(20)
+    expect(nextDeepReviewBatchLimitAfterCleanPass(20, 20)).toBe(20)
+    expect(nextDeepReviewBatchLimitAfterCleanPass(10, 4)).toBe(10)
   })
 
   it('adds an unknown-question context only to the leased AI payload', () => {
