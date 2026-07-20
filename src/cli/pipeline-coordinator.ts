@@ -435,6 +435,14 @@ platform_slug to null unless its exact registered slug is known from the input.
 Use the fragment content_hash in provenance, not a newly invented hash.
 Confidence and quality_score are JSON numbers between 0 and 1.
 
+For any candidate that changes configuration, interrupts service, erases data,
+or otherwise has a non-read-only effect, set dangerous=true and include at
+least one explicit rollback entry. A rollback may state that no direct rollback
+exists only when the leased evidence supports that limitation and names the
+documented recovery boundary. Do not invent a recovery procedure. If the
+leased evidence cannot support a complete dangerous procedure including this
+information, reject that fact instead of emitting an incomplete candidate.
+
 Return exactly:
 {"candidates":[{"fragment_id":"leased uuid","candidate":{"stable_key":"...","kind":"command","vendor_slug":"...","platform_slug":null,"operating_system_slug":"...","version_min":null,"version_max":null,"title":"...","summary":"...","question_patterns":["..."],"cli_mode":null,"command":null,"procedure":[],"prerequisites":[],"risks":[],"verification":["..."],"rollback":[],"limitations":[],"dangerous":false,"risk_level":"safe_read_only","confidence":0.95,"quality_score":0.95,"confidence_reason":"...","last_verified_at":"${verifiedDate}","provenance":[{"url":"https://...","document_type":"...","title":"...","document_version":null,"document_date":null,"verified_at":"${verifiedDate}","content_hash":"sha256:...","evidence_fragment":"...","evidence_role":"primary"}]}}],
 "rejected_fragments":[{"fragment_id":"leased uuid","reason":"8-500 characters"}]}
@@ -444,6 +452,9 @@ Independently verify every leased candidate against its evidence, applicability,
 version bounds, risk and existing limitations. Do not trust extraction choices.
 Use verified only when evidence supports the complete structured claim. A
 dangerous item needs confidence at least 0.95; other items need at least 0.90.
+Before choosing verified, recompute risk from the command and procedure. A
+dangerous candidate must have a non-empty, evidence-supported rollback array.
+If rollback is absent or unsupported, choose deep_review rather than verified.
 Do not browse during standard verification; unresolved critical ambiguity must
 be routed to automatic deep review.
 Submit one decision per candidate:
@@ -466,6 +477,9 @@ do not demand a second source. If the official text supports only part of the
 candidate, repair the candidate to that narrower claim. If the claim remains
 unsupported after the bounded medium pass, reject that candidate rather than
 the source document. The medium pass must not return unresolved.
+Do not return verified for a dangerous candidate with an empty rollback array.
+Repair it with an explicit evidence-supported rollback or irreversible recovery
+boundary; if that cannot be supported, reject it. Never invent rollback text.
 Return every zero-based candidate_index exactly once. repaired_candidate must be
 a complete candidate object when changed, otherwise null. Do not include or
 edit provenance in repaired_candidate: the server preserves the leased

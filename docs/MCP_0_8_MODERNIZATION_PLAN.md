@@ -133,6 +133,9 @@ short post-deploy inactivity is not treated as proof of long-run behavior.
   verification, before a record can become Ready.
 - `[~]` Keep publication preflight as the final invariant, but eliminate the
   avoidable Ready → Deep Review loop for records already known to be incomplete.
+- `[~]` Make the Luna extraction, standard verification and Deep Review
+  instructions require an evidence-supported rollback or an explicit,
+  documented irreversibility boundary for dangerous procedures.
 
 Ready when no newly verified dangerous record without rollback reaches the
 mechanical publisher, while dangerous records with an evidence-backed rollback
