@@ -267,7 +267,8 @@ GRANT INSERT ON
   candidate_verifications,
   agent_runs,
   active_source_slots,
-  worker_heartbeats
+  worker_heartbeats,
+  pipeline_ai_circuits
 TO clideck_mcp_researcher;
 GRANT UPDATE ON
   coverage_targets,
