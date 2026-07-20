@@ -4,6 +4,8 @@ import {
   REDACTED_SOURCE_IDENTITY,
   sanitizeDemoExpertTasks,
   sanitizeDemoFeedback,
+  sanitizeDemoMcpRequestDetail,
+  sanitizeDemoMcpRequestPage,
   sanitizeDemoPipeline,
   sanitizeDemoProvenance,
   sanitizeDemoReleases,
@@ -11,6 +13,68 @@ import {
 } from '../src/domain/public-demo.js'
 
 describe('public demo security projections', () => {
+  it('keeps MCP answers while redacting the caller and question', () => {
+    const page = sanitizeDemoMcpRequestPage({
+      items: [{
+        id: '42',
+        request_id: 'request-id',
+        client_ip: '203.0.113.17',
+        actor_kind: 'anonymous',
+        tool_name: 'query_network_knowledge',
+        question_preview: 'Private user question',
+        response_preview: 'Use show interfaces counters errors.',
+        outcome: 'success',
+        error_code: null,
+        retryable: false,
+        duration_ms: 25,
+        knowledge_demand_id: null,
+        learning_status: null,
+        demand_count: null,
+        result_release_id: null,
+        occurred_at: '2026-07-20T12:00:00.000Z'
+      }],
+      total: 1,
+      limit: 50,
+      offset: 0
+    })
+    const detail = sanitizeDemoMcpRequestDetail({
+      ...page.items[0]!,
+      request_payload: {
+        question: 'Private user question',
+        context: { vendor: 'Cisco' }
+      },
+      response_payload: {
+        answers: [{
+          title: 'Inspect interface counters',
+          command: 'show interfaces counters errors'
+        }]
+      },
+      first_seen_at: null,
+      last_seen_at: null,
+      result_release_sequence: null
+    })
+
+    expect(page.items[0]).toMatchObject({
+      request_id: REDACTED_SOURCE_IDENTITY,
+      client_ip: REDACTED_SOURCE_IDENTITY,
+      question_preview: REDACTED_SOURCE_IDENTITY,
+      response_preview: 'Use show interfaces counters errors.'
+    })
+    expect(detail.request_payload).toEqual({
+      question: REDACTED_SOURCE_IDENTITY,
+      context: { vendor: REDACTED_SOURCE_IDENTITY }
+    })
+    expect(detail.response_payload).toMatchObject({
+      answers: [{
+        command: 'show interfaces counters errors'
+      }]
+    })
+    expect(JSON.stringify({ page, detail })).not.toContain('203.0.113.17')
+    expect(JSON.stringify({ page, detail })).not.toContain(
+      'Private user question',
+    )
+  })
+
   it('projects normal provenance without source identities or hashes', () => {
     const result = sanitizeDemoProvenance({
       revision_id: 'revision-1',

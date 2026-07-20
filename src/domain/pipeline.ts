@@ -486,6 +486,7 @@ export type PipelineTaskRow = {
   coverage_target_id: string | null
   source_candidate_id: string | null
   expert_task_id: string | null
+  knowledge_demand_id: string | null
   requested_reasoning_effort?: 'low' | 'medium'
   attempts?: number
 }
@@ -632,6 +633,7 @@ async function insertTask(
     coverageTargetId?: string | null
     sourceId?: string | null
     expertTaskId?: string | null
+    knowledgeDemandId?: string | null
     payload?: Record<string, unknown>
     reasoningEffort?: 'low' | 'medium'
   },
@@ -644,11 +646,12 @@ async function insertTask(
        coverage_target_id,
        source_candidate_id,
        expert_task_id,
+       knowledge_demand_id,
        dedupe_key,
        payload,
        requested_reasoning_effort
      )
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10)
      ON CONFLICT (dedupe_key)
        WHERE status IN ('queued', 'claimed', 'running')
      DO NOTHING
@@ -660,6 +663,7 @@ async function insertTask(
       input.coverageTargetId ?? null,
       input.sourceId ?? null,
       input.expertTaskId ?? null,
+      input.knowledgeDemandId ?? null,
       input.dedupeKey,
       JSON.stringify(input.payload ?? {}),
       input.reasoningEffort ?? 'low'
@@ -914,6 +918,7 @@ async function queueDeepReviewWork(
     id: string
     pipeline_task_id: string
     source_candidate_id: string | null
+    knowledge_demand_id: string | null
     resolution_attempts: number
     resolution_reason: string | null
     resolution_code: string | null
@@ -923,12 +928,15 @@ async function queueDeepReviewWork(
        kc.id,
        kc.pipeline_task_id,
        pt.source_candidate_id,
+       source.knowledge_demand_id,
        kc.resolution_attempts,
        kc.resolution_reason,
        kc.resolution_code,
        kc.deep_review_batch_limit
      FROM knowledge_candidates kc
      JOIN pipeline_tasks pt ON pt.id = kc.pipeline_task_id
+     LEFT JOIN source_candidates source
+       ON source.id = pt.source_candidate_id
      WHERE kc.status IN ('deep_review', 'quarantined')
        AND kc.deep_review_task_id IS NULL
        AND (
@@ -943,6 +951,7 @@ async function queueDeepReviewWork(
          END
        )
      ORDER BY
+       CASE WHEN source.knowledge_demand_id IS NOT NULL THEN 0 ELSE 1 END,
        CASE WHEN kc.status = 'deep_review' THEN 0 ELSE 1 END,
        kc.next_review_at NULLS FIRST,
        kc.created_at
@@ -1008,12 +1017,13 @@ async function queueDeepReviewWork(
     type: 'candidate_deep_review',
     stage: 'deep_review',
     priority: reviewPass === 'medium'
-      ? aiPriorities.deepMedium
-      : aiPriorities.deepLow,
+      ? (first.knowledge_demand_id ? 120 : aiPriorities.deepMedium)
+      : (first.knowledge_demand_id ? 120 : aiPriorities.deepLow),
     dedupeKey: `deep-review:${reviewPass}:${sha256Label(
       candidateIds.join(','),
     )}`,
     sourceId: first.source_candidate_id,
+    knowledgeDemandId: first.knowledge_demand_id,
     payload: {
       review_pass: reviewPass,
       candidates: batch.rows
@@ -1053,6 +1063,7 @@ async function queueSourceWork(
     title: string
     document_version: string | null
     document_date: string | null
+    knowledge_demand_id: string | null
   }>(
     `SELECT
        sc.id,
@@ -1068,7 +1079,8 @@ async function queueSourceWork(
        sc.document_type,
        sc.title,
        sc.document_version,
-       sc.document_date
+       sc.document_date,
+       sc.knowledge_demand_id
      FROM source_candidates sc
      JOIN coverage_targets ct ON ct.id = sc.coverage_target_id
      WHERE sc.id = $1
@@ -1131,16 +1143,37 @@ async function queueSourceWork(
       document_role: source.document_role
     }
   }
+  const taskPriority = source.knowledge_demand_id ? 120 : null
+  if (source.knowledge_demand_id) {
+    await client.query(
+      `UPDATE knowledge_demands
+          SET status = CASE
+                WHEN $2 = ANY($3::text[]) THEN 'acquiring'
+                ELSE 'processing'
+              END,
+              source_candidate_id = coalesce(source_candidate_id, $4),
+              last_seen_at = now()
+        WHERE id = $1
+          AND status <> 'published'`,
+      [
+        source.knowledge_demand_id,
+        source.status,
+        ['discovered', 'approved', 'acquiring'],
+        source.id
+      ],
+    )
+  }
 
   if (['discovered', 'approved', 'acquiring'].includes(source.status)) {
     if (mode !== 'mechanical') return false
     return Boolean(await insertTask(client, {
       type: 'source_acquisition',
       stage: 'acquire',
-      priority: 80,
+      priority: taskPriority ?? 80,
       dedupeKey: `source:${source.id}:acquire`,
       coverageTargetId: source.coverage_target_id,
       sourceId: source.id,
+      knowledgeDemandId: source.knowledge_demand_id,
       payload: basePayload
     }))
   }
@@ -1149,10 +1182,11 @@ async function queueSourceWork(
     return Boolean(await insertTask(client, {
       type: 'source_conversion',
       stage: 'convert',
-      priority: 78,
+      priority: taskPriority ?? 78,
       dedupeKey: `source:${source.id}:convert`,
       coverageTargetId: source.coverage_target_id,
       sourceId: source.id,
+      knowledgeDemandId: source.knowledge_demand_id,
       payload: basePayload
     }))
   }
@@ -1161,10 +1195,11 @@ async function queueSourceWork(
     return Boolean(await insertTask(client, {
       type: 'source_chunking',
       stage: 'chunk',
-      priority: 76,
+      priority: taskPriority ?? 76,
       dedupeKey: `source:${source.id}:chunk`,
       coverageTargetId: source.coverage_target_id,
       sourceId: source.id,
+      knowledgeDemandId: source.knowledge_demand_id,
       payload: basePayload
     }))
   }
@@ -1228,12 +1263,13 @@ async function queueSourceWork(
       const taskId = await insertTask(client, {
         type: 'candidate_verification',
         stage: 'verify',
-        priority: aiPriorities.verify,
+        priority: taskPriority ?? aiPriorities.verify,
         dedupeKey: `source:${source.id}:verify:${sha256Label(
           candidateIds.join(','),
         )}`,
         coverageTargetId: source.coverage_target_id,
         sourceId: source.id,
+        knowledgeDemandId: source.knowledge_demand_id,
         payload: {
           ...basePayload,
           candidates: analyzedCandidates.rows
@@ -1294,12 +1330,13 @@ async function queueSourceWork(
       const taskId = await insertTask(client, {
         type: 'fragment_analysis',
         stage: 'analyze',
-        priority: aiPriorities.analyze,
+        priority: taskPriority ?? aiPriorities.analyze,
         dedupeKey: `source:${source.id}:analyze:${sha256Label(
           fragmentIds.join(','),
         )}`,
         coverageTargetId: source.coverage_target_id,
         sourceId: source.id,
+        knowledgeDemandId: source.knowledge_demand_id,
         payload: {
           ...basePayload,
           fragments: analysisFragments
@@ -1359,10 +1396,11 @@ async function queueSourceWork(
     return Boolean(await insertTask(client, {
       type: 'source_publication',
       stage: 'publish',
-      priority: 74,
+      priority: taskPriority ?? 74,
       dedupeKey: `source:${source.id}:publish`,
       coverageTargetId: source.coverage_target_id,
       sourceId: source.id,
+      knowledgeDemandId: source.knowledge_demand_id,
       payload: basePayload
     }))
   }
@@ -1459,6 +1497,97 @@ async function queueDiscoveryWork(client: DatabaseClient): Promise<boolean> {
   }))
 }
 
+async function queueDemandDiscoveryWork(
+  client: DatabaseClient,
+): Promise<boolean> {
+  const demand = await client.query<{
+    id: string
+    question: string
+    tool_name: string
+    context: Record<string, unknown>
+    coverage_target_id: string
+    vendor_slug: string
+    product_family: string | null
+    model: string | null
+    operating_system_slug: string
+    version_branch: string | null
+    document_role: string
+    priority: number
+  }>(
+    `SELECT
+       demand.id,
+       demand.question,
+       demand.tool_name,
+       demand.context,
+       demand.coverage_target_id,
+       target.vendor_slug,
+       target.product_family,
+       target.model,
+       target.operating_system_slug,
+       target.version_branch,
+       target.document_role,
+       target.priority
+     FROM knowledge_demands demand
+     JOIN coverage_targets target
+       ON target.id = demand.coverage_target_id
+     WHERE demand.status IN ('queued', 'unresolved', 'failed')
+       AND demand.next_retry_at <= now()
+       AND NOT EXISTS (
+         SELECT 1
+         FROM pipeline_tasks active
+         WHERE active.knowledge_demand_id = demand.id
+           AND active.status IN ('queued', 'claimed', 'running')
+       )
+     ORDER BY demand.priority DESC, demand.first_seen_at
+     LIMIT 1
+     FOR UPDATE OF demand SKIP LOCKED`,
+  )
+  const row = demand.rows[0]
+  if (!row) return false
+  const taskId = await insertTask(client, {
+    type: 'source_discovery',
+    stage: 'discover',
+    priority: 120,
+    dedupeKey: `demand:${row.id}:discover`,
+    coverageTargetId: row.coverage_target_id,
+    knowledgeDemandId: row.id,
+    payload: {
+      coverage_target: {
+        id: row.coverage_target_id,
+        vendor_slug: row.vendor_slug,
+        product_family: row.product_family,
+        model: row.model,
+        operating_system_slug: row.operating_system_slug,
+        version_branch: row.version_branch,
+        document_role: row.document_role,
+        priority: row.priority
+      },
+      knowledge_demand: {
+        question: row.question,
+        tool_name: row.tool_name,
+        context: row.context
+      },
+      requirements: {
+        public_https_only: true,
+        official_vendor_sources_only: true,
+        no_authenticated_sources: true,
+        source_urls_are_internal: true
+      }
+    }
+  })
+  if (!taskId) return false
+  await client.query(
+    `UPDATE knowledge_demands
+        SET status = 'discovering',
+            discovery_task_id = $2,
+            last_error_code = NULL,
+            last_seen_at = now()
+      WHERE id = $1`,
+    [row.id, taskId],
+  )
+  return true
+}
+
 async function queueCandidatePublication(
   client: DatabaseClient,
 ): Promise<boolean> {
@@ -1492,16 +1621,23 @@ async function queueCandidatePublication(
     id: string
     pipeline_task_id: string
     source_candidate_id: string | null
+    knowledge_demand_id: string | null
   }>(
     `SELECT
        candidate.id,
        candidate.pipeline_task_id,
-       task.source_candidate_id
+       task.source_candidate_id,
+       source.knowledge_demand_id
      FROM knowledge_candidates candidate
      JOIN pipeline_tasks task ON task.id = candidate.pipeline_task_id
+     LEFT JOIN source_candidates source
+       ON source.id = task.source_candidate_id
      WHERE candidate.status = 'verified'
        AND candidate.publication_task_id IS NULL
-     ORDER BY candidate.updated_at, candidate.created_at
+     ORDER BY
+       CASE WHEN source.knowledge_demand_id IS NOT NULL THEN 0 ELSE 1 END,
+       candidate.updated_at,
+       candidate.created_at
      LIMIT 50
      FOR UPDATE OF candidate SKIP LOCKED`,
   )
@@ -1516,12 +1652,22 @@ async function queueCandidatePublication(
       ),
     )
   ]
+  const demandIds = [
+    ...new Set(
+      batch.rows.flatMap((candidate) =>
+        candidate.knowledge_demand_id
+          ? [candidate.knowledge_demand_id]
+          : [],
+      ),
+    )
+  ]
   const taskId = await insertTask(client, {
     type: 'candidate_publication',
     stage: 'publish',
-    priority: 98,
+    priority: demandIds.length > 0 ? 120 : 98,
     dedupeKey: `records:publish:${sha256Label(candidateIds.join(','))}`,
     sourceId: sourceIds.length === 1 ? sourceIds[0]! : null,
+    knowledgeDemandId: demandIds.length === 1 ? demandIds[0]! : null,
     payload: {
       candidate_ids: candidateIds,
       source_ids: sourceIds,
@@ -1582,7 +1728,9 @@ async function maintainPreparedSourceBuffer(
        'converted',
        'chunking'
      )
-     ORDER BY discovered_at
+     ORDER BY
+       CASE WHEN knowledge_demand_id IS NOT NULL THEN 0 ELSE 1 END,
+       discovered_at
      LIMIT $1
      FOR UPDATE SKIP LOCKED`,
     [preparationLimit],
@@ -1596,7 +1744,9 @@ async function maintainPreparedSourceBuffer(
     `SELECT id
      FROM source_candidates
      WHERE status = 'discovered'
-     ORDER BY discovered_at
+     ORDER BY
+       CASE WHEN knowledge_demand_id IS NOT NULL THEN 0 ELSE 1 END,
+       discovered_at
      LIMIT $1
      FOR UPDATE SKIP LOCKED`,
     [available],
@@ -1681,6 +1831,10 @@ async function reconcileSourceLanes(
              AND fragment.reservation_task_id IS NULL
          )
        ORDER BY
+         CASE
+           WHEN source.knowledge_demand_id IS NOT NULL THEN 0
+           ELSE 1
+         END,
          CASE source.status WHEN 'analyzing' THEN 0 ELSE 1 END,
          source.updated_at
        LIMIT 1
@@ -1785,6 +1939,35 @@ async function reconcileCompletedSources(
             )
         )`,
   )
+  await client.query(
+    `UPDATE knowledge_demands demand
+        SET status = 'unresolved',
+            last_error_code = 'KNOWLEDGE_STILL_UNKNOWN',
+            next_retry_at = now() + interval '15 minutes',
+            last_seen_at = now()
+      FROM source_candidates source
+      WHERE source.id = demand.source_candidate_id
+        AND source.status IN ('completed', 'completed_with_exceptions')
+        AND demand.status IN ('acquiring', 'processing')
+        AND NOT EXISTS (
+          SELECT 1
+          FROM source_candidates linked_source
+          WHERE linked_source.knowledge_demand_id = demand.id
+            AND linked_source.status NOT IN (
+              'completed',
+              'completed_with_exceptions',
+              'duplicate',
+              'rejected',
+              'failed'
+            )
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM pipeline_tasks task
+          WHERE task.knowledge_demand_id = demand.id
+            AND task.status IN ('queued', 'claimed', 'running')
+        )`,
+  )
 }
 
 async function queueVerificationFromAnySource(
@@ -1794,11 +1977,17 @@ async function queueVerificationFromAnySource(
     `SELECT task.source_candidate_id AS id
      FROM knowledge_candidates candidate
      JOIN pipeline_tasks task ON task.id = candidate.pipeline_task_id
+     LEFT JOIN source_candidates source
+       ON source.id = task.source_candidate_id
      WHERE candidate.status = 'analyzed'
        AND candidate.verification_task_id IS NULL
        AND task.source_candidate_id IS NOT NULL
      GROUP BY task.source_candidate_id
-     ORDER BY min(candidate.created_at)
+     ORDER BY
+       min(
+         CASE WHEN source.knowledge_demand_id IS NOT NULL THEN 0 ELSE 1 END
+       ),
+       min(candidate.created_at)
      LIMIT 1`,
   )
   return source.rows[0]
@@ -2220,13 +2409,16 @@ async function ensureStreamingWorkInTransaction(
     if (!(await queueCandidatePublication(client))) break
   }
 
-  // Expert work is always materialized first so it owns the next free lane.
+  // A real unanswered MCP request outranks background coverage and record
+  // refinement. Expert work remains the next highest class.
+  await queueDemandDiscoveryWork(client)
   await queueExpertWork(client)
   // Tasks can survive an application deployment. Normalize every unclaimed
   // AI task so an older numeric priority cannot defeat the current policy.
   await client.query(
     `UPDATE pipeline_tasks
         SET priority = CASE
+          WHEN knowledge_demand_id IS NOT NULL THEN 120::smallint
           WHEN task_type = 'expert_research' THEN $1::smallint
           WHEN task_type = 'candidate_deep_review'
             AND requested_reasoning_effort = 'medium' THEN $2::smallint
@@ -2239,6 +2431,7 @@ async function ensureStreamingWorkInTransaction(
       WHERE status = 'queued'
         AND task_type = ANY($7::text[])
         AND priority IS DISTINCT FROM CASE
+          WHEN knowledge_demand_id IS NOT NULL THEN 120::smallint
           WHEN task_type = 'expert_research' THEN $1::smallint
           WHEN task_type = 'candidate_deep_review'
             AND requested_reasoning_effort = 'medium' THEN $2::smallint
@@ -2464,6 +2657,7 @@ export async function claimPipelineTask(
          coverage_target_id,
          source_candidate_id,
          expert_task_id,
+         knowledge_demand_id,
          requested_reasoning_effort
        FROM pipeline_tasks
        WHERE status = 'queued'
@@ -2471,6 +2665,7 @@ export async function claimPipelineTask(
          AND task_type = ANY($1::text[])
          AND (
            task_type NOT IN ('source_discovery', 'source_refresh')
+           OR knowledge_demand_id IS NOT NULL
            OR NOT EXISTS (
              SELECT 1
              FROM pipeline_tasks active_discovery
@@ -2994,6 +3189,7 @@ async function assertPipelineLease(
        coverage_target_id,
        source_candidate_id,
        expert_task_id,
+       knowledge_demand_id,
        requested_reasoning_effort,
        attempts
      FROM pipeline_tasks
@@ -3206,9 +3402,10 @@ export async function submitSourceDiscovery(
            document_date,
            status,
            discovered_by,
-           discovery_pipeline_task_id
+           discovery_pipeline_task_id,
+           knowledge_demand_id
          )
-         VALUES ($1, $2, $3, $4, $5, $6, 'approved', $7, $8)
+         VALUES ($1, $2, $3, $4, $5, $6, 'approved', $7, $8, $9)
          ON CONFLICT (canonical_url) DO NOTHING
          RETURNING id`,
         [
@@ -3219,7 +3416,8 @@ export async function submitSourceDiscovery(
           source.document_version ?? null,
           source.document_date ?? null,
           researcherId,
-          task.id
+          task.id,
+          task.knowledge_demand_id
         ],
       )
       if (inserted.rows[0]) insertedIds.push(inserted.rows[0].id)
@@ -3249,6 +3447,28 @@ export async function submitSourceDiscovery(
           WHERE singleton
             AND active_source_id IS NULL`,
         [insertedIds[0], researcherId],
+      )
+    }
+    if (task.knowledge_demand_id) {
+      await client.query(
+        `UPDATE knowledge_demands
+            SET status = CASE WHEN $2::uuid IS NULL
+                  THEN 'unresolved'
+                  ELSE 'acquiring'
+                END,
+                source_candidate_id = $2,
+                discovery_task_id = NULL,
+                last_error_code = CASE WHEN $2::uuid IS NULL
+                  THEN 'OFFICIAL_SOURCE_NOT_FOUND'
+                  ELSE NULL
+                END,
+                next_retry_at = CASE WHEN $2::uuid IS NULL
+                  THEN now() + interval '15 minutes'
+                  ELSE now()
+                END,
+                last_seen_at = now()
+          WHERE id = $1`,
+        [task.knowledge_demand_id, insertedIds[0] ?? null],
       )
     }
     const activeSource = await client.query<{
@@ -4133,6 +4353,37 @@ export async function failPipelineTask(
         retrying ? 'queued' : 'failed'
       ],
     )
+    if (task.knowledge_demand_id) {
+      await client.query(
+        `UPDATE knowledge_demands
+            SET status = CASE
+                  WHEN NOT $2 THEN 'failed'
+                  WHEN $5 = ANY($6::text[]) THEN 'discovering'
+                  WHEN $5 = 'source_acquisition' THEN 'acquiring'
+                  ELSE 'processing'
+                END,
+                discovery_task_id = CASE
+                  WHEN $5 = ANY($6::text[]) AND $2 THEN $3
+                  WHEN $5 = ANY($6::text[]) THEN NULL
+                  ELSE discovery_task_id
+                END,
+                last_error_code = $4,
+                next_retry_at = CASE WHEN $2
+                  THEN now()
+                  ELSE now() + interval '15 minutes'
+                END,
+                last_seen_at = now()
+          WHERE id = $1`,
+        [
+          task.knowledge_demand_id,
+          retrying,
+          task.id,
+          input.failure_code,
+          task.task_type,
+          ['source_discovery', 'source_refresh']
+        ],
+      )
+    }
     if (task.task_type === 'candidate_publication' && !retrying) {
       await client.query(
         `UPDATE knowledge_candidates

@@ -16,6 +16,8 @@ import {
   importRunsSchema,
   knowledgePageSchema,
   labSchema,
+  mcpRequestLogDetailSchema,
+  mcpRequestLogPageSchema,
   overviewSchema,
   pipelineDetailsSchema,
   pipelineTransitionsSchema,
@@ -47,6 +49,7 @@ import {
   getActiveSource,
   getActiveSources,
   getAdminOverview,
+  getMcpRequestLog,
   getPipelineDetails,
   getQualityDashboard,
   getRevisionProvenance,
@@ -60,6 +63,7 @@ import {
   listImports,
   listKnowledge,
   listLabValidations,
+  listMcpRequestLogs,
   listReleases,
   listReviewExceptions,
   listSources,
@@ -81,6 +85,8 @@ import {
   sanitizeDemoExpertTasks,
   sanitizeDemoFeedback,
   sanitizeDemoImports,
+  sanitizeDemoMcpRequestDetail,
+  sanitizeDemoMcpRequestPage,
   sanitizeDemoOverview,
   sanitizeDemoPipeline,
   sanitizeDemoProvenance,
@@ -165,6 +171,30 @@ function parseTransitionCursor(value: string | undefined): string | null | undef
   }
 }
 
+function parseMcpRequestLogQuery(context: Context<ApiBindings>) {
+  const limit = Math.min(
+    100,
+    Math.max(1, Number(context.req.query('limit') ?? 25) || 25),
+  )
+  const offset = Math.min(
+    1_000_000,
+    Math.max(0, Number(context.req.query('offset') ?? 0) || 0),
+  )
+  const tool = context.req.query('tool')?.trim() || null
+  const requestedOutcome = context.req.query('outcome')?.trim() || null
+  const outcome = requestedOutcome && [
+    'success',
+    'unknown',
+    'blocked',
+    'error',
+    'rate_limited'
+  ].includes(requestedOutcome)
+    ? requestedOutcome
+    : null
+  const query = context.req.query('q')?.trim().slice(0, 200) || null
+  return { limit, offset, tool, outcome, query }
+}
+
 export function createApiApp(dependencies: ApiDependencies) {
   const {
     config,
@@ -188,7 +218,10 @@ export function createApiApp(dependencies: ApiDependencies) {
   )
   app.use('*', timeout(30_000))
   app.use('*', async (context, next) => {
-    const requestId = context.req.header('x-request-id') ?? randomUUID()
+    const suppliedRequestId = context.req.header('x-request-id')
+    const requestId = z.uuid().safeParse(suppliedRequestId).success
+      ? suppliedRequestId!
+      : randomUUID()
     context.set('requestId', requestId)
     context.header('x-request-id', requestId)
     const startedAt = performance.now()
@@ -225,7 +258,7 @@ export function createApiApp(dependencies: ApiDependencies) {
     context.json({
       status: 'ok',
       service: 'CliDeck MCP — Network Knowledge',
-      version: '0.7.4'
+      version: '0.8.0'
     }),
   )
 
@@ -292,6 +325,7 @@ export function createApiApp(dependencies: ApiDependencies) {
       metrics,
       actor,
       clientKey: clientAddress,
+      clientAddress,
       requestId,
       ...(taskStore ? { taskStore } : {})
     })
@@ -354,6 +388,33 @@ export function createApiApp(dependencies: ApiDependencies) {
       await getAdminOverview(adminDatabase, config.deployCommitSha),
     ))),
   )
+
+  app.get('/public/v1/demo/mcp-requests', async (context) => {
+    const page = parseHttpContract(
+      mcpRequestLogPageSchema,
+      await listMcpRequestLogs(
+        adminDatabase,
+        {
+          ...parseMcpRequestLogQuery(context),
+          queryScope: 'response_only'
+        },
+      ),
+    )
+    return context.json(sanitizeDemoMcpRequestPage(page))
+  })
+
+  app.get('/public/v1/demo/mcp-requests/:requestLogId', async (context) => {
+    const id = context.req.param('requestLogId')
+    if (!/^\d{1,19}$/.test(id)) {
+      return context.json({ error: 'invalid_request_log_id' }, 400)
+    }
+    const detail = await getMcpRequestLog(adminDatabase, id)
+    if (!detail) return context.json({ error: 'not_found' }, 404)
+    return context.json(sanitizeDemoMcpRequestDetail(parseHttpContract(
+      mcpRequestLogDetailSchema,
+      detail,
+    )))
+  })
 
   app.get('/public/v1/demo/pipeline/transitions', async (context) => {
     const after = parseTransitionCursor(context.req.query('after'))
@@ -866,6 +927,27 @@ export function createApiApp(dependencies: ApiDependencies) {
     return context.json(
       await getAdminOverview(adminDatabase, config.deployCommitSha),
     )
+  })
+
+  app.get('/admin/v1/mcp-requests', async (context) => {
+    return context.json(parseHttpContract(
+      mcpRequestLogPageSchema,
+      await listMcpRequestLogs(
+        adminDatabase,
+        parseMcpRequestLogQuery(context),
+      ),
+    ))
+  })
+
+  app.get('/admin/v1/mcp-requests/:requestLogId', async (context) => {
+    const id = context.req.param('requestLogId')
+    if (!/^\d{1,19}$/.test(id)) {
+      return context.json({ error: 'invalid_request_log_id' }, 400)
+    }
+    const detail = await getMcpRequestLog(adminDatabase, id)
+    return detail
+      ? context.json(parseHttpContract(mcpRequestLogDetailSchema, detail))
+      : context.json({ error: 'not_found' }, 404)
   })
 
   app.get('/admin/v1/pipeline/transitions', async (context) => {

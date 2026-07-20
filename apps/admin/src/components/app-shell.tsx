@@ -24,6 +24,7 @@ import {
   Play,
   RefreshCw,
   Search,
+  ScrollText,
   ShieldCheck,
   Tag,
   type LucideIcon,
@@ -38,6 +39,7 @@ import { Button, Status } from './ui'
 
 export type SectionId =
   | 'overview'
+  | 'mcp-requests'
   | 'pipeline'
   | 'active-source'
   | 'agent-runs'
@@ -63,6 +65,7 @@ const GROUPS: Array<{
     label: 'Monitor',
     items: [
       { id: 'overview', label: 'Overview', icon: CircleGauge },
+      { id: 'mcp-requests', label: 'MCP Requests', icon: ScrollText },
       { id: 'pipeline', label: 'Pipeline', icon: Network },
       { id: 'active-source', label: 'Active Sources', icon: FileCheck2 },
       { id: 'agent-runs', label: 'Agent Runs', icon: BrainCircuit }
@@ -225,7 +228,7 @@ export function AppShell({
         <main className="workspace__content">
           <div className="page-heading">
             <div>
-              <h1>{titleCase(section)}</h1>
+              <h1>{SECTION_TITLES[section] ?? titleCase(section)}</h1>
               <p>{SECTION_COPY[section]}</p>
             </div>
             <span className="page-heading__updated">
@@ -241,6 +244,7 @@ export function AppShell({
 
 const SECTION_COPY: Record<SectionId, string> = {
   overview: 'Published knowledge, live throughput, cost and operational health.',
+  'mcp-requests': 'Questions, safe responses, latency, errors and demand-driven learning.',
   pipeline: 'Every stage from source discovery through immutable publication.',
   'active-source': 'Four concurrent source lanes, extraction progress and candidate outcomes.',
   'agent-runs': 'Luna capacity, token efficiency, duration and run outcomes.',
@@ -257,6 +261,10 @@ const SECTION_COPY: Record<SectionId, string> = {
   releases: 'Immutable knowledge packages and the currently active snapshot.',
   approvals: 'Human decisions for code changes that cannot proceed automatically.',
   provenance: 'Restricted evidence and lineage for an individual revision.'
+}
+
+const SECTION_TITLES: Partial<Record<SectionId, string>> = {
+  'mcp-requests': 'MCP Requests'
 }
 
 export const NAVIGATION_GROUPS = GROUPS

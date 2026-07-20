@@ -50,6 +50,7 @@ const FeedbackPage = lazy(() => import('./pages/feedback').then((module) => ({ d
 const ImportsPage = lazy(() => import('./pages/imports').then((module) => ({ default: module.ImportsPage })))
 const KnowledgePage = lazy(() => import('./pages/knowledge').then((module) => ({ default: module.KnowledgePage })))
 const LabPage = lazy(() => import('./pages/lab').then((module) => ({ default: module.LabPage })))
+const McpRequestsPage = lazy(() => import('./pages/mcp-requests').then((module) => ({ default: module.McpRequestsPage })))
 const OverviewPage = lazy(() => import('./pages/overview').then((module) => ({ default: module.OverviewPage })))
 const PipelinePage = lazy(() => import('./pages/pipeline').then((module) => ({ default: module.PipelinePage })))
 const ProvenancePage = lazy(() => import('./pages/provenance').then((module) => ({ default: module.ProvenancePage })))
@@ -254,6 +255,7 @@ export const OPERATIONS_PAGE_REGISTRY: Record<
   ) => ReactNode
 > = {
   overview: (overview) => <OverviewPage overview={overview} />,
+  'mcp-requests': () => <McpRequestsPage />,
   pipeline: (overview) => <PipelinePage overview={overview} />,
   'active-source': () => <ActiveSourcePage />,
   'agent-runs': (overview) => <AgentRunsPage overview={overview} />,

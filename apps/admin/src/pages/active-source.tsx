@@ -1,4 +1,8 @@
-import type { ActiveSourceDetail } from '@clideck/admin-contracts'
+import type {
+  ActiveSourceDetail,
+  ActiveSourceLane,
+  PipelineTask
+} from '@clideck/admin-contracts'
 import {
   AlertTriangle,
   FileCheck2,
@@ -26,18 +30,32 @@ import {
   shortId,
   titleCase
 } from '../lib/format'
-import { useActiveSource, useActiveSources } from '../lib/queries'
+import {
+  useActiveSource,
+  useActiveSources,
+  usePipeline
+} from '../lib/queries'
 
 export function ActiveSourcePage() {
   const query = useActiveSource()
   const lanesQuery = useActiveSources()
+  const pipelineQuery = usePipeline()
   const [tab, setTab] = useState<'fragments' | 'candidates' | 'events'>('fragments')
   if (query.isLoading) return <LoadingState label="Loading the active source…" />
   if (query.isError) return <ErrorState onRetry={() => void query.refetch()}>Active source data is unavailable.</ErrorState>
+  const liveTasks = (pipelineQuery.data?.tasks ?? []).filter(
+    (task) =>
+      ['queued', 'claimed', 'running'].includes(task.status) &&
+      task.source_candidate_id !== null,
+  )
   if (!query.data) return (
-    <Panel title="Active source" icon={FileCheck2} help="The source currently moving through the knowledge factory.">
-      <EmptyState>No source is active. The scheduler will choose the next coverage gap automatically.</EmptyState>
-    </Panel>
+    <div className="dashboard-stack">
+      <SourceLanesPanel lanes={lanesQuery.data ?? []} loading={lanesQuery.isLoading} />
+      <LiveSourceWork tasks={liveTasks} loading={pipelineQuery.isLoading} />
+      <Panel title="Extraction lanes are clear" icon={FileCheck2} help="A source can leave its extraction lane while its records continue through Verify, Deep Review and Publish.">
+        <EmptyState>No source currently occupies a fragment-analysis lane. Live downstream source work remains visible above.</EmptyState>
+      </Panel>
+    </div>
   )
   const detail = query.data
   const source = detail.source
@@ -48,39 +66,8 @@ export function ActiveSourcePage() {
   const completion = fragmentsTotal ? (fragmentsDone / fragmentsTotal) * 100 : 0
   return (
     <div className="dashboard-stack">
-      <Panel
-        title="Active source lanes"
-        icon={Layers3}
-        help="Up to four independent documents move through extraction and verification concurrently, preventing one difficult source from idling Luna."
-        action={<Status tone="good">{lanesQuery.data?.length ?? 0} active</Status>}
-      >
-        <div className="source-lanes">
-          {(lanesQuery.data ?? []).map((lane) => {
-            const total = numberOf(lane.fragments_total)
-            const done = numberOf(lane.fragments_completed)
-            const percent = total ? (done / total) * 100 : 0
-            return (
-              <article className="source-lane" key={lane.id}>
-                <header>
-                  <span>Lane {formatNumber(lane.slot_number, 0)}</span>
-                  <Status>{titleCase(lane.status)}</Status>
-                </header>
-                <strong>{lane.title}</strong>
-                <small>{lane.vendor_slug} · {lane.operating_system_slug ?? 'Vendor-level'} · {titleCase(lane.document_role)}</small>
-                <ProgressBar value={percent} label={`${Math.round(percent)}% processed`} />
-                <footer>
-                  <span>{formatNumber(lane.candidates_verified, 0)} verified</span>
-                  <span>{formatNumber(lane.candidates_deep_review, 0)} deep</span>
-                  <span>{formatNumber(lane.candidates_quarantined, 0)} evidence pending</span>
-                </footer>
-              </article>
-            )
-          })}
-          {!lanesQuery.isLoading && (lanesQuery.data?.length ?? 0) === 0 && (
-            <EmptyState>No source lane is currently assigned.</EmptyState>
-          )}
-        </div>
-      </Panel>
+      <SourceLanesPanel lanes={lanesQuery.data ?? []} loading={lanesQuery.isLoading} />
+      <LiveSourceWork tasks={liveTasks} loading={pipelineQuery.isLoading} />
       <Panel
         title={source.title}
         icon={FileCheck2}
@@ -140,6 +127,115 @@ export function ActiveSourcePage() {
         {tab === 'events' && <EventTable detail={detail} />}
       </Panel>
     </div>
+  )
+}
+
+function SourceLanesPanel({
+  lanes,
+  loading
+}: {
+  lanes: ActiveSourceLane[]
+  loading: boolean
+}) {
+  return (
+    <Panel
+      title="Active source lanes"
+      icon={Layers3}
+      help="Up to four documents can occupy fragment-analysis lanes. A source leaves this panel as soon as extraction finishes, while downstream work remains visible separately."
+      action={<Status tone={lanes.length > 0 ? 'good' : 'neutral'}>{lanes.length} active</Status>}
+    >
+      <div className="source-lanes">
+        {lanes.map((lane) => {
+          const total = numberOf(lane.fragments_total)
+          const done = numberOf(lane.fragments_completed)
+          const percent = total ? (done / total) * 100 : 0
+          return (
+            <article className="source-lane" key={lane.id}>
+              <header>
+                <span>Lane {formatNumber(lane.slot_number, 0)}</span>
+                <Status>{titleCase(lane.status)}</Status>
+              </header>
+              <strong>{lane.title}</strong>
+              <small>{lane.vendor_slug} · {lane.operating_system_slug ?? 'Vendor-level'} · {titleCase(lane.document_role)}</small>
+              <ProgressBar value={percent} label={`${Math.round(percent)}% processed`} />
+              <footer>
+                <span>{formatNumber(lane.candidates_verified, 0)} verified</span>
+                <span>{formatNumber(lane.candidates_deep_review, 0)} deep</span>
+                <span>{formatNumber(lane.candidates_quarantined, 0)} evidence pending</span>
+              </footer>
+            </article>
+          )
+        })}
+        {loading && <LoadingState label="Loading source lanes…" />}
+        {!loading && lanes.length === 0 && (
+          <EmptyState>No source currently occupies an extraction lane.</EmptyState>
+        )}
+      </div>
+    </Panel>
+  )
+}
+
+function LiveSourceWork({
+  tasks,
+  loading
+}: {
+  tasks: PipelineTask[]
+  loading: boolean
+}) {
+  return (
+    <Panel
+      title="Live source work"
+      icon={Layers3}
+      help="All queued and running source-linked tasks, including Verify, Deep Review and Publish after a document has left its extraction lane."
+      action={<Status tone={tasks.some((task) => task.status === 'running') ? 'good' : 'neutral'}>{tasks.filter((task) => task.status === 'running').length} running</Status>}
+    >
+      {loading
+        ? <LoadingState label="Loading live source work…" />
+        : (
+          <DataTable
+            rows={tasks.slice(0, 40)}
+            columns={[
+              {
+                key: 'source',
+                label: 'Source',
+                render: (task) => (
+                  <div className="primary-cell">
+                    <strong>{task.source_title ?? 'Source-linked task'}</strong>
+                    <code>{shortId(task.source_candidate_id ?? task.id)}</code>
+                  </div>
+                )
+              },
+              {
+                key: 'stage',
+                label: 'Stage',
+                render: (task) => <Status tone={task.status === 'running' ? 'good' : 'info'}>{titleCase(task.stage)}</Status>
+              },
+              {
+                key: 'state',
+                label: 'State',
+                render: (task) => titleCase(task.status)
+              },
+              {
+                key: 'owner',
+                label: 'Worker',
+                render: (task) => task.claim_owner ?? 'Waiting for worker'
+              },
+              {
+                key: 'attempts',
+                label: 'Attempts',
+                render: (task) => formatNumber(task.attempts, 0)
+              },
+              {
+                key: 'updated',
+                label: 'Updated',
+                render: (task) => formatDate(task.updated_at)
+              }
+            ]}
+            rowKey={(task) => task.id}
+            empty="No source-linked task is currently queued or running."
+          />
+        )}
+    </Panel>
   )
 }
 

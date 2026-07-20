@@ -8,6 +8,7 @@ import type {
 import type { AppConfig } from '../config.js'
 import {
   type Database,
+  isTransientDatabaseError,
   withTransientDatabaseRetry
 } from '../db.js'
 import type { Logger } from '../logger.js'
@@ -34,6 +35,11 @@ import {
   queryDomainKnowledgeOutputSchema
 } from '../domain/domain-tool-schemas.js'
 import { searchKnowledge } from '../domain/knowledge.js'
+import {
+  classifyMcpOutcome,
+  queueUnknownKnowledgeDemand,
+  recordMcpRequest
+} from '../domain/mcp-observability.js'
 import { analyzeDeviceSnapshot } from '../domain/snapshot.js'
 import { recordPublicUsage } from '../domain/telemetry.js'
 import { analyzeNetworkPath } from '../domain/topology.js'
@@ -81,6 +87,7 @@ type PublicServerDependencies = {
   database: Database
   quarantineDatabase: Database
   clientKey: string
+  clientAddress: string
   logger: Logger
   metrics: Metrics
   actor: PublicActor
@@ -131,14 +138,25 @@ function wrapTool<TInput, TOutput>(
         : await operation(input)
       stopTimer({ outcome: 'success' })
       const publicOutput = output as Record<string, unknown>
-      const usageOutcome =
-        publicOutput['unknown'] === true ||
-        publicOutput['status'] === 'unknown' ||
-        publicOutput['decision'] === 'unknown'
-          ? 'unknown'
-          : publicOutput['decision'] === 'blocked'
-            ? 'blocked'
-            : 'success'
+      const usageOutcome = classifyMcpOutcome(publicOutput)
+      const knowledgeDemandId = usageOutcome === 'unknown'
+        ? await queueUnknownKnowledgeDemand(
+            dependencies.database,
+            toolName,
+            input,
+            publicOutput,
+          ).catch((error: unknown) => {
+            dependencies.logger.warn(
+              {
+                err: error,
+                requestId: dependencies.requestId,
+                tool: toolName
+              },
+              'Unknown MCP request could not be queued for learning',
+            )
+            return null
+          })
+        : null
       await recordPublicUsage(
         dependencies.database,
         toolName,
@@ -150,20 +168,55 @@ function wrapTool<TInput, TOutput>(
           'Public usage aggregation failed',
         )
       })
+      await recordMcpRequest(dependencies.database, {
+        requestId: dependencies.requestId,
+        clientAddress: dependencies.clientAddress,
+        actor: dependencies.actor,
+        toolName,
+        request: input,
+        response: publicOutput,
+        outcome: usageOutcome,
+        durationMs: performance.now() - startedAt,
+        knowledgeDemandId
+      }).catch((error: unknown) => {
+        dependencies.logger.warn(
+          { err: error, requestId: dependencies.requestId, tool: toolName },
+          'Public MCP request journal write failed',
+        )
+      })
       return textAndStructured(output as Record<string, unknown>)
     } catch (error) {
       stopTimer({ outcome: 'error' })
+      const publicError = publicToolError(error)
+      const errorMessage = error instanceof Error ? error.message : null
+      const errorOutcome =
+        errorMessage === 'RATE_LIMITED' ? 'rate_limited' as const : 'error' as const
       await recordPublicUsage(
         dependencies.database,
         toolName,
-        'error',
+        errorOutcome,
         performance.now() - startedAt,
       ).catch(() => undefined)
+      await recordMcpRequest(dependencies.database, {
+        requestId: dependencies.requestId,
+        clientAddress: dependencies.clientAddress,
+        actor: dependencies.actor,
+        toolName,
+        request: input,
+        response: publicError,
+        outcome: errorOutcome,
+        durationMs: performance.now() - startedAt,
+        errorCode:
+          errorMessage && /^[A-Z][A-Z0-9_]{2,63}$/.test(errorMessage)
+            ? errorMessage
+            : 'INTERNAL_ERROR',
+        retryable: isTransientDatabaseError(error)
+      }).catch(() => undefined)
       dependencies.logger.warn(
         { err: error, requestId: dependencies.requestId, tool: toolName },
         'Public MCP tool failed',
       )
-      return publicToolError(error)
+      return publicError
     }
   }
 }
@@ -174,7 +227,7 @@ export function createPublicMcpServer(
   const server = new McpServer(
     {
       name: 'CliDeck MCP — Network Knowledge',
-      version: '0.7.4',
+      version: '0.8.0',
       title: 'CliDeck MCP — Network Knowledge',
       websiteUrl: 'https://clideck.com/software/mcp'
     },
@@ -408,32 +461,75 @@ export function createPublicMcpServer(
           rawInput: unknown,
           extra: CreateTaskRequestHandlerExtra,
         ) => {
-          await enforceExpertLimit()
-          const input = requestExpertAnswerInputSchema.parse(rawInput)
-          const task = await extra.taskStore.createTask({
-            ttl: dependencies.config.anonymousTaskTtlMinutes * 60_000,
-            pollInterval: 3_000
-          })
-          const expert = await createExpertTask(
-            dependencies.database,
-            dependencies.config,
-            dependencies.actor,
-            input.question,
-            input.context,
-            input.idempotency_key,
-            dependencies.actor.kind === 'tenant'
-              ? dependencies.actor.tenantId
-              : dependencies.clientKey,
-          )
-          const fallbackResult = textAndStructured(
-            expert as Record<string, unknown>,
-          )
-          await dependencies.taskStore!.linkExpertTask(
-            task.taskId,
-            expert.task_id,
-            fallbackResult,
-          )
-          return { task }
+          const startedAt = performance.now()
+          try {
+            await enforceExpertLimit()
+            const input = requestExpertAnswerInputSchema.parse(rawInput)
+            const task = await extra.taskStore.createTask({
+              ttl: dependencies.config.anonymousTaskTtlMinutes * 60_000,
+              pollInterval: 3_000
+            })
+            const expert = await createExpertTask(
+              dependencies.database,
+              dependencies.config,
+              dependencies.actor,
+              input.question,
+              input.context,
+              input.idempotency_key,
+              dependencies.actor.kind === 'tenant'
+                ? dependencies.actor.tenantId
+                : dependencies.clientKey,
+            )
+            const fallbackResult = textAndStructured(
+              expert as Record<string, unknown>,
+            )
+            await dependencies.taskStore!.linkExpertTask(
+              task.taskId,
+              expert.task_id,
+              fallbackResult,
+            )
+            await Promise.all([
+              recordPublicUsage(
+                dependencies.database,
+                'request_expert_answer',
+                'success',
+                performance.now() - startedAt,
+              ).catch(() => undefined),
+              recordMcpRequest(dependencies.database, {
+                requestId: dependencies.requestId,
+                clientAddress: dependencies.clientAddress,
+                actor: dependencies.actor,
+                toolName: 'request_expert_answer',
+                request: rawInput,
+                response: expert,
+                outcome: 'success',
+                durationMs: performance.now() - startedAt
+              }).catch(() => undefined)
+            ])
+            return { task }
+          } catch (error) {
+            const publicError = publicToolError(error)
+            await recordMcpRequest(dependencies.database, {
+              requestId: dependencies.requestId,
+              clientAddress: dependencies.clientAddress,
+              actor: dependencies.actor,
+              toolName: 'request_expert_answer',
+              request: rawInput,
+              response: publicError,
+              outcome:
+                error instanceof Error && error.message === 'RATE_LIMITED'
+                  ? 'rate_limited'
+                  : 'error',
+              durationMs: performance.now() - startedAt,
+              errorCode:
+                error instanceof Error &&
+                /^[A-Z][A-Z0-9_]{2,63}$/.test(error.message)
+                  ? error.message
+                  : 'INTERNAL_ERROR',
+              retryable: isTransientDatabaseError(error)
+            }).catch(() => undefined)
+            throw error
+          }
         },
         getTask: async (
           _input: unknown,

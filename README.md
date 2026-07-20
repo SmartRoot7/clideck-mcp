@@ -93,7 +93,7 @@ a scientific reference database.
 `/demo` is not a mock dashboard. It runs the exact same compiled
 `apps/admin` frontend bundle as the LAN console:
 
-- the same 16 pages, navigation, JS, CSS, charts, tables, filters, tooltips,
+- the same 18 pages, navigation, JS, CSS, charts, tables, filters, tooltips,
   forms, and confirmation dialogs;
 - the same real operational records and totals from the active production
   database;
@@ -112,6 +112,19 @@ operational model stay real. Values are not hidden with CSS blur. `/admin` and
 `/demo` select different RBAC runtimes around one `OperationsApp`; there is only
 one visual implementation and one production frontend artifact. The public API
 exposes matching GET models and no mutation route.
+
+The Monitor section includes a paginated MCP Requests journal. The local
+super-admin sees sanitized questions, safe answers, caller IP, outcome, latency,
+and learning status. The public demo renders the identical page, but the server
+replaces caller IP and request content with `XXXXXXXX`; safe CliDeck answers
+remain visible. Retention defaults to 30 days and is configured with
+`MCP_REQUEST_LOG_RETENTION_DAYS`.
+
+When a deterministic Network query or workflow returns `unknown`, the server
+deduplicates that question and context into a highest-priority knowledge demand.
+Its priority is preserved through official-source discovery, download,
+conversion, chunking, analysis, verification, and publication. A demand is
+marked learned only after the same deterministic query finds an active revision.
 
 ![The real CliDeck MCP production operations dashboard](docs/assets/clideck-mcp-demo.jpg)
 

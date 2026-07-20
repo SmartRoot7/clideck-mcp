@@ -56,6 +56,32 @@ async function testApp() {
       expect(url.search).toBe('')
       return Response.json({ items: [], total: 0, limit: 50, offset: 0 })
     }
+    if (url.pathname === '/admin/v1/mcp-requests') {
+      expect(url.search).toBe('?limit=25&offset=0')
+      return Response.json({
+        items: [{
+          id: '1',
+          request_id: randomUUID(),
+          client_ip: '203.0.113.17',
+          actor_kind: 'anonymous',
+          tool_name: 'query_network_knowledge',
+          question_preview: 'How do I inspect errors?',
+          response_preview: 'Use show interfaces counters errors.',
+          outcome: 'success',
+          error_code: null,
+          retryable: false,
+          duration_ms: 25,
+          knowledge_demand_id: null,
+          learning_status: null,
+          demand_count: null,
+          result_release_id: null,
+          occurred_at: new Date().toISOString()
+        }],
+        total: 1,
+        limit: 25,
+        offset: 0
+      })
+    }
     return Response.json(overviewFixture())
   }
   return createAdminUiApp({
@@ -208,6 +234,20 @@ describe('local admin HTTP boundary', () => {
     expect(knowledge.status).toBe(200)
     expect(await knowledge.json()).toMatchObject({ items: [], total: 0 })
 
+    const requests = await app.request(
+      '/admin/api/v1/mcp-requests?limit=25&offset=0',
+      { headers: { host, cookie: cookie.split(';')[0]! } },
+    )
+    expect(requests.status).toBe(200)
+    expect(requests.headers.get('cache-control')).toBe('no-store')
+    expect(await requests.json()).toMatchObject({
+      total: 1,
+      items: [{
+        client_ip: '203.0.113.17',
+        question_preview: 'How do I inspect errors?'
+      }]
+    })
+
     const concurrency = await app.request(
       '/admin/api/v1/pipeline/concurrency',
       {
@@ -347,6 +387,15 @@ function overviewFixture() {
     },
     activity_30d: [],
     published_hourly_24h: [],
+    mcp_requests: {
+      totals_24h: {
+        requests: 0,
+        answered: 0,
+        unknown: 0,
+        errors: 0
+      },
+      hourly_24h: []
+    },
     recent_errors: []
   }
 }

@@ -4,6 +4,8 @@ import type {
   ExpertTask,
   Feedback,
   ImportRun,
+  McpRequestLogDetail,
+  McpRequestLogPage,
   Overview,
   PipelineDetails,
   Provenance,
@@ -34,6 +36,54 @@ const SAFE_OPERATIONAL_METADATA_KEYS = new Set([
 
 function redactNullable(value: string | null): string | null {
   return value === null ? null : REDACTED_SOURCE_IDENTITY
+}
+
+function redactRequestValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(redactRequestValue)
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(
+        ([key, entry]) => [key, redactRequestValue(entry)],
+      ),
+    )
+  }
+  return value === null ? null : REDACTED_SOURCE_IDENTITY
+}
+
+export function sanitizeDemoMcpRequestPage(
+  page: McpRequestLogPage,
+): McpRequestLogPage {
+  return {
+    ...page,
+    items: page.items.map((row) => ({
+      ...row,
+      request_id: REDACTED_SOURCE_IDENTITY,
+      client_ip: REDACTED_SOURCE_IDENTITY,
+      question_preview: REDACTED_SOURCE_IDENTITY,
+      knowledge_demand_id:
+        row.knowledge_demand_id === null
+          ? null
+          : REDACTED_SOURCE_IDENTITY
+    }))
+  }
+}
+
+export function sanitizeDemoMcpRequestDetail(
+  detail: McpRequestLogDetail,
+): McpRequestLogDetail {
+  return {
+    ...detail,
+    request_id: REDACTED_SOURCE_IDENTITY,
+    client_ip: REDACTED_SOURCE_IDENTITY,
+    question_preview: REDACTED_SOURCE_IDENTITY,
+    knowledge_demand_id:
+      detail.knowledge_demand_id === null
+        ? null
+        : REDACTED_SOURCE_IDENTITY,
+    request_payload: redactRequestValue(
+      detail.request_payload,
+    ) as McpRequestLogDetail['request_payload']
+  }
 }
 
 function projectOperationalMetadata(
@@ -246,6 +296,7 @@ export function sanitizeDemoOverview(overview: Overview): Overview {
       hour: hour.hour,
       published: hour.published
     })),
+    mcp_requests: overview.mcp_requests,
     recent_errors: overview.recent_errors.map((error) => ({
       id: error.id,
       pipeline_task_id: error.pipeline_task_id,

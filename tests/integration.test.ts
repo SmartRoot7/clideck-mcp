@@ -58,6 +58,7 @@ import {
   getPublicRevision,
   searchKnowledge
 } from '../src/domain/knowledge.js'
+import { queueUnknownKnowledgeDemand } from '../src/domain/mcp-observability.js'
 import { labRevisionHash } from '../src/domain/lab.js'
 import {
   activateKnowledgeRelease,
@@ -155,6 +156,206 @@ describeIntegration('PostgreSQL integration', () => {
   afterAll(async () => {
     await database.end()
   }, 30_000)
+
+  it('journals an unanswered MCP request and queues one priority demand', async () => {
+    const client = await database.connect()
+    const question =
+      `How do I configure quantum banana teleportation ${randomUUID()}?`
+    try {
+      await client.query('BEGIN')
+      const transactionalDatabase = client as unknown as Database
+      const requestId = randomUUID()
+      const mcpServer = createPublicMcpServer({
+        config,
+        database: transactionalDatabase,
+        quarantineDatabase: transactionalDatabase,
+        logger,
+        metrics: createMetrics(),
+        actor: { kind: 'anonymous' },
+        clientKey: 'integration-unanswered-demand',
+        clientAddress: '203.0.113.17',
+        requestId
+      })
+      const mcpClient = new Client({
+        name: 'unanswered-demand-integration',
+        version: '1.0.0'
+      })
+      const [clientTransport, serverTransport] =
+        InMemoryTransport.createLinkedPair()
+      await Promise.all([
+        mcpClient.connect(clientTransport),
+        mcpServer.connect(serverTransport)
+      ])
+      try {
+        const result = await mcpClient.callTool({
+          name: 'query_network_knowledge',
+          arguments: {
+            question,
+            context: {
+              vendor: 'Cisco',
+              model: 'C9300',
+              operating_system: 'IOS XE',
+              version: '17.9.4'
+            },
+            limit: 3
+          }
+        })
+        expect(result.structuredContent).toMatchObject({
+          unknown: true,
+          next_action: 'request_expert_answer'
+        })
+      } finally {
+        await mcpClient.close()
+        await mcpServer.close()
+      }
+
+      const demand = await client.query<{
+        id: string
+        status: string
+        priority: number
+        task_priority: number
+        task_type: string
+      }>(
+        `SELECT
+           demand.id,
+           demand.status,
+           demand.priority,
+           task.priority AS task_priority,
+           task.task_type
+         FROM knowledge_demands demand
+         JOIN pipeline_tasks task
+           ON task.id = demand.discovery_task_id
+         WHERE demand.question = $1`,
+        [question],
+      )
+      expect(demand.rows).toEqual([
+        expect.objectContaining({
+          status: 'discovering',
+          priority: 120,
+          task_priority: 120,
+          task_type: 'source_discovery'
+        })
+      ])
+
+      const log = await client.query<{
+        id: string
+        client_ip: string
+        question_preview: string
+        outcome: string
+        knowledge_demand_id: string
+      }>(
+        `SELECT
+           id::text,
+           host(client_ip) AS client_ip,
+           question_preview,
+           outcome,
+           knowledge_demand_id
+         FROM mcp_request_logs
+         WHERE request_id = $1`,
+        [requestId],
+      )
+      expect(log.rows).toEqual([
+        expect.objectContaining({
+          client_ip: '203.0.113.17',
+          question_preview: question,
+          outcome: 'unknown',
+          knowledge_demand_id: demand.rows[0]!.id
+        })
+      ])
+
+      const upgradeDemandId = await queueUnknownKnowledgeDemand(
+        transactionalDatabase,
+        'advise_network_upgrade',
+        {
+          model: 'C9300',
+          operating_system: 'IOS XE',
+          current_version: '17.6.5',
+          target_version: '17.15.5',
+          enabled_features: []
+        },
+        {
+          status: 'unknown',
+          applicability: {
+            vendor: 'Cisco',
+            model: 'C9300',
+            operating_system: 'IOS XE',
+            current_version: '17.6.5',
+            target_version: '17.15.5'
+          }
+        },
+      )
+      expect(upgradeDemandId).toEqual(expect.any(String))
+      const upgradeDemand = await client.query<{
+        tool_name: string
+        question: string
+        priority: number
+      }>(
+        `SELECT tool_name, question, priority
+         FROM knowledge_demands
+         WHERE id = $1`,
+        [upgradeDemandId],
+      )
+      expect(upgradeDemand.rows[0]).toMatchObject({
+        tool_name: 'advise_network_upgrade',
+        question: 'Upgrade C9300 IOS XE from 17.6.5 to 17.15.5',
+        priority: 120
+      })
+
+      const demoApp = createApiApp({
+        config: { ...config, enablePublicDemo: true },
+        database: transactionalDatabase,
+        adminDatabase: transactionalDatabase,
+        quarantineDatabase: transactionalDatabase,
+        logger,
+        metrics: createMetrics()
+      })
+      const privateSearchResponse = await demoApp.request(
+        `/public/v1/demo/mcp-requests?q=${encodeURIComponent(question)}`,
+      )
+      expect(privateSearchResponse.status).toBe(200)
+      const privateSearch = await privateSearchResponse.json() as {
+        items: unknown[]
+        total: number
+      }
+      expect(privateSearch).toMatchObject({ items: [], total: 0 })
+
+      const demoPageResponse = await demoApp.request(
+        '/public/v1/demo/mcp-requests?outcome=unknown&q=request_expert_answer',
+      )
+      expect(demoPageResponse.status).toBe(200)
+      const demoPage = await demoPageResponse.json() as {
+        items: Array<{
+          id: string
+          client_ip: string
+          question_preview: string
+          response_preview: string
+        }>
+      }
+      expect(demoPage.items[0]).toMatchObject({
+        client_ip: 'XXXXXXXX',
+        question_preview: 'XXXXXXXX'
+      })
+      expect(demoPage.items[0]?.response_preview).toContain('"unknown":true')
+
+      const detailResponse = await demoApp.request(
+        `/public/v1/demo/mcp-requests/${log.rows[0]!.id}`,
+      )
+      expect(detailResponse.status).toBe(200)
+      const detailText = await detailResponse.text()
+      expect(detailText).not.toContain(question)
+      expect(detailText).not.toContain('203.0.113.17')
+      expect(detailText).toContain('"unknown":true')
+
+      const forbiddenMutation = await demoApp.request(
+        '/public/v1/demo/mcp-requests',
+        { method: 'POST' },
+      )
+      expect(forbiddenMutation.status).toBe(405)
+    } finally {
+      await client.query('ROLLBACK')
+      client.release()
+    }
+  })
 
   it('uses reusable short verification handles and cached public stats', async () => {
     const workflowContext = await resolveNetworkContext(database, {
@@ -811,6 +1012,7 @@ describeIntegration('PostgreSQL integration', () => {
         metrics: createMetrics(),
         actor: { kind: 'anonymous' },
         clientKey: 'integration-domain-tools',
+        clientAddress: '127.0.0.1',
         requestId: randomUUID()
       })
       const mcpClient = new Client({

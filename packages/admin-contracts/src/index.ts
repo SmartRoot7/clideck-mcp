@@ -111,6 +111,24 @@ export const hourlyPublishedSchema = z.object({
   published: scalarNumberSchema
 })
 
+export const mcpRequestHourlySchema = z.object({
+  hour: timestampSchema,
+  requests: scalarNumberSchema,
+  answered: scalarNumberSchema,
+  unknown: scalarNumberSchema,
+  errors: scalarNumberSchema
+})
+
+export const mcpRequestAnalyticsSchema = z.object({
+  totals_24h: z.object({
+    requests: scalarNumberSchema,
+    answered: scalarNumberSchema,
+    unknown: scalarNumberSchema,
+    errors: scalarNumberSchema
+  }),
+  hourly_24h: z.array(mcpRequestHourlySchema)
+})
+
 export const pipelineTransitionSchema = z.object({
   scope: z.enum(['source', 'record']),
   from_stage: z.string(),
@@ -235,8 +253,56 @@ export const overviewSchema = z.object({
   }),
   activity_30d: z.array(activityDaySchema),
   published_hourly_24h: z.array(hourlyPublishedSchema),
+  mcp_requests: mcpRequestAnalyticsSchema,
   recent_errors: z.array(pipelineErrorSchema)
 })
+
+export const mcpRequestLogRowSchema = z.object({
+  id: z.string().regex(/^\d+$/),
+  request_id: z.string(),
+  client_ip: nullableStringSchema,
+  actor_kind: z.enum(['anonymous', 'tenant']),
+  tool_name: z.string(),
+  question_preview: z.string(),
+  response_preview: z.string(),
+  outcome: z.enum([
+    'success',
+    'unknown',
+    'blocked',
+    'error',
+    'rate_limited'
+  ]),
+  error_code: nullableStringSchema,
+  retryable: z.boolean(),
+  duration_ms: scalarNumberSchema,
+  knowledge_demand_id: nullableStringSchema,
+  learning_status: nullableStringSchema,
+  demand_count: nullableScalarNumberSchema,
+  result_release_id: nullableStringSchema.optional(),
+  occurred_at: timestampSchema
+})
+
+export const mcpRequestLogPageSchema = z.object({
+  items: z.array(mcpRequestLogRowSchema),
+  total: scalarNumberSchema,
+  limit: scalarNumberSchema,
+  offset: scalarNumberSchema
+})
+
+const loggedPayloadSchema = z.union([
+  z.record(z.string(), z.unknown()),
+  z.array(z.unknown())
+])
+
+export const mcpRequestLogDetailSchema = mcpRequestLogRowSchema
+  .omit({ result_release_id: true })
+  .extend({
+    request_payload: loggedPayloadSchema,
+    response_payload: loggedPayloadSchema,
+    first_seen_at: nullableStringSchema,
+    last_seen_at: nullableStringSchema,
+    result_release_sequence: nullableScalarNumberSchema
+  })
 
 export const coverageTargetSchema = z.object({
   id: z.string(),
@@ -682,6 +748,11 @@ export const feedbackRowsSchema = z.array(feedbackSchema)
 
 export type Session = z.infer<typeof sessionSchema>
 export type Overview = z.infer<typeof overviewSchema>
+export type McpRequestLogPage = z.infer<typeof mcpRequestLogPageSchema>
+export type McpRequestLogRow = z.infer<typeof mcpRequestLogRowSchema>
+export type McpRequestLogDetail = z.infer<
+  typeof mcpRequestLogDetailSchema
+>
 export type PipelineTransition = z.infer<typeof pipelineTransitionSchema>
 export type PipelineTransitions = z.infer<typeof pipelineTransitionsSchema>
 export type CoverageTarget = z.infer<typeof coverageTargetSchema>

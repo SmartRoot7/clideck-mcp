@@ -29,7 +29,8 @@ GRANT SELECT ON
   release_changes,
   active_knowledge_state,
   pipeline_transition_events,
-  public_stats_cache
+  public_stats_cache,
+  knowledge_demands
 TO clideck_mcp_api;
 GRANT SELECT, UPDATE ON principals TO clideck_mcp_api;
 GRANT SELECT, INSERT, UPDATE ON expert_tasks TO clideck_mcp_api;
@@ -38,6 +39,7 @@ GRANT SELECT, INSERT ON task_messages TO clideck_mcp_api;
 GRANT SELECT, INSERT ON task_public_events TO clideck_mcp_api;
 GRANT INSERT ON feedback TO clideck_mcp_api;
 GRANT SELECT, INSERT, UPDATE ON public_usage_daily TO clideck_mcp_api;
+GRANT INSERT ON mcp_request_logs TO clideck_mcp_api;
 GRANT SELECT, INSERT, UPDATE, DELETE ON rate_limit_buckets TO clideck_mcp_api;
 GRANT SELECT, INSERT, UPDATE ON mcp_protocol_tasks TO clideck_mcp_api;
 GRANT USAGE, SELECT ON SEQUENCE
@@ -97,7 +99,9 @@ GRANT SELECT ON
   pipeline_transition_events,
   verification_sessions,
   public_stats_cache,
-  pipeline_reconciliation_snapshots
+  pipeline_reconciliation_snapshots,
+  knowledge_demands,
+  mcp_request_logs
 TO clideck_mcp_admin;
 GRANT INSERT ON product_eval_runs TO clideck_mcp_admin;
 GRANT INSERT ON
@@ -176,7 +180,9 @@ GRANT SELECT ON
   candidate_verifications,
   agent_runs,
   active_source_slots,
-  source_collections
+  source_collections,
+  knowledge_demands,
+  mcp_request_logs
 TO clideck_mcp_worker;
 GRANT INSERT, UPDATE, DELETE ON active_source_slots
 TO clideck_mcp_worker;
@@ -200,6 +206,8 @@ GRANT UPDATE ON
 TO clideck_mcp_worker;
 GRANT SELECT, INSERT, UPDATE ON public_stats_cache TO clideck_mcp_worker;
 GRANT SELECT, DELETE ON verification_sessions TO clideck_mcp_worker;
+GRANT UPDATE ON knowledge_demands TO clideck_mcp_worker;
+GRANT DELETE ON mcp_request_logs TO clideck_mcp_worker;
 GRANT SELECT, INSERT ON pipeline_reconciliation_snapshots
 TO clideck_mcp_worker;
 GRANT SELECT, UPDATE, DELETE ON snapshot_contributions TO clideck_mcp_worker;
@@ -213,6 +221,12 @@ GRANT EXECUTE ON FUNCTION current_knowledge_validation(uuid) TO
   clideck_mcp_admin,
   clideck_mcp_worker,
   clideck_mcp_researcher;
+GRANT EXECUTE ON FUNCTION queue_network_knowledge_demand(
+  text,
+  text,
+  jsonb,
+  bytea
+) TO clideck_mcp_api;
 
 GRANT SELECT, UPDATE ON expert_tasks TO clideck_mcp_researcher;
 GRANT SELECT, INSERT ON task_messages TO clideck_mcp_researcher;
@@ -239,7 +253,8 @@ GRANT SELECT ON
   operating_systems,
   knowledge_items,
   knowledge_conflicts,
-  task_artifacts
+  task_artifacts,
+  knowledge_demands
 TO clideck_mcp_researcher;
 GRANT INSERT ON
   source_candidates,
@@ -261,7 +276,8 @@ GRANT UPDATE ON
   knowledge_candidates,
   active_source_slots,
   agent_runs,
-  worker_heartbeats
+  worker_heartbeats,
+  knowledge_demands
 TO clideck_mcp_researcher;
 GRANT DELETE ON active_source_slots TO clideck_mcp_researcher;
 GRANT USAGE, SELECT ON SEQUENCE
@@ -270,6 +286,10 @@ GRANT USAGE, SELECT ON SEQUENCE
   pipeline_events_id_seq,
   pipeline_transition_events_id_seq
 TO clideck_mcp_researcher;
+
+GRANT USAGE, SELECT ON SEQUENCE
+  mcp_request_logs_id_seq
+TO clideck_mcp_api, clideck_mcp_admin, clideck_mcp_worker;
 
 GRANT SELECT, INSERT, UPDATE ON
   snapshot_contributions

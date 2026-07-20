@@ -30,6 +30,8 @@ import { withTransaction } from '../db.js'
 import type { Logger } from '../logger.js'
 import { assertSafeProvenanceUrl } from '../security/url-policy.js'
 import { safePublicLookup } from '../security/url-policy.js'
+import { resolveNetworkContext } from './context.js'
+import { searchKnowledge } from './knowledge.js'
 import {
   claimMechanicalPipelineTask,
   completeMechanicalPipelineTask,
@@ -67,6 +69,72 @@ const allowedMediaTypes = new Set([
 type ClaimedMechanicalTask = {
   task: PipelineTaskRow
   leaseToken: string
+}
+
+async function reconcilePublishedKnowledgeDemands(
+  database: Database,
+  sourceIds: string[],
+): Promise<void> {
+  if (sourceIds.length === 0) return
+  const demands = await database.query<{
+    id: string
+    question: string
+    context: Record<string, unknown>
+  }>(
+    `SELECT id, question, context
+     FROM knowledge_demands
+     WHERE id IN (
+       SELECT source.knowledge_demand_id
+       FROM source_candidates source
+       WHERE source.id = ANY($1::uuid[])
+         AND source.knowledge_demand_id IS NOT NULL
+     )
+       AND status IN ('acquiring', 'processing', 'unresolved')`,
+    [sourceIds],
+  )
+  for (const demand of demands.rows) {
+    const vendor = demand.context['vendor_slug']
+    const operatingSystem = demand.context['operating_system_slug']
+    if (
+      typeof vendor !== 'string' ||
+      typeof operatingSystem !== 'string'
+    ) {
+      continue
+    }
+    const context = await resolveNetworkContext(database, {
+      vendor,
+      operating_system: operatingSystem,
+      ...(typeof demand.context['model'] === 'string'
+        ? { model: demand.context['model'] }
+        : {}),
+      ...(typeof demand.context['version'] === 'string'
+        ? { version: demand.context['version'] }
+        : {})
+    })
+    const answers = await searchKnowledge(
+      database,
+      demand.question,
+      context,
+      1,
+    )
+    const answer = answers[0]
+    if (!answer) continue
+    await database.query(
+      `UPDATE knowledge_demands demand
+          SET status = 'published',
+              result_revision_id = revision.id,
+              result_release_id = active.release_id,
+              last_error_code = NULL,
+              completed_at = now(),
+              last_seen_at = now()
+        FROM knowledge_revisions revision
+        CROSS JOIN active_release active
+        WHERE demand.id = $1
+          AND revision.public_ref = $2
+          AND demand.status <> 'published'`,
+      [demand.id, answer.revision_ref],
+    )
+  }
 }
 
 function bufferHash(value: Buffer): string {
@@ -119,7 +187,7 @@ async function fetchPublicDocument(
               'application/pdf,text/html,application/xhtml+xml,text/plain;q=0.9',
             'accept-encoding': 'br, gzip, deflate',
             'accept-language': 'en-US,en;q=0.8',
-            'user-agent': 'CliDeck-MCP-Knowledge-Pipeline/0.7'
+            'user-agent': 'CliDeck-MCP-Knowledge-Pipeline/0.8'
           }
         },
         (incoming) => {
@@ -1315,7 +1383,7 @@ async function publishSource(
     }
   }
 
-  return withTransaction(database, async (client) => {
+  const result = await withTransaction(database, async (client) => {
     let release: { releaseId: string; sequence: number } | null = null
     if (revisions.length > 0) {
       release = await publishKnowledgeBatch(
@@ -1433,6 +1501,10 @@ async function publishSource(
       release_sequence: release?.sequence ?? null
     }
   })
+  if (result.revisions_published > 0) {
+    await reconcilePublishedKnowledgeDemands(database, sourceIds)
+  }
+  return result
 }
 
 const candidatePublicationPayloadSchema = z.object({
@@ -1540,7 +1612,7 @@ async function publishCandidateBatch(
     }
   }
 
-  return withTransaction(database, async (client) => {
+  const result = await withTransaction(database, async (client) => {
     let deferredLow = 0
     let deferredMedium = 0
     for (const candidate of deferred) {
@@ -1655,6 +1727,10 @@ async function publishCandidateBatch(
       release_sequence: release?.sequence ?? null
     }
   })
+  if (result.records_published > 0) {
+    await reconcilePublishedKnowledgeDemands(database, payload.source_ids)
+  }
+  return result
 }
 
 async function executeMechanicalTask(

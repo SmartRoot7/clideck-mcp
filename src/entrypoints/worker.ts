@@ -11,6 +11,7 @@ import {
   processNextPipelineTask,
   purgeExpiredSourceArtifacts
 } from '../domain/pipeline-worker.js'
+import { purgeExpiredMcpRequestLogs } from '../domain/mcp-observability.js'
 import { refreshPublicStatsCacheIfStale } from '../domain/telemetry.js'
 import { createLogger } from '../logger.js'
 
@@ -19,6 +20,7 @@ const logger = createLogger(config)
 const database = createDatabase(config, logger, config.workerDatabaseUrl)
 const instanceId = `worker-${randomUUID()}`
 const abortController = new AbortController()
+let nextRequestLogCleanupAt = 0
 
 process.once('SIGTERM', () => abortController.abort())
 process.once('SIGINT', () => abortController.abort())
@@ -30,6 +32,13 @@ try {
     await runWorkerMaintenance(database, instanceId)
     await refreshPublicStatsCacheIfStale(database)
     await purgeExpiredSourceArtifacts(database, logger)
+    if (Date.now() >= nextRequestLogCleanupAt) {
+      await purgeExpiredMcpRequestLogs(
+        database,
+        config.mcpRequestLogRetentionDays,
+      )
+      nextRequestLogCleanupAt = Date.now() + 60 * 60_000
+    }
     const processedPipeline = await processNextPipelineTask(
       database,
       config,

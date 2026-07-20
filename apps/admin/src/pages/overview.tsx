@@ -119,6 +119,7 @@ export function OverviewPage({ overview }: { overview: Overview }) {
   const coverage = coverageQuery.data ?? []
   const publishedOption = usePublishedOption(overview)
   const activityOption = useActivityOption(overview)
+  const mcpRequestsOption = useMcpRequestsOption(overview)
   const tokensOption = useTokenOption(overview)
   const activeTotal = numberOf(overview.published_revisions)
   const activeExecutors = executorRows(overview)
@@ -180,6 +181,25 @@ export function OverviewPage({ overview }: { overview: Overview }) {
         <div className="chart-footnote">
           <span>Hourly publications use your browser timezone.</span>
           <span>{activeTotal.toLocaleString()} revisions currently active.</span>
+        </div>
+      </Panel>
+
+      <Panel
+        title="MCP requests · last 24 hours"
+        icon={Network}
+        help="Hourly public MCP tool calls. Answered excludes unknown results; Errors includes structured failures and rate-limit responses."
+        action={<Status tone={numberOf(overview.mcp_requests.totals_24h.errors) > 0 ? 'warning' : 'good'}>Live · 10s refresh</Status>}
+      >
+        <div className="request-analytics-summary">
+          <span><b>{formatNumber(overview.mcp_requests.totals_24h.requests, 0)}</b>Requests</span>
+          <span><b>{formatNumber(overview.mcp_requests.totals_24h.answered, 0)}</b>Answered</span>
+          <span><b>{formatNumber(overview.mcp_requests.totals_24h.unknown, 0)}</b>Learning</span>
+          <span><b>{formatNumber(overview.mcp_requests.totals_24h.errors, 0)}</b>Errors</span>
+        </div>
+        <Chart option={mcpRequestsOption} height={255} />
+        <div className="chart-footnote">
+          <span>Tool calls only; health, initialization and asset requests are excluded.</span>
+          <span>Unknown requests enter the priority learning loop.</span>
         </div>
       </Panel>
 
@@ -300,6 +320,72 @@ export function OverviewPage({ overview }: { overview: Overview }) {
       </div>
     </div>
   )
+}
+
+function useMcpRequestsOption(overview: Overview) {
+  return useMemo(() => {
+    const rows = overview.mcp_requests.hourly_24h
+    return {
+      color: ['#0f5fff', '#16885b', '#b56400', '#c4322a'],
+      tooltip: { trigger: 'axis' },
+      legend: {
+        top: 0,
+        right: 8,
+        itemWidth: 16,
+        itemHeight: 8,
+        textStyle: { color: '#667085', fontSize: 11 }
+      },
+      grid: { top: 42, left: 42, right: 18, bottom: 30 },
+      xAxis: {
+        type: 'category',
+        boundaryGap: false,
+        data: rows.map((row) =>
+          new Date(row.hour).toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit'
+          })),
+        axisLine: { lineStyle: { color: '#dfe4ec' } },
+        axisLabel: { color: '#98a2b3', fontSize: 10, interval: 2 }
+      },
+      yAxis: {
+        type: 'value',
+        minInterval: 1,
+        axisLabel: { color: '#98a2b3', fontSize: 10 },
+        splitLine: { lineStyle: { color: '#edf0f5' } }
+      },
+      series: [
+        {
+          name: 'Requests',
+          type: 'line',
+          symbol: 'none',
+          lineStyle: { width: 2 },
+          areaStyle: { opacity: .08 },
+          data: rows.map((row) => numberOf(row.requests))
+        },
+        {
+          name: 'Answered',
+          type: 'line',
+          symbol: 'none',
+          lineStyle: { width: 2 },
+          data: rows.map((row) => numberOf(row.answered))
+        },
+        {
+          name: 'Learning',
+          type: 'line',
+          symbol: 'none',
+          lineStyle: { width: 1.5, type: 'dashed' },
+          data: rows.map((row) => numberOf(row.unknown))
+        },
+        {
+          name: 'Errors',
+          type: 'line',
+          symbol: 'none',
+          lineStyle: { width: 1.5 },
+          data: rows.map((row) => numberOf(row.errors))
+        }
+      ]
+    }
+  }, [overview.mcp_requests.hourly_24h])
 }
 
 function usePublishedOption(overview: Overview) {

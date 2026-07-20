@@ -5,6 +5,11 @@ import { getNetworkDomainPack } from './domain-packs.js'
 import { ensurePipelineWork } from './pipeline.js'
 import { candidateKnowledgeSchema } from './publication.js'
 import { enforceKnowledgeRisk } from './risk.js'
+import {
+  getMcpRequestAnalytics,
+  getMcpRequestLog,
+  listMcpRequestLogs
+} from './mcp-observability.js'
 
 export type AdminRole = 'admin' | 'super_admin'
 
@@ -45,7 +50,8 @@ export async function getAdminOverview(
     activity,
     publishedHourly,
     errors,
-    activeTask
+    activeTask,
+    mcpRequests
   ] = await Promise.all([
     database.query(
       `SELECT
@@ -270,7 +276,24 @@ export async function getAdminOverview(
        FROM active_release ar
        JOIN releases r ON r.id = ar.release_id
        CROSS JOIN pipeline_settings ps
-       LEFT JOIN source_candidates sc ON sc.id = ps.active_source_id
+       LEFT JOIN source_candidates sc ON sc.id = coalesce(
+         ps.active_source_id,
+         (
+           SELECT task.source_candidate_id
+           FROM pipeline_tasks task
+           WHERE task.source_candidate_id IS NOT NULL
+             AND task.status IN ('claimed', 'running', 'queued')
+           ORDER BY
+             CASE task.status
+               WHEN 'running' THEN 0
+               WHEN 'claimed' THEN 1
+               ELSE 2
+             END,
+             task.priority DESC,
+             task.created_at
+           LIMIT 1
+         )
+       )
        LEFT JOIN coverage_targets ct ON ct.id = sc.coverage_target_id
        WHERE ar.singleton AND ps.singleton`,
     ),
@@ -1068,7 +1091,8 @@ export async function getAdminOverview(
        WHERE pt.status IN ('queued', 'claimed', 'running')
        ORDER BY pt.priority DESC, pt.created_at
        LIMIT 1`,
-    )
+    ),
+    getMcpRequestAnalytics(database)
   ])
 
   const data = summary.rows[0] ?? {}
@@ -1137,8 +1161,14 @@ export async function getAdminOverview(
     },
     activity_30d: activity.rows,
     published_hourly_24h: publishedHourly.rows,
+    mcp_requests: mcpRequests,
     recent_errors: errors.rows
   }
+}
+
+export {
+  getMcpRequestLog,
+  listMcpRequestLogs
 }
 
 export async function listCoverageTargets(database: Database) {
@@ -1248,7 +1278,53 @@ export async function getPipelineDetails(database: Database) {
 
 export async function getActiveSource(database: Database) {
   const source = await database.query(
-    `SELECT
+     `WITH selected_source AS (
+       SELECT coalesce(
+         (
+           SELECT settings.active_source_id
+           WHERE settings.active_source_id IS NOT NULL
+             AND (
+               EXISTS (
+                 SELECT 1
+                 FROM active_source_slots active
+                 WHERE active.source_candidate_id =
+                   settings.active_source_id
+               )
+               OR EXISTS (
+                 SELECT 1
+                 FROM pipeline_tasks active_task
+                 WHERE active_task.source_candidate_id =
+                   settings.active_source_id
+                   AND active_task.status IN ('claimed', 'running', 'queued')
+               )
+             )
+         ),
+         (
+           SELECT task.source_candidate_id
+           FROM pipeline_tasks task
+           WHERE task.source_candidate_id IS NOT NULL
+             AND task.status IN ('claimed', 'running', 'queued')
+           ORDER BY
+             CASE task.status
+               WHEN 'running' THEN 0
+               WHEN 'claimed' THEN 1
+               ELSE 2
+             END,
+             task.priority DESC,
+             task.created_at
+           LIMIT 1
+         ),
+         (
+           SELECT active.source_candidate_id
+           FROM active_source_slots active
+           ORDER BY active.slot_number
+           LIMIT 1
+         )
+       ) AS source_id
+       FROM pipeline_settings settings
+       WHERE settings.singleton
+     )
+     SELECT
        sc.id,
        sc.title,
        sc.document_type,
@@ -1286,11 +1362,11 @@ export async function getActiveSource(database: Database) {
         JOIN pipeline_tasks pt ON pt.id = kc.pipeline_task_id
         WHERE pt.source_candidate_id = sc.id
           AND kc.status = 'verified') AS candidates_verified
-     FROM pipeline_settings ps
-     JOIN source_candidates sc ON sc.id = ps.active_source_id
+     FROM selected_source selected
+     JOIN source_candidates sc ON sc.id = selected.source_id
      JOIN coverage_targets ct ON ct.id = sc.coverage_target_id
      LEFT JOIN source_artifacts sa ON sa.source_candidate_id = sc.id
-     WHERE ps.singleton`,
+     `,
   )
   if (!source.rows[0]) return null
   const [fragments, candidates, errors] = await Promise.all([

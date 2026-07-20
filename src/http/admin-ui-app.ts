@@ -17,6 +17,8 @@ import {
   knowledgePageSchema,
   labSchema,
   loginInputSchema,
+  mcpRequestLogDetailSchema,
+  mcpRequestLogPageSchema,
   mutationAckSchema,
   overviewSchema,
   pipelineDetailsSchema,
@@ -207,7 +209,7 @@ export function createAdminUiApp(dependencies: AdminUiDependencies) {
   app.get('/admin/health', (context) => context.json({
     status: 'ok',
     service: 'clideck-mcp-admin',
-    version: '0.7.4'
+    version: '0.8.0'
   }))
 
   function sessionFor(context: {
@@ -397,6 +399,27 @@ export function createAdminUiApp(dependencies: AdminUiDependencies) {
   app.get('/admin/api/v1/overview', (context) =>
     readEndpoint(context, '/admin/v1/overview', overviewSchema),
   )
+
+  app.get('/admin/api/v1/mcp-requests', (context) => {
+    const query = new URL(context.req.url).search
+    return readEndpoint(
+      context,
+      `/admin/v1/mcp-requests${query}`,
+      mcpRequestLogPageSchema,
+    )
+  })
+
+  app.get('/admin/api/v1/mcp-requests/:requestLogId', async (context) => {
+    const id = context.req.param('requestLogId')
+    if (!/^\d{1,19}$/.test(id)) {
+      return context.json({ error: 'invalid_request_log_id' }, 400)
+    }
+    return readEndpoint(
+      context,
+      `/admin/v1/mcp-requests/${id}`,
+      mcpRequestLogDetailSchema,
+    )
+  })
   app.get('/admin/api/v1/pipeline/transitions', async (context) => {
     const after = context.req.query('after')
     if (after !== undefined && !/^\d{1,19}$/.test(after)) {

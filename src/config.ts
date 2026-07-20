@@ -56,6 +56,8 @@ const envSchema = z.object({
   SOURCE_MAX_BYTES: z.coerce.number().int().min(1024).max(104857600)
     .default(104857600),
   SOURCE_RETENTION_DAYS: z.coerce.number().int().min(1).max(90).default(30),
+  MCP_REQUEST_LOG_RETENTION_DAYS: z.coerce.number().int().min(1).max(365)
+    .default(30),
   PIPELINE_FRAGMENT_BATCH_SIZE: z.coerce.number().int().min(1).max(32)
     .default(8),
   AUTO_PUBLISH_CONFIDENCE: z.coerce.number().min(0.5).max(1).default(0.9),
@@ -109,6 +111,7 @@ export type AppConfig = {
   sourceStorageDir: string
   sourceMaxBytes: number
   sourceRetentionDays: number
+  mcpRequestLogRetentionDays: number
   pipelineFragmentBatchSize: number
   autoPublishConfidence: number
   dangerousAutoPublishConfidence: number
@@ -180,6 +183,7 @@ export function getConfig(
     sourceStorageDir: parsed.SOURCE_STORAGE_DIR,
     sourceMaxBytes: parsed.SOURCE_MAX_BYTES,
     sourceRetentionDays: parsed.SOURCE_RETENTION_DAYS,
+    mcpRequestLogRetentionDays: parsed.MCP_REQUEST_LOG_RETENTION_DAYS,
     pipelineFragmentBatchSize: parsed.PIPELINE_FRAGMENT_BATCH_SIZE,
     autoPublishConfidence: parsed.AUTO_PUBLISH_CONFIDENCE,
     dangerousAutoPublishConfidence:

@@ -122,6 +122,17 @@ code { font-size: .78rem; color: #344054; }
 .published-panel { padding-bottom: 12px; }
 .chart { width: 100%; min-width: 0; }
 .chart-footnote { display: flex; justify-content: space-between; color: #98a2b3; font-size: .67rem; border-top: 1px solid #f0f2f6; padding-top: 9px; }
+.request-analytics-summary {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px; margin: -2px 0 10px; overflow: hidden;
+  border: 1px solid #e4e7ec; border-radius: 9px; background: #e4e7ec;
+}
+.request-analytics-summary span {
+  min-height: 58px; padding: 10px 13px; display: flex; flex-direction: column;
+  justify-content: center; gap: 3px; background: #fbfcfe; color: #667085;
+  font-size: .62rem; text-transform: uppercase; letter-spacing: .04em;
+}
+.request-analytics-summary b { color: #101828; font-size: 1.05rem; letter-spacing: -.03em; }
 
 .status { display: inline-flex; align-items: center; gap: 6px; width: fit-content; padding: 4px 8px; border-radius: 999px; font-size: .66rem; font-weight: 700; white-space: nowrap; background: #f2f4f7; color: #475467; }
 .status i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
@@ -279,6 +290,31 @@ code { font-size: .78rem; color: #344054; }
 .table-progress strong { font-size: .62rem; }
 .pagination { display: flex; justify-content: space-between; align-items: center; margin-top: 11px; color: var(--muted); font-size: .68rem; }
 .pagination > div { display: flex; gap: 3px; }
+.request-log__filters { grid-template-columns: minmax(260px, 1.5fr) minmax(180px, .8fr) minmax(145px, .55fr) auto auto; }
+.request-log__content { width: 28%; max-width: 420px; }
+.request-time { min-width: 126px; }
+.request-tool { min-width: 170px; }
+.request-preview {
+  display: -webkit-box; margin: 0; overflow: hidden; color: #344054;
+  font-size: .68rem; line-height: 1.42; -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3; word-break: break-word;
+}
+.request-preview--response { color: #475467; }
+.request-detail { width: min(1040px, 100%); max-height: min(840px, 92vh); overflow: auto; }
+.request-detail__body { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.request-detail__meta {
+  grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0,1fr));
+  gap: 8px; padding: 12px; border: 1px solid var(--border); border-radius: 9px;
+  background: #f8fafc;
+}
+.request-detail__meta span { display: flex; flex-direction: column; gap: 3px; color: #475467; font-size: .7rem; }
+.request-detail__meta b { color: #98a2b3; font-size: .58rem; letter-spacing: .06em; text-transform: uppercase; }
+.request-detail h3 { margin: 0 0 8px; font-size: .75rem; }
+.request-detail pre {
+  min-height: 260px; max-height: 430px; overflow: auto; margin: 0; padding: 14px;
+  border: 1px solid #1d2939; border-radius: 9px; background: #0b1220; color: #d9e4f7;
+  font: 11px/1.55 "JetBrains Mono Variable", monospace; white-space: pre-wrap; word-break: break-word;
+}
 
 .state { min-height: 130px; display: flex; align-items: center; justify-content: center; gap: 8px; color: #667085; font-size: .78rem; }
 .state--error { color: #b42318; flex-wrap: wrap; }
@@ -412,6 +448,8 @@ code { font-size: .78rem; color: #344054; }
   .overview-grid--wide { grid-template-columns: 1fr; }
   .knowledge-filters { grid-template-columns: repeat(3, minmax(130px, 1fr)); }
   .knowledge-filters .search-field { grid-column: span 3; }
+  .request-log__filters { grid-template-columns: repeat(2, minmax(160px, 1fr)); }
+  .request-log__filters .search-field { grid-column: span 2; }
   .key-value { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .login-page { grid-template-columns: minmax(380px, 480px) 1fr; }
   .login-context { padding: 50px; }
@@ -464,6 +502,11 @@ code { font-size: .78rem; color: #344054; }
   .key-value { grid-template-columns: 1fr 1fr; }
   .knowledge-filters { grid-template-columns: 1fr; }
   .knowledge-filters .search-field { grid-column: auto; }
+  .request-log__filters { grid-template-columns: 1fr; }
+  .request-log__filters .search-field { grid-column: auto; }
+  .request-detail__body, .request-detail__meta { grid-template-columns: 1fr; }
+  .request-detail__meta { grid-column: auto; }
+  .request-analytics-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .lab-counts { grid-template-columns: 1fr; }
   .provenance-search { grid-template-columns: 1fr; }
   .chart-footnote { flex-direction: column; gap: 4px; }

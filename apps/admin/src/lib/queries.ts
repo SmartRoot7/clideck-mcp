@@ -10,6 +10,8 @@ import {
   importRunsSchema,
   knowledgePageSchema,
   labSchema,
+  mcpRequestLogDetailSchema,
+  mcpRequestLogPageSchema,
   overviewSchema,
   pipelineTransitionsSchema,
   pipelineDetailsSchema,
@@ -47,6 +49,52 @@ export function useOverview() {
     queryFn: () => getJson(`${apiPrefix}/overview`, overviewSchema),
     refetchInterval: 10_000,
     staleTime: 8_000
+  })
+}
+
+export type McpRequestFilters = {
+  q: string
+  tool: string
+  outcome: string
+  limit: number
+  offset: number
+}
+
+export function useMcpRequests(
+  filters: McpRequestFilters,
+  enabled = true,
+) {
+  const { apiPrefix } = useOperationsRuntime()
+  const search = new URLSearchParams({
+    limit: String(filters.limit),
+    offset: String(filters.offset)
+  })
+  if (filters.q) search.set('q', filters.q)
+  if (filters.tool) search.set('tool', filters.tool)
+  if (filters.outcome) search.set('outcome', filters.outcome)
+  return useQuery({
+    queryKey: [apiPrefix, 'mcp-requests', filters],
+    queryFn: () => getJson(
+      `${apiPrefix}/mcp-requests?${search.toString()}`,
+      mcpRequestLogPageSchema,
+    ),
+    enabled,
+    placeholderData: keepPreviousData,
+    refetchInterval: enabled ? 10_000 : false
+  })
+}
+
+export function useMcpRequest(
+  requestLogId: string | null,
+) {
+  const { apiPrefix } = useOperationsRuntime()
+  return useQuery({
+    queryKey: [apiPrefix, 'mcp-request', requestLogId],
+    queryFn: () => getJson(
+      `${apiPrefix}/mcp-requests/${encodeURIComponent(requestLogId ?? '')}`,
+      mcpRequestLogDetailSchema,
+    ),
+    enabled: Boolean(requestLogId)
   })
 }
 
