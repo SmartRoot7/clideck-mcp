@@ -43,6 +43,19 @@ function matchesTerm(text: string, term: string): boolean {
     .test(text)
 }
 
+/**
+ * PostgreSQL-compatible patterns for ranking source fragments before an AI
+ * analysis run. They are deliberately based on the exact same term boundary
+ * rule as `matchesTerm`: the ranking may change order, but it must never
+ * promote a substring such as "remacsec" for the demand term "macsec".
+ */
+export function knowledgeDemandTermPatterns(question: string): string[] {
+  return knowledgeDemandTerms(question).map((term) => {
+    const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    return `(^|[^a-z0-9])${escaped}($|[^a-z0-9])`
+  })
+}
+
 export type KnowledgeDemandRelevance = {
   terms: string[]
   matchedTerms: string[]

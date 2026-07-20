@@ -18,7 +18,10 @@ import {
   recordPipelineTransition,
   recordPipelineTransitions
 } from './pipeline-transitions.js'
-import { isRelevantToKnowledgeDemand } from './knowledge-demand-relevance.js'
+import {
+  isRelevantToKnowledgeDemand,
+  knowledgeDemandTermPatterns
+} from './knowledge-demand-relevance.js'
 import { candidateRevisionSchema } from './schemas.js'
 import { enforceKnowledgeRisk } from './risk.js'
 
@@ -1167,6 +1170,7 @@ async function queueSourceWork(
     document_version: string | null
     document_date: string | null
     knowledge_demand_id: string | null
+    demand_question: string | null
   }>(
     `SELECT
        sc.id,
@@ -1183,9 +1187,11 @@ async function queueSourceWork(
        sc.title,
        sc.document_version,
        sc.document_date,
-       sc.knowledge_demand_id
+       sc.knowledge_demand_id,
+       demand.question AS demand_question
      FROM source_candidates sc
      JOIN coverage_targets ct ON ct.id = sc.coverage_target_id
+     LEFT JOIN knowledge_demands demand ON demand.id = sc.knowledge_demand_id
      WHERE sc.id = $1
      FOR UPDATE OF sc`,
     [sourceId],
@@ -1400,6 +1406,9 @@ async function queueSourceWork(
     }
     if (mode === 'verification') return false
 
+    const demandTermPatterns = source.demand_question
+      ? knowledgeDemandTermPatterns(source.demand_question)
+      : []
     const queuedFragments = await client.query<{
       id: string
       ordinal: number
@@ -1420,10 +1429,24 @@ async function queueSourceWork(
        WHERE sa.source_candidate_id = $1
          AND sf.status = 'queued'
          AND sf.reservation_task_id IS NULL
-       ORDER BY sf.ordinal
+       ORDER BY
+         COALESCE((
+           SELECT sum(
+             CASE
+               WHEN coalesce(sf.section_title, '') ~* demand_pattern THEN 4
+               ELSE 0
+             END +
+             CASE
+               WHEN sf.content ~* demand_pattern THEN 1
+               ELSE 0
+             END
+           )
+           FROM unnest($2::text[]) AS terms(demand_pattern)
+         ), 0) DESC,
+         sf.ordinal
        LIMIT 16
        FOR UPDATE OF sf SKIP LOCKED`,
-      [source.id],
+      [source.id, demandTermPatterns],
     )
     const analysisFragments = boundFragmentAnalysisBatch(
       queuedFragments.rows,

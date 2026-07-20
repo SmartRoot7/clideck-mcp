@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   assessKnowledgeDemandRelevance,
   isRelevantToKnowledgeDemand,
+  knowledgeDemandTermPatterns,
   knowledgeDemandTerms
 } from '../src/domain/knowledge-demand-relevance.js'
 
@@ -38,6 +39,17 @@ describe('knowledge-demand relevance', () => {
     expect(isRelevantToKnowledgeDemand(macsecQuestion, [
       'The remacsec-test command is unrelated.'
     ])).toBe(false)
+  })
+
+  it('produces PostgreSQL-safe exact-term patterns for source prioritization', () => {
+    const patterns = knowledgeDemandTermPatterns(macsecQuestion)
+    const macsecPattern = patterns.find((pattern) => pattern.includes('macsec'))
+
+    expect(macsecPattern).toBe('(^|[^a-z0-9])macsec($|[^a-z0-9])')
+    expect(new RegExp(macsecPattern!, 'i').test(
+      'MACsec key agreement troubleshooting',
+    )).toBe(true)
+    expect(new RegExp(macsecPattern!, 'i').test('remacsec-test')).toBe(false)
   })
 
   it('keeps ordinary operational terms usable for concrete network questions', () => {

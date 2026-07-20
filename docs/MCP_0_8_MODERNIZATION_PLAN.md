@@ -3,8 +3,8 @@
 ## Current focus
 
 `[~]` Observe the production demand-driven loop through analysis, verification
-and publication, then use only measured quality or throughput gaps for the
-next improvement.
+and publication. The next measured gap is eliminating Luna runs on early,
+document-order fragments that do not address an urgent unknown question.
 
 ## Scope and completion journal
 
@@ -185,6 +185,21 @@ the next successful executor closes it without losing or weakening a record.
 
 Ready when live median analysis batch size rises above one for normal converted
 documents, without any artifact-size, quality or safety regression.
+
+### M14 — Demand-aware fragment prioritization
+
+- `[~]` For a priority knowledge demand, rank queued fragments by exact
+  demand-term matches before creating a Luna analysis task; a matching section
+  title is weighted above a matching body.
+- `[~]` Preserve the existing complete-document queue: ranking changes only
+  which safe fragment is analysed first and never discards unmatched evidence.
+- `[~]` Use the same technical-term boundary rule as the source and candidate
+  relevance gates, so a substring such as `remacsec` cannot be promoted for a
+  `macsec` demand.
+
+Ready when an urgent demand begins with relevant sections from the official
+source, all remaining fragments remain retryable, and production observation
+shows fewer zero-yield Luna analysis runs without a false learned answer.
 
 ## Production verification — 20 July 2026
 
