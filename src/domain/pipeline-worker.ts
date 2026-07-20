@@ -25,7 +25,7 @@ import { z } from 'zod'
 
 import type { AppConfig } from '../config.js'
 import { sha256Label } from '../crypto.js'
-import type { Database } from '../db.js'
+import type { Database, DatabaseClient } from '../db.js'
 import { withTransaction } from '../db.js'
 import type { Logger } from '../logger.js'
 import { assertSafeProvenanceUrl } from '../security/url-policy.js'
@@ -307,6 +307,8 @@ async function fetchPublicDocument(
   }
   throw new Error('SOURCE_REDIRECT_INVALID')
 }
+
+type PublicDocumentFetcher = typeof fetchPublicDocument
 
 function htmlToText(html: string): string {
   return html
@@ -832,13 +834,49 @@ export function chunkSourceText(text: string): TextFragment[] {
   return fragments
 }
 
+async function markSourceCandidateDuplicate(
+  client: DatabaseClient,
+  sourceId: string,
+): Promise<void> {
+  await client.query(
+    `UPDATE source_candidates
+        SET status = 'duplicate',
+            content_hash = NULL,
+            failure_code = NULL,
+            failure_message = NULL,
+            completed_at = now(),
+            updated_at = now()
+      WHERE id = $1`,
+    [sourceId],
+  )
+  await client.query(
+    `DELETE FROM active_source_slots
+      WHERE source_candidate_id = $1`,
+    [sourceId],
+  )
+  await client.query(
+    `UPDATE pipeline_settings
+        SET active_source_id = (
+              SELECT source_candidate_id
+              FROM active_source_slots
+              ORDER BY slot_number
+              LIMIT 1
+            ),
+            updated_at = now(),
+            updated_by = 'duplicate-detector'
+      WHERE singleton AND active_source_id = $1`,
+    [sourceId],
+  )
+}
+
 async function acquireSource(
   database: Database,
   config: AppConfig,
   claimed: ClaimedMechanicalTask,
+  fetchDocument: PublicDocumentFetcher = fetchPublicDocument,
 ): Promise<Record<string, unknown>> {
   const payload = sourcePayloadSchema.parse(claimed.task.payload)
-  const downloaded = await fetchPublicDocument(
+  const downloaded = await fetchDocument(
     payload.canonical_url,
     config.sourceMaxBytes,
   )
@@ -856,6 +894,32 @@ async function acquireSource(
   let outcome: { duplicate: boolean; [key: string]: unknown }
   try {
     outcome = await withTransaction(database, async (client) => {
+      // A collection link can redirect to a canonical document that another
+      // source already owns. This is a normal duplicate, not a mechanical
+      // failure: trying to update the candidate URL after storing the artifact
+      // would otherwise violate source_candidates_canonical_url_key and waste
+      // a retry slot.
+      const canonicalDuplicate = await client.query<{ id: string }>(
+        `SELECT id
+         FROM source_candidates
+         WHERE canonical_url = $1
+           AND id <> $2
+         LIMIT 1
+         FOR UPDATE`,
+        [downloaded.finalUrl, payload.source_id],
+      )
+      if (canonicalDuplicate.rows[0]) {
+        await markSourceCandidateDuplicate(
+          client,
+          payload.source_id,
+        )
+        return {
+          duplicate: true,
+          duplicate_of: canonicalDuplicate.rows[0].id,
+          duplicate_reason: 'canonical_url_redirect',
+          content_hash: contentHash
+        }
+      }
       const duplicate = await client.query<{ source_candidate_id: string }>(
       `SELECT source_candidate_id
        FROM source_artifacts
@@ -867,23 +931,7 @@ async function acquireSource(
         duplicate.rows[0] &&
         duplicate.rows[0].source_candidate_id !== payload.source_id
       ) {
-        await client.query(
-          `UPDATE source_candidates
-            SET status = 'duplicate',
-                content_hash = NULL,
-                completed_at = now(),
-                updated_at = now()
-          WHERE id = $1`,
-          [payload.source_id],
-        )
-        await client.query(
-          `UPDATE pipeline_settings
-            SET active_source_id = NULL,
-                updated_at = now(),
-                updated_by = 'duplicate-detector'
-          WHERE singleton AND active_source_id = $1`,
-          [payload.source_id],
-        )
+        await markSourceCandidateDuplicate(client, payload.source_id)
         return {
           duplicate: true,
           duplicate_of: duplicate.rows[0].source_candidate_id,
@@ -1816,10 +1864,11 @@ async function executeMechanicalTask(
   database: Database,
   config: AppConfig,
   claimed: ClaimedMechanicalTask,
+  fetchDocument: PublicDocumentFetcher = fetchPublicDocument,
 ): Promise<Record<string, unknown>> {
   switch (claimed.task.task_type) {
     case 'source_acquisition':
-      return acquireSource(database, config, claimed)
+      return acquireSource(database, config, claimed, fetchDocument)
     case 'source_conversion':
       return convertSource(database, claimed)
     case 'source_chunking':
@@ -1845,6 +1894,7 @@ export async function processNextPipelineTask(
   config: AppConfig,
   logger: Logger,
   workerId: string,
+  fetchDocument: PublicDocumentFetcher = fetchPublicDocument,
 ): Promise<boolean> {
   const claimed = await claimMechanicalPipelineTask(
     database,
@@ -1854,7 +1904,12 @@ export async function processNextPipelineTask(
   if (!claimed) return expandNextSourceCollection(database, logger)
 
   try {
-    const result = await executeMechanicalTask(database, config, claimed)
+    const result = await executeMechanicalTask(
+      database,
+      config,
+      claimed,
+      fetchDocument,
+    )
     await completeMechanicalPipelineTask(
       database,
       claimed.task.id,

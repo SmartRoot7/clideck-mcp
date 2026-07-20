@@ -307,6 +307,24 @@ rest of the four-Luna pipeline appear fully occupied.
 Ready when invalid records no longer consume a release attempt merely to find
 out that they need automated repair.
 
+### M22 — Canonical source identity at acquisition
+
+- `[x]` Treat a source URL that redirects to an already-known canonical
+  document as a normal duplicate, rather than letting a unique-key error turn
+  it into a failed mechanical task.
+- `[x]` Remove the duplicate source from active lanes and clean up its
+  temporary artifact immediately; retain the already-owned canonical document
+  as the sole processing path.
+- `[x]` Cover the redirect collision with a PostgreSQL integration scenario:
+  the task completes as a duplicate, creates no second artifact and records no
+  false worker failure.
+- `[~]` Observe the next collection cycle to confirm that duplicate-key
+  acquisition failures stop growing. Terminal 404/410 URLs remain separately
+  classified as unavailable documents and are never retried.
+
+Ready when a normal canonical redirect cannot consume a retry, poison a source
+lane or inflate the mechanical-failure metric.
+
 ## Production verification — 20 July 2026
 
 - `[x]` Deployed `bc7c950b585bd994efa704e4ca246320fbde05dd` exclusively through

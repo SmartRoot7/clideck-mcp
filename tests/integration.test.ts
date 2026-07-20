@@ -4781,4 +4781,152 @@ describeIntegration('PostgreSQL integration', () => {
       failure_code: 'SOURCE_HTTP_404'
     })
   })
+
+  it('treats a redirect to an existing canonical document as a duplicate', async () => {
+    const suffix = randomUUID().replaceAll('-', '')
+    const scratch = await mkdtemp(join(tmpdir(), 'clideck-redirect-test-'))
+    const sourceIds: string[] = []
+    let targetId: string | null = null
+    try {
+      const target = await database.query<{ id: string }>(
+        `INSERT INTO coverage_targets (
+           vendor_slug, product_family, model, operating_system_slug,
+           version_branch, document_role, priority, status, next_check_at
+         )
+         VALUES (
+           'cisco', $1, 'C9300', 'ios-xe', '17.15',
+           'commands', 100, 'active', now()
+         )
+         RETURNING id`,
+        [`redirect-dedupe-${suffix}`],
+      )
+      targetId = target.rows[0]!.id
+      const finalUrl = `https://example.com/canonical-${suffix}.txt`
+      const redirectUrl = `https://example.com/redirect-${suffix}`
+      const sources = await database.query<{ id: string }>(
+        `INSERT INTO source_candidates (
+           coverage_target_id, canonical_url, document_type, title, status,
+           discovered_by
+         )
+         VALUES
+           ($1, $2, 'command_reference', 'Existing canonical document',
+            'approved', 'integration-test'),
+           ($1, $3, 'command_reference', 'Redirecting document',
+            'approved', 'integration-test')
+         RETURNING id`,
+        [targetId, finalUrl, redirectUrl],
+      )
+      sourceIds.push(...sources.rows.map((source) => source.id))
+      const redirectSourceId = sources.rows[1]!.id
+      const task = await database.query<{ id: string }>(
+        `INSERT INTO pipeline_tasks (
+           task_type, stage, status, priority, dedupe_key,
+           source_candidate_id, coverage_target_id, payload
+         )
+         VALUES (
+           'source_acquisition', 'acquire', 'queued', 125, $1,
+           $2::uuid, $3::uuid,
+           jsonb_build_object(
+             'source_id', ($2::uuid)::text,
+             'canonical_url', $4::text,
+             'document_type', 'command_reference',
+             'title', 'Redirecting document',
+             'document_version', null,
+             'document_date', null
+           )
+         )
+         RETURNING id`,
+        [
+          `redirect-dedupe-task:${suffix}`,
+          redirectSourceId,
+          targetId,
+          redirectUrl,
+        ],
+      )
+
+      await expect(processNextPipelineTask(
+        database,
+        { ...config, sourceStorageDir: scratch },
+        logger,
+        'redirect-dedupe-worker',
+        async () => ({
+          body: Buffer.from('show redirect-dedupe', 'utf8'),
+          mediaType: 'text/plain',
+          finalUrl,
+        }),
+      )).resolves.toBe(true)
+
+      const source = await database.query<{
+        status: string
+        failure_code: string | null
+        content_hash: string | null
+      }>(
+        `SELECT status, failure_code, content_hash
+         FROM source_candidates
+         WHERE id = $1`,
+        [redirectSourceId],
+      )
+      expect(source.rows[0]).toEqual({
+        status: 'duplicate',
+        failure_code: null,
+        content_hash: null,
+      })
+      const completedTask = await database.query<{
+        status: string
+        duplicate_reason: string | null
+      }>(
+        `SELECT status, result->>'duplicate_reason' AS duplicate_reason
+         FROM pipeline_tasks
+         WHERE id = $1`,
+        [task.rows[0]!.id],
+      )
+      expect(completedTask.rows[0]).toEqual({
+        status: 'completed',
+        duplicate_reason: 'canonical_url_redirect',
+      })
+      const artifacts = await database.query<{ count: number }>(
+        `SELECT count(*)::int AS count
+         FROM source_artifacts
+         WHERE source_candidate_id = $1`,
+        [redirectSourceId],
+      )
+      expect(artifacts.rows[0]?.count).toBe(0)
+    } finally {
+      if (sourceIds.length > 0) {
+        await database.query(
+          `DELETE FROM active_source_slots
+           WHERE source_candidate_id = ANY($1::uuid[]);`,
+          [sourceIds],
+        )
+        await database.query(
+          `UPDATE pipeline_settings
+              SET active_source_id = NULL
+            WHERE active_source_id = ANY($1::uuid[])`,
+          [sourceIds],
+        )
+        await database.query(
+          `DELETE FROM pipeline_tasks
+           WHERE source_candidate_id = ANY($1::uuid[]);`,
+          [sourceIds],
+        )
+        await database.query(
+          `DELETE FROM source_artifacts
+           WHERE source_candidate_id = ANY($1::uuid[]);`,
+          [sourceIds],
+        )
+        await database.query(
+          `DELETE FROM source_candidates
+           WHERE id = ANY($1::uuid[]);`,
+          [sourceIds],
+        )
+      }
+      if (targetId) {
+        await database.query(
+          'DELETE FROM coverage_targets WHERE id = $1',
+          [targetId],
+        )
+      }
+      await rm(scratch, { recursive: true, force: true })
+    }
+  })
 })
