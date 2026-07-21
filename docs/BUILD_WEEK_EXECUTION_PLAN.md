@@ -825,6 +825,11 @@ Verified before release:
   classifier, removing contradictory legacy `dangerous` presentation without
   editing the immutable historical revision; workflows and write operations
   retain their stored conservative risk.
+- live portable acceptance also identified read-only legacy spellings omitted
+  from the deterministic allowlist (`ip addr`, `swconfig ... show`, `clagctl`,
+  and `onie-support`). These exact inspection forms are now classified as
+  read-only at public rendering while adjacent mutation forms such as
+  `ip link set`, `uci set`, install, boot, firmware, and reload remain guarded.
 
 Remaining: production backup and canonical deployment, 14 real public MCP
 scenarios, latency/query-plan review, and production conservation accounting.

@@ -30,16 +30,19 @@ function isDeterministicReadOnlyCommand(line: string): boolean {
     /^(?:show|display|ping|traceroute|tracert|terminal length|dir|more|verify)\b/i
       .test(line)
   ) return true
-  if (/^(?:onie-sysinfo|uname|uptime)(?:\s|$)/i.test(line)) return true
+  if (/^(?:onie-sysinfo|onie-support|uname|uptime)(?:\s|$)/i.test(line)) {
+    return true
+  }
+  if (/^clagctl(?:\s+(?:status|show)(?:\s|$)|\s*$)/i.test(line)) return true
   if (/^nv\s+show\b/i.test(line)) return true
   if (
     /^networkctl(?:\s+(?:list|status|lldp|label)(?:\s|$)|\s*$)/i.test(line)
   ) {
     return true
   }
-  if (/^swconfig\s+dev\s+\S+\s+show(?:\s|$)/i.test(line)) return true
+  if (/^swconfig\s+dev(?:\s+\S+)?\s+show(?:\s|$)/i.test(line)) return true
   if (
-    /^ip(?:\s+-\S+)*\s+(?:link|address|addr|route|neighbor|neigh|rule)\s+(?:show|list)(?:\s|$)/i
+    /^ip(?:\s+-\S+)*\s+(?:link|address|addr|route|neighbor|neigh|rule)(?:\s+(?:show|list)(?:\s|$)|\s*$)/i
       .test(line)
   ) return true
   if (

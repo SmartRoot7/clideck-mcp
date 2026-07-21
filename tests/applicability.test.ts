@@ -81,6 +81,10 @@ describe('knowledge applicability', () => {
       'safe_read_only'
     )
     expect(classifyKnowledgeRisk(['ip link show'])).toBe('safe_read_only')
+    expect(classifyKnowledgeRisk(['ip addr'])).toBe('safe_read_only')
+    expect(classifyKnowledgeRisk(['swconfig dev show'])).toBe('safe_read_only')
+    expect(classifyKnowledgeRisk(['clagctl'])).toBe('safe_read_only')
+    expect(classifyKnowledgeRisk(['onie-support'])).toBe('safe_read_only')
     expect(classifyKnowledgeRisk(['ip link set eth0 down'])).toBe('unknown')
     expect(classifyKnowledgeRisk(['networkctl reload'])).toBe(
       'service_disruptive'
