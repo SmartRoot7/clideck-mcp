@@ -37,7 +37,8 @@ GRANT SELECT ON
   operating_system_family_memberships,
   platform_architectures,
   knowledge_applicability_index,
-  knowledge_applicability_exclusions
+  knowledge_applicability_exclusions,
+  vendor_software_families
 TO clideck_mcp_api;
 GRANT SELECT, UPDATE ON principals TO clideck_mcp_api;
 GRANT SELECT, INSERT, UPDATE ON expert_tasks TO clideck_mcp_api;
@@ -117,6 +118,7 @@ GRANT SELECT ON
   platform_architectures,
   knowledge_applicability_index,
   knowledge_applicability_exclusions,
+  vendor_software_families,
   applicability_reindex_runs,
   pipeline_ai_circuits
 TO clideck_mcp_admin;
@@ -199,6 +201,7 @@ GRANT SELECT ON
   platform_architectures,
   knowledge_applicability_index,
   knowledge_applicability_exclusions,
+  vendor_software_families,
   public_lab_validation_summary,
   public_latest_eval_result,
   knowledge_conflicts,

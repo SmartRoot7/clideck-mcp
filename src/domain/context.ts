@@ -224,6 +224,19 @@ async function familyIdsWithInheritance(
   return result.rows.map((row) => row.id)
 }
 
+async function vendorLevelFamilyId(
+  database: Database,
+  vendorId: string,
+): Promise<string | null> {
+  const result = await database.query<{ family_id: string }>(
+    `SELECT family_id
+     FROM vendor_software_families
+     WHERE vendor_id = $1`,
+    [vendorId],
+  )
+  return result.rows[0]?.family_id ?? null
+}
+
 export type InternalResolvedContext = ResolvedNetworkContext & {
   vendorId: string | null
   platformId: string | null
@@ -312,7 +325,15 @@ export async function resolveNetworkContext(
   if (!input.version) {
     ambiguities.push('No software version was supplied; verify version applicability')
   }
-  const familyIds = await familyIdsWithInheritance(database, family.id)
+  const inheritedFamilyIds = await familyIdsWithInheritance(database, family.id)
+  const vendorLevelFamily = vendor?.score &&
+    vendor.score >= minimumVendorScore
+    ? await vendorLevelFamilyId(database, vendor.id)
+    : null
+  const familyIds = [...new Set([
+    ...inheritedFamilyIds,
+    ...(vendorLevelFamily ? [vendorLevelFamily] : [])
+  ])]
   return {
     vendorId: vendor?.score && vendor.score >= minimumVendorScore
       ? vendor.id

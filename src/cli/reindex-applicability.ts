@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto'
 import type { DatabaseClient } from '../db.js'
 import { createCliRuntime } from './runtime.js'
 
-const classifierVersion = 'portable-v1'
+const classifierVersion = 'portable-v2'
 const dryRun = process.argv.includes('--dry-run')
 const verify = process.argv.includes('--verify')
 const resume = process.argv.includes('--resume')
@@ -16,6 +16,12 @@ type OperatingSystemRow = {
   vendor_slug: string
   vendor_name: string
   family_count: number
+}
+
+type VendorRow = {
+  id: string
+  slug: string
+  display_name: string
 }
 
 function fallbackFamilySlug(vendor: string, operatingSystem: string): string {
@@ -80,6 +86,38 @@ async function ensureVendorSpecificFamilies(
   }
 }
 
+async function ensureVendorLevelFamilies(
+  client: DatabaseClient,
+): Promise<void> {
+  const vendors = await client.query<VendorRow>(
+    `SELECT DISTINCT vendor.id, vendor.slug, vendor.display_name
+     FROM knowledge_revisions revision
+     JOIN knowledge_items item ON item.id = revision.knowledge_item_id
+     JOIN vendors vendor ON vendor.id = revision.vendor_id
+     WHERE item.domain_id = 'network'
+       AND revision.domain_id = 'network'
+       AND revision.operating_system_id IS NULL
+     ORDER BY vendor.slug`,
+  )
+  for (const vendor of vendors.rows) {
+    const slug = fallbackFamilySlug(vendor.slug, 'vendor-level')
+    const family = await client.query<{ id: string }>(
+      `INSERT INTO software_families (
+         slug, display_name, portability_mode, version_strategy
+       ) VALUES ($1, $2, 'vendor_specific', 'vendor')
+       ON CONFLICT (slug) DO UPDATE SET updated_at = now()
+       RETURNING id`,
+      [slug, `${vendor.display_name} vendor-level`],
+    )
+    await client.query(
+      `INSERT INTO vendor_software_families (vendor_id, family_id)
+       VALUES ($1, $2)
+       ON CONFLICT (vendor_id) DO UPDATE SET family_id = excluded.family_id`,
+      [vendor.id, family.rows[0]!.id],
+    )
+  }
+}
+
 async function rebuildIndexBatch(
   client: DatabaseClient,
   afterRevisionId: string | null,
@@ -102,6 +140,7 @@ async function rebuildIndexBatch(
          revision.id AS revision_id,
          family.id AS family_id,
          CASE
+           WHEN os.id IS NULL THEN 'vendor_os'
            WHEN os.slug = 'onie'
              AND vendor.slug = 'open-compute-project'
              THEN 'os_family'
@@ -189,18 +228,28 @@ async function rebuildIndexBatch(
        LEFT JOIN platforms platform ON platform.id = revision.platform_id
        LEFT JOIN platform_architectures architecture
          ON architecture.platform_id = platform.id
-       JOIN operating_systems os ON os.id = revision.operating_system_id
+       LEFT JOIN operating_systems os ON os.id = revision.operating_system_id
        JOIN LATERAL (
-         SELECT selected_family.*
-         FROM operating_system_family_memberships membership
-         JOIN software_families selected_family
-           ON selected_family.id = membership.family_id
-         WHERE membership.operating_system_id = os.id
+         SELECT candidates.*
+         FROM (
+           SELECT selected_family.*
+           FROM operating_system_family_memberships membership
+           JOIN software_families selected_family
+             ON selected_family.id = membership.family_id
+           WHERE membership.operating_system_id = os.id
+           UNION ALL
+           SELECT vendor_family.*
+           FROM vendor_software_families mapping
+           JOIN software_families vendor_family
+             ON vendor_family.id = mapping.family_id
+           WHERE os.id IS NULL
+             AND mapping.vendor_id = vendor.id
+         ) candidates
          ORDER BY
-           CASE selected_family.portability_mode
+           CASE candidates.portability_mode
              WHEN 'portable' THEN 0 ELSE 1
            END,
-           selected_family.slug
+           candidates.slug
          LIMIT 1
        ) family ON true
        WHERE item.domain_id = 'network'
@@ -337,6 +386,7 @@ try {
         runId = run.rows[0]!.id
       }
       await ensureVendorSpecificFamilies(setupClient)
+      await ensureVendorLevelFamilies(setupClient)
       await setupClient.query('COMMIT')
     } catch (error) {
       await setupClient.query('ROLLBACK')

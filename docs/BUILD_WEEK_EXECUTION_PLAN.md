@@ -801,6 +801,12 @@ Verified before release:
   preflight because seed revisions had not yet received the new derived index;
   the canonical script now runs the verified reindex between seed and tests,
   before any remote backup, switch, or production mutation.
+- the next conservation gate found legacy network revisions with no OS; rollout
+  again stopped before checkout switch and restored release #1220. Migration
+  027 maps those immutable records to a vendor-level family that is added only
+  for the requested vendor, including portable-OS queries without cross-vendor
+  inheritance. A synthetic no-OS revision then passed exact 60/60 conservation
+  and all 40 focused PostgreSQL scenarios.
 
 Remaining: production backup and canonical deployment, 14 real public MCP
 scenarios, latency/query-plan review, and production conservation accounting.
