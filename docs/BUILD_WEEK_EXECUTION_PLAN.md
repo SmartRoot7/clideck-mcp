@@ -807,6 +807,14 @@ Verified before release:
   for the requested vendor, including portable-OS queries without cross-vendor
   inheritance. A synthetic no-OS revision then passed exact 60/60 conservation
   and all 40 focused PostgreSQL scenarios.
+- the corrected production backfill indexed all 71,416 immutable network
+  revisions with exact conservation, including 1,884 portable revisions. The
+  supplemental risk-repair then found a legacy inspection record without the
+  Network Pack's required command/procedure content; rollout again preserved
+  release #1220 and did not switch application checkout. Risk reconciliation
+  now isolates each legacy candidate with a PostgreSQL savepoint, records
+  deterministic Domain Pack validation skips by reason, and continues the
+  safe immutable corrections without hiding unexpected database failures.
 
 Remaining: production backup and canonical deployment, 14 real public MCP
 scenarios, latency/query-plan review, and production conservation accounting.

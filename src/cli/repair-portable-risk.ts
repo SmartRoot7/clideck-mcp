@@ -73,6 +73,14 @@ function cleanLegacyRiskLines(lines: string[]): string[] {
   )
 }
 
+function skippableLegacyCandidateReason(error: unknown): string | null {
+  if (!(error instanceof Error)) return null
+  const prefix = 'NETWORK_DOMAIN_CANDIDATE_INVALID:'
+  if (!error.message.startsWith(prefix)) return null
+  const reason = error.message.slice(prefix.length).trim()
+  return reason || 'NETWORK_DOMAIN_CANDIDATE_INVALID'
+}
+
 async function loadRepairableRows(
   client: DatabaseClient,
 ): Promise<RepairRow[]> {
@@ -168,59 +176,70 @@ try {
     const rows = await loadRepairableRows(client)
     const revisions: { itemId: string; revisionId: string }[] = []
     let skippedWithoutEvidence = 0
+    const skippedInvalid: Record<string, number> = {}
     for (const row of rows) {
       const provenance = await loadProvenance(client, row.revision_id)
       if (provenance.length === 0) {
         skippedWithoutEvidence += 1
         continue
       }
-      revisions.push(await createKnowledgeRevision(client, {
-        stable_key: row.stable_key,
-        kind: row.kind,
-        vendor_slug: row.vendor_slug,
-        platform_slug: row.platform_slug ?? undefined,
-        operating_system_slug: row.operating_system_slug,
-        version_min: row.version_min ?? undefined,
-        version_max: row.version_max ?? undefined,
-        software_family_slug: row.software_family_slug,
-        applicability_scope: row.scope_level,
-        architecture_slug: row.architecture_slug ?? undefined,
-        version_scope: row.version_scope,
-        version_branch: row.version_branch ?? undefined,
-        title: row.title,
-        summary: row.summary,
-        question_patterns: row.question_patterns,
-        cli_mode: row.cli_mode ?? undefined,
-        command: row.command_text ?? undefined,
-        procedure: row.procedure_steps,
-        prerequisites: row.prerequisites,
-        risks: cleanLegacyRiskLines(row.risks),
-        verification: row.verification_steps,
-        rollback: row.rollback_steps,
-        limitations: [
-          ...row.limitations,
-          'Safety metadata was deterministically reclassified without changing the documented operation.'
-        ],
-        dangerous: false,
-        risk_level: 'safe_read_only',
-        confidence: Number(row.confidence),
-        quality_score: Number(row.quality_score),
-        confidence_reason: row.confidence_reason,
-        last_verified_at: dateOnly(row.last_verified_at),
-        provenance: provenance.map((source) => ({
-          url: source.canonical_url,
-          document_type: source.document_type.slice(0, 80),
-          title: source.title.slice(0, 240),
-          document_version: source.document_version ?? undefined,
-          document_date: source.document_date
-            ? dateOnly(source.document_date)
-            : undefined,
-          verified_at: dateOnly(source.verified_at),
-          content_hash: source.content_hash,
-          evidence_fragment: source.evidence_fragment,
-          evidence_role: source.evidence_role
-        }))
-      }, 'super_admin'))
+      await client.query('SAVEPOINT portable_risk_record')
+      try {
+        revisions.push(await createKnowledgeRevision(client, {
+          stable_key: row.stable_key,
+          kind: row.kind,
+          vendor_slug: row.vendor_slug,
+          platform_slug: row.platform_slug ?? undefined,
+          operating_system_slug: row.operating_system_slug,
+          version_min: row.version_min ?? undefined,
+          version_max: row.version_max ?? undefined,
+          software_family_slug: row.software_family_slug,
+          applicability_scope: row.scope_level,
+          architecture_slug: row.architecture_slug ?? undefined,
+          version_scope: row.version_scope,
+          version_branch: row.version_branch ?? undefined,
+          title: row.title,
+          summary: row.summary,
+          question_patterns: row.question_patterns,
+          cli_mode: row.cli_mode ?? undefined,
+          command: row.command_text ?? undefined,
+          procedure: row.procedure_steps,
+          prerequisites: row.prerequisites,
+          risks: cleanLegacyRiskLines(row.risks),
+          verification: row.verification_steps,
+          rollback: row.rollback_steps,
+          limitations: [
+            ...row.limitations,
+            'Safety metadata was deterministically reclassified without changing the documented operation.'
+          ],
+          dangerous: false,
+          risk_level: 'safe_read_only',
+          confidence: Number(row.confidence),
+          quality_score: Number(row.quality_score),
+          confidence_reason: row.confidence_reason,
+          last_verified_at: dateOnly(row.last_verified_at),
+          provenance: provenance.map((source) => ({
+            url: source.canonical_url,
+            document_type: source.document_type.slice(0, 80),
+            title: source.title.slice(0, 240),
+            document_version: source.document_version ?? undefined,
+            document_date: source.document_date
+              ? dateOnly(source.document_date)
+              : undefined,
+            verified_at: dateOnly(source.verified_at),
+            content_hash: source.content_hash,
+            evidence_fragment: source.evidence_fragment,
+            evidence_role: source.evidence_role
+          }))
+        }, 'super_admin'))
+        await client.query('RELEASE SAVEPOINT portable_risk_record')
+      } catch (error) {
+        await client.query('ROLLBACK TO SAVEPOINT portable_risk_record')
+        await client.query('RELEASE SAVEPOINT portable_risk_record')
+        const reason = skippableLegacyCandidateReason(error)
+        if (!reason) throw error
+        skippedInvalid[reason] = (skippedInvalid[reason] ?? 0) + 1
+      }
     }
     const release = revisions.length > 0
       ? await publishKnowledgeBatch(
@@ -235,6 +254,7 @@ try {
       inspected: rows.length,
       corrected: revisions.length,
       skipped_without_evidence: skippedWithoutEvidence,
+      skipped_invalid: skippedInvalid,
       release_sequence: release?.sequence ?? null
     }, 'Portable risk metadata reconciliation complete')
   } catch (error) {

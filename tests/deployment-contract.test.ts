@@ -25,4 +25,17 @@ describe('production database role contract', () => {
       /GRANT SELECT ON\s+[\s\S]*?pipeline_ai_circuits[\s\S]*?TO clideck_mcp_worker;/,
     )
   })
+
+  it('isolates invalid legacy portable-risk candidates without masking infrastructure failures', async () => {
+    const repair = await readFile(
+      resolve(process.cwd(), 'src/cli/repair-portable-risk.ts'),
+      'utf8',
+    )
+
+    expect(repair).toContain('SAVEPOINT portable_risk_record')
+    expect(repair).toContain('ROLLBACK TO SAVEPOINT portable_risk_record')
+    expect(repair).toContain("'NETWORK_DOMAIN_CANDIDATE_INVALID:'")
+    expect(repair).toContain('if (!reason) throw error')
+    expect(repair).toContain('skipped_invalid: skippedInvalid')
+  })
 })
