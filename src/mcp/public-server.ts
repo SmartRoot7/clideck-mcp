@@ -245,7 +245,7 @@ export function createPublicMcpServer(
   const server = new McpServer(
     {
       name: 'CliDeck MCP — Network Knowledge',
-      version: '0.8.2',
+      version: '0.8.3',
       title: 'CliDeck MCP — Network Knowledge',
       websiteUrl: 'https://clideck.com/software/mcp'
     },

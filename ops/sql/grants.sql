@@ -101,6 +101,7 @@ GRANT SELECT ON
   public_stats_cache,
   pipeline_reconciliation_snapshots,
   knowledge_demands,
+  knowledge_demand_source_attempts,
   mcp_request_logs,
   pipeline_ai_circuits
 TO clideck_mcp_admin;
@@ -184,6 +185,7 @@ GRANT SELECT ON
   active_source_slots,
   source_collections,
   knowledge_demands,
+  knowledge_demand_source_attempts,
   pipeline_ai_circuits,
   mcp_request_logs
 TO clideck_mcp_worker;
@@ -210,6 +212,8 @@ TO clideck_mcp_worker;
 GRANT SELECT, INSERT, UPDATE ON public_stats_cache TO clideck_mcp_worker;
 GRANT SELECT, DELETE ON verification_sessions TO clideck_mcp_worker;
 GRANT UPDATE ON knowledge_demands TO clideck_mcp_worker;
+GRANT SELECT, INSERT, UPDATE ON knowledge_demand_source_attempts
+TO clideck_mcp_worker;
 GRANT DELETE ON mcp_request_logs TO clideck_mcp_worker;
 GRANT SELECT, INSERT ON pipeline_reconciliation_snapshots
 TO clideck_mcp_worker;
@@ -258,7 +262,8 @@ GRANT SELECT ON
   knowledge_items,
   knowledge_conflicts,
   task_artifacts,
-  knowledge_demands
+  knowledge_demands,
+  knowledge_demand_source_attempts
 TO clideck_mcp_researcher;
 GRANT INSERT ON
   source_candidates,
@@ -284,6 +289,8 @@ GRANT UPDATE ON
   worker_heartbeats,
   pipeline_ai_circuits,
   knowledge_demands
+TO clideck_mcp_researcher;
+GRANT INSERT, UPDATE ON knowledge_demand_source_attempts
 TO clideck_mcp_researcher;
 GRANT DELETE ON active_source_slots TO clideck_mcp_researcher;
 GRANT DELETE ON pipeline_ai_circuits TO clideck_mcp_researcher;

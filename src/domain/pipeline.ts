@@ -3984,6 +3984,186 @@ async function completeTask(
   })
 }
 
+type ReusedDemandSources = {
+  sourceIds: string[]
+  fragmentCount: number
+  candidateCount: number
+}
+
+async function reuseDuplicateSourcesForKnowledgeDemand(
+  client: DatabaseClient,
+  knowledgeDemandId: string,
+  duplicateSourceIds: string[],
+): Promise<ReusedDemandSources> {
+  if (duplicateSourceIds.length === 0) {
+    return { sourceIds: [], fragmentCount: 0, candidateCount: 0 }
+  }
+  const demand = await client.query<{ question: string }>(
+    `SELECT question
+       FROM knowledge_demands
+      WHERE id = $1
+        AND status <> 'published'
+      FOR UPDATE`,
+    [knowledgeDemandId],
+  )
+  const question = demand.rows[0]?.question
+  if (!question) {
+    return { sourceIds: [], fragmentCount: 0, candidateCount: 0 }
+  }
+  const termPatterns = knowledgeDemandTermPatterns(question)
+  const fragments = await client.query<{
+    id: string
+    source_candidate_id: string
+    source_content_hash: string
+  }>(
+    `SELECT
+       fragment.id,
+       artifact.source_candidate_id,
+       artifact.content_hash AS source_content_hash
+     FROM source_fragments fragment
+     JOIN source_artifacts artifact
+       ON artifact.id = fragment.source_artifact_id
+     JOIN source_candidates source
+       ON source.id = artifact.source_candidate_id
+     LEFT JOIN knowledge_demand_source_attempts attempt
+       ON attempt.knowledge_demand_id = $1
+      AND attempt.source_candidate_id = source.id
+     LEFT JOIN knowledge_demands previous_demand
+       ON previous_demand.id = source.knowledge_demand_id
+     WHERE source.id = ANY($2::uuid[])
+       AND source.status IN (
+         'completed',
+         'completed_with_exceptions',
+         'rejected',
+         'failed'
+       )
+       AND (
+         source.knowledge_demand_id IS NULL
+         OR source.knowledge_demand_id = $1
+         OR previous_demand.status = 'published'
+       )
+       AND (
+         attempt.knowledge_demand_id IS NULL
+         OR attempt.source_content_hash IS DISTINCT FROM artifact.content_hash
+       )
+       AND fragment.status IN (
+         'analyzed',
+         'verified',
+         'published',
+         'rejected',
+         'failed'
+       )
+       AND fragment.reservation_task_id IS NULL
+     ORDER BY
+       COALESCE((
+         SELECT sum(
+           CASE
+             WHEN coalesce(fragment.section_title, '') ~* demand_pattern
+               THEN 4
+             ELSE 0
+           END +
+           CASE
+             WHEN fragment.content ~* demand_pattern THEN 1
+             ELSE 0
+           END
+         )
+         FROM unnest($3::text[]) AS terms(demand_pattern)
+       ), 0) DESC,
+       source.updated_at DESC,
+       fragment.ordinal
+     LIMIT 32
+     FOR UPDATE OF source, fragment SKIP LOCKED`,
+    [knowledgeDemandId, duplicateSourceIds, termPatterns],
+  )
+  if (fragments.rows.length === 0) {
+    return { sourceIds: [], fragmentCount: 0, candidateCount: 0 }
+  }
+  const fragmentIds = fragments.rows.map((fragment) => fragment.id)
+  const sourceIds = [
+    ...new Set(
+      fragments.rows.map((fragment) => fragment.source_candidate_id),
+    ),
+  ]
+  await client.query(
+    `UPDATE source_candidates
+        SET knowledge_demand_id = $1,
+            status = 'prepared',
+            completed_at = NULL,
+            failure_code = NULL,
+            failure_message = NULL,
+            updated_at = now()
+      WHERE id = ANY($2::uuid[])`,
+    [knowledgeDemandId, sourceIds],
+  )
+  await client.query(
+    `UPDATE source_fragments
+        SET status = 'queued',
+            attempts = 0,
+            reservation_task_id = NULL,
+            updated_at = now()
+      WHERE id = ANY($1::uuid[])`,
+    [fragmentIds],
+  )
+  const reopened = await client.query<{ count: number }>(
+    `WITH candidates AS (
+       UPDATE knowledge_candidates
+          SET status = 'deep_review',
+              verification_task_id = NULL,
+              deep_review_task_id = NULL,
+              publication_task_id = NULL,
+              resolution_attempts = 0,
+              resolution_code = 'knowledge_demand_recheck',
+              resolution_reason =
+                'An unanswered MCP request requires a targeted review of existing official evidence.',
+              next_review_at = now(),
+              updated_at = now()
+        WHERE source_fragment_id = ANY($1::uuid[])
+          AND status = 'rejected'
+        RETURNING id
+     )
+     SELECT count(*)::int AS count FROM candidates`,
+    [fragmentIds],
+  )
+  const candidateCount = reopened.rows[0]?.count ?? 0
+  for (const sourceId of sourceIds) {
+    const sourceFragmentCount = fragments.rows.filter(
+      (fragment) => fragment.source_candidate_id === sourceId,
+    ).length
+    const sourceContentHash = fragments.rows.find(
+      (fragment) => fragment.source_candidate_id === sourceId,
+    )!.source_content_hash
+    await client.query(
+      `INSERT INTO knowledge_demand_source_attempts (
+         knowledge_demand_id,
+         source_candidate_id,
+         source_content_hash,
+         fragment_count,
+         candidate_count,
+         attempted_at
+       )
+       VALUES ($1, $2, $3, $4, $5, now())
+       ON CONFLICT (knowledge_demand_id, source_candidate_id)
+       DO UPDATE SET
+         source_content_hash = excluded.source_content_hash,
+         fragment_count = excluded.fragment_count,
+         candidate_count = excluded.candidate_count,
+         attempted_at = excluded.attempted_at`,
+      [
+        knowledgeDemandId,
+        sourceId,
+        sourceContentHash,
+        sourceFragmentCount,
+        candidateCount,
+      ],
+    )
+  }
+  return {
+    sourceIds,
+    fragmentCount: fragmentIds.length,
+    candidateCount,
+  }
+}
+
 export async function submitSourceDiscovery(
   database: Database,
   input: z.infer<typeof discoverySubmissionSchema>,
@@ -4007,6 +4187,7 @@ export async function submitSourceDiscovery(
       throw new Error('PIPELINE_TASK_TYPE_INVALID')
     }
     const insertedIds: string[] = []
+    const duplicateIds: string[] = []
     let duplicates = 0
     for (const source of safeSources) {
       const inserted = await client.query<{ id: string }>(
@@ -4037,9 +4218,28 @@ export async function submitSourceDiscovery(
           task.knowledge_demand_id
         ],
       )
-      if (inserted.rows[0]) insertedIds.push(inserted.rows[0].id)
-      else duplicates += 1
+      if (inserted.rows[0]) {
+        insertedIds.push(inserted.rows[0].id)
+      } else {
+        duplicates += 1
+        const existing = await client.query<{ id: string }>(
+          `SELECT id
+             FROM source_candidates
+            WHERE canonical_url = $1
+            FOR UPDATE`,
+          [source.canonical_url],
+        )
+        if (existing.rows[0]) duplicateIds.push(existing.rows[0].id)
+      }
     }
+    const reused = task.knowledge_demand_id
+      ? await reuseDuplicateSourcesForKnowledgeDemand(
+          client,
+          task.knowledge_demand_id,
+          duplicateIds,
+        )
+      : { sourceIds: [], fragmentCount: 0, candidateCount: 0 }
+    const usefulSourceIds = [...insertedIds, ...reused.sourceIds]
     await client.query(
       `UPDATE coverage_targets
           SET status = CASE WHEN $2 > 0 THEN 'active' ELSE 'covered' END,
@@ -4053,9 +4253,9 @@ export async function submitSourceDiscovery(
               END,
               updated_at = now()
         WHERE id = $1`,
-      [task.coverage_target_id, insertedIds.length],
+      [task.coverage_target_id, usefulSourceIds.length],
     )
-    if (insertedIds[0]) {
+    if (usefulSourceIds[0]) {
       await client.query(
         `UPDATE pipeline_settings
             SET active_source_id = $1,
@@ -4063,30 +4263,37 @@ export async function submitSourceDiscovery(
                 updated_by = $2
           WHERE singleton
             AND active_source_id IS NULL`,
-        [insertedIds[0], researcherId],
+        [usefulSourceIds[0], researcherId],
       )
     }
     if (task.knowledge_demand_id) {
       await client.query(
         `UPDATE knowledge_demands
-            SET status = CASE WHEN $2::uuid IS NULL
-                  THEN 'unresolved'
-                  ELSE 'acquiring'
+            SET status = CASE
+                  WHEN $2::uuid IS NOT NULL THEN 'acquiring'
+                  WHEN $3::uuid IS NOT NULL THEN 'processing'
+                  ELSE 'unresolved'
                 END,
-                source_candidate_id = $2,
+                source_candidate_id = coalesce($2, $3),
                 discovery_task_id = NULL,
-                last_error_code = CASE WHEN $2::uuid IS NULL
+                last_error_code = CASE
+                  WHEN $2::uuid IS NULL AND $3::uuid IS NULL
                   THEN 'OFFICIAL_SOURCE_NOT_FOUND'
                   ELSE NULL
                 END,
-                next_retry_at = CASE WHEN $2::uuid IS NULL
+                next_retry_at = CASE
+                  WHEN $2::uuid IS NULL AND $3::uuid IS NULL
                   THEN now() + interval '15 minutes'
                   ELSE now()
                 END,
                 last_seen_at = now()
           WHERE id = $1
             AND status <> 'published'`,
-        [task.knowledge_demand_id, insertedIds[0] ?? null],
+        [
+          task.knowledge_demand_id,
+          insertedIds[0] ?? null,
+          reused.sourceIds[0] ?? null,
+        ],
       )
     }
     const activeSource = await client.query<{
@@ -4099,6 +4306,9 @@ export async function submitSourceDiscovery(
     const completion = {
       inserted_sources: insertedIds.length,
       duplicate_sources: duplicates,
+      reused_sources: reused.sourceIds.length,
+      reused_fragments: reused.fragmentCount,
+      reopened_candidates: reused.candidateCount,
       active_source_id: activeSource.rows[0]?.active_source_id ?? null,
       rejection_reason: input.rejection_reason ?? null
     }
@@ -4107,6 +4317,14 @@ export async function submitSourceDiscovery(
       fromStage: 'discover',
       toStage: 'acquire',
       count: insertedIds.length,
+      kind: 'progress',
+      taskId: task.id
+    })
+    await recordPipelineTransition(client, {
+      scope: 'source',
+      fromStage: 'discover',
+      toStage: 'analyze',
+      count: reused.fragmentCount,
       kind: 'progress',
       taskId: task.id
     })

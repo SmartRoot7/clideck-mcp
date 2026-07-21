@@ -11,6 +11,7 @@ type TransitionWriter = Pick<DatabaseClient, 'query'>
 
 export const PIPELINE_TRANSITION_ROUTES = [
   'source:discover:acquire',
+  'source:discover:analyze',
   'source:acquire:downloaded',
   'source:downloaded:convert',
   'source:convert:chunk',

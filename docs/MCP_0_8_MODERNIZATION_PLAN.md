@@ -419,11 +419,20 @@ without making the other executors idle.
 - `[x]` Make extraction and Deep Review narrow generic IOS/IOS XE evidence to
   generic applicability with explicit limitations instead of rejecting it only
   because the original request named an exact model or release.
+- `[x]` Reuse an already-downloaded official source when demand Discovery finds
+  only URL duplicates. Up to 32 question-relevant fragments return to targeted
+  priority-120 analysis and rejected candidates receive one evidence-bound
+  recheck; the document is not downloaded again.
+- `[x]` Persist the demand/source content-hash attempt so an unchanged document
+  cannot be reprocessed repeatedly for the same unanswered request. A genuinely
+  updated artifact remains eligible for another targeted pass.
 - `[x]` Verify the migration and demand lifecycle on a fresh PostgreSQL database
-  with focused integration coverage.
-- `[~]` Deploy 0.8.2 through the canonical script, repeat all historical unknown
-  questions and verify that the two remaining gaps are linked to priority-120
-  Discovery.
+  with focused integration coverage. The complete gate passes 145 backend and
+  PostgreSQL tests, all Domain/UI tests, eval 250/250 with zero dangerous
+  false-safe results, typecheck and production build.
+- `[~]` Deploy 0.8.3 through the canonical script, repeat all historical unknown
+  questions and verify that the remaining gap reuses existing official evidence
+  instead of stopping at URL dedupe.
 
 Ready when every unknown response has a durable learning demand, every newly
 known answer closes that demand, and generic official evidence remains useful

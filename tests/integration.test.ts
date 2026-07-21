@@ -401,6 +401,263 @@ describeIntegration('PostgreSQL integration', () => {
     }
   })
 
+  it('reuses unchanged duplicate official sources for a demand only once', async () => {
+    const suffix = randomUUID().replaceAll('-', '')
+    const question = `How do I validate demand source reuse ${suffix}?`
+    const demandId = await queueUnknownKnowledgeDemand(
+      database,
+      'query_network_knowledge',
+      {
+        question,
+        context: {
+          vendor: 'Cisco',
+          model: 'C9300',
+          operating_system: 'IOS XE',
+          version: '17.9.4'
+        },
+        limit: 3
+      },
+      {
+        unknown: true,
+        context: {
+          vendor_slug: 'cisco',
+          model: 'C9300',
+          operating_system_slug: 'ios-xe',
+          version: '17.9.4'
+        }
+      },
+    )
+    expect(demandId).toEqual(expect.any(String))
+    const firstTask = await database.query<{
+      id: string
+      coverage_target_id: string
+    }>(
+      `SELECT id, coverage_target_id
+         FROM pipeline_tasks
+        WHERE knowledge_demand_id = $1
+          AND task_type = 'source_discovery'
+        ORDER BY created_at DESC
+        LIMIT 1`,
+      [demandId],
+    )
+    const sourceUrl =
+      `https://www.cisco.com/c/en/us/support/docs/demand-reuse-${suffix}.html`
+    const sourceHash = sha256Label(`demand-source-${suffix}`)
+    const source = await database.query<{ id: string }>(
+      `INSERT INTO source_candidates (
+         coverage_target_id,
+         canonical_url,
+         document_type,
+         title,
+         status,
+         discovered_by,
+         content_hash,
+         completed_at
+       )
+       VALUES (
+         $1, $2, 'configuration_guide',
+         'Demand source reuse integration fixture',
+         'completed', 'integration-test', $3, now()
+       )
+       RETURNING id`,
+      [firstTask.rows[0]!.coverage_target_id, sourceUrl, sourceHash],
+    )
+    const artifact = await database.query<{ id: string }>(
+      `INSERT INTO source_artifacts (
+         source_candidate_id,
+         media_type,
+         byte_size,
+         content_hash,
+         storage_path,
+         status
+       )
+       VALUES ($1, 'text/plain', 128, $2, $3, 'chunked')
+       RETURNING id`,
+      [
+        source.rows[0]!.id,
+        sha256Label(`demand-artifact-${suffix}`),
+        `/tmp/demand-reuse-${suffix}`
+      ],
+    )
+    const fragment = await database.query<{ id: string }>(
+      `INSERT INTO source_fragments (
+         source_artifact_id,
+         ordinal,
+         section_title,
+         content,
+         content_hash,
+         status
+       )
+       VALUES (
+         $1, 0, 'Validate demand source reuse',
+         $2, $3, 'analyzed'
+       )
+       RETURNING id`,
+      [
+        artifact.rows[0]!.id,
+        `Official evidence for validate demand source reuse ${suffix}.`,
+        sha256Label(`demand-fragment-${suffix}`)
+      ],
+    )
+    const firstLease = randomUUID().replaceAll('-', '')
+    await database.query(
+      `UPDATE pipeline_tasks
+          SET status = 'running',
+              claim_owner = 'demand-source-reuse-test',
+              lease_token_hash = $2,
+              lease_until = now() + interval '5 minutes',
+              attempts = 1,
+              updated_at = now()
+        WHERE id = $1`,
+      [firstTask.rows[0]!.id, sha256(firstLease)],
+    )
+    const firstResult = await submitSourceDiscovery(
+      database,
+      {
+        pipeline_task_id: firstTask.rows[0]!.id,
+        lease_token: firstLease,
+        sources: [{
+          canonical_url: sourceUrl,
+          document_type: 'configuration_guide',
+          title: 'Demand source reuse integration fixture'
+        }]
+      },
+      'demand-source-reuse-test',
+    )
+    expect(firstResult).toMatchObject({
+      inserted_sources: 0,
+      duplicate_sources: 1,
+      reused_sources: 1,
+      reused_fragments: 1
+    })
+    const reused = await database.query<{
+      demand_status: string
+      source_status: string
+      source_demand_id: string | null
+      fragment_status: string
+      attempt_count: number
+      analysis_tasks: number
+    }>(
+      `SELECT
+         demand.status AS demand_status,
+         source.status AS source_status,
+         source.knowledge_demand_id AS source_demand_id,
+         fragment.status AS fragment_status,
+         (
+           SELECT count(*)::int
+           FROM knowledge_demand_source_attempts attempt
+           WHERE attempt.knowledge_demand_id = demand.id
+             AND attempt.source_candidate_id = source.id
+         ) AS attempt_count,
+         (
+           SELECT count(*)::int
+           FROM pipeline_tasks task
+           WHERE task.knowledge_demand_id = demand.id
+             AND task.source_candidate_id = source.id
+             AND task.task_type = 'fragment_analysis'
+             AND task.status IN ('queued', 'claimed', 'running')
+         ) AS analysis_tasks
+       FROM knowledge_demands demand
+       JOIN source_candidates source ON source.id = $2
+       JOIN source_artifacts artifact ON artifact.source_candidate_id = source.id
+       JOIN source_fragments fragment ON fragment.source_artifact_id = artifact.id
+       WHERE demand.id = $1
+         AND fragment.id = $3`,
+      [demandId, source.rows[0]!.id, fragment.rows[0]!.id],
+    )
+    expect(reused.rows[0]).toMatchObject({
+      demand_status: 'processing',
+      source_demand_id: demandId,
+      attempt_count: 1,
+      analysis_tasks: 1
+    })
+    expect(['prepared', 'analyzing']).toContain(
+      reused.rows[0]!.source_status,
+    )
+    expect(['queued', 'reserved', 'analyzing']).toContain(
+      reused.rows[0]!.fragment_status,
+    )
+
+    await database.query(
+      `UPDATE pipeline_tasks
+          SET status = 'cancelled',
+              completed_at = now(),
+              updated_at = now()
+        WHERE knowledge_demand_id = $1
+          AND status IN ('queued', 'claimed', 'running')`,
+      [demandId],
+    )
+    await database.query(
+      `DELETE FROM active_source_slots
+        WHERE source_candidate_id = $1`,
+      [source.rows[0]!.id],
+    )
+    await database.query(
+      `UPDATE source_fragments
+          SET status = 'analyzed',
+              reservation_task_id = NULL,
+              updated_at = now()
+        WHERE id = $1`,
+      [fragment.rows[0]!.id],
+    )
+    await database.query(
+      `UPDATE source_candidates
+          SET status = 'completed',
+              completed_at = now(),
+              updated_at = now()
+        WHERE id = $1`,
+      [source.rows[0]!.id],
+    )
+    const secondTask = await database.query<{ id: string }>(
+      `INSERT INTO pipeline_tasks (
+         task_type,
+         stage,
+         status,
+         priority,
+         coverage_target_id,
+         knowledge_demand_id,
+         dedupe_key,
+         payload,
+         requested_reasoning_effort,
+         claim_owner,
+         lease_token_hash,
+         lease_until,
+         attempts
+       )
+       VALUES (
+         'source_discovery', 'discover', 'running', 120, $1, $2,
+         $3, '{}'::jsonb, 'low', 'demand-source-reuse-test',
+         $4, now() + interval '5 minutes', 1
+       )
+       RETURNING id`,
+      [
+        firstTask.rows[0]!.coverage_target_id,
+        demandId,
+        `demand-source-reuse-repeat:${suffix}`,
+        sha256(firstLease)
+      ],
+    )
+    const secondResult = await submitSourceDiscovery(
+      database,
+      {
+        pipeline_task_id: secondTask.rows[0]!.id,
+        lease_token: firstLease,
+        sources: [{
+          canonical_url: sourceUrl,
+          document_type: 'configuration_guide',
+          title: 'Demand source reuse integration fixture'
+        }]
+      },
+      'demand-source-reuse-test',
+    )
+    expect(secondResult).toMatchObject({
+      inserted_sources: 0,
+      duplicate_sources: 1,
+      reused_sources: 0,
+      reused_fragments: 0
+    })
+  })
+
   it('reconciles a known answer and never downgrades its published demand', async () => {
     const client = await database.connect()
     const question = 'show ip interface brief'
