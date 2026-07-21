@@ -280,6 +280,11 @@ manual intervention.
   deterministic capability evidence gates so shared words cannot mark IP,
   ARP, counters, TFTP, reboot or boot behavior as covered without a matching
   command or procedure.
+- `[x]` Fix the canonical deployment storage leak exposed by the acceptance
+  correction rollout: interrupted SHA-addressed build directories are removed
+  before the next build, and successful rollouts retain the current/previous
+  release plus eight historical releases and 14 deployment backups. Retention
+  runs only after smoke and never deletes the active rollback target.
 - `[~]` Deploy through the canonical script and run the live ONIE Rescue
   acceptance cycle.
 

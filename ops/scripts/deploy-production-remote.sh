@@ -12,9 +12,16 @@ release_root="${CLIDECK_MCP_RELEASE_ROOT:-/opt/clideck-mcp/releases}"
 current_link="${CLIDECK_MCP_CURRENT_LINK:-/opt/clideck-mcp/current}"
 config_directory="${CLIDECK_MCP_CONFIG_DIRECTORY:-/etc/clideck-mcp}"
 backup_root="${CLIDECK_MCP_BACKUP_ROOT:-/var/backups/clideck-mcp}"
+release_retention_count="${CLIDECK_MCP_RELEASE_RETENTION_COUNT:-8}"
+backup_retention_count="${CLIDECK_MCP_BACKUP_RETENTION_COUNT:-14}"
 
 if [[ ! "$commit_sha" =~ ^[0-9a-f]{40}$ ]]; then
   printf 'A full 40-character Git commit SHA is required\n' >&2
+  exit 1
+fi
+if [[ ! "$release_retention_count" =~ ^[1-9][0-9]*$ ]] ||
+   [[ ! "$backup_retention_count" =~ ^[1-9][0-9]*$ ]]; then
+  printf 'Deployment retention counts must be positive integers\n' >&2
   exit 1
 fi
 
@@ -293,6 +300,51 @@ restore_pipeline_state
 if [[ "$(readlink -f "$current_link")" != "$release_directory" ]]; then
   printf 'Atomic release switch did not persist\n' >&2
   exit 1
+fi
+
+prune_deployment_history() {
+  local current_release previous_keep entry entry_name index
+  local -a release_entries backup_entries
+  current_release="$(readlink -f "$current_link")"
+  previous_keep="$previous_release"
+
+  mapfile -t release_entries < <(
+    find "$release_root" -mindepth 1 -maxdepth 1 -type d \
+      -printf '%T@ %p\n' | sort -nr | cut -d' ' -f2-
+  )
+  index=0
+  for entry in "${release_entries[@]}"; do
+    entry_name="${entry##*/}"
+    [[ "$entry_name" =~ ^[0-9a-f]{40}$ ]] || continue
+    if [[ "$entry" == "$current_release" || "$entry" == "$previous_keep" ]]; then
+      continue
+    fi
+    index=$((index + 1))
+    if (( index > release_retention_count )); then
+      rm -rf -- "$entry"
+    fi
+  done
+
+  mapfile -t backup_entries < <(
+    find "$backup_root" -mindepth 1 -maxdepth 1 -type d \
+      -name 'deploy-*' -printf '%T@ %p\n' | sort -nr | cut -d' ' -f2-
+  )
+  index=0
+  for entry in "${backup_entries[@]}"; do
+    entry_name="${entry##*/}"
+    [[ "$entry_name" =~ ^deploy-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{7}$ ]] || continue
+    index=$((index + 1))
+    if (( index > backup_retention_count )) && [[ "$entry" != "$backup_directory" ]]; then
+      rm -rf -- "$entry"
+    fi
+  done
+}
+
+# Retention runs only after migration, service restart, smoke, pipeline-state
+# restoration and atomic-link verification have all succeeded. Housekeeping
+# failure is reported but must not roll back an otherwise healthy release.
+if ! prune_deployment_history; then
+  printf 'Warning: deployment history retention did not complete\n' >&2
 fi
 
 switched=0

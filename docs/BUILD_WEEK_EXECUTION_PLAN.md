@@ -941,6 +941,10 @@ fair learning loop without delaying the caller or allowing AI to publish.
   capability coverage now requires matching operational evidence rather than
   text similarity alone (for example, a syslog server IP cannot satisfy
   interface IP configuration, and a TFTP URL cannot replace a TFTP command).
+- `[x]` Bound canonical deployment storage: strict SHA-addressed temporary
+  build cleanup runs before compilation; post-smoke retention preserves the
+  active and previous release plus rollback history instead of accumulating
+  every historical build and backup indefinitely.
 - `[~]` Complete canonical production rollout and live ONIE Rescue acceptance.
 
 ## Required acceptance suite

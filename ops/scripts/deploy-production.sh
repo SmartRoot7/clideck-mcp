@@ -99,6 +99,27 @@ release_directory="/opt/clideck-mcp/releases/$commit_sha"
 store_directory="/tmp/clideck-mcp-pnpm-store-$commit_sha"
 build_log="/tmp/clideck-mcp-build-$commit_sha.log"
 
+if [[ ! "$commit_sha" =~ ^[0-9a-f]{40}$ ]]; then
+  printf 'Remote build requires a full 40-character Git SHA\n' >&2
+  exit 1
+fi
+
+# Interrupted historical builds used to survive indefinitely and eventually
+# filled the production filesystem. Delete only this deployer's own strictly
+# SHA-addressed temporary directories; releases and backups are pruned only by
+# the privileged rollout after a successful smoke test.
+for stale_path in \
+  /tmp/clideck-mcp-build-* \
+  /tmp/clideck-mcp-pnpm-store-*; do
+  [[ -e "$stale_path" ]] || continue
+  stale_name="${stale_path##*/}"
+  if [[ "$stale_name" =~ ^clideck-mcp-(build|pnpm-store)-[0-9a-f]{40}$ ]] &&
+     [[ "$stale_path" != "$candidate_directory" ]] &&
+     [[ "$stale_path" != "$store_directory" ]]; then
+    rm -rf -- "$stale_path"
+  fi
+done
+
 cleanup_remote_build() {
   status=$?
   trap - EXIT
