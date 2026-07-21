@@ -49,6 +49,7 @@ function projectValue(
   if (value && typeof value === 'object') {
     return Object.fromEntries(
       Object.entries(value as Record<string, unknown>)
+        .filter(([, entryValue]) => entryValue !== undefined)
         .slice(0, maxObjectKeys)
         .map(([entryKey, entryValue]) => [
           entryKey,
@@ -108,6 +109,8 @@ function recordOf(value: unknown): Record<string, unknown> | null {
 export function classifyMcpOutcome(output: unknown): McpRequestOutcome {
   const value = recordOf(output)
   if (
+    value?.['answer_status'] === 'partial' ||
+    value?.['answer_status'] === 'unknown' ||
     value?.['unknown'] === true ||
     value?.['status'] === 'unknown' ||
     value?.['decision'] === 'unknown'
@@ -214,6 +217,8 @@ async function prepareKnowledgeDemand(
         platform_slug: resolved.platform_slug,
         operating_system: resolved.operating_system,
         operating_system_slug: resolved.operating_system_slug,
+        runtime_mode: resolved.runtime_mode,
+        shell_environment: resolved.shell_environment,
         version: resolved.version,
         applicable_version: resolved.applicable_version
       }
@@ -234,20 +239,50 @@ async function prepareKnowledgeDemand(
     platform_slug: contextValue['platform_slug'],
     operating_system: contextValue['operating_system'],
     operating_system_slug: contextValue['operating_system_slug'],
+    software_family: contextValue['software_family'],
+    software_family_slug: contextValue['software_family_slug'],
+    runtime_mode: contextValue['runtime_mode'],
+    shell_environment: contextValue['shell_environment'],
     version: contextValue['version'],
-    applicable_version: contextValue['applicable_version']
+    applicable_version: contextValue['applicable_version'],
+    initial_answer_status: outputRecord['answer_status'] ?? (
+      outputRecord['unknown'] === true ? 'unknown' : 'complete'
+    ),
+    initial_coverage: outputRecord['coverage'] ?? [],
+    initial_answers: Array.isArray(outputRecord['answers'])
+      ? outputRecord['answers'].slice(0, 5).map((answer) => {
+          const record = recordOf(answer)
+          return record
+            ? {
+                revision_ref: record['revision_ref'],
+                title: record['title'],
+                summary: record['summary'],
+                command: record['command'],
+                procedure: record['procedure'],
+                limitations: record['limitations'],
+                applicability: record['applicability']
+              }
+            : null
+        }).filter(Boolean)
+      : []
   }
   const question = sanitizeScalarString(questionValue).slice(0, 2_000)
   if (question.length < 3) return null
   const context = boundedPayload(contextValue, 16_384)
   if (Array.isArray(context)) return null
+  const {
+    initial_answer_status: _initialAnswerStatus,
+    initial_coverage: _initialCoverage,
+    initial_answers: _initialAnswers,
+    ...canonicalDemandContext
+  } = context
   return {
     question,
     context,
     demandKey: sha256(JSON.stringify(stableValue({
       domain_id: 'network',
       question: question.toLocaleLowerCase('en-US'),
-      context
+      context: canonicalDemandContext
     })))
   }
 }
@@ -282,6 +317,25 @@ export async function queueUnknownKnowledgeDemand(
     ],
   )
   return result.rows[0]?.demand_id ?? null
+}
+
+export async function getKnowledgeDemandLearningStatus(
+  database: Database,
+  demandId: string,
+): Promise<'diagnosing' | 'discovering' | 'processing' | 'rechecking' | 'unavailable'> {
+  const result = await database.query<{ status: string }>(
+    `SELECT status FROM knowledge_demands WHERE id = $1`,
+    [demandId],
+  )
+  switch (result.rows[0]?.status) {
+    case 'diagnosing': return 'diagnosing'
+    case 'queued':
+    case 'discovering': return 'discovering'
+    case 'acquiring':
+    case 'processing': return 'processing'
+    case 'published': return 'rechecking'
+    default: return 'unavailable'
+  }
 }
 
 export async function queueApproximateKnowledgeDemand(
@@ -556,12 +610,49 @@ export async function getMcpRequestLog(
        demand.first_seen_at,
        demand.last_seen_at,
        release.sequence AS result_release_sequence,
+       CASE WHEN demand.id IS NULL THEN NULL ELSE jsonb_build_object(
+         'status', coalesce(diagnostic.status, demand.diagnosis_status),
+         'failure_class', diagnostic.failure_class,
+         'answer_status', coalesce(diagnostic.answer_status, demand.replay_status),
+         'canonical_context', coalesce(
+           diagnostic.canonical_context, demand.canonical_context, '{}'::jsonb
+         ),
+         'subquestions', coalesce(diagnostic.subquestions, '[]'::jsonb),
+         'missing_capabilities', coalesce(diagnostic.missing_capabilities, '{}'),
+         'recommended_action', diagnostic.recommended_action,
+         'reasoning_summary', diagnostic.reasoning_summary,
+         'topic_slug', topic.topic_slug,
+         'topic_state', topic.state,
+         'replay_result', diagnostic.replay_result,
+         'attempts', coalesce(task.attempts, 0),
+         'luna_tokens', coalesce(tokens.total_tokens, 0),
+         'completed_at', diagnostic.completed_at
+       ) END AS learning_diagnosis,
        log.occurred_at
      FROM mcp_request_logs log
      LEFT JOIN knowledge_demands demand
        ON demand.id = log.knowledge_demand_id
      LEFT JOIN releases release
        ON release.id = demand.result_release_id
+     LEFT JOIN LATERAL (
+       SELECT * FROM knowledge_demand_diagnostics candidate
+        WHERE candidate.knowledge_demand_id = demand.id
+        ORDER BY candidate.created_at DESC LIMIT 1
+     ) diagnostic ON true
+     LEFT JOIN pipeline_tasks task ON task.id = diagnostic.pipeline_task_id
+     LEFT JOIN LATERAL (
+       SELECT coalesce(sum(
+         run.input_tokens + run.output_tokens + run.reasoning_output_tokens
+       ), 0)::int AS total_tokens
+       FROM agent_runs run
+       WHERE run.pipeline_task_id = diagnostic.pipeline_task_id
+     ) tokens ON true
+     LEFT JOIN LATERAL (
+       SELECT * FROM knowledge_demand_topic_memberships candidate
+        WHERE candidate.knowledge_demand_id = demand.id
+        ORDER BY candidate.created_at DESC LIMIT 1
+     ) membership ON true
+     LEFT JOIN demand_topics topic ON topic.id = membership.demand_topic_id
      WHERE log.id = $1::bigint`,
     [id],
   )

@@ -35,5 +35,18 @@ export const queryDomainKnowledgeOutputSchema = z.strictObject({
   context: jsonObjectSchema,
   answers: z.array(jsonObjectSchema),
   unknown: z.boolean(),
+  answer_status: z.enum(['complete', 'partial', 'unknown']).optional(),
+  coverage: z.array(z.strictObject({
+    capability: z.string(),
+    label: z.string(),
+    status: z.enum(['covered', 'missing']),
+    answer_refs: z.array(z.string())
+  })).optional(),
+  learning: z.strictObject({
+    status: z.enum([
+      'diagnosing', 'discovering', 'processing', 'rechecking',
+      'queued', 'not_required', 'unavailable'
+    ])
+  }).optional(),
   next_action: z.enum(['use_answer', 'knowledge_not_found'])
 })

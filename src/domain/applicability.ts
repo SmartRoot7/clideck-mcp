@@ -266,12 +266,13 @@ export async function indexPublishedKnowledgeApplicability(
        requires_platform_confirmation, classifier_version,
        classification_source
      ) VALUES (
-       $1, $2, $3, NULL, $4, $5, $6, $7, $8, $9,
-       $10, 'portable-v1', 'publication'
+       $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+       $11, 'demand-intelligence-v1', 'publication'
      )
      ON CONFLICT (revision_id) DO UPDATE SET
        family_id = EXCLUDED.family_id,
        scope_level = EXCLUDED.scope_level,
+       capability_slug = EXCLUDED.capability_slug,
        vendor_id = EXCLUDED.vendor_id,
        platform_id = EXCLUDED.platform_id,
        architecture_slug = EXCLUDED.architecture_slug,
@@ -287,6 +288,7 @@ export async function indexPublishedKnowledgeApplicability(
       input.revisionId,
       familyRow.id,
       scope,
+      candidate.capability_slug ?? null,
       scope === 'vendor_os' ? input.vendorId : null,
       scope === 'model' ? input.platformId : null,
       scope === 'architecture' ? candidate.architecture_slug ?? null : null,

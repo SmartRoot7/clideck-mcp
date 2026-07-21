@@ -10,6 +10,11 @@ export const networkContextSchema = z.strictObject({
   vendor: slugSchema.optional(),
   model: slugSchema.optional(),
   operating_system: slugSchema,
+  runtime_mode: z.enum([
+    'normal', 'rescue', 'installer', 'update', 'uninstall', 'recovery',
+    'diagnostic'
+  ]).optional(),
+  shell_environment: z.string().trim().min(1).max(120).optional(),
   version: versionSchema.optional()
 })
 
@@ -53,6 +58,15 @@ export const networkKnowledgeCandidateSchema = z.strictObject({
   portable_key: z.string()
     .regex(/^[a-z0-9][a-z0-9._-]{2,159}$/)
     .optional(),
+  capability_slug: z.string()
+    .regex(/^[a-z][a-z0-9-]{1,62}$/)
+    .optional(),
+  runtime_modes: z.array(z.enum([
+    'normal', 'rescue', 'installer', 'update', 'uninstall', 'recovery',
+    'diagnostic'
+  ])).max(7).optional(),
+  shell_environments: z.array(z.string().trim().min(1).max(120))
+    .max(10).optional(),
   title: z.string().trim().min(1).max(240),
   summary: z.string().trim().min(1).max(4_000),
   question_patterns: z.array(

@@ -30,8 +30,10 @@ import { withTransaction } from '../db.js'
 import type { Logger } from '../logger.js'
 import { assertSafeProvenanceUrl } from '../security/url-policy.js'
 import { safePublicLookup } from '../security/url-policy.js'
-import { resolveNetworkContext } from './context.js'
-import { searchKnowledge } from './knowledge.js'
+import {
+  demandDiagnosisAgentArtifactSchema,
+  replayDemandCoverage
+} from './demand-intelligence.js'
 import {
   assessKnowledgeDemandRelevance,
   isRelevantToKnowledgeDemand
@@ -92,55 +94,101 @@ async function demandQuestionForTask(
 
 async function reconcilePublishedKnowledgeDemands(
   database: Database,
+  demandIds: string[],
 ): Promise<void> {
+  if (demandIds.length === 0) return
   const demands = await database.query<{
     id: string
     question: string
-    context: Record<string, unknown>
+    tool_name: string
+    diagnosis: unknown
   }>(
-    `SELECT id, question, context
-     FROM knowledge_demands
-     WHERE status IN (
+    `SELECT demand.id, demand.question, demand.tool_name,
+            jsonb_build_object(
+              'failure_class', diagnostic.failure_class,
+              'answer_status', diagnostic.answer_status,
+              'canonical_context', diagnostic.canonical_context,
+              'subquestions', diagnostic.subquestions,
+              'existing_coverage_summary',
+                coalesce(diagnostic.existing_coverage->>'summary', 'No prior coverage summary.'),
+              'missing_capabilities', diagnostic.missing_capabilities,
+              'search_expansions', diagnostic.search_expansions,
+              'document_roles', diagnostic.document_roles,
+              'recommended_action', diagnostic.recommended_action,
+              'reasoning_summary', diagnostic.reasoning_summary
+            ) AS diagnosis
+       FROM knowledge_demands demand
+       JOIN LATERAL (
+         SELECT * FROM knowledge_demand_diagnostics
+          WHERE knowledge_demand_id = demand.id AND status = 'completed'
+          ORDER BY created_at DESC LIMIT 1
+       ) diagnostic ON true
+      WHERE demand.status IN (
        'queued',
+       'diagnosing',
        'discovering',
        'acquiring',
        'processing',
        'unresolved',
        'failed'
-     )`,
+     ) AND demand.id = ANY($1::uuid[])`,
+    [demandIds],
   )
   for (const demand of demands.rows) {
-    const vendor = demand.context['vendor_slug']
-    const operatingSystem = demand.context['operating_system_slug']
-    if (
-      typeof vendor !== 'string' ||
-      typeof operatingSystem !== 'string'
-    ) {
+    const diagnosis = demandDiagnosisAgentArtifactSchema.safeParse(
+      demand.diagnosis,
+    )
+    if (!diagnosis.success) continue
+    const replay = await replayDemandCoverage(
+      database,
+      demand,
+      diagnosis.data,
+    ).catch(async () => {
+      await database.query(
+        `UPDATE knowledge_demands
+            SET replay_status = 'failed', replayed_at = now(),
+                last_error_code = 'DEMAND_REPLAY_FAILED',
+                next_retry_at = now(), last_seen_at = now()
+          WHERE id = $1 AND status <> 'published'`,
+        [demand.id],
+      )
+      return null
+    })
+    if (!replay) continue
+    await database.query(
+      `UPDATE knowledge_demand_diagnostics
+          SET replay_result = $2::jsonb, completed_at = now()
+        WHERE id = (
+          SELECT id FROM knowledge_demand_diagnostics
+           WHERE knowledge_demand_id = $1
+           ORDER BY created_at DESC LIMIT 1
+        )`,
+      [
+        demand.id,
+        JSON.stringify({
+          answer_status: replay.answerStatus,
+          coverage: replay.coverage,
+          answer_refs: replay.answers.map((answer) => answer.revision_ref)
+        })
+      ],
+    )
+    const answer = replay.answers[0]
+    if (replay.answerStatus !== 'complete' || !answer) {
+      await database.query(
+        `UPDATE knowledge_demands
+            SET replay_status = $2, replayed_at = now(), last_seen_at = now()
+          WHERE id = $1 AND status <> 'published'`,
+        [demand.id, replay.answerStatus],
+      )
       continue
     }
-    const context = await resolveNetworkContext(database, {
-      vendor,
-      operating_system: operatingSystem,
-      ...(typeof demand.context['model'] === 'string'
-        ? { model: demand.context['model'] }
-        : {}),
-      ...(typeof demand.context['version'] === 'string'
-        ? { version: demand.context['version'] }
-        : {})
-    })
-    const answers = await searchKnowledge(
-      database,
-      demand.question,
-      context,
-      1,
-    )
-    const answer = answers[0]
-    if (!answer) continue
     await database.query(
       `UPDATE knowledge_demands demand
           SET status = 'published',
               result_revision_id = revision.id,
               result_release_id = active.release_id,
+              replay_status = 'complete',
+              replayed_at = now(),
               last_error_code = NULL,
               completed_at = now(),
               last_seen_at = now()
@@ -1400,11 +1448,13 @@ async function publishSource(
     id: string
     payload: unknown
     revision_id: string | null
+    knowledge_demand_id: string | null
   }>(
       `SELECT DISTINCT ON (kc.stable_key)
          kc.id,
          kc.payload,
-         kc.revision_id
+         kc.revision_id,
+         pt.knowledge_demand_id
        FROM knowledge_candidates kc
        JOIN pipeline_tasks pt ON pt.id = kc.pipeline_task_id
        WHERE pt.source_candidate_id = ANY($1::uuid[])
@@ -1418,6 +1468,7 @@ async function publishSource(
     candidateId: string
     itemId: string
     revisionId: string
+    knowledgeDemandId: string | null
   }> = []
   let exceptions = 0
   for (const candidate of candidates.rows) {
@@ -1476,6 +1527,7 @@ async function publishSource(
       })
       revisions.push({
         candidateId: candidate.id,
+        knowledgeDemandId: candidate.knowledge_demand_id,
         ...created
       })
     } catch (error) {
@@ -1628,7 +1680,11 @@ async function publishSource(
     }
   })
   if (result.revisions_published > 0) {
-    await reconcilePublishedKnowledgeDemands(database)
+    await reconcilePublishedKnowledgeDemands(database, [
+      ...new Set(revisions.flatMap((revision) =>
+        revision.knowledgeDemandId ? [revision.knowledgeDemandId] : [],
+      ))
+    ])
   }
   return result
 }
@@ -1650,13 +1706,16 @@ async function publishCandidateBatch(
     id: string
     payload: unknown
     revision_id: string | null
+    knowledge_demand_id: string | null
   }>(
-    `SELECT id, payload, revision_id
-     FROM knowledge_candidates
-     WHERE id = ANY($1::uuid[])
-       AND publication_task_id = $2
-       AND status = 'verified'
-     ORDER BY updated_at, created_at`,
+    `SELECT candidate.id, candidate.payload, candidate.revision_id,
+            origin.knowledge_demand_id
+       FROM knowledge_candidates candidate
+       JOIN pipeline_tasks origin ON origin.id = candidate.pipeline_task_id
+      WHERE candidate.id = ANY($1::uuid[])
+        AND candidate.publication_task_id = $2
+        AND candidate.status = 'verified'
+      ORDER BY candidate.updated_at, candidate.created_at`,
     [payload.candidate_ids, claimed.task.id],
   )
 
@@ -1664,6 +1723,7 @@ async function publishCandidateBatch(
     candidateId: string
     itemId: string
     revisionId: string
+    knowledgeDemandId: string | null
   }> = []
   const deferred: Array<{
     candidateId: string
@@ -1721,6 +1781,7 @@ async function publishCandidateBatch(
       })
       revisions.push({
         candidateId: candidate.id,
+        knowledgeDemandId: candidate.knowledge_demand_id,
         ...created
       })
     } catch (error) {
@@ -1854,7 +1915,11 @@ async function publishCandidateBatch(
     }
   })
   if (result.records_published > 0) {
-    await reconcilePublishedKnowledgeDemands(database)
+    await reconcilePublishedKnowledgeDemands(database, [
+      ...new Set(revisions.flatMap((revision) =>
+        revision.knowledgeDemandId ? [revision.knowledgeDemandId] : [],
+      ))
+    ])
   }
   return result
 }

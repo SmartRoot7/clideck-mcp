@@ -31,6 +31,9 @@ GRANT SELECT ON
   pipeline_transition_events,
   public_stats_cache,
   knowledge_demands,
+  demand_topics,
+  knowledge_demand_topic_memberships,
+  knowledge_demand_diagnostics,
   software_families,
   software_family_aliases,
   software_family_inheritance,
@@ -110,6 +113,9 @@ GRANT SELECT ON
   pipeline_reconciliation_snapshots,
   knowledge_demands,
   knowledge_demand_source_attempts,
+  demand_topics,
+  knowledge_demand_topic_memberships,
+  knowledge_demand_diagnostics,
   mcp_request_logs,
   software_families,
   software_family_aliases,
@@ -220,6 +226,9 @@ GRANT SELECT ON
   source_collections,
   knowledge_demands,
   knowledge_demand_source_attempts,
+  demand_topics,
+  knowledge_demand_topic_memberships,
+  knowledge_demand_diagnostics,
   pipeline_ai_circuits,
   mcp_request_logs
 TO clideck_mcp_worker;
@@ -246,6 +255,11 @@ TO clideck_mcp_worker;
 GRANT SELECT, INSERT, UPDATE ON public_stats_cache TO clideck_mcp_worker;
 GRANT SELECT, DELETE ON verification_sessions TO clideck_mcp_worker;
 GRANT UPDATE ON knowledge_demands TO clideck_mcp_worker;
+GRANT INSERT, UPDATE ON demand_topics TO clideck_mcp_worker;
+GRANT INSERT, UPDATE ON knowledge_demand_topic_memberships
+TO clideck_mcp_worker;
+GRANT INSERT, UPDATE ON knowledge_demand_diagnostics
+TO clideck_mcp_worker;
 GRANT SELECT, INSERT, UPDATE ON knowledge_demand_source_attempts
 TO clideck_mcp_worker;
 GRANT DELETE ON mcp_request_logs TO clideck_mcp_worker;
@@ -303,7 +317,10 @@ GRANT SELECT ON
   knowledge_conflicts,
   task_artifacts,
   knowledge_demands,
-  knowledge_demand_source_attempts
+  knowledge_demand_source_attempts,
+  demand_topics,
+  knowledge_demand_topic_memberships,
+  knowledge_demand_diagnostics
 TO clideck_mcp_researcher;
 GRANT INSERT ON
   source_candidates,
@@ -316,6 +333,11 @@ GRANT INSERT ON
   active_source_slots,
   worker_heartbeats,
   pipeline_ai_circuits
+TO clideck_mcp_researcher;
+GRANT INSERT, UPDATE ON
+  demand_topics,
+  knowledge_demand_topic_memberships,
+  knowledge_demand_diagnostics
 TO clideck_mcp_researcher;
 GRANT UPDATE ON
   coverage_targets,

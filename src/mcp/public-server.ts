@@ -36,12 +36,10 @@ import {
   queryDomainKnowledgeInputSchema,
   queryDomainKnowledgeOutputSchema
 } from '../domain/domain-tool-schemas.js'
-import {
-  filterActionableKnowledge,
-  searchKnowledge
-} from '../domain/knowledge.js'
+import { searchKnowledgeWithCoverage } from '../domain/demand-intelligence.js'
 import {
   classifyMcpOutcome,
+  getKnowledgeDemandLearningStatus,
   queueApproximateKnowledgeDemand,
   queueUnknownKnowledgeDemand,
   reconcileKnownKnowledgeDemand,
@@ -208,6 +206,28 @@ function wrapTool<TInput, TOutput>(
               return null
             })
           : null
+      if (
+        publicOutput['answer_status'] === 'partial' ||
+        publicOutput['answer_status'] === 'unknown'
+      ) {
+        publicOutput['learning'] = {
+          status: knowledgeDemandId
+            ? await getKnowledgeDemandLearningStatus(
+                dependencies.database,
+                knowledgeDemandId,
+              ).catch(() => 'unavailable' as const)
+            : 'unavailable'
+        }
+      } else if (publicOutput['answer_status'] === 'complete') {
+        publicOutput['learning'] = {
+          status: knowledgeDemandId
+            ? await getKnowledgeDemandLearningStatus(
+                dependencies.database,
+                knowledgeDemandId,
+              ).catch(() => 'unavailable' as const)
+            : 'not_required'
+        }
+      }
       await recordPublicUsage(
         dependencies.database,
         toolName,
@@ -278,7 +298,7 @@ export function createPublicMcpServer(
   const server = new McpServer(
     {
       name: 'CliDeck MCP — Network Knowledge',
-      version: '0.8.4',
+      version: '0.8.5',
       title: 'CliDeck MCP — Network Knowledge',
       websiteUrl: 'https://clideck.com/software/mcp'
     },
@@ -358,20 +378,22 @@ export function createPublicMcpServer(
           dependencies.database,
           parsedContext,
         )
-        const answers = resolution.context
-          ? await searchKnowledge(
-              dependencies.database,
-              input.question,
-              resolution.context,
-              Math.min(20, Math.max(1, input.limit)),
-            )
-          : []
+        const result = resolution.context
+          ? await searchKnowledgeWithCoverage({
+              database: dependencies.database,
+              question: input.question,
+              context: resolution.context,
+              limit: Math.min(20, Math.max(1, input.limit))
+            })
+          : { answers: [], answerStatus: 'unknown' as const, coverage: [] }
         return {
           domain_id: 'network',
           context: resolution.publicContext,
-          answers,
-          unknown: answers.length === 0,
-          next_action: answers.length === 0
+          answers: result.answers,
+          unknown: result.answerStatus === 'unknown',
+          answer_status: result.answerStatus,
+          coverage: result.coverage,
+          next_action: result.answers.length === 0
             ? 'knowledge_not_found' as const
             : 'use_answer' as const
         }
@@ -387,6 +409,10 @@ export function createPublicMcpServer(
         context: result.context,
         answers: result.records,
         unknown: result.records.length === 0,
+        answer_status: result.records.length === 0
+          ? 'unknown' as const
+          : 'complete' as const,
+        coverage: [],
         next_action:
           result.records.length === 0
             ? 'knowledge_not_found' as const
@@ -434,23 +460,24 @@ export function createPublicMcpServer(
         dependencies.database,
         input.context,
       )
-      const answers = resolution.context
-        ? filterActionableKnowledge(
-            input.question,
-            await searchKnowledge(
-              dependencies.database,
-              input.question,
-              resolution.context,
-              Math.min(5, Math.max(1, input.limit)),
-            ),
-          )
-        : []
+      const result = resolution.context
+        ? await searchKnowledgeWithCoverage({
+            database: dependencies.database,
+            question: input.question,
+            context: resolution.context,
+            limit: Math.min(5, Math.max(1, input.limit))
+          })
+        : { answers: [], answerStatus: 'unknown' as const, coverage: [] }
       return {
         context: resolution.publicContext,
-        answers,
-        unknown: answers.length === 0,
+        answers: result.answers,
+        unknown: result.answerStatus === 'unknown',
+        answer_status: result.answerStatus,
+        coverage: result.coverage,
         next_action:
-          answers.length === 0 ? 'request_expert_answer' as const : 'use_answer' as const
+          result.answers.length === 0
+            ? 'request_expert_answer' as const
+            : 'use_answer' as const
       }
     }),
   )
@@ -474,25 +501,26 @@ export function createPublicMcpServer(
         dependencies.database,
         input.context,
       )
-      const answers = resolution.context
-        ? filterActionableKnowledge(
-            input.goal,
-            await searchKnowledge(
-              dependencies.database,
-              input.goal,
-              resolution.context,
-              Math.min(3, Math.max(1, input.limit)),
-              ['workflow', 'change', 'diagnostic'],
-            ),
-            { requireAction: true },
-          )
-        : []
+      const result = resolution.context
+        ? await searchKnowledgeWithCoverage({
+            database: dependencies.database,
+            question: input.goal,
+            context: resolution.context,
+            limit: Math.min(3, Math.max(1, input.limit)),
+            kind: ['workflow', 'change', 'diagnostic'],
+            requireAction: true
+          })
+        : { answers: [], answerStatus: 'unknown' as const, coverage: [] }
       return {
         context: resolution.publicContext,
-        answers,
-        unknown: answers.length === 0,
+        answers: result.answers,
+        unknown: result.answerStatus === 'unknown',
+        answer_status: result.answerStatus,
+        coverage: result.coverage,
         next_action:
-          answers.length === 0 ? 'request_expert_answer' as const : 'use_answer' as const
+          result.answers.length === 0
+            ? 'request_expert_answer' as const
+            : 'use_answer' as const
       }
     }),
   )

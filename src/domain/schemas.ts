@@ -9,6 +9,16 @@ export const networkContextInputSchema = z.object({
   vendor: shortText.optional(),
   model: shortText.optional(),
   operating_system: shortText.optional(),
+  runtime_mode: z.enum([
+    'normal',
+    'rescue',
+    'installer',
+    'update',
+    'uninstall',
+    'recovery',
+    'diagnostic'
+  ]).optional(),
+  shell_environment: z.string().trim().min(1).max(120).optional(),
   version: networkVersionSchema.optional()
 }).refine(
   (value) => value.vendor || value.model || value.operating_system,
@@ -27,6 +37,16 @@ export const resolvedNetworkContextSchema = z.object({
   software_family: z.string().optional(),
   software_family_slug: z.string().optional(),
   portable_operating_system: z.boolean().optional(),
+  runtime_mode: z.enum([
+    'normal',
+    'rescue',
+    'installer',
+    'update',
+    'uninstall',
+    'recovery',
+    'diagnostic'
+  ]).nullable().optional(),
+  shell_environment: z.string().nullable().optional(),
   vendor_resolved: z.boolean().optional(),
   model_resolved: z.boolean().optional(),
   version: z.string().nullable(),
@@ -129,6 +149,19 @@ export const knowledgeSearchResultSchema = z.object({
   context: resolvedNetworkContextSchema,
   answers: z.array(publicKnowledgeSchema),
   unknown: z.boolean(),
+  answer_status: z.enum(['complete', 'partial', 'unknown']).optional(),
+  coverage: z.array(z.object({
+    capability: z.string(),
+    label: z.string(),
+    status: z.enum(['covered', 'missing']),
+    answer_refs: z.array(z.string().uuid())
+  })).optional(),
+  learning: z.object({
+    status: z.enum([
+      'diagnosing', 'discovering', 'processing', 'rechecking',
+      'queued', 'not_required', 'unavailable'
+    ])
+  }).optional(),
   next_action: z
     .enum(['use_answer', 'request_expert_answer'])
 })
@@ -278,6 +311,15 @@ export const candidateRevisionSchema = z.object({
   portable_key: z.string()
     .regex(/^[a-z0-9][a-z0-9._-]{2,159}$/)
     .optional(),
+  capability_slug: z.string()
+    .regex(/^[a-z][a-z0-9-]{1,62}$/)
+    .optional(),
+  runtime_modes: z.array(z.enum([
+    'normal', 'rescue', 'installer', 'update', 'uninstall', 'recovery',
+    'diagnostic'
+  ])).max(7).optional(),
+  shell_environments: z.array(z.string().trim().min(1).max(120))
+    .max(10).optional(),
   title: shortText,
   summary: z.string().trim().min(1).max(4_000),
   question_patterns: z.array(z.string().trim().min(3).max(300)).min(1).max(20),

@@ -80,6 +80,7 @@ import {
   submitCandidateAnalysis,
   submitCandidateDeepReview,
   submitCandidateVerification,
+  submitDemandDiagnosis,
   submitSourceDiscovery
 } from '../src/domain/pipeline.js'
 import { processNextPipelineTask } from '../src/domain/pipeline-worker.js'
@@ -159,6 +160,58 @@ describeIntegration('PostgreSQL integration', () => {
     await database.end()
   }, 30_000)
 
+  async function completeMissingKnowledgeDiagnosis(
+    demandId: string,
+  ): Promise<void> {
+    const task = await database.query<{ id: string }>(
+      `SELECT id FROM pipeline_tasks
+        WHERE knowledge_demand_id = $1
+          AND task_type = 'demand_diagnosis'
+          AND status = 'queued'
+        ORDER BY created_at DESC LIMIT 1`,
+      [demandId],
+    )
+    const lease = randomUUID().replaceAll('-', '')
+    await database.query(
+      `UPDATE pipeline_tasks
+          SET status = 'running', claim_owner = 'demand-diagnosis-test',
+              lease_token_hash = $2,
+              lease_until = now() + interval '5 minutes', attempts = 1
+        WHERE id = $1`,
+      [task.rows[0]!.id, sha256(lease)],
+    )
+    await submitDemandDiagnosis(database, {
+      pipeline_task_id: task.rows[0]!.id,
+      lease_token: lease,
+      diagnosis: {
+        failure_class: 'missing_knowledge',
+        answer_status: 'unknown',
+        canonical_context: {
+          vendor: 'Cisco',
+          model: 'C9300',
+          operating_system: 'IOS XE',
+          version: '17.9.4',
+          runtime_mode: null,
+          shell_environment: null
+        },
+        subquestions: [{
+          capability: 'general',
+          label: 'Requested operation',
+          status: 'missing',
+          explanation: 'The active knowledge set does not contain this fixture.',
+          search_terms: ['official command reference']
+        }],
+        existing_coverage_summary: 'No matching active revision was found.',
+        missing_capabilities: ['general'],
+        search_expansions: ['official command reference'],
+        document_roles: ['commands'],
+        recommended_action: 'targeted_discovery',
+        reasoning_summary:
+          'The deterministic replay confirms a genuine official-document gap.'
+      }
+    })
+  }
+
   it('journals an unanswered MCP request and queues one priority demand', async () => {
     const client = await database.connect()
     const question =
@@ -204,6 +257,8 @@ describeIntegration('PostgreSQL integration', () => {
         })
         expect(result.structuredContent).toMatchObject({
           unknown: true,
+          answer_status: 'unknown',
+          learning: { status: 'diagnosing' },
           next_action: 'request_expert_answer'
         })
       } finally {
@@ -228,16 +283,16 @@ describeIntegration('PostgreSQL integration', () => {
            task.task_type
          FROM knowledge_demands demand
          JOIN pipeline_tasks task
-           ON task.id = demand.discovery_task_id
+           ON task.id = demand.diagnosis_task_id
          WHERE demand.question = $1`,
         [question],
       )
       expect(demand.rows).toEqual([
         expect.objectContaining({
-          status: 'discovering',
+          status: 'diagnosing',
           priority: 120,
-          task_priority: 120,
-          task_type: 'source_discovery'
+          task_priority: 110,
+          task_type: 'demand_diagnosis'
         })
       ])
 
@@ -262,15 +317,15 @@ describeIntegration('PostgreSQL integration', () => {
       expect(repeatedDemandId).toBe(demand.rows[0]!.id)
       const repeated = await client.query<{
         demand_count: number
-        active_discovery_tasks: number
+        active_diagnosis_tasks: number
       }>(
         `SELECT
            demand.demand_count,
-           count(task.id)::int AS active_discovery_tasks
+           count(task.id)::int AS active_diagnosis_tasks
          FROM knowledge_demands demand
          LEFT JOIN pipeline_tasks task
            ON task.knowledge_demand_id = demand.id
-          AND task.task_type = 'source_discovery'
+          AND task.task_type = 'demand_diagnosis'
           AND task.status IN ('queued', 'claimed', 'running')
          WHERE demand.id = $1
          GROUP BY demand.id`,
@@ -278,7 +333,7 @@ describeIntegration('PostgreSQL integration', () => {
       )
       expect(repeated.rows).toEqual([{
         demand_count: 2,
-        active_discovery_tasks: 1
+        active_diagnosis_tasks: 1
       }])
 
       const log = await client.query<{
@@ -428,6 +483,7 @@ describeIntegration('PostgreSQL integration', () => {
       },
     )
     expect(demandId).toEqual(expect.any(String))
+    await completeMissingKnowledgeDiagnosis(demandId!)
     const firstTask = await database.query<{
       id: string
       coverage_target_id: string
@@ -727,6 +783,14 @@ describeIntegration('PostgreSQL integration', () => {
               next_retry_at = now(),
               last_seen_at = now()
         WHERE id = $1`,
+      [demandId],
+    )
+    await database.query(
+      `UPDATE demand_topics topic
+          SET state = 'active', next_eligible_at = now(), updated_at = now()
+         FROM knowledge_demand_topic_memberships membership
+        WHERE membership.knowledge_demand_id = $1
+          AND membership.demand_topic_id = topic.id`,
       [demandId],
     )
     await ensurePipelineWork(database)

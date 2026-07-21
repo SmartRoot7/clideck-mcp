@@ -13,6 +13,7 @@ import {
   codexExecutorEnvironment,
   sensitiveEnvironmentValues
 } from '../src/cli/pipeline-codex-policy.js'
+import { demandCapacityAtLimit } from '../src/domain/pipeline.js'
 
 describe('parallel Luna runtime', () => {
   it('uses four isolated executor lanes with the economical model', () => {
@@ -93,7 +94,7 @@ describe('parallel Luna runtime', () => {
       .toBe('--disable')
   })
 
-  it('allows medium reasoning only for automatic deep review without web search', () => {
+  it('allows medium reasoning only for deep review and demand diagnosis', () => {
     const common = {
       model: pipelineModel,
       reasoning: 'medium',
@@ -112,6 +113,14 @@ describe('parallel Luna runtime', () => {
     expect(deepReview).toContain('model_reasoning_effort="medium"')
     expect(
       deepReview[deepReview.indexOf('standalone_web_search') - 1]
+    ).toBe('--disable')
+    const diagnosis = codexExecutorArguments({
+      ...common,
+      taskType: 'demand_diagnosis'
+    })
+    expect(diagnosis).toContain('model_reasoning_effort="medium"')
+    expect(
+      diagnosis[diagnosis.indexOf('standalone_web_search') - 1]
     ).toBe('--disable')
   })
 
@@ -138,6 +147,24 @@ describe('parallel Luna runtime', () => {
 })
 
 describe('pipeline task reasoning', () => {
+  it('caps demand at half the lanes only while baseline work exists', () => {
+    expect(demandCapacityAtLimit({
+      baselineAvailable: true,
+      activeDemand: 2,
+      concurrency: 4
+    })).toBe(true)
+    expect(demandCapacityAtLimit({
+      baselineAvailable: true,
+      activeDemand: 1,
+      concurrency: 4
+    })).toBe(false)
+    expect(demandCapacityAtLimit({
+      baselineAvailable: false,
+      activeDemand: 4,
+      concurrency: 4
+    })).toBe(false)
+  })
+
   it('preserves medium review and fails unknown values closed to low', () => {
     expect(normalizeTaskReasoning('medium')).toBe('medium')
     expect(normalizeTaskReasoning('low')).toBe('low')

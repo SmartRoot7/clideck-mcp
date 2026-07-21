@@ -8,6 +8,7 @@ import {
   candidateAnalysisSubmissionSchema,
   candidateDeepReviewSubmissionSchema,
   candidateVerificationSubmissionSchema,
+  demandDiagnosisSubmissionSchema,
   claimPipelineTask,
   discoverySubmissionSchema,
   failPipelineTask,
@@ -21,6 +22,7 @@ import {
   submitCandidateAnalysis,
   submitCandidateDeepReview,
   submitCandidateVerification,
+  submitDemandDiagnosis,
   submitSourceDiscovery
 } from '../domain/pipeline.js'
 import {
@@ -123,6 +125,26 @@ export function createResearcherMcpServer(
           dependencies.researcherId,
           dependencies.researcherInstanceId,
         ),
+    ),
+  )
+
+  server.registerTool(
+    'submit_demand_diagnosis',
+    {
+      description:
+        'Submit a structured Medium diagnosis for one unanswered request. The server owns topics, identifiers, replay and any subsequent discovery.',
+      inputSchema: demandDiagnosisSubmissionSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false
+      }
+    },
+    wrapResearcherTool(
+      dependencies,
+      'submit_demand_diagnosis',
+      async (input) => submitDemandDiagnosis(dependencies.database, input),
     ),
   )
 

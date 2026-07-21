@@ -31,6 +31,12 @@ import {
 } from './knowledge-demand-relevance.js'
 import { omitNullObjectProperties } from './structured-output.js'
 import { candidateRevisionSchema } from './schemas.js'
+import {
+  demandDiagnosisAgentArtifactSchema,
+  diagnosticTopicIdentity,
+  replayDemandCoverage
+} from './demand-intelligence.js'
+import { decomposeNetworkQuestion, normalizeTopicSlug } from './network-intent.js'
 import { candidateKnowledgeSchema } from './publication.js'
 import { enforceKnowledgeRisk } from './risk.js'
 
@@ -74,6 +80,10 @@ export const discoverySubmissionSchema = pipelineLeaseSchema.extend(
   (value) => value.sources.length > 0 || Boolean(value.rejection_reason),
   'A discovery run must submit a source or an explicit rejection reason.',
 )
+
+export const demandDiagnosisSubmissionSchema = pipelineLeaseSchema.extend({
+  diagnosis: demandDiagnosisAgentArtifactSchema
+})
 
 export const pipelineCandidatePayloadSchema = candidateRevisionSchema.omit({
   task_id: true,
@@ -601,6 +611,7 @@ export type PipelineTaskRow = {
   id: string
   task_type:
     | 'expert_research'
+    | 'demand_diagnosis'
     | 'source_discovery'
     | 'source_acquisition'
     | 'source_conversion'
@@ -612,6 +623,7 @@ export type PipelineTaskRow = {
     | 'source_publication'
     | 'source_refresh'
   stage:
+    | 'diagnose'
     | 'discover'
     | 'acquire'
     | 'convert'
@@ -626,6 +638,7 @@ export type PipelineTaskRow = {
   expert_task_id: string | null
   knowledge_demand_id: string | null
   requested_reasoning_effort?: 'low' | 'medium'
+  queue_class?: 'baseline' | 'demand'
   attempts?: number
 }
 
@@ -659,6 +672,7 @@ export function withLeasedKnowledgeDemand(
 
 const aiTaskTypes: PipelineTaskRow['task_type'][] = [
   'expert_research',
+  'demand_diagnosis',
   'source_discovery',
   'fragment_analysis',
   'candidate_verification',
@@ -675,6 +689,7 @@ const mechanicalTaskTypes: PipelineTaskRow['task_type'][] = [
 ]
 
 const nonBlockingAiTaskTypes: PipelineTaskRow['task_type'][] = [
+  'demand_diagnosis',
   'fragment_analysis',
   'candidate_verification',
   'candidate_deep_review'
@@ -710,16 +725,87 @@ export function demandFailureDisposition(input: {
   return 'normal'
 }
 
+async function queueDemandDiagnosisWork(
+  client: DatabaseClient,
+): Promise<boolean> {
+  const demand = await client.query<{
+    id: string
+    question: string
+    tool_name: string
+    context: Record<string, unknown>
+    coverage_target_id: string
+    diagnosis_version: string
+  }>(
+    `SELECT id, question, tool_name, context, coverage_target_id,
+            diagnosis_version
+       FROM knowledge_demands demand
+      WHERE demand.status <> 'published'
+        AND demand.diagnosis_status IN ('pending', 'failed')
+        AND demand.next_retry_at <= now()
+        AND NOT EXISTS (
+          SELECT 1 FROM pipeline_tasks active
+           WHERE active.knowledge_demand_id = demand.id
+             AND active.task_type = 'demand_diagnosis'
+             AND active.status IN ('queued', 'claimed', 'running')
+        )
+      ORDER BY demand.priority DESC, demand.first_seen_at
+      LIMIT 1
+      FOR UPDATE OF demand SKIP LOCKED`,
+  )
+  const row = demand.rows[0]
+  if (!row) return false
+  const taskId = await insertTask(client, {
+    type: 'demand_diagnosis',
+    stage: 'diagnose',
+    priority: aiPriorities.demandDiagnosis,
+    dedupeKey: `demand:${row.id}:diagnose:${row.diagnosis_version}`,
+    coverageTargetId: row.coverage_target_id,
+    knowledgeDemandId: row.id,
+    reasoningEffort: 'medium',
+    queueClass: 'demand',
+    payload: {
+      diagnosis_version: row.diagnosis_version,
+      deterministic_subquestions: decomposeNetworkQuestion(row.question),
+      knowledge_demand: {
+        question: row.question,
+        tool_name: row.tool_name,
+        context: row.context
+      }
+    }
+  })
+  if (!taskId) return false
+  await client.query(
+    `UPDATE knowledge_demands
+        SET status = 'diagnosing', diagnosis_status = 'queued',
+            diagnosis_task_id = $2, last_error_code = NULL,
+            last_seen_at = now()
+      WHERE id = $1`,
+    [row.id, taskId],
+  )
+  return true
+}
+
 const requiredPipelineModel = 'gpt-5.6-luna'
 const requiredPipelineReasoning = 'low'
 const aiPriorities = {
   expert: 100,
+  demandDiagnosis: 110,
+  demand: 105,
   deepMedium: 96,
   deepLow: 92,
   verify: 88,
   analyze: 80,
   discover: 50
 } as const
+
+export function demandCapacityAtLimit(input: {
+  baselineAvailable: boolean
+  activeDemand: number
+  concurrency: number
+}): boolean {
+  return input.baselineAvailable &&
+    input.activeDemand >= Math.ceil(Math.max(1, input.concurrency) / 2)
+}
 
 export function boundFragmentAnalysisBatch<
   T extends { content: string }
@@ -907,6 +993,7 @@ async function insertTask(
     knowledgeDemandId?: string | null
     payload?: Record<string, unknown>
     reasoningEffort?: 'low' | 'medium'
+    queueClass?: 'baseline' | 'demand'
   },
 ): Promise<string | null> {
   const inserted = await client.query<{ id: string }>(
@@ -920,9 +1007,10 @@ async function insertTask(
        knowledge_demand_id,
        dedupe_key,
        payload,
-       requested_reasoning_effort
+       requested_reasoning_effort,
+       queue_class
      )
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11)
      ON CONFLICT (dedupe_key)
        WHERE status IN ('queued', 'claimed', 'running')
      DO NOTHING
@@ -937,7 +1025,8 @@ async function insertTask(
       input.knowledgeDemandId ?? null,
       input.dedupeKey,
       JSON.stringify(input.payload ?? {}),
-      input.reasoningEffort ?? 'low'
+      input.reasoningEffort ?? 'low',
+      input.queueClass ?? (input.knowledgeDemandId ? 'demand' : 'baseline')
     ],
   )
   const taskId = inserted.rows[0]?.id ?? null
@@ -1304,8 +1393,8 @@ async function queueDeepReviewWork(
     type: 'candidate_deep_review',
     stage: 'deep_review',
     priority: reviewMode === 'medium'
-      ? (first.knowledge_demand_id ? 120 : aiPriorities.deepMedium)
-      : (first.knowledge_demand_id ? 120 : aiPriorities.deepLow),
+      ? (first.knowledge_demand_id ? aiPriorities.demand : aiPriorities.deepMedium)
+      : (first.knowledge_demand_id ? aiPriorities.demand : aiPriorities.deepLow),
     dedupeKey: `deep-review:${reviewMode}:${sha256Label(
       candidateIds.join(','),
     )}`,
@@ -1435,7 +1524,7 @@ async function queueSourceWork(
       document_role: source.document_role
     }
   }
-  const taskPriority = source.knowledge_demand_id ? 120 : null
+  const taskPriority = source.knowledge_demand_id ? aiPriorities.demand : null
   if (source.knowledge_demand_id) {
     await client.query(
       `UPDATE knowledge_demands
@@ -1885,7 +1974,18 @@ async function queueDemandDiscoveryWork(
      FROM knowledge_demands demand
      JOIN coverage_targets target
        ON target.id = demand.coverage_target_id
+     LEFT JOIN knowledge_demand_topic_memberships membership
+       ON membership.knowledge_demand_id = demand.id
+     LEFT JOIN demand_topics topic ON topic.id = membership.demand_topic_id
      WHERE demand.status IN ('queued', 'unresolved', 'failed')
+       AND demand.diagnosis_status = 'completed'
+       AND (
+         topic.id IS NULL
+         OR (
+           topic.state IN ('active', 'cooldown')
+           AND topic.next_eligible_at <= now()
+         )
+       )
        AND demand.next_retry_at <= now()
        AND NOT EXISTS (
          SELECT 1
@@ -1893,12 +1993,30 @@ async function queueDemandDiscoveryWork(
          WHERE active.knowledge_demand_id = demand.id
            AND active.status IN ('queued', 'claimed', 'running')
        )
-     ORDER BY demand.priority DESC, demand.first_seen_at
+     ORDER BY topic.last_served_at NULLS FIRST,
+              topic.priority_score DESC NULLS LAST,
+              demand.priority DESC, demand.first_seen_at
      LIMIT 1
      FOR UPDATE OF demand SKIP LOCKED`,
   )
   const row = demand.rows[0]
   if (!row) return false
+  const latestDiagnosis = await client.query<{
+    canonical_context: Record<string, unknown>
+    subquestions: unknown[]
+    missing_capabilities: string[]
+    search_expansions: string[]
+    document_roles: string[]
+    reasoning_summary: string | null
+  }>(
+    `SELECT canonical_context, subquestions, missing_capabilities,
+            search_expansions, document_roles, reasoning_summary
+       FROM knowledge_demand_diagnostics
+      WHERE knowledge_demand_id = $1 AND status = 'completed'
+      ORDER BY created_at DESC
+      LIMIT 1`,
+    [row.id],
+  )
   const termPatterns = knowledgeDemandTermPatterns(row.question)
   const existingSources = await client.query<{ id: string }>(
     `SELECT source.id
@@ -1976,15 +2094,24 @@ async function queueDemandDiscoveryWork(
           AND status <> 'published'`,
       [row.id, reused.sourceIds[0]],
     )
+    await client.query(
+      `UPDATE demand_topics topic
+          SET last_served_at = now(), updated_at = now()
+         FROM knowledge_demand_topic_memberships membership
+        WHERE membership.knowledge_demand_id = $1
+          AND membership.demand_topic_id = topic.id`,
+      [row.id],
+    )
     return true
   }
   const taskId = await insertTask(client, {
     type: 'source_discovery',
     stage: 'discover',
-    priority: 120,
+    priority: aiPriorities.demand,
     dedupeKey: `demand:${row.id}:discover`,
     coverageTargetId: row.coverage_target_id,
     knowledgeDemandId: row.id,
+    queueClass: 'demand',
     payload: {
       coverage_target: {
         id: row.coverage_target_id,
@@ -1999,7 +2126,8 @@ async function queueDemandDiscoveryWork(
       knowledge_demand: {
         question: row.question,
         tool_name: row.tool_name,
-        context: row.context
+        context: row.context,
+        diagnosis: latestDiagnosis.rows[0] ?? null
       },
       requirements: {
         public_https_only: true,
@@ -2018,6 +2146,14 @@ async function queueDemandDiscoveryWork(
             last_seen_at = now()
       WHERE id = $1`,
     [row.id, taskId],
+  )
+  await client.query(
+    `UPDATE demand_topics topic
+        SET last_served_at = now(), updated_at = now()
+       FROM knowledge_demand_topic_memberships membership
+      WHERE membership.knowledge_demand_id = $1
+        AND membership.demand_topic_id = topic.id`,
+    [row.id],
   )
   return true
 }
@@ -2098,7 +2234,7 @@ async function queueCandidatePublication(
   const taskId = await insertTask(client, {
     type: 'candidate_publication',
     stage: 'publish',
-    priority: demandIds.length > 0 ? 120 : 98,
+    priority: demandIds.length > 0 ? aiPriorities.demand : 98,
     dedupeKey: `records:publish:${sha256Label(candidateIds.join(','))}`,
     sourceId: sourceIds.length === 1 ? sourceIds[0]! : null,
     knowledgeDemandId: demandIds.length === 1 ? demandIds[0]! : null,
@@ -2152,21 +2288,27 @@ async function maintainPreparedSourceBuffer(
     target - (prepared.rows[0]?.count ?? 0),
   )
   const preparationSources = await client.query<{ id: string }>(
-    `SELECT id
-     FROM source_candidates
-     WHERE status IN (
-       'approved',
-       'acquiring',
-       'acquired',
-       'converting',
-       'converted',
-       'chunking'
+    `WITH ranked AS MATERIALIZED (
+       SELECT id, (knowledge_demand_id IS NOT NULL) AS is_demand,
+              discovered_at,
+              row_number() OVER (
+                PARTITION BY (knowledge_demand_id IS NOT NULL)
+                ORDER BY discovered_at
+              ) AS class_rank
+         FROM source_candidates
+        WHERE status IN (
+          'approved', 'acquiring', 'acquired', 'converting',
+          'converted', 'chunking'
+        )
      )
-     ORDER BY
-       CASE WHEN knowledge_demand_id IS NOT NULL THEN 0 ELSE 1 END,
-       discovered_at
+     SELECT source.id
+       FROM ranked
+       JOIN source_candidates source ON source.id = ranked.id
+     ORDER BY ranked.class_rank,
+       CASE WHEN ranked.is_demand THEN 0 ELSE 1 END,
+       ranked.discovered_at
      LIMIT $1
-     FOR UPDATE SKIP LOCKED`,
+     FOR UPDATE OF source SKIP LOCKED`,
     [preparationLimit],
   )
   for (const source of preparationSources.rows) {
@@ -2175,14 +2317,24 @@ async function maintainPreparedSourceBuffer(
   if (available === 0) return
 
   const discovered = await client.query<{ id: string }>(
-    `SELECT id
-     FROM source_candidates
-     WHERE status = 'discovered'
-     ORDER BY
-       CASE WHEN knowledge_demand_id IS NOT NULL THEN 0 ELSE 1 END,
-       discovered_at
+    `WITH ranked AS MATERIALIZED (
+       SELECT id, (knowledge_demand_id IS NOT NULL) AS is_demand,
+              discovered_at,
+              row_number() OVER (
+                PARTITION BY (knowledge_demand_id IS NOT NULL)
+                ORDER BY discovered_at
+              ) AS class_rank
+         FROM source_candidates
+        WHERE status = 'discovered'
+     )
+     SELECT source.id
+       FROM ranked
+       JOIN source_candidates source ON source.id = ranked.id
+     ORDER BY ranked.class_rank,
+       CASE WHEN ranked.is_demand THEN 0 ELSE 1 END,
+       ranked.discovered_at
      LIMIT $1
-     FOR UPDATE SKIP LOCKED`,
+     FOR UPDATE OF source SKIP LOCKED`,
     [available],
   )
   for (const source of discovered.rows) {
@@ -2302,21 +2454,43 @@ async function reconcileSourceLanes(
   const occupied = await client.query<{
     slot_number: number
     source_candidate_id: string
+    is_demand: boolean
   }>(
-    `SELECT slot_number, source_candidate_id
-     FROM active_source_slots
+    `SELECT slot.slot_number, slot.source_candidate_id,
+            (source.knowledge_demand_id IS NOT NULL) AS is_demand
+     FROM active_source_slots slot
+     JOIN source_candidates source ON source.id = slot.source_candidate_id
      WHERE slot_number <= $1
      ORDER BY slot_number
-     FOR UPDATE`,
+     FOR UPDATE OF slot`,
     [maxActiveSources],
   )
   const used = new Set(occupied.rows.map((row) => row.slot_number))
+  let demandSlots = occupied.rows.filter((row) => row.is_demand).length
   for (let slot = 1; slot <= maxActiveSources; slot += 1) {
     if (used.has(slot)) continue
-    const source = await client.query<{ id: string }>(
+    const baselineAvailable = await client.query<{ available: boolean }>(
+      `SELECT EXISTS (
+         SELECT 1 FROM source_candidates source
+          WHERE source.status IN ('prepared', 'analyzing')
+            AND source.knowledge_demand_id IS NULL
+            AND NOT EXISTS (
+              SELECT 1 FROM active_source_slots active
+               WHERE active.source_candidate_id = source.id
+            )
+       ) AS available`,
+    )
+    const restrictToBaseline = demandCapacityAtLimit({
+      baselineAvailable: baselineAvailable.rows[0]?.available === true,
+      activeDemand: demandSlots,
+      concurrency: maxActiveSources
+    })
+    const source = await client.query<{ id: string; is_demand: boolean }>(
       `SELECT source.id
+              ,(source.knowledge_demand_id IS NOT NULL) AS is_demand
        FROM source_candidates source
        WHERE source.status IN ('prepared', 'analyzing')
+         AND (NOT $1::boolean OR source.knowledge_demand_id IS NULL)
          AND NOT EXISTS (
            SELECT 1
            FROM active_source_slots active
@@ -2340,6 +2514,7 @@ async function reconcileSourceLanes(
          source.updated_at
        LIMIT 1
        FOR UPDATE OF source SKIP LOCKED`,
+      [restrictToBaseline],
     )
     if (!source.rows[0]) break
     await client.query(
@@ -2350,6 +2525,7 @@ async function reconcileSourceLanes(
        VALUES ($1, $2)`,
       [slot, source.rows[0].id],
     )
+    if (source.rows[0].is_demand) demandSlots += 1
     await client.query(
       `UPDATE source_candidates
           SET status = 'analyzing',
@@ -2926,8 +3102,9 @@ async function ensureStreamingWorkInTransaction(
     if (!(await queueCandidatePublication(client))) break
   }
 
-  // A real unanswered MCP request outranks background coverage and record
-  // refinement. Expert work remains the next highest class.
+  // Diagnose an unanswered request before spending discovery capacity. The
+  // diagnosis may resolve a retrieval/context miss using existing knowledge.
+  await queueDemandDiagnosisWork(client)
   await queueDemandDiscoveryWork(client)
 
   // Keep one future Luna claim available for intake whenever the prepared
@@ -2963,7 +3140,8 @@ async function ensureStreamingWorkInTransaction(
   await client.query(
     `UPDATE pipeline_tasks
         SET priority = CASE
-          WHEN knowledge_demand_id IS NOT NULL THEN 120::smallint
+          WHEN task_type = 'demand_diagnosis' THEN $7::smallint
+          WHEN knowledge_demand_id IS NOT NULL THEN $8::smallint
           WHEN task_type = 'expert_research' THEN $1::smallint
           WHEN task_type = 'candidate_deep_review'
             AND requested_reasoning_effort = 'medium' THEN $2::smallint
@@ -2974,9 +3152,10 @@ async function ensureStreamingWorkInTransaction(
         END,
         updated_at = now()
       WHERE status = 'queued'
-        AND task_type = ANY($7::text[])
+        AND task_type = ANY($9::text[])
         AND priority IS DISTINCT FROM CASE
-          WHEN knowledge_demand_id IS NOT NULL THEN 120::smallint
+          WHEN task_type = 'demand_diagnosis' THEN $7::smallint
+          WHEN knowledge_demand_id IS NOT NULL THEN $8::smallint
           WHEN task_type = 'expert_research' THEN $1::smallint
           WHEN task_type = 'candidate_deep_review'
             AND requested_reasoning_effort = 'medium' THEN $2::smallint
@@ -2992,6 +3171,8 @@ async function ensureStreamingWorkInTransaction(
       aiPriorities.verify,
       aiPriorities.analyze,
       aiPriorities.discover,
+      aiPriorities.demandDiagnosis,
+      aiPriorities.demand,
       aiTaskTypes
     ],
   )
@@ -3220,6 +3401,61 @@ export async function claimPipelineTask(
       }
     }
 
+    const demandCapacity = await client.query<{
+      active_demand: number
+      active_diagnosis: number
+      baseline_available: boolean
+    }>(
+      `SELECT
+         count(*) FILTER (
+           WHERE status IN ('claimed', 'running') AND queue_class = 'demand'
+         )::int AS active_demand,
+         count(*) FILTER (
+           WHERE status IN ('claimed', 'running')
+             AND task_type = 'demand_diagnosis'
+         )::int AS active_diagnosis,
+         EXISTS (
+           SELECT 1 FROM pipeline_tasks baseline
+            WHERE baseline.status = 'queued'
+              AND baseline.available_at <= now()
+              AND baseline.queue_class = 'baseline'
+              AND baseline.task_type = ANY($1::text[])
+              AND NOT EXISTS (
+                SELECT 1 FROM pipeline_ai_circuits circuit
+                 WHERE circuit.task_type = baseline.task_type
+                   AND circuit.reasoning_effort = coalesce(
+                     baseline.requested_reasoning_effort,
+                     'low'
+                   )
+                   AND (
+                     circuit.open_until > now()
+                     OR circuit.probe_executor_id IS NOT NULL
+                   )
+              )
+              AND (
+                baseline.task_type NOT IN (
+                  'source_discovery', 'source_refresh'
+                )
+                OR NOT EXISTS (
+                  SELECT 1 FROM pipeline_tasks active_discovery
+                   WHERE active_discovery.status IN ('claimed', 'running')
+                     AND active_discovery.task_type IN (
+                       'source_discovery', 'source_refresh'
+                     )
+                )
+              )
+         ) AS baseline_available
+       FROM pipeline_tasks
+      WHERE task_type = ANY($1::text[])`,
+      [aiTaskTypes],
+    )
+    const capacity = demandCapacity.rows[0]!
+    const demandAtCapacity = demandCapacityAtLimit({
+      baselineAvailable: capacity.baseline_available,
+      activeDemand: capacity.active_demand,
+      concurrency: pipeline.max_concurrent_ai_runs
+    })
+
     const selected = await client.query<PipelineTaskRow>(
       `SELECT
          id,
@@ -3230,11 +3466,17 @@ export async function claimPipelineTask(
          source_candidate_id,
          expert_task_id,
          knowledge_demand_id,
-         requested_reasoning_effort
+         requested_reasoning_effort,
+         queue_class
        FROM pipeline_tasks
        WHERE status = 'queued'
          AND available_at <= now()
          AND task_type = ANY($1::text[])
+         AND (NOT $2::boolean OR queue_class = 'baseline')
+         AND (
+           task_type <> 'demand_diagnosis'
+           OR NOT $3::boolean
+         )
          AND NOT EXISTS (
            SELECT 1
            FROM pipeline_ai_circuits circuit
@@ -3250,7 +3492,6 @@ export async function claimPipelineTask(
          )
          AND (
            task_type NOT IN ('source_discovery', 'source_refresh')
-           OR knowledge_demand_id IS NOT NULL
            OR NOT EXISTS (
              SELECT 1
              FROM pipeline_tasks active_discovery
@@ -3264,7 +3505,7 @@ export async function claimPipelineTask(
        ORDER BY priority DESC, created_at
        FOR UPDATE SKIP LOCKED
        LIMIT 1`,
-      [aiTaskTypes],
+      [aiTaskTypes, demandAtCapacity, capacity.active_diagnosis > 0],
     )
     const task = selected.rows[0]
     if (!task) {
@@ -3429,6 +3670,15 @@ export async function claimPipelineTask(
         ],
       )
       if (!expert.rows[0]) throw new Error('EXPERT_TASK_NOT_AVAILABLE')
+      await client.query(
+        `INSERT INTO task_public_events (
+           task_id, stage, progress_percent, public_message
+         ) VALUES (
+           $1, 'researching', 25,
+           'A Luna executor is researching the requested answer.'
+         )`,
+        [task.expert_task_id],
+      )
       payload = {
         ...payload,
         task_id: expert.rows[0].public_id,
@@ -3466,6 +3716,15 @@ export async function claimPipelineTask(
             (source) => source.canonical_url,
           ),
         })
+      }
+      if (task.task_type === 'demand_diagnosis') {
+        await client.query(
+          `UPDATE knowledge_demands
+              SET status = 'diagnosing', diagnosis_status = 'running',
+                  diagnosis_task_id = $2, last_seen_at = now()
+            WHERE id = $1 AND status <> 'published'`,
+          [task.knowledge_demand_id, task.id],
+        )
       }
     }
 
@@ -4319,6 +4578,17 @@ export async function submitSourceDiscovery(
         )
       : { sourceIds: [], fragmentCount: 0, candidateCount: 0 }
     const usefulSourceIds = [...insertedIds, ...reused.sourceIds]
+    if (task.knowledge_demand_id && usefulSourceIds.length > 0) {
+      await client.query(
+        `UPDATE source_candidates source
+            SET priority_topic_id = membership.demand_topic_id,
+                updated_at = now()
+           FROM knowledge_demand_topic_memberships membership
+          WHERE membership.knowledge_demand_id = $1
+            AND source.id = ANY($2::uuid[])`,
+        [task.knowledge_demand_id, usefulSourceIds],
+      )
+    }
     await client.query(
       `UPDATE coverage_targets
           SET status = CASE WHEN $2 > 0 THEN 'active' ELSE 'covered' END,
@@ -4374,6 +4644,45 @@ export async function submitSourceDiscovery(
           reused.sourceIds[0] ?? null,
         ],
       )
+      if (usefulSourceIds.length === 0) {
+        await client.query(
+          `UPDATE demand_topics topic
+              SET state = CASE
+                    WHEN (
+                      SELECT count(*) FROM pipeline_tasks prior
+                       WHERE prior.knowledge_demand_id = $1
+                         AND prior.task_type = 'source_discovery'
+                         AND prior.status = 'completed'
+                    ) >= 2 THEN 'exhausted'
+                    ELSE 'cooldown'
+                  END,
+                  priority_score = greatest(0, priority_score * 0.8),
+                  next_eligible_at = CASE
+                    WHEN (
+                      SELECT count(*) FROM pipeline_tasks prior
+                       WHERE prior.knowledge_demand_id = $1
+                         AND prior.task_type = 'source_discovery'
+                         AND prior.status = 'completed'
+                    ) >= 2 THEN now() + interval '7 days'
+                    ELSE now() + interval '15 minutes'
+                  END,
+                  updated_at = now()
+             FROM knowledge_demand_topic_memberships membership
+            WHERE membership.knowledge_demand_id = $1
+              AND membership.demand_topic_id = topic.id`,
+          [task.knowledge_demand_id],
+        )
+      } else {
+        await client.query(
+          `UPDATE demand_topics topic
+              SET state = 'active', next_eligible_at = now(),
+                  updated_at = now()
+             FROM knowledge_demand_topic_memberships membership
+            WHERE membership.knowledge_demand_id = $1
+              AND membership.demand_topic_id = topic.id`,
+          [task.knowledge_demand_id],
+        )
+      }
     }
     const activeSource = await client.query<{
       active_source_id: string | null
@@ -4407,6 +4716,199 @@ export async function submitSourceDiscovery(
       kind: 'progress',
       taskId: task.id
     })
+    await completeTask(client, task, completion)
+    return completion
+  })
+  await ensurePipelineWork(database)
+  return result
+}
+
+export async function submitDemandDiagnosis(
+  database: Database,
+  input: z.infer<typeof demandDiagnosisSubmissionSchema>,
+): Promise<Record<string, unknown>> {
+  const result = await withTransaction(database, async (client) => {
+    const task = await assertPipelineLease(
+      client,
+      input.pipeline_task_id,
+      input.lease_token,
+    )
+    if (task.task_type !== 'demand_diagnosis' || !task.knowledge_demand_id) {
+      throw new Error('PIPELINE_TASK_TYPE_INVALID')
+    }
+    const demandResult = await client.query<{
+      id: string
+      question: string
+      tool_name: string
+      demand_count: number
+      diagnosis_version: string
+    }>(
+      `SELECT id, question, tool_name, demand_count, diagnosis_version
+         FROM knowledge_demands
+        WHERE id = $1
+        FOR UPDATE`,
+      [task.knowledge_demand_id],
+    )
+    const demand = demandResult.rows[0]
+    if (!demand) throw new Error('KNOWLEDGE_DEMAND_NOT_FOUND')
+
+    const diagnosis = demandDiagnosisAgentArtifactSchema.parse(input.diagnosis)
+    const fallbackParts = decomposeNetworkQuestion(demand.question)
+    const identity = diagnosticTopicIdentity(diagnosis, fallbackParts)
+    const topic = await client.query<{ id: string; created: boolean }>(
+      `INSERT INTO demand_topics (
+         topic_key, topic_slug, scope, request_count,
+         unique_demand_count, priority_score
+       ) VALUES ($1, $2, $3::jsonb, $4, 1, least(1000, 1 + ln(1 + $4)))
+       ON CONFLICT (topic_key) DO UPDATE SET
+         state = 'active',
+         next_eligible_at = least(demand_topics.next_eligible_at, now()),
+         updated_at = now()
+       RETURNING id, (xmax = 0) AS created`,
+      [
+        identity.topicKey,
+        identity.topicSlug,
+        JSON.stringify(identity.scope),
+        Math.max(1, demand.demand_count),
+      ],
+    )
+    const topicRow = topic.rows[0]!
+    const topicId = topicRow.id
+    const membership = await client.query<{ created: boolean }>(
+      `INSERT INTO knowledge_demand_topic_memberships (
+         knowledge_demand_id, demand_topic_id, missing_capabilities
+       ) VALUES ($1, $2, $3)
+       ON CONFLICT (knowledge_demand_id, demand_topic_id) DO UPDATE SET
+         missing_capabilities = excluded.missing_capabilities
+       RETURNING (xmax = 0) AS created`,
+      [demand.id, topicId, diagnosis.missing_capabilities],
+    )
+    if (membership.rows[0]?.created) {
+      await client.query(
+        `UPDATE demand_topics
+            SET request_count = CASE
+                  WHEN $2::boolean THEN request_count
+                  ELSE least(2147483647, request_count + $3::integer)
+                END,
+                priority_score = least(1000, greatest(
+                  priority_score,
+                  1 + ln(1 + CASE
+                    WHEN $2::boolean THEN request_count
+                    ELSE least(2147483647, request_count + $3::integer)
+                  END)
+                )),
+                unique_demand_count = (
+              SELECT count(*)::int
+                FROM knowledge_demand_topic_memberships
+               WHERE demand_topic_id = $1
+            ), updated_at = now()
+          WHERE id = $1`,
+        [topicId, topicRow.created, Math.max(1, demand.demand_count)],
+      )
+    }
+
+    let replay: Awaited<ReturnType<typeof replayDemandCoverage>>
+    try {
+      replay = await replayDemandCoverage(client, demand, diagnosis)
+    } catch {
+      replay = {
+        answers: [],
+        answerStatus: 'unknown',
+        coverage: fallbackParts.map((part) => ({
+          capability: part.capability,
+          label: part.label,
+          status: 'missing' as const,
+          answer_refs: []
+        })),
+        context: {} as Awaited<ReturnType<typeof replayDemandCoverage>>['context']
+      }
+    }
+    const firstRevisionRef = replay.answers[0]?.revision_ref ?? null
+    const acceptedExisting =
+      replay.answerStatus === 'complete' && firstRevisionRef !== null
+
+    await client.query(
+      `INSERT INTO knowledge_demand_diagnostics (
+         knowledge_demand_id, pipeline_task_id, diagnosis_version, status,
+         failure_class, answer_status, canonical_context, subquestions,
+         existing_coverage, missing_capabilities, search_expansions,
+         document_roles, recommended_action, reasoning_summary,
+         replay_result, artifact_hash
+       ) VALUES (
+         $1, $2, $3, 'completed', $4, $5, $6::jsonb, $7::jsonb,
+         $8::jsonb, $9, $10, $11, $12, $13, $14::jsonb, $15
+       )`,
+      [
+        demand.id,
+        task.id,
+        demand.diagnosis_version,
+        diagnosis.failure_class,
+        diagnosis.answer_status,
+        JSON.stringify(diagnosis.canonical_context),
+        JSON.stringify(diagnosis.subquestions),
+        JSON.stringify({ summary: diagnosis.existing_coverage_summary }),
+        diagnosis.missing_capabilities,
+        diagnosis.search_expansions,
+        diagnosis.document_roles,
+        diagnosis.recommended_action,
+        diagnosis.reasoning_summary,
+        JSON.stringify({
+          answer_status: replay.answerStatus,
+          coverage: replay.coverage,
+          answer_refs: replay.answers.map((answer) => answer.revision_ref)
+        }),
+        sha256Label(JSON.stringify(diagnosis))
+      ],
+    )
+
+    if (acceptedExisting) {
+      await client.query(
+        `UPDATE knowledge_demands demand
+            SET status = 'published', diagnosis_status = 'completed',
+                diagnosis_task_id = NULL, canonical_context = $2::jsonb,
+                replay_status = 'complete', replayed_at = now(),
+                result_revision_id = revision.id,
+                result_release_id = active.release_id,
+                last_error_code = NULL, completed_at = now(),
+                last_seen_at = now()
+           FROM knowledge_revisions revision
+           CROSS JOIN active_release active
+          WHERE demand.id = $1 AND revision.public_ref = $3`,
+        [demand.id, JSON.stringify(diagnosis.canonical_context), firstRevisionRef],
+      )
+      await client.query(
+        `UPDATE demand_topics SET state = 'resolved', completed_at = now(),
+                updated_at = now()
+          WHERE id = $1
+            AND NOT EXISTS (
+              SELECT 1 FROM knowledge_demand_topic_memberships membership
+              JOIN knowledge_demands other
+                ON other.id = membership.knowledge_demand_id
+             WHERE membership.demand_topic_id = $1
+               AND other.status <> 'published'
+            )`,
+        [topicId],
+      )
+    } else {
+      await client.query(
+        `UPDATE knowledge_demands
+            SET status = 'queued', diagnosis_status = 'completed',
+                diagnosis_task_id = NULL, canonical_context = $2::jsonb,
+                replay_status = $3, replayed_at = now(),
+                last_error_code = NULL, next_retry_at = now(),
+                last_seen_at = now()
+          WHERE id = $1`,
+        [demand.id, JSON.stringify(diagnosis.canonical_context), replay.answerStatus],
+      )
+    }
+    const completion = {
+      answer_status: replay.answerStatus,
+      topic: identity.topicSlug,
+      reused_existing_knowledge: acceptedExisting,
+      missing_capabilities: replay.coverage
+        .filter((part) => part.status === 'missing')
+        .map((part) => part.capability)
+    }
     await completeTask(client, task, completion)
     return completion
   })
@@ -5428,6 +5930,8 @@ export async function failPipelineTask(
       await client.query(
         `UPDATE knowledge_demands
             SET status = CASE
+                  WHEN $5 = 'demand_diagnosis' AND $2 THEN 'diagnosing'
+                  WHEN $5 = 'demand_diagnosis' THEN 'failed'
                   WHEN $7 = 'keep_processing' THEN 'processing'
                   WHEN NOT $2 THEN 'failed'
                   WHEN $5 = ANY($6::text[]) THEN 'discovering'
@@ -5441,6 +5945,16 @@ export async function failPipelineTask(
                   ELSE discovery_task_id
                 END,
                 last_error_code = $4,
+                diagnosis_status = CASE
+                  WHEN $5 = 'demand_diagnosis' AND $2 THEN 'queued'
+                  WHEN $5 = 'demand_diagnosis' THEN 'failed'
+                  ELSE diagnosis_status
+                END,
+                diagnosis_task_id = CASE
+                  WHEN $5 = 'demand_diagnosis' AND $2 THEN $3
+                  WHEN $5 = 'demand_diagnosis' THEN NULL
+                  ELSE diagnosis_task_id
+                END,
                 next_retry_at = CASE
                   WHEN $7 IN ('keep_processing', 'restart_discovery')
                     THEN now()

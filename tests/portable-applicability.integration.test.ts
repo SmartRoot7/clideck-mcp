@@ -215,14 +215,14 @@ describeIntegration('portable software applicability', () => {
            demand.priority,
            task.priority AS task_priority
          FROM knowledge_demands demand
-         JOIN pipeline_tasks task ON task.id = demand.discovery_task_id
+         JOIN pipeline_tasks task ON task.id = demand.diagnosis_task_id
          WHERE demand.id = $1`,
         [gapDemandId],
       )
       expect(gap.rows[0]).toEqual({
         demand_kind: 'specificity_gap',
         priority: 90,
-        task_priority: 90
+        task_priority: 105
       })
       await client.query(
         `INSERT INTO knowledge_applicability_exclusions (

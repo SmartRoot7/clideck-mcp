@@ -2,10 +2,9 @@
 
 ## Current focus
 
-`[~]` Observe the production demand-driven loop through analysis, verification
-and publication. The next measured gap is ensuring an analysis executor retains
-the urgent question in its short-lived lease, so an extracted candidate can be
-correctly linked back to that question.
+`[~]` Release Demand Intelligence: diagnose every unique incomplete answer,
+reuse existing knowledge before discovery, allocate demand work fairly, and
+prove the ONIE Rescue source-to-answer loop in production.
 
 ## Scope and completion journal
 
@@ -46,8 +45,9 @@ Ready when chart totals reconcile exactly with the request journal.
 - `[x]` Add deduplicated `knowledge_demands` linked to request logs, discovery
   tasks, sources and the resulting release.
 - `[x]` Convert unknown Network query/workflow, Change Guard, and Upgrade
-  Advisor results into priority-120
-  demand-discovery work without requiring the user to create an expert task.
+  Advisor results into durable learning demands without requiring the user to
+  create an expert task. The legacy priority-120 bypass is superseded by the
+  fair demand/baseline scheduler in M20.
 - `[x]` Search only official public HTTPS documentation, then continue through
   Acquire → Convert → Chunk → Analyze → Verify/Deep Review → Publish.
 - `[x]` Keep repeated identical questions idempotent and increase demand count.
@@ -247,6 +247,41 @@ Ready when a persistent external failure cannot repeatedly burn full Deep
 Review runs, while one successful probe restores normal automatic work without
 manual intervention.
 
+### M20 — Demand Intelligence 0.8.5
+
+- `[x]` Split software family, runtime mode, shell environment and requested
+  capabilities; `ONIE Rescue` resolves as `ONIE + rescue`.
+- `[x]` Decompose compound network questions and return `complete`, `partial`
+  or `unknown` with per-capability coverage.
+- `[x]` Queue exactly one Medium `demand_diagnosis` per unique unfinished
+  demand before official-document discovery; repeated requests increase topic
+  weight without launching another diagnosis.
+- `[x]` Generate topic keys, slugs and artifact hashes only on the server.
+- `[x]` Replay deterministic search after diagnosis and every related
+  publication; one similar command can no longer falsely close a compound
+  request.
+- `[x]` Replace priority-120 bypass with `demand | baseline` queue classes,
+  one concurrent diagnosis, half-lane/half-source fairness while baseline work
+  exists, and full use of otherwise idle capacity.
+- `[x]` Store structured diagnostics in PostgreSQL and expose them in the
+  shared MCP Requests page with admin-only JSON/Markdown export; demo output
+  masks questions, context, diagnostic prose and source leads server-side.
+- `[x]` Make expert-task public progress follow its real Luna claim instead of
+  showing `researching` together with a stale `queued` milestone.
+- `[x]` Verify migrations 001–028, applicability backfill, 161 backend and
+  PostgreSQL tests, all Domain Pack tests, 15 shared UI tests, production
+  build, and eval 250/250 with dangerous false-safe 0 and p95 13.56 ms.
+- `[x]` Verify the production-shaped 027 → 028 upgrade with unfinished
+  demands: obsolete queued discovery work is skipped and every unfinished
+  demand receives exactly one queued Medium diagnosis.
+- `[~]` Deploy through the canonical script and run the live ONIE Rescue
+  acceptance cycle.
+
+Ready when production creates one Medium diagnosis for the existing unfinished
+demands, ONIE Rescue enters fair official discovery only if replay remains
+partial, and the live MCP response exposes truthful coverage without waiting
+for Luna.
+
 ### M18 — Isolate an AI incident without idling useful work
 
 - `[~]` Scope a circuit to the exact AI task type and reasoning level that
@@ -273,7 +308,7 @@ from a token-spending retry storm.
 - `[~]` Display all four source lanes on Overview, each with its true live
   stage, Luna/worker count, fragment progress and candidate/verified totals.
   The values come from current task leases rather than inferred heartbeats.
-- `[~]` Treat an unknown request as a durable priority-120 learning goal.  A
+- `[~]` Treat an unknown request as a durable fair-scheduled learning goal. A
   recoverable analysis/verification/Deep Review failure must keep that goal in
   automatic processing; a terminal document failure immediately permits a
   fresh official-source discovery instead of a long delay.

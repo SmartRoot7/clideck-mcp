@@ -51,7 +51,29 @@ describe('public demo security projections', () => {
       },
       first_seen_at: null,
       last_seen_at: null,
-      result_release_sequence: null
+      result_release_sequence: null,
+      learning_diagnosis: {
+        status: 'completed',
+        failure_class: 'missing_knowledge',
+        answer_status: 'partial',
+        canonical_context: { operating_system: 'Private requested ONIE Rescue' },
+        subquestions: [{
+          capability: 'tftp-transfer',
+          label: 'Private TFTP question',
+          explanation: 'Private diagnostic reasoning',
+          search_terms: ['Private source lead'],
+          status: 'missing'
+        }],
+        missing_capabilities: ['tftp-transfer'],
+        recommended_action: 'targeted_discovery',
+        reasoning_summary: 'Private question and source reasoning',
+        topic_slug: 'onie-rescue-tftp',
+        topic_state: 'active',
+        replay_result: { answer_status: 'partial' },
+        attempts: 1,
+        luna_tokens: 250,
+        completed_at: '2026-07-20T12:00:01.000Z'
+      }
     })
 
     expect(page.items[0]).toMatchObject({
@@ -68,6 +90,16 @@ describe('public demo security projections', () => {
       answers: [{
         command: 'show interfaces counters errors'
       }]
+    })
+    expect(detail.learning_diagnosis).toMatchObject({
+      topic_slug: 'onie-rescue-tftp',
+      canonical_context: { operating_system: REDACTED_SOURCE_IDENTITY },
+      subquestions: [{
+        capability: 'tftp-transfer',
+        label: REDACTED_SOURCE_IDENTITY,
+        explanation: REDACTED_SOURCE_IDENTITY
+      }],
+      reasoning_summary: REDACTED_SOURCE_IDENTITY
     })
     expect(JSON.stringify({ page, detail })).not.toContain('203.0.113.17')
     expect(JSON.stringify({ page, detail })).not.toContain(

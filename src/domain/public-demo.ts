@@ -82,7 +82,24 @@ export function sanitizeDemoMcpRequestDetail(
         : REDACTED_SOURCE_IDENTITY,
     request_payload: redactRequestValue(
       detail.request_payload,
-    ) as McpRequestLogDetail['request_payload']
+    ) as McpRequestLogDetail['request_payload'],
+    learning_diagnosis: detail.learning_diagnosis
+      ? {
+          ...detail.learning_diagnosis,
+          canonical_context: redactRequestValue(
+            detail.learning_diagnosis.canonical_context,
+          ) as Record<string, unknown>,
+          subquestions: detail.learning_diagnosis.subquestions.map((part) => ({
+            ...part,
+            label: REDACTED_SOURCE_IDENTITY,
+            explanation: REDACTED_SOURCE_IDENTITY,
+            search_terms: REDACTED_SOURCE_IDENTITY
+          })),
+          reasoning_summary: detail.learning_diagnosis.reasoning_summary === null
+            ? null
+            : REDACTED_SOURCE_IDENTITY
+        }
+      : null
   }
 }
 

@@ -4,6 +4,7 @@ import type {
   ResolvedNetworkContext
 } from './schemas.js'
 import type { SoftwareVersionStrategy } from './applicability.js'
+import { normalizeOperatingSystemIntent } from './network-intent.js'
 
 type ContextCandidate = {
   id: string
@@ -36,7 +37,14 @@ function requestedSlug(value: string | undefined): string {
 export function unresolvedNetworkContext(
   input: NetworkContextInput,
 ): ResolvedNetworkContext {
-  const operatingSystem = input.operating_system ?? 'Not specified'
+  const operatingSystemIntent = normalizeOperatingSystemIntent({
+    ...(input.operating_system ? { operatingSystem: input.operating_system } : {}),
+    ...(input.runtime_mode ? { runtimeMode: input.runtime_mode } : {}),
+    ...(input.shell_environment
+      ? { shellEnvironment: input.shell_environment }
+      : {})
+  })
+  const operatingSystem = operatingSystemIntent.familyRequest ?? 'Not specified'
   return {
     vendor: input.vendor ?? 'Not specified',
     vendor_slug: requestedSlug(input.vendor),
@@ -47,6 +55,8 @@ export function unresolvedNetworkContext(
     software_family: operatingSystem,
     software_family_slug: requestedSlug(input.operating_system),
     portable_operating_system: false,
+    runtime_mode: operatingSystemIntent.runtimeMode,
+    shell_environment: operatingSystemIntent.shellEnvironment,
     vendor_resolved: false,
     model_resolved: false,
     version: input.version ?? null,
@@ -294,9 +304,17 @@ export async function resolveNetworkContext(
   database: Database,
   input: NetworkContextInput,
 ): Promise<InternalResolvedContext> {
+  const operatingSystemIntent = normalizeOperatingSystemIntent({
+    ...(input.operating_system ? { operatingSystem: input.operating_system } : {}),
+    ...(input.runtime_mode ? { runtimeMode: input.runtime_mode } : {}),
+    ...(input.shell_environment
+      ? { shellEnvironment: input.shell_environment }
+      : {})
+  })
+  const operatingSystemRequest = operatingSystemIntent.familyRequest
   const vendor = await resolveVendor(database, input)
-  const explicitFamily = input.operating_system
-    ? await resolveFamily(database, input.operating_system)
+  const explicitFamily = operatingSystemRequest
+    ? await resolveFamily(database, operatingSystemRequest)
     : undefined
   if (explicitFamily && explicitFamily.score < minimumFamilyScore) {
     throw new Error('NETWORK_CONTEXT_OS_NOT_RESOLVED')
@@ -315,7 +333,7 @@ export async function resolveNetworkContext(
     ? await resolveVendorOperatingSystem(
         database,
         vendor.id,
-        input.operating_system,
+        operatingSystemRequest,
       )
     : undefined
   const family = explicitFamily ?? (
@@ -352,6 +370,11 @@ export async function resolveNetworkContext(
   if (!input.version) {
     ambiguities.push('No software version was supplied; verify version applicability')
   }
+  if (operatingSystemIntent.runtimeMode) {
+    ambiguities.push(
+      `Runtime mode ${operatingSystemIntent.runtimeMode} was separated from the software family for applicability matching`,
+    )
+  }
   const inheritedFamilyIds = await familyIdsWithInheritance(database, family.id)
   const vendorLevelFamily = vendor?.score &&
     vendor.score >= minimumVendorScore
@@ -384,6 +407,8 @@ export async function resolveNetworkContext(
     software_family: family.display_name,
     software_family_slug: family.slug,
     portable_operating_system: family.portability_mode === 'portable',
+    runtime_mode: operatingSystemIntent.runtimeMode,
+    shell_environment: operatingSystemIntent.shellEnvironment,
     vendor_resolved: Boolean(
       vendor?.score && vendor.score >= minimumVendorScore
     ),

@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   Clock3,
   Eye,
+  FileDown,
   MessageSquareText,
   Search,
   ServerCog,
@@ -321,6 +322,39 @@ function RequestDetailDialog({
   onRetry: () => void
   onClose: () => void
 }) {
+  const runtime = useOperationsRuntime()
+  const exportDiagnosis = (format: 'json' | 'markdown') => {
+    if (!data?.learning_diagnosis || runtime.role !== 'super_admin') return
+    const diagnosis = data.learning_diagnosis
+    const content = format === 'json'
+      ? JSON.stringify(diagnosis, null, 2)
+      : [
+          '# Learning diagnosis',
+          '',
+          `- Status: ${diagnosis.status}`,
+          `- Failure class: ${diagnosis.failure_class ?? 'n/a'}`,
+          `- Answer status: ${diagnosis.answer_status ?? 'n/a'}`,
+          `- Topic: ${diagnosis.topic_slug ?? 'n/a'}`,
+          `- Attempts: ${diagnosis.attempts}`,
+          `- Luna tokens: ${diagnosis.luna_tokens}`,
+          '',
+          '## Missing capabilities',
+          '',
+          diagnosis.missing_capabilities.map((item) => `- ${item}`).join('\n') || '- None',
+          '',
+          '## Diagnosis',
+          '',
+          diagnosis.reasoning_summary ?? 'No summary.'
+        ].join('\n')
+    const url = URL.createObjectURL(new Blob([content], {
+      type: format === 'json' ? 'application/json' : 'text/markdown'
+    }))
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `mcp-learning-diagnosis.${format === 'json' ? 'json' : 'md'}`
+    anchor.click()
+    URL.revokeObjectURL(url)
+  }
   return (
     <div
       className="dialog-backdrop"
@@ -366,6 +400,39 @@ function RequestDetailDialog({
             <section>
               <h3>Response</h3>
               <pre>{JSON.stringify(data.response_payload, null, 2)}</pre>
+            </section>
+            <section>
+              <h3>Learning diagnosis</h3>
+              {data.learning_diagnosis ? (
+                <>
+                  <div className="request-detail__meta">
+                    <span><b>Cause</b>{titleCase(data.learning_diagnosis.failure_class ?? 'pending')}</span>
+                    <span><b>Coverage</b>{titleCase(data.learning_diagnosis.answer_status ?? 'unknown')}</span>
+                    <span><b>Topic</b>{data.learning_diagnosis.topic_slug ?? 'Pending'}</span>
+                    <span><b>Attempts</b>{formatNumber(data.learning_diagnosis.attempts, 0)}</span>
+                    <span><b>Luna</b>{formatNumber(data.learning_diagnosis.luna_tokens, 0)} tokens</span>
+                  </div>
+                  <pre>{JSON.stringify({
+                    canonical_context: data.learning_diagnosis.canonical_context,
+                    subquestions: data.learning_diagnosis.subquestions,
+                    missing_capabilities: data.learning_diagnosis.missing_capabilities,
+                    current_result: data.learning_diagnosis.replay_result,
+                    explanation: data.learning_diagnosis.reasoning_summary
+                  }, null, 2)}</pre>
+                  {runtime.role === 'super_admin' && (
+                    <div className="request-detail__exports">
+                      <Button onClick={() => exportDiagnosis('json')}>
+                        <FileDown size={16} /> Export JSON
+                      </Button>
+                      <Button onClick={() => exportDiagnosis('markdown')}>
+                        <FileDown size={16} /> Export Markdown
+                      </Button>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <p>No diagnosis was required or it has not started yet.</p>
+              )}
             </section>
           </div>
         )}

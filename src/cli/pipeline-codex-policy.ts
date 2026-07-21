@@ -46,8 +46,13 @@ export function assertPipelineAiPolicy(input: {
   if (
     input.reasoning !== 'low' &&
     !(
-      input.taskType === 'candidate_deep_review' &&
-      input.reasoning === 'medium'
+      (
+        input.taskType === 'candidate_deep_review' &&
+        input.reasoning === 'medium'
+      ) || (
+        input.taskType === 'demand_diagnosis' &&
+        input.reasoning === 'medium'
+      )
     )
   ) {
     throw new Error('PIPELINE_REASONING_POLICY_REJECTED')

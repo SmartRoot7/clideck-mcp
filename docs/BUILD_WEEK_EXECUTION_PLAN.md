@@ -914,6 +914,31 @@ Completed: 2026-07-19
 - finish Devpost description, repository URL, demo URL, and `/feedback` Session
   ID.
 
+### [~] CliDeck MCP 0.8.5 — Demand Intelligence
+
+Goal: turn every incomplete public MCP answer into a fast, deduplicated and
+fair learning loop without delaying the caller or allowing AI to publish.
+
+- `[x]` Normalize software family, runtime mode and shell environment; ONIE
+  Rescue becomes ONIE plus rescue mode.
+- `[x]` Return deterministic complete/partial/unknown coverage for compound
+  questions.
+- `[x]` Diagnose each unique unfinished demand once with Luna/medium before
+  discovery, then aggregate repeats and paraphrases into server-owned topics.
+- `[x]` Enforce demand/baseline capacity fairness and oldest-unserved topic
+  scheduling without wasting idle lanes.
+- `[x]` Replay the original subquestions after diagnosis and publication; a
+  weak or single-part match cannot close the demand.
+- `[x]` Add structured MCP Request diagnosis, admin export and demo redaction.
+- `[x]` Verify migrations 001–028, seed, applicability reindex, typecheck,
+  161 backend/PostgreSQL tests, all Domain Pack tests, 15 shared UI tests,
+  production build, and eval 250/250 with dangerous false-safe 0 and p95
+  13.56 ms.
+- `[x]` Verify a production-shaped migration from schema 027 with unfinished
+  demands: each receives one Medium diagnosis and superseded queued discovery
+  work is removed without touching immutable revisions.
+- `[~]` Complete canonical production rollout and live ONIE Rescue acceptance.
+
 ## Required acceptance suite
 
 - all existing network MCP tools remain compatible;

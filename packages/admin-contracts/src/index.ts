@@ -304,6 +304,23 @@ const loggedPayloadSchema = z.union([
   z.array(z.unknown())
 ])
 
+const learningDiagnosisSchema = z.object({
+  status: z.string(),
+  failure_class: nullableStringSchema,
+  answer_status: nullableStringSchema,
+  canonical_context: z.record(z.string(), z.unknown()),
+  subquestions: z.array(z.record(z.string(), z.unknown())),
+  missing_capabilities: z.array(z.string()),
+  recommended_action: nullableStringSchema,
+  reasoning_summary: nullableStringSchema,
+  topic_slug: nullableStringSchema,
+  topic_state: nullableStringSchema,
+  replay_result: z.unknown().nullable(),
+  attempts: scalarNumberSchema,
+  luna_tokens: scalarNumberSchema,
+  completed_at: nullableStringSchema
+})
+
 export const mcpRequestLogDetailSchema = mcpRequestLogRowSchema
   .omit({ result_release_id: true })
   .extend({
@@ -311,7 +328,8 @@ export const mcpRequestLogDetailSchema = mcpRequestLogRowSchema
     response_payload: loggedPayloadSchema,
     first_seen_at: nullableStringSchema,
     last_seen_at: nullableStringSchema,
-    result_release_sequence: nullableScalarNumberSchema
+    result_release_sequence: nullableScalarNumberSchema,
+    learning_diagnosis: learningDiagnosisSchema.nullable().optional()
   })
 
 export const coverageTargetSchema = z.object({

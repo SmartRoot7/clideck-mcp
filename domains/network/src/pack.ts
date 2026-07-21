@@ -70,6 +70,20 @@ export const networkDomainManifest = {
       description: 'Vendor-specific software version.',
       value_type: 'string' as const,
       required: false
+    },
+    {
+      key: 'runtime_mode',
+      display_name: 'Runtime mode',
+      description: 'Installer, rescue, recovery, update, or normal runtime.',
+      value_type: 'string' as const,
+      required: false
+    },
+    {
+      key: 'shell_environment',
+      display_name: 'Shell environment',
+      description: 'The command environment, for example BusyBox.',
+      value_type: 'string' as const,
+      required: false
     }
   ],
   record_types: [
@@ -199,6 +213,15 @@ export const networkDomainPack: DomainPack<
           : {}),
         ...(candidate.portable_key
           ? { portable_key: candidate.portable_key }
+          : {}),
+        ...(candidate.capability_slug
+          ? { capability: candidate.capability_slug }
+          : {}),
+        ...(candidate.runtime_modes
+          ? { runtime_modes: candidate.runtime_modes }
+          : {}),
+        ...(candidate.shell_environments
+          ? { shell_environments: candidate.shell_environments }
           : {})
       },
       payload: {
