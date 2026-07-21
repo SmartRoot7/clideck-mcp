@@ -1899,6 +1899,85 @@ async function queueDemandDiscoveryWork(
   )
   const row = demand.rows[0]
   if (!row) return false
+  const termPatterns = knowledgeDemandTermPatterns(row.question)
+  const existingSources = await client.query<{ id: string }>(
+    `SELECT source.id
+       FROM source_candidates source
+       JOIN source_artifacts artifact
+         ON artifact.source_candidate_id = source.id
+       JOIN source_fragments fragment
+         ON fragment.source_artifact_id = artifact.id
+       LEFT JOIN knowledge_demand_source_attempts attempt
+         ON attempt.knowledge_demand_id = $1
+        AND attempt.source_candidate_id = source.id
+       LEFT JOIN knowledge_demands previous_demand
+         ON previous_demand.id = source.knowledge_demand_id
+      WHERE (
+          source.knowledge_demand_id = $1
+          OR source.coverage_target_id = $2
+        )
+        AND source.status IN (
+          'completed',
+          'completed_with_exceptions',
+          'rejected',
+          'failed'
+        )
+        AND (
+          source.knowledge_demand_id IS NULL
+          OR source.knowledge_demand_id = $1
+          OR previous_demand.status = 'published'
+        )
+        AND (
+          attempt.knowledge_demand_id IS NULL
+          OR attempt.source_content_hash IS DISTINCT FROM artifact.content_hash
+        )
+        AND fragment.status IN (
+          'analyzed',
+          'verified',
+          'published',
+          'rejected',
+          'failed'
+        )
+        AND fragment.reservation_task_id IS NULL
+      GROUP BY source.id
+      ORDER BY sum(COALESCE((
+        SELECT sum(
+          CASE
+            WHEN coalesce(fragment.section_title, '') ~* demand_pattern
+              THEN 4
+            ELSE 0
+          END +
+          CASE
+            WHEN fragment.content ~* demand_pattern THEN 1
+            ELSE 0
+          END
+        )
+        FROM unnest($3::text[]) AS terms(demand_pattern)
+      ), 0)) DESC,
+      source.updated_at DESC
+      LIMIT 8`,
+    [row.id, row.coverage_target_id, termPatterns],
+  )
+  const reused = await reuseDuplicateSourcesForKnowledgeDemand(
+    client,
+    row.id,
+    existingSources.rows.map((source) => source.id),
+  )
+  if (reused.sourceIds.length > 0) {
+    await client.query(
+      `UPDATE knowledge_demands
+          SET status = 'processing',
+              source_candidate_id = $2,
+              discovery_task_id = NULL,
+              last_error_code = NULL,
+              next_retry_at = now(),
+              last_seen_at = now()
+        WHERE id = $1
+          AND status <> 'published'`,
+      [row.id, reused.sourceIds[0]],
+    )
+    return true
+  }
   const taskId = await insertTask(client, {
     type: 'source_discovery',
     stage: 'discover',

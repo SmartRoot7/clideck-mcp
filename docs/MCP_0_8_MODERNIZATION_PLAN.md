@@ -426,6 +426,11 @@ without making the other executors idle.
 - `[x]` Persist the demand/source content-hash attempt so an unchanged document
   cannot be reprocessed repeatedly for the same unanswered request. A genuinely
   updated artifact remains eligible for another targeted pass.
+- `[x]` Before spending another Discovery run, rank all previously downloaded
+  official documents linked to the demand or its coverage target and reuse the
+  highest-value untried fragments. This closes the case where the exact evidence
+  was already local but the newest discovery response mentioned a different
+  duplicate URL.
 - `[x]` Verify the migration and demand lifecycle on a fresh PostgreSQL database
   with focused integration coverage. The complete gate passes 145 backend and
   PostgreSQL tests, all Domain/UI tests, eval 250/250 with zero dangerous

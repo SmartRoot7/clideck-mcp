@@ -656,6 +656,103 @@ describeIntegration('PostgreSQL integration', () => {
       reused_sources: 0,
       reused_fragments: 0
     })
+
+    const corpusSource = await database.query<{ id: string }>(
+      `INSERT INTO source_candidates (
+         coverage_target_id,
+         canonical_url,
+         document_type,
+         title,
+         status,
+         discovered_by,
+         content_hash,
+         knowledge_demand_id,
+         completed_at
+       )
+       VALUES (
+         $1, $2, 'configuration_guide',
+         'Existing demand corpus integration fixture',
+         'completed', 'integration-test', $3, $4, now()
+       )
+       RETURNING id`,
+      [
+        firstTask.rows[0]!.coverage_target_id,
+        `https://www.cisco.com/c/en/us/support/docs/demand-corpus-${suffix}.html`,
+        sha256Label(`demand-corpus-source-${suffix}`),
+        demandId
+      ],
+    )
+    const corpusArtifact = await database.query<{ id: string }>(
+      `INSERT INTO source_artifacts (
+         source_candidate_id,
+         media_type,
+         byte_size,
+         content_hash,
+         storage_path,
+         status
+       )
+       VALUES ($1, 'text/plain', 128, $2, $3, 'chunked')
+       RETURNING id`,
+      [
+        corpusSource.rows[0]!.id,
+        sha256Label(`demand-corpus-artifact-${suffix}`),
+        `/tmp/demand-corpus-${suffix}`
+      ],
+    )
+    await database.query(
+      `INSERT INTO source_fragments (
+         source_artifact_id,
+         ordinal,
+         section_title,
+         content,
+         content_hash,
+         status
+       )
+       VALUES (
+         $1, 0, 'Validate demand source reuse from corpus',
+         $2, $3, 'analyzed'
+       )`,
+      [
+        corpusArtifact.rows[0]!.id,
+        `Official corpus evidence for validate demand source reuse ${suffix}.`,
+        sha256Label(`demand-corpus-fragment-${suffix}`)
+      ],
+    )
+    await database.query(
+      `UPDATE knowledge_demands
+          SET status = 'unresolved',
+              next_retry_at = now(),
+              last_seen_at = now()
+        WHERE id = $1`,
+      [demandId],
+    )
+    await ensurePipelineWork(database)
+    const corpusReuse = await database.query<{
+      demand_status: string
+      source_status: string
+      attempts: number
+    }>(
+      `SELECT
+         demand.status AS demand_status,
+         source.status AS source_status,
+         (
+           SELECT count(*)::int
+           FROM knowledge_demand_source_attempts attempt
+           WHERE attempt.knowledge_demand_id = demand.id
+             AND attempt.source_candidate_id = source.id
+         ) AS attempts
+       FROM knowledge_demands demand
+       JOIN source_candidates source ON source.id = $2
+       WHERE demand.id = $1`,
+      [demandId, corpusSource.rows[0]!.id],
+    )
+    expect(corpusReuse.rows[0]).toMatchObject({
+      demand_status: 'processing',
+      attempts: 1
+    })
+    expect(['prepared', 'analyzing']).toContain(
+      corpusReuse.rows[0]!.source_status,
+    )
   })
 
   it('reconciles a known answer and never downgrades its published demand', async () => {
