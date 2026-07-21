@@ -568,9 +568,12 @@ describeIntegration('PostgreSQL integration', () => {
     expect(reused.rows[0]).toMatchObject({
       demand_status: 'processing',
       source_demand_id: demandId,
-      attempt_count: 1,
-      analysis_tasks: 1
+      attempt_count: 1
     })
+    // Reuse atomically makes the fragment claimable. The work-conserving
+    // scheduler may reserve it immediately, or leave it prepared when the
+    // shared integration database already has every source lane occupied.
+    expect([0, 1]).toContain(reused.rows[0]!.analysis_tasks)
     expect(['prepared', 'analyzing']).toContain(
       reused.rows[0]!.source_status,
     )
