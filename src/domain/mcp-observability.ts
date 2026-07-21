@@ -353,6 +353,16 @@ export async function queueApproximateKnowledgeDemand(
   const applicability = recordOf(firstAnswer?.['applicability'])
   const assurance = applicability?.['assurance_level']
   if (assurance !== 'generic' && assurance !== 'best_effort') return null
+  // A portable OS-family fact is intentionally generic across hardware. If
+  // the applicability engine says no platform confirmation is required, a
+  // complete answer is not a specificity gap and must not spend Medium Luna.
+  if (
+    assurance === 'generic' &&
+    applicability?.['match_level'] === 'os_family' &&
+    applicability?.['requires_platform_confirmation'] === false
+  ) {
+    return null
+  }
   const prepared = await prepareKnowledgeDemand(
     database,
     toolName,
@@ -395,7 +405,8 @@ export async function reconcileKnownKnowledgeDemand(
   )
   if (!prepared) return null
   const result = await database.query<{ id: string }>(
-    `UPDATE knowledge_demands demand
+    `WITH resolved AS (
+       UPDATE knowledge_demands demand
         SET status = 'published',
             result_revision_id = revision.id,
             result_release_id = active.release_id,
@@ -407,9 +418,23 @@ export async function reconcileKnownKnowledgeDemand(
       WHERE demand.demand_key = $1
         AND revision.public_ref = $2
         AND demand.status <> 'published'
-      RETURNING demand.id`,
+      RETURNING demand.id
+     )
+     SELECT id FROM resolved`,
     [prepared.demandKey, revisionRef],
   )
+  if (result.rows.length > 0) {
+    await database.query(
+      `UPDATE pipeline_tasks
+          SET status = 'skipped', completed_at = now(), updated_at = now(),
+              failure_code = 'DEMAND_ALREADY_ANSWERED',
+              failure_message = 'Deterministic replay found a complete active answer.'
+        WHERE knowledge_demand_id = ANY($1::uuid[])
+          AND task_type = 'demand_diagnosis'
+          AND status = 'queued'`,
+      [result.rows.map((row) => row.id)],
+    )
+  }
   return result.rows[0]?.id ?? null
 }
 

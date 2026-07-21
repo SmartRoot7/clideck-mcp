@@ -906,20 +906,25 @@ describeIntegration('PostgreSQL integration', () => {
         result_revision_id: string | null
         result_release_id: string | null
         discovery_task_id: string
+        diagnosis_task_status: string | null
       }>(
         `SELECT
-           status,
-           result_revision_id,
-           result_release_id,
-           discovery_task_id
-         FROM knowledge_demands
-         WHERE id = $1`,
+           demand.status,
+           demand.result_revision_id,
+           demand.result_release_id,
+           demand.discovery_task_id,
+           diagnosis.status AS diagnosis_task_status
+         FROM knowledge_demands demand
+         LEFT JOIN pipeline_tasks diagnosis
+           ON diagnosis.id = demand.diagnosis_task_id
+         WHERE demand.id = $1`,
         [demandId],
       )
       expect(reconciled.rows[0]).toMatchObject({
         status: 'published',
         result_revision_id: expect.any(String),
-        result_release_id: expect.any(String)
+        result_release_id: expect.any(String),
+        diagnosis_task_status: 'skipped'
       })
     } finally {
       await client.query('ROLLBACK').catch(() => undefined)

@@ -204,26 +204,7 @@ describeIntegration('portable software applicability', () => {
           next_action: 'use_answer'
         },
       )
-      expect(gapDemandId).toBeTruthy()
-      const gap = await client.query<{
-        demand_kind: string
-        priority: number
-        task_priority: number
-      }>(
-        `SELECT
-           demand.demand_kind,
-           demand.priority,
-           task.priority AS task_priority
-         FROM knowledge_demands demand
-         JOIN pipeline_tasks task ON task.id = demand.diagnosis_task_id
-         WHERE demand.id = $1`,
-        [gapDemandId],
-      )
-      expect(gap.rows[0]).toEqual({
-        demand_kind: 'specificity_gap',
-        priority: 90,
-        task_priority: 105
-      })
+      expect(gapDemandId).toBeNull()
       await client.query(
         `INSERT INTO knowledge_applicability_exclusions (
            revision_id, version_min, version_max,
