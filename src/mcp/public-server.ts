@@ -16,7 +16,8 @@ import type { Metrics } from '../metrics.js'
 import type { PublicActor } from '../domain/auth.js'
 import {
   publicNetworkContext,
-  resolveNetworkContext
+  resolveNetworkContext,
+  unresolvedNetworkContext
 } from '../domain/context.js'
 import {
   reviewNetworkChange,
@@ -99,6 +100,26 @@ type PublicServerDependencies = {
   actor: PublicActor
   requestId: string
   taskStore?: PostgresTaskStore
+}
+
+function isUnresolvedNetworkContext(error: unknown): boolean {
+  return error instanceof Error && [
+    'NETWORK_CONTEXT_OS_NOT_RESOLVED',
+    'NETWORK_CONTEXT_VENDOR_NOT_RESOLVED'
+  ].includes(error.message)
+}
+
+async function resolveKnowledgeContext(
+  database: Database,
+  input: Parameters<typeof unresolvedNetworkContext>[0],
+) {
+  try {
+    const context = await resolveNetworkContext(database, input)
+    return { context, publicContext: publicNetworkContext(context) }
+  } catch (error) {
+    if (!isUnresolvedNetworkContext(error)) throw error
+    return { context: null, publicContext: unresolvedNetworkContext(input) }
+  }
 }
 
 function wrapTool<TInput, TOutput>(
@@ -333,19 +354,21 @@ export function createPublicMcpServer(
     wrapTool(dependencies, 'query_domain_knowledge', async (input) => {
       if (input.domain_id === 'network') {
         const parsedContext = networkContextInputSchema.parse(input.context)
-        const context = await resolveNetworkContext(
+        const resolution = await resolveKnowledgeContext(
           dependencies.database,
           parsedContext,
         )
-        const answers = await searchKnowledge(
-          dependencies.database,
-          input.question,
-          context,
-          Math.min(20, Math.max(1, input.limit)),
-        )
+        const answers = resolution.context
+          ? await searchKnowledge(
+              dependencies.database,
+              input.question,
+              resolution.context,
+              Math.min(20, Math.max(1, input.limit)),
+            )
+          : []
         return {
           domain_id: 'network',
-          context: publicNetworkContext(context),
+          context: resolution.publicContext,
           answers,
           unknown: answers.length === 0,
           next_action: answers.length === 0
@@ -407,21 +430,23 @@ export function createPublicMcpServer(
       }
     },
     wrapTool(dependencies, 'query_network_knowledge', async (input) => {
-      const context = await resolveNetworkContext(
+      const resolution = await resolveKnowledgeContext(
         dependencies.database,
         input.context,
       )
-      const answers = filterActionableKnowledge(
-        input.question,
-        await searchKnowledge(
-          dependencies.database,
-          input.question,
-          context,
-          Math.min(5, Math.max(1, input.limit)),
-        ),
-      )
+      const answers = resolution.context
+        ? filterActionableKnowledge(
+            input.question,
+            await searchKnowledge(
+              dependencies.database,
+              input.question,
+              resolution.context,
+              Math.min(5, Math.max(1, input.limit)),
+            ),
+          )
+        : []
       return {
-        context: publicNetworkContext(context),
+        context: resolution.publicContext,
         answers,
         unknown: answers.length === 0,
         next_action:
@@ -445,23 +470,25 @@ export function createPublicMcpServer(
       }
     },
     wrapTool(dependencies, 'get_network_workflow', async (input) => {
-      const context = await resolveNetworkContext(
+      const resolution = await resolveKnowledgeContext(
         dependencies.database,
         input.context,
       )
-      const answers = filterActionableKnowledge(
-        input.goal,
-        await searchKnowledge(
-          dependencies.database,
-          input.goal,
-          context,
-          Math.min(3, Math.max(1, input.limit)),
-          ['workflow', 'change', 'diagnostic'],
-        ),
-        { requireAction: true },
-      )
+      const answers = resolution.context
+        ? filterActionableKnowledge(
+            input.goal,
+            await searchKnowledge(
+              dependencies.database,
+              input.goal,
+              resolution.context,
+              Math.min(3, Math.max(1, input.limit)),
+              ['workflow', 'change', 'diagnostic'],
+            ),
+            { requireAction: true },
+          )
+        : []
       return {
-        context: publicNetworkContext(context),
+        context: resolution.publicContext,
         answers,
         unknown: answers.length === 0,
         next_action:

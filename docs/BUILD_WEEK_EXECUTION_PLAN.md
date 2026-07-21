@@ -815,6 +815,16 @@ Verified before release:
   now isolates each legacy candidate with a PostgreSQL savepoint, records
   deterministic Domain Pack validation skips by reason, and continues the
   safe immutable corrections without hiding unexpected database failures.
+- the first public 0.8.4 acceptance pass confirmed cross-vendor ONIE and SONiC
+  answers, but also proved that a wholly unknown OS still escaped as a context
+  resolution error and therefore did not enter the priority-120 demand path.
+  Knowledge queries and workflows now return a structured, zero-confidence
+  `unknown` context without inferred applicability, allowing the existing MCP
+  journal and demand scheduler to learn it normally. Public rendering also
+  derives clearly read-only command/diagnostic safety from the deterministic
+  classifier, removing contradictory legacy `dangerous` presentation without
+  editing the immutable historical revision; workflows and write operations
+  retain their stored conservative risk.
 
 Remaining: production backup and canonical deployment, 14 real public MCP
 scenarios, latency/query-plan review, and production conservation accounting.

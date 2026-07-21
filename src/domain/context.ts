@@ -33,6 +33,33 @@ function requestedSlug(value: string | undefined): string {
   return slug && slug.length >= 2 ? slug : 'not-specified'
 }
 
+export function unresolvedNetworkContext(
+  input: NetworkContextInput,
+): ResolvedNetworkContext {
+  const operatingSystem = input.operating_system ?? 'Not specified'
+  return {
+    vendor: input.vendor ?? 'Not specified',
+    vendor_slug: requestedSlug(input.vendor),
+    model: input.model ?? null,
+    platform_slug: null,
+    operating_system: operatingSystem,
+    operating_system_slug: requestedSlug(input.operating_system),
+    software_family: operatingSystem,
+    software_family_slug: requestedSlug(input.operating_system),
+    portable_operating_system: false,
+    vendor_resolved: false,
+    model_resolved: false,
+    version: input.version ?? null,
+    applicable_version: input.version
+      ? `Requested version ${input.version}`
+      : 'Version not supplied',
+    resolution_confidence: 0,
+    ambiguities: [
+      'The requested operating system context is not known yet; no applicability was inferred.'
+    ]
+  }
+}
+
 async function resolveVendor(
   database: Database,
   input: NetworkContextInput,

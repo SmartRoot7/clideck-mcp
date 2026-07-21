@@ -15,6 +15,7 @@ import {
   type SoftwareVersionStrategy,
   type VersionScope
 } from './applicability.js'
+import { classifyKnowledgeRisk } from './risk.js'
 
 type KnowledgeRow = {
   revision_id: string
@@ -76,6 +77,15 @@ const operationalIntentPattern =
 const readOnlyDiagnosticCommandPattern =
   /^(?:dir|display|more|ping|show|traceroute|tracert|verify)\b/i
 
+export function isDeterministicallyReadOnlyPublicCommand(
+  kind: PublicKnowledge['kind'],
+  command: string | null,
+): boolean {
+  return (kind === 'command' || kind === 'diagnostic') &&
+    Boolean(command) &&
+    classifyKnowledgeRisk([command!]) === 'safe_read_only'
+}
+
 function hasExecutableAction(answer: PublicKnowledge): boolean {
   if (answer.procedure.length > 0) return true
   const commands = answer.command
@@ -130,10 +140,17 @@ function toPublicKnowledge(
 ): PublicKnowledge {
   const matchLevel = publicMatchLevel(row.scope_level)
   const assuranceLevel = assuranceFor(row.scope_level, versionMatch)
+  const deterministicallyReadOnly = isDeterministicallyReadOnlyPublicCommand(
+    row.kind,
+    row.command_text,
+  )
+  const dangerous = deterministicallyReadOnly ? false : row.dangerous
   const requiresPlatformConfirmation =
-    row.requires_platform_confirmation ||
-    (row.scope_level !== 'model' && row.dangerous) ||
-    (versionMatch === 'same_branch_fallback' && row.dangerous)
+    !deterministicallyReadOnly && (
+      row.requires_platform_confirmation ||
+      (row.scope_level !== 'model' && dangerous) ||
+      (versionMatch === 'same_branch_fallback' && dangerous)
+    )
   const additionalLimitations = [
     requiresPlatformConfirmation
       ? 'Stop unless the exact platform and hardware-specific prerequisites are confirmed before applying this operation.'
@@ -171,13 +188,19 @@ function toPublicKnowledge(
     command: row.command_text,
     procedure: row.procedure_steps,
     prerequisites: row.prerequisites,
-    risks: row.risks,
+    risks: deterministicallyReadOnly
+      ? row.risks.filter((risk) =>
+          !/^Legacy risk classification:/i.test(risk) &&
+          !/^Deterministic safety classifier enforced risk level/i.test(risk) &&
+          !/^CliDeck deterministic guard enforced risk level/i.test(risk)
+        )
+      : row.risks,
     verification: row.verification_steps,
     rollback: row.rollback_steps,
     last_verified_at: new Date(row.last_verified_at).toISOString().slice(0, 10),
     confidence: Number(row.confidence),
     quality_score: Number(row.quality_score),
-    dangerous: row.dangerous,
+    dangerous,
     assurance: {
       validation_level: row.validation_level,
       independent_confirmations: Number(row.independent_confirmations),

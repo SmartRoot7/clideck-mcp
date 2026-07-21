@@ -6,6 +6,8 @@ import {
   matchVersionApplicability,
   publicMatchLevel
 } from '../src/domain/applicability.js'
+import { unresolvedNetworkContext } from '../src/domain/context.js'
+import { isDeterministicallyReadOnlyPublicCommand } from '../src/domain/knowledge.js'
 import { classifyKnowledgeRisk } from '../src/domain/risk.js'
 
 describe('knowledge applicability', () => {
@@ -85,5 +87,35 @@ describe('knowledge applicability', () => {
     )
     expect(classifyKnowledgeRisk(['onie-sysinfo-danger'])).toBe('unknown')
     expect(classifyKnowledgeRisk(['onie-self-update image.bin'])).toBe('unknown')
+    expect(isDeterministicallyReadOnlyPublicCommand(
+      'command',
+      'onie-sysinfo',
+    )).toBe(true)
+    expect(isDeterministicallyReadOnlyPublicCommand(
+      'workflow',
+      'onie-sysinfo',
+    )).toBe(false)
+    expect(isDeterministicallyReadOnlyPublicCommand(
+      'command',
+      'onie-self-update image.bin',
+    )).toBe(false)
+  })
+
+  it('represents an unknown operating system without inventing applicability', () => {
+    expect(unresolvedNetworkContext({
+      vendor: 'Rare Networks',
+      model: 'RN-9000',
+      operating_system: 'QuantumBananaOS',
+      version: '1.0'
+    })).toMatchObject({
+      vendor: 'Rare Networks',
+      model: 'RN-9000',
+      operating_system: 'QuantumBananaOS',
+      software_family: 'QuantumBananaOS',
+      vendor_resolved: false,
+      model_resolved: false,
+      version: '1.0',
+      resolution_confidence: 0
+    })
   })
 })
