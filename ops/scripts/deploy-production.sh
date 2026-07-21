@@ -76,6 +76,9 @@ DATABASE_URL="$test_database_url" \
   pnpm db:seed
 DATABASE_URL="$test_database_url" \
   QUARANTINE_DATABASE_URL="$test_database_url" \
+  pnpm knowledge:reindex-applicability -- --resume --verify
+DATABASE_URL="$test_database_url" \
+  QUARANTINE_DATABASE_URL="$test_database_url" \
   pnpm test
 DATABASE_URL="$test_database_url" \
   QUARANTINE_DATABASE_URL="$test_database_url" \

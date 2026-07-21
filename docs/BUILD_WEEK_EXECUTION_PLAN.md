@@ -797,6 +797,10 @@ Verified before release:
   passed without skip;
 - product eval passed 250/250 with dangerous false-safe 0 and known-query p95
   9.45 ms; typecheck, production build, shell syntax, and diff checks passed.
+- the first canonical rollout attempt stopped safely during its isolated local
+  preflight because seed revisions had not yet received the new derived index;
+  the canonical script now runs the verified reindex between seed and tests,
+  before any remote backup, switch, or production mutation.
 
 Remaining: production backup and canonical deployment, 14 real public MCP
 scenarios, latency/query-plan review, and production conservation accounting.
