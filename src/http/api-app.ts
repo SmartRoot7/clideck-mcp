@@ -261,7 +261,7 @@ export function createApiApp(dependencies: ApiDependencies) {
     context.json({
       status: 'ok',
       service: 'CliDeck MCP — Network Knowledge',
-      version: '0.8.3'
+      version: '0.8.4'
     }),
   )
 

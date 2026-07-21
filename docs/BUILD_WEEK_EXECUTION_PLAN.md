@@ -753,7 +753,7 @@ Remaining for completion: one local `main` commit, the unified production
 deployment, reconciliation accounting, 20 live MCP acceptance scenarios, and
 production latency/security smoke checks.
 
-### [~] CliDeck MCP 0.8.4 — portable OS and version compatibility
+### [x] CliDeck MCP 0.8.4 — portable OS and version compatibility
 
 Goal: reuse OS-wide knowledge across equipment vendors without weakening
 model, architecture, version, risk, or provenance boundaries.
@@ -831,8 +831,35 @@ Verified before release:
   read-only at public rendering while adjacent mutation forms such as
   `ip link set`, `uci set`, install, boot, firmware, and reload remain guarded.
 
-Remaining: production backup and canonical deployment, 14 real public MCP
-scenarios, latency/query-plan review, and production conservation accounting.
+Production completion:
+
+- the canonical deployment completed from clean `main`, including backup,
+  migrations 026–027, resumable applicability backfill, risk reconciliation,
+  tests, release-safe service switching, smoke tests, and restoration of the
+  four-lane Luna pipeline;
+- the backfill conserved all 71,416 immutable network revisions and created
+  exactly 71,416 derived applicability profiles, including the planned 1,884
+  portable profiles; no FTS rebuild or PostgreSQL `REINDEX` was performed;
+- the active knowledge state contains 71,359 revisions at release sequence
+  1220 after normal pipeline activity; applicability backfill did not replace
+  or delete any immutable revision;
+- the final gate passed 155 backend/PostgreSQL tests, 15 admin UI tests, all
+  Domain Pack tests, the production build, and the 250/250 evaluation with
+  dangerous false-safe 0 and known-query p95 11.7 ms;
+- fourteen live scenarios through the public MCP confirmed cross-vendor ONIE,
+  SONiC, Cumulus/NVUE, OpenWrt, and Debian/Linux reuse; exact-model precedence;
+  NX-OS explicit-range compatibility; same-branch fallback with platform
+  confirmation; cross-branch refusal; full destructive ONIE workflows; and a
+  structured unknown for an invented OS;
+- the invented-OS unknown created priority-120 demand and two completed
+  official-source discovery tasks. No official source existed, so the demand
+  correctly remains unresolved with backoff instead of publishing invented
+  knowledge;
+- public acceptance exposed no source URL, provenance, source/task/fragment
+  identifier, credential, or secret. Remaining product gaps are content gaps:
+  richer rollback/verification for legacy ONIE workflows, OpenWrt DSA/GL.iNet
+  overlays, an explicit Linux link-counter record, and more precise branch
+  metadata for records that currently remain intentionally unbounded.
 
 ### [x] D3.1 — Security and release gate
 
