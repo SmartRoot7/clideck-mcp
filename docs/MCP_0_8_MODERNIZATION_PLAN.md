@@ -431,6 +431,15 @@ without making the other executors idle.
   highest-value untried fragments. This closes the case where the exact evidence
   was already local but the newest discovery response mentioned a different
   duplicate URL.
+- `[x]` Verify the first production pass on exact historical inputs: seven of
+  eight demands now have useful deterministic answers. The remaining backup
+  scenario initially returned only a preflight diagnostic that explicitly did
+  not cover the requested transport and management VRF, so it is not accepted
+  as complete merely because it shares search terms with the question.
+- `[x]` Require an executable command or procedure before an operational query
+  is considered answered. The workflow tool applies the same gate to every
+  result. Diagnostic-only matches now remain honest `unknown` responses and
+  reopen the priority-120 learning demand instead of prematurely closing it.
 - `[x]` Verify the migration and demand lifecycle on a fresh PostgreSQL database
   with focused integration coverage. The complete gate passes 145 backend and
   PostgreSQL tests, all Domain/UI tests, eval 250/250 with zero dangerous

@@ -34,7 +34,10 @@ import {
   queryDomainKnowledgeInputSchema,
   queryDomainKnowledgeOutputSchema
 } from '../domain/domain-tool-schemas.js'
-import { searchKnowledge } from '../domain/knowledge.js'
+import {
+  filterActionableKnowledge,
+  searchKnowledge
+} from '../domain/knowledge.js'
 import {
   classifyMcpOutcome,
   queueUnknownKnowledgeDemand,
@@ -378,11 +381,14 @@ export function createPublicMcpServer(
         dependencies.database,
         input.context,
       )
-      const answers = await searchKnowledge(
-        dependencies.database,
+      const answers = filterActionableKnowledge(
         input.question,
-        context,
-        Math.min(5, Math.max(1, input.limit)),
+        await searchKnowledge(
+          dependencies.database,
+          input.question,
+          context,
+          Math.min(5, Math.max(1, input.limit)),
+        ),
       )
       const {
         vendorId: _vendorId,
@@ -419,12 +425,16 @@ export function createPublicMcpServer(
         dependencies.database,
         input.context,
       )
-      const answers = await searchKnowledge(
-        dependencies.database,
+      const answers = filterActionableKnowledge(
         input.goal,
-        context,
-        Math.min(3, Math.max(1, input.limit)),
-        ['workflow', 'change', 'diagnostic'],
+        await searchKnowledge(
+          dependencies.database,
+          input.goal,
+          context,
+          Math.min(3, Math.max(1, input.limit)),
+          ['workflow', 'change', 'diagnostic'],
+        ),
+        { requireAction: true },
       )
       const {
         vendorId: _vendorId,

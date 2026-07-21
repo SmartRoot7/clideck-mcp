@@ -6,6 +6,8 @@ import {
   knowledgeDemandTermPatterns,
   knowledgeDemandTerms
 } from '../src/domain/knowledge-demand-relevance.js'
+import { filterActionableKnowledge } from '../src/domain/knowledge.js'
+import type { PublicKnowledge } from '../src/domain/schemas.js'
 
 describe('knowledge-demand relevance', () => {
   const macsecQuestion =
@@ -60,5 +62,44 @@ describe('knowledge-demand relevance', () => {
     expect(isRelevantToKnowledgeDemand(vlanQuestion, [
       'Adding VLANs to an interface trunk allowed list.'
     ])).toBe(true)
+  })
+})
+
+describe('operational answer completeness', () => {
+  const diagnosticOnly = {
+    kind: 'diagnostic',
+    command: null,
+    procedure: [],
+  } as unknown as PublicKnowledge
+  const commandAnswer = {
+    kind: 'command',
+    command: 'copy running-config ftp:',
+    procedure: [],
+  } as unknown as PublicKnowledge
+
+  it('does not treat a diagnostic mention as an answer to an operational request', () => {
+    expect(filterActionableKnowledge(
+      'Back up the running configuration without changing the device',
+      [diagnosticOnly],
+    )).toEqual([])
+    expect(filterActionableKnowledge(
+      'Back up the running configuration without changing the device',
+      [diagnosticOnly, commandAnswer],
+    )).toEqual([commandAnswer])
+  })
+
+  it('keeps diagnostic answers for diagnostic questions', () => {
+    expect(filterActionableKnowledge(
+      'Why is this interface reporting input errors?',
+      [diagnosticOnly],
+    )).toEqual([diagnosticOnly])
+  })
+
+  it('requires executable content for the workflow tool', () => {
+    expect(filterActionableKnowledge(
+      'Inspect the current platform state',
+      [diagnosticOnly],
+      { requireAction: true },
+    )).toEqual([])
   })
 })

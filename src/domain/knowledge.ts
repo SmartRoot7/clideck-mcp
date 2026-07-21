@@ -55,6 +55,30 @@ const nonSemanticSearchTerms = new Set([
   'disable', 'enable', 'manage', 'remove', 'running', 'set', 'setup', 'show'
 ])
 
+const operationalIntentPattern =
+  /\b(?:add|apply|back\s+up|backup|change|configure|delete|disable|downgrade|enable|erase|migrate|recover|remove|replace|reset|restore|upgrade)\b/i
+
+function hasExecutableAction(answer: PublicKnowledge): boolean {
+  return Boolean(answer.command?.trim()) || answer.procedure.length > 0
+}
+
+/**
+ * A diagnostic that merely mentions an operation is useful supporting
+ * knowledge, but it must not make an operational request look answered. The
+ * unanswered-demand loop relies on this distinction to continue learning
+ * until it can return an actual command or procedure.
+ */
+export function filterActionableKnowledge(
+  question: string,
+  answers: readonly PublicKnowledge[],
+  options: { requireAction?: boolean } = {},
+): PublicKnowledge[] {
+  if (!options.requireAction && !operationalIntentPattern.test(question)) {
+    return [...answers]
+  }
+  return answers.filter(hasExecutableAction)
+}
+
 function normalizedTerms(value: string | null | undefined): Set<string> {
   return new Set(value?.toLowerCase().match(/[a-z0-9]+/g) ?? [])
 }
