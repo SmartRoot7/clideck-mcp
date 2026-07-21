@@ -4084,7 +4084,8 @@ export async function submitSourceDiscovery(
                   ELSE now()
                 END,
                 last_seen_at = now()
-          WHERE id = $1`,
+          WHERE id = $1
+            AND status <> 'published'`,
         [task.knowledge_demand_id, insertedIds[0] ?? null],
       )
     }
@@ -5151,7 +5152,8 @@ export async function failPipelineTask(
                   ELSE now() + interval '15 minutes'
                 END,
                 last_seen_at = now()
-          WHERE id = $1`,
+          WHERE id = $1
+            AND status <> 'published'`,
         [
           task.knowledge_demand_id,
           retrying,

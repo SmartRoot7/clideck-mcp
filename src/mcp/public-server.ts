@@ -38,6 +38,7 @@ import { searchKnowledge } from '../domain/knowledge.js'
 import {
   classifyMcpOutcome,
   queueUnknownKnowledgeDemand,
+  reconcileKnownKnowledgeDemand,
   recordMcpRequest
 } from '../domain/mcp-observability.js'
 import { analyzeDeviceSnapshot } from '../domain/snapshot.js'
@@ -156,7 +157,24 @@ function wrapTool<TInput, TOutput>(
             )
             return null
           })
-        : null
+        : usageOutcome === 'success'
+          ? await reconcileKnownKnowledgeDemand(
+              dependencies.database,
+              toolName,
+              input,
+              publicOutput,
+            ).catch((error: unknown) => {
+              dependencies.logger.warn(
+                {
+                  err: error,
+                  requestId: dependencies.requestId,
+                  tool: toolName
+                },
+                'Known MCP request could not reconcile its learning demand',
+              )
+              return null
+            })
+          : null
       await recordPublicUsage(
         dependencies.database,
         toolName,
@@ -227,7 +245,7 @@ export function createPublicMcpServer(
   const server = new McpServer(
     {
       name: 'CliDeck MCP — Network Knowledge',
-      version: '0.8.1',
+      version: '0.8.2',
       title: 'CliDeck MCP — Network Knowledge',
       websiteUrl: 'https://clideck.com/software/mcp'
     },

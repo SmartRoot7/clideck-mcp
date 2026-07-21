@@ -92,9 +92,7 @@ async function demandQuestionForTask(
 
 async function reconcilePublishedKnowledgeDemands(
   database: Database,
-  sourceIds: string[],
 ): Promise<void> {
-  if (sourceIds.length === 0) return
   const demands = await database.query<{
     id: string
     question: string
@@ -102,14 +100,14 @@ async function reconcilePublishedKnowledgeDemands(
   }>(
     `SELECT id, question, context
      FROM knowledge_demands
-     WHERE id IN (
-       SELECT source.knowledge_demand_id
-       FROM source_candidates source
-       WHERE source.id = ANY($1::uuid[])
-         AND source.knowledge_demand_id IS NOT NULL
-     )
-       AND status IN ('acquiring', 'processing', 'unresolved')`,
-    [sourceIds],
+     WHERE status IN (
+       'queued',
+       'discovering',
+       'acquiring',
+       'processing',
+       'unresolved',
+       'failed'
+     )`,
   )
   for (const demand of demands.rows) {
     const vendor = demand.context['vendor_slug']
@@ -1630,7 +1628,7 @@ async function publishSource(
     }
   })
   if (result.revisions_published > 0) {
-    await reconcilePublishedKnowledgeDemands(database, sourceIds)
+    await reconcilePublishedKnowledgeDemands(database)
   }
   return result
 }
@@ -1856,7 +1854,7 @@ async function publishCandidateBatch(
     }
   })
   if (result.records_published > 0) {
-    await reconcilePublishedKnowledgeDemands(database, payload.source_ids)
+    await reconcilePublishedKnowledgeDemands(database)
   }
   return result
 }

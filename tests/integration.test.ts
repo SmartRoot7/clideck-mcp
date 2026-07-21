@@ -217,11 +217,13 @@ describeIntegration('PostgreSQL integration', () => {
         priority: number
         task_priority: number
         task_type: string
+        context: Record<string, unknown>
       }>(
         `SELECT
            demand.id,
            demand.status,
            demand.priority,
+           demand.context,
            task.priority AS task_priority,
            task.task_type
          FROM knowledge_demands demand
@@ -238,6 +240,46 @@ describeIntegration('PostgreSQL integration', () => {
           task_type: 'source_discovery'
         })
       ])
+
+      const repeatedDemandId = await queueUnknownKnowledgeDemand(
+        transactionalDatabase,
+        'query_network_knowledge',
+        {
+          question,
+          context: {
+            vendor: 'Cisco',
+            model: 'C9300',
+            operating_system: 'IOS XE',
+            version: '17.9.4'
+          },
+          limit: 3
+        },
+        {
+          unknown: true,
+          context: demand.rows[0]!.context
+        },
+      )
+      expect(repeatedDemandId).toBe(demand.rows[0]!.id)
+      const repeated = await client.query<{
+        demand_count: number
+        active_discovery_tasks: number
+      }>(
+        `SELECT
+           demand.demand_count,
+           count(task.id)::int AS active_discovery_tasks
+         FROM knowledge_demands demand
+         LEFT JOIN pipeline_tasks task
+           ON task.knowledge_demand_id = demand.id
+          AND task.task_type = 'source_discovery'
+          AND task.status IN ('queued', 'claimed', 'running')
+         WHERE demand.id = $1
+         GROUP BY demand.id`,
+        [demand.rows[0]!.id],
+      )
+      expect(repeated.rows).toEqual([{
+        demand_count: 2,
+        active_discovery_tasks: 1
+      }])
 
       const log = await client.query<{
         id: string
@@ -357,6 +399,172 @@ describeIntegration('PostgreSQL integration', () => {
       await client.query('ROLLBACK')
       client.release()
     }
+  })
+
+  it('reconciles a known answer and never downgrades its published demand', async () => {
+    const client = await database.connect()
+    const question = 'show ip interface brief'
+    try {
+      await client.query('BEGIN')
+      const transactionalDatabase = client as unknown as Database
+      const resolved = await resolveNetworkContext(transactionalDatabase, {
+        vendor: 'Cisco',
+        model: 'C9300',
+        operating_system: 'IOS XE',
+        version: '17.9.4'
+      })
+      const {
+        vendorId: _vendorId,
+        platformId: _platformId,
+        operatingSystemId: _operatingSystemId,
+        ...publicContext
+      } = resolved
+      const demandId = await queueUnknownKnowledgeDemand(
+        transactionalDatabase,
+        'query_network_knowledge',
+        {
+          question,
+          context: {
+            vendor: 'Cisco',
+            model: 'C9300',
+            operating_system: 'IOS XE',
+            version: '17.9.4'
+          },
+          limit: 3
+        },
+        { unknown: true, context: publicContext },
+      )
+      expect(demandId).toEqual(expect.any(String))
+
+      const mcpServer = createPublicMcpServer({
+        config,
+        database: transactionalDatabase,
+        quarantineDatabase: transactionalDatabase,
+        logger,
+        metrics: createMetrics(),
+        actor: { kind: 'anonymous' },
+        clientKey: 'integration-known-demand',
+        clientAddress: '203.0.113.18',
+        requestId: randomUUID()
+      })
+      const mcpClient = new Client({
+        name: 'known-demand-integration',
+        version: '1.0.0'
+      })
+      const [clientTransport, serverTransport] =
+        InMemoryTransport.createLinkedPair()
+      await Promise.all([
+        mcpClient.connect(clientTransport),
+        mcpServer.connect(serverTransport)
+      ])
+      try {
+        const result = await mcpClient.callTool({
+          name: 'query_network_knowledge',
+          arguments: {
+            question,
+            context: {
+              vendor: 'Cisco',
+              model: 'C9300',
+              operating_system: 'IOS XE',
+              version: '17.9.4'
+            },
+            limit: 3
+          }
+        })
+        expect(result.structuredContent).toMatchObject({
+          unknown: false,
+          next_action: 'use_answer'
+        })
+      } finally {
+        await mcpClient.close()
+        await mcpServer.close()
+      }
+
+      const reconciled = await client.query<{
+        status: string
+        result_revision_id: string | null
+        result_release_id: string | null
+        discovery_task_id: string
+      }>(
+        `SELECT
+           status,
+           result_revision_id,
+           result_release_id,
+           discovery_task_id
+         FROM knowledge_demands
+         WHERE id = $1`,
+        [demandId],
+      )
+      expect(reconciled.rows[0]).toMatchObject({
+        status: 'published',
+        result_revision_id: expect.any(String),
+        result_release_id: expect.any(String)
+      })
+    } finally {
+      await client.query('ROLLBACK').catch(() => undefined)
+      client.release()
+    }
+  })
+
+  it('does not downgrade a published demand after a late task failure', async () => {
+    const suffix = randomUUID()
+    const leaseToken = randomUUID()
+    const target = await database.query<{ id: string }>(
+      `INSERT INTO coverage_targets (
+         vendor_slug, product_family, model, operating_system_slug,
+         version_branch, document_role, priority, status, next_check_at
+       )
+       VALUES (
+         'cisco', $1, 'C9300', 'ios-xe', '17.15',
+         'commands', 100, 'active', now()
+       )
+       RETURNING id`,
+      [`published-demand-guard-${suffix}`],
+    )
+    const demand = await database.query<{ id: string }>(
+      `INSERT INTO knowledge_demands (
+         demand_key, domain_id, tool_name, question, context,
+         status, priority, coverage_target_id, completed_at
+       )
+       VALUES (
+         $1, 'network', 'query_network_knowledge',
+         'Known integration test answer',
+         '{"vendor_slug":"cisco","operating_system_slug":"ios-xe"}'::jsonb,
+         'published', 120, $2, now()
+       )
+       RETURNING id`,
+      [sha256(`published-demand-guard-${suffix}`), target.rows[0]!.id],
+    )
+    const task = await database.query<{ id: string }>(
+      `INSERT INTO pipeline_tasks (
+         task_type, stage, status, priority, coverage_target_id,
+         knowledge_demand_id, dedupe_key, payload, claim_owner,
+         lease_token_hash, lease_until, attempts
+       )
+       VALUES (
+         'source_discovery', 'discover', 'running', 120, $1,
+         $2, $3, '{}'::jsonb, 'published-demand-guard-test',
+         $4, now() + interval '1 hour', 1
+       )
+       RETURNING id`,
+      [
+        target.rows[0]!.id,
+        demand.rows[0]!.id,
+        `published-demand-guard:${suffix}`,
+        sha256(leaseToken)
+      ],
+    )
+    await failPipelineTask(database, {
+      pipeline_task_id: task.rows[0]!.id,
+      lease_token: leaseToken,
+      failure_code: 'SOURCE_POLICY_REJECTED',
+      failure_message: 'Synthetic late failure after demand publication.'
+    })
+    const afterFailure = await database.query<{ status: string }>(
+      `SELECT status FROM knowledge_demands WHERE id = $1`,
+      [demand.rows[0]!.id],
+    )
+    expect(afterFailure.rows).toEqual([{ status: 'published' }])
   })
 
   it('returns an exhausted demand to the retryable queue when every linked source is terminal', async () => {

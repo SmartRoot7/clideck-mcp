@@ -130,12 +130,18 @@ export function extractMcpQuestion(
   return preview({ tool: toolName, input }, 1_000)
 }
 
-export async function queueUnknownKnowledgeDemand(
+type PreparedKnowledgeDemand = {
+  question: string
+  context: Record<string, unknown>
+  demandKey: Buffer
+}
+
+async function prepareKnowledgeDemand(
   database: Database,
   toolName: string,
   input: unknown,
   output: unknown,
-): Promise<string | null> {
+): Promise<PreparedKnowledgeDemand | null> {
   if (![
     'query_network_knowledge',
     'get_network_workflow',
@@ -146,9 +152,7 @@ export async function queueUnknownKnowledgeDemand(
     return null
   }
   const outputRecord = recordOf(output)
-  if (!outputRecord || classifyMcpOutcome(outputRecord) !== 'unknown') {
-    return null
-  }
+  if (!outputRecord) return null
   if (
     toolName === 'query_domain_knowledge' &&
     outputRecord['domain_id'] !== 'network'
@@ -227,19 +231,87 @@ export async function queueUnknownKnowledgeDemand(
   if (question.length < 3) return null
   const context = boundedPayload(contextValue, 16_384)
   if (Array.isArray(context)) return null
-  const demandKey = sha256(JSON.stringify(stableValue({
-    domain_id: 'network',
-    question: question.toLocaleLowerCase('en-US'),
-    context
-  })))
+  return {
+    question,
+    context,
+    demandKey: sha256(JSON.stringify(stableValue({
+      domain_id: 'network',
+      question: question.toLocaleLowerCase('en-US'),
+      context
+    })))
+  }
+}
+
+export async function queueUnknownKnowledgeDemand(
+  database: Database,
+  toolName: string,
+  input: unknown,
+  output: unknown,
+): Promise<string | null> {
+  const outputRecord = recordOf(output)
+  if (!outputRecord || classifyMcpOutcome(outputRecord) !== 'unknown') {
+    return null
+  }
+  const prepared = await prepareKnowledgeDemand(
+    database,
+    toolName,
+    input,
+    output,
+  )
+  if (!prepared) return null
   const result = await database.query<{
     demand_id: string
   }>(
     `SELECT demand_id
      FROM queue_network_knowledge_demand($1, $2, $3::jsonb, $4)`,
-    [toolName, question, JSON.stringify(context), demandKey],
+    [
+      toolName,
+      prepared.question,
+      JSON.stringify(prepared.context),
+      prepared.demandKey
+    ],
   )
   return result.rows[0]?.demand_id ?? null
+}
+
+export async function reconcileKnownKnowledgeDemand(
+  database: Database,
+  toolName: string,
+  input: unknown,
+  output: unknown,
+): Promise<string | null> {
+  const outputRecord = recordOf(output)
+  if (!outputRecord || classifyMcpOutcome(outputRecord) !== 'success') {
+    return null
+  }
+  const answers = outputRecord['answers']
+  const firstAnswer = Array.isArray(answers) ? recordOf(answers[0]) : null
+  const revisionRef = firstAnswer?.['revision_ref']
+  if (typeof revisionRef !== 'string') return null
+  const prepared = await prepareKnowledgeDemand(
+    database,
+    toolName,
+    input,
+    output,
+  )
+  if (!prepared) return null
+  const result = await database.query<{ id: string }>(
+    `UPDATE knowledge_demands demand
+        SET status = 'published',
+            result_revision_id = revision.id,
+            result_release_id = active.release_id,
+            last_error_code = NULL,
+            completed_at = now(),
+            last_seen_at = now()
+       FROM knowledge_revisions revision
+       CROSS JOIN active_release active
+      WHERE demand.demand_key = $1
+        AND revision.public_ref = $2
+        AND demand.status <> 'published'
+      RETURNING demand.id`,
+    [prepared.demandKey, revisionRef],
+  )
+  return result.rows[0]?.id ?? null
 }
 
 export async function recordMcpRequest(

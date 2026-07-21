@@ -400,6 +400,35 @@ Ready when production no longer shows queued Analyze fragments without a lane,
 an empty source buffer immediately refills, and a Medium incident is visible
 without making the other executors idle.
 
+### M27 — Demand closure and exact-scope recovery
+
+- `[x]` Trace every production learning demand without exposing caller IPs,
+  source identities or stored request content. Six of eight historical unknown
+  questions now return deterministic answers; two remain genuine gaps.
+- `[x]` Replace the demand queue function with an explicitly qualified
+  PL/pgSQL definition. A repeated unknown can now reuse an active demand without
+  the `discovery_task_id` output variable colliding with the table column.
+- `[x]` Reconcile a successful MCP answer back to its existing demand and link
+  the active revision/release immediately.
+- `[x]` Recheck every outstanding demand after each knowledge publication,
+  including answers learned through a different source than the original
+  demand.
+- `[x]` Prevent late discovery and task failures from downgrading a published
+  demand; restore historical rows only when their exact result revision remains
+  active.
+- `[x]` Make extraction and Deep Review narrow generic IOS/IOS XE evidence to
+  generic applicability with explicit limitations instead of rejecting it only
+  because the original request named an exact model or release.
+- `[x]` Verify the migration and demand lifecycle on a fresh PostgreSQL database
+  with focused integration coverage.
+- `[~]` Deploy 0.8.2 through the canonical script, repeat all historical unknown
+  questions and verify that the two remaining gaps are linked to priority-120
+  Discovery.
+
+Ready when every unknown response has a durable learning demand, every newly
+known answer closes that demand, and generic official evidence remains useful
+without being misrepresented as exact platform support.
+
 ## Production verification — 20 July 2026
 
 - `[x]` Deployed `bc7c950b585bd994efa704e4ca246320fbde05dd` exclusively through
