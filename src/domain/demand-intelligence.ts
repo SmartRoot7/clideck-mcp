@@ -96,6 +96,55 @@ function uniqueAnswers(answers: PublicKnowledge[], limit: number): PublicKnowled
     .slice(0, limit)
 }
 
+type CapabilityEvidence = Pick<
+  PublicKnowledge,
+  'title' | 'summary' | 'command' | 'procedure'
+>
+
+function evidenceText(answer: CapabilityEvidence): string {
+  return [
+    answer.title,
+    answer.summary,
+    answer.command ?? '',
+    ...answer.procedure
+  ].join('\n')
+}
+
+/**
+ * FTS is only the candidate generator for decomposed operational questions.
+ * These narrow deterministic gates prevent a shared word such as "IP" from
+ * marking an unrelated syslog or server-address record as IP configuration.
+ * General questions continue to use the established ranked search unchanged.
+ */
+export function answerSupportsCapability(
+  capability: string,
+  answer: CapabilityEvidence,
+): boolean {
+  const text = evidenceText(answer)
+  const command = answer.command ?? ''
+  switch (capability) {
+    case 'system-reboot':
+      return /\b(?:reboot|reload|restart|shutdown\s+-r)\b/i.test(text)
+    case 'ip-configuration':
+      return /\bip\s+addr(?:ess)?\s+(?:add|replace|change)\b/i.test(text) ||
+        /\bifconfig\s+\S+\s+(?:inet\s+)?(?:\d{1,3}\.){3}\d{1,3}\b/i.test(text) ||
+        /\b(?:nmcli|uci)\b[^\n]*(?:ipv4\.addresses|network\.)/i.test(text)
+    case 'arp-diagnostics':
+      return /(?:^|[\s`])(?:arp(?:\s+-[anv])?|ip\s+neigh(?:bour)?)(?:[\s`]|$)/i
+        .test(text)
+    case 'interface-counters':
+      return /\b(?:ip\s+-s\s+link|ethtool\s+-S|ifconfig\s+\S+|show\s+interfaces?\s+counters?|\/proc\/net\/dev)\b/i
+        .test(text)
+    case 'tftp-transfer':
+      return /(?:^|[\s`])tftp(?:[\s`]|$)/i.test(command)
+    case 'boot-behavior':
+      return /\b(?:next\s+boot|boot\s+(?:mode|reason|sequence|behavior)|after\s+(?:the\s+)?(?:next\s+)?(?:reboot|boot)|onie_boot_reason)\b/i
+        .test(text)
+    default:
+      return true
+  }
+}
+
 export async function searchKnowledgeWithCoverage(input: {
   database: Database
   question: string
@@ -117,10 +166,13 @@ export async function searchKnowledgeWithCoverage(input: {
       'arp-diagnostics',
       'interface-counters'
     ].includes(part.capability)
-    const answers = filterActionableKnowledge(
+    const actionable = filterActionableKnowledge(
       part.query,
       raw,
       { requireAction: partRequiresAction },
+    )
+    const answers = actionable.filter((answer) =>
+      answerSupportsCapability(part.capability, answer),
     )
     return { part, answers }
   }))

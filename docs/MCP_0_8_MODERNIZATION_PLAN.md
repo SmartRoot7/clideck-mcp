@@ -268,12 +268,18 @@ manual intervention.
   masks questions, context, diagnostic prose and source leads server-side.
 - `[x]` Make expert-task public progress follow its real Luna claim instead of
   showing `researching` together with a stale `queued` milestone.
-- `[x]` Verify migrations 001–028, applicability backfill, 161 backend and
+- `[x]` Verify migrations 001–028, applicability backfill, 163 backend and
   PostgreSQL tests, all Domain Pack tests, 15 shared UI tests, production
-  build, and eval 250/250 with dangerous false-safe 0 and p95 13.56 ms.
+  build, and eval 250/250 with dangerous false-safe 0 and p95 19.29 ms.
 - `[x]` Verify the production-shaped 027 → 028 upgrade with unfinished
   demands: obsolete queued discovery work is skipped and every unfinished
   demand receives exactly one queued Medium diagnosis.
+- `[x]` Run the first live compound ONIE Rescue query. It correctly returned
+  partial coverage and queued diagnosis, but exposed one false-positive route:
+  a remote-syslog IP value was treated as interface IP configuration. Add
+  deterministic capability evidence gates so shared words cannot mark IP,
+  ARP, counters, TFTP, reboot or boot behavior as covered without a matching
+  command or procedure.
 - `[~]` Deploy through the canonical script and run the live ONIE Rescue
   acceptance cycle.
 

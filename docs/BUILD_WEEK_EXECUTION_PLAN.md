@@ -931,12 +931,16 @@ fair learning loop without delaying the caller or allowing AI to publish.
   weak or single-part match cannot close the demand.
 - `[x]` Add structured MCP Request diagnosis, admin export and demo redaction.
 - `[x]` Verify migrations 001–028, seed, applicability reindex, typecheck,
-  161 backend/PostgreSQL tests, all Domain Pack tests, 15 shared UI tests,
+  163 backend/PostgreSQL tests, all Domain Pack tests, 15 shared UI tests,
   production build, and eval 250/250 with dangerous false-safe 0 and p95
-  13.56 ms.
+  19.29 ms.
 - `[x]` Verify a production-shaped migration from schema 027 with unfinished
   demands: each receives one Medium diagnosis and superseded queued discovery
   work is removed without touching immutable revisions.
+- `[x]` Correct the false-positive found by live compound ONIE acceptance:
+  capability coverage now requires matching operational evidence rather than
+  text similarity alone (for example, a syslog server IP cannot satisfy
+  interface IP configuration, and a TFTP URL cannot replace a TFTP command).
 - `[~]` Complete canonical production rollout and live ONIE Rescue acceptance.
 
 ## Required acceptance suite

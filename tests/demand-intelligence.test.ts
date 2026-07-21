@@ -5,6 +5,7 @@ import {
   normalizeOperatingSystemIntent
 } from '../src/domain/network-intent.js'
 import {
+  answerSupportsCapability,
   demandDiagnosisAgentArtifactSchema,
   diagnosticTopicIdentity
 } from '../src/domain/demand-intelligence.js'
@@ -43,6 +44,36 @@ describe('Demand Intelligence', () => {
       'interface-counters',
       'tftp-transfer'
     ])
+  })
+
+  it('does not confuse an IP-valued syslog setting with IP configuration', () => {
+    expect(answerSupportsCapability('ip-configuration', {
+      title: 'Configure remote syslog server',
+      summary: 'Set the remote log collector IP address.',
+      command: 'option log-servers 203.0.113.2;',
+      procedure: ['Replace the example IP with the syslog server address.']
+    })).toBe(false)
+    expect(answerSupportsCapability('ip-configuration', {
+      title: 'Configure a temporary interface address',
+      summary: 'Add an address to eth0.',
+      command: 'ip addr add 192.0.2.10/24 dev eth0',
+      procedure: ['Verify the address before continuing.']
+    })).toBe(true)
+  })
+
+  it('requires a real TFTP client command for TFTP coverage', () => {
+    expect(answerSupportsCapability('tftp-transfer', {
+      title: 'ONIE self update',
+      summary: 'The updater accepts a TFTP URL.',
+      command: 'onie-self-update <url>',
+      procedure: ['Supported URL schemes include TFTP.']
+    })).toBe(false)
+    expect(answerSupportsCapability('tftp-transfer', {
+      title: 'Download with BusyBox TFTP',
+      summary: 'Fetch an installer image.',
+      command: 'tftp -g -r installer.bin 192.0.2.20',
+      procedure: ['Verify the downloaded image before use.']
+    })).toBe(true)
   })
 
   it('creates the same server-owned topic for equivalent diagnoses', () => {
