@@ -248,6 +248,24 @@ Dangerous commands are not hidden. The system returns the available
 information while clearly explaining risk, prerequisites, verification, and
 rollback.
 
+Portable software is resolved independently from hardware vendor identity.
+ONIE, SONiC, OpenWrt, Debian/Linux tooling, and Cumulus Linux/NVUE knowledge
+can therefore be reused across documented platforms. Model and vendor overlays
+still take precedence over family-wide records. NX-OS, IOS-XE, Cumulus, and
+OpenWrt use explicit version-branch rules: an exact or bounded record wins,
+and a nearby patch in the same branch is returned only as a labelled
+best-effort fallback. Hardware-sensitive generic answers remain complete but
+carry `requires_platform_confirmation` and a stop condition.
+
+Existing immutable revisions are indexed without rewriting their content or
+FTS data:
+
+```bash
+pnpm knowledge:reindex-applicability -- --resume --verify
+```
+
+The command is batched, resumable, checksum-recorded, and idempotent.
+
 CliDeck MCP provides guidance but never connects to a network device and never
 executes commands.
 

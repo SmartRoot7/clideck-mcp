@@ -1830,6 +1830,9 @@ export async function listKnowledge(
     kind: string | null
     risk: string | null
     origin: string | null
+    family: string | null
+    scope: string | null
+    versionMatch: string | null
     limit: number
     offset: number
   },
@@ -1843,14 +1846,20 @@ export async function listKnowledge(
        AND ($3::text IS NULL OR pak.operating_system_slug = $3)
        AND ($4::text IS NULL OR pak.kind = $4)
        AND ($5::text IS NULL OR pak.risk_level = $5)
-       AND ($6::text IS NULL OR pak.origin = $6)`
+       AND ($6::text IS NULL OR pak.origin = $6)
+       AND ($7::text IS NULL OR family.slug = $7)
+       AND ($8::text IS NULL OR applicability.scope_level = $8)
+       AND ($9::text IS NULL OR applicability.version_scope = $9)`
   const filterParameters = [
     input.query,
     input.vendor,
     input.operatingSystem,
     input.kind,
     input.risk,
-    input.origin
+    input.origin,
+    input.family,
+    input.scope,
+    input.versionMatch
   ]
   const [items, count] = await Promise.all([
     database.query(
@@ -1865,6 +1874,9 @@ export async function listKnowledge(
        pak.platform_name,
        pak.operating_system_slug,
        pak.operating_system_name,
+       family.slug AS software_family_slug,
+       applicability.scope_level,
+       applicability.version_scope,
        pak.version_min,
        pak.version_max,
        pak.title,
@@ -1876,14 +1888,20 @@ export async function listKnowledge(
        pak.last_verified_at,
        pak.revision_created_at
      FROM public_active_knowledge pak
+     JOIN knowledge_applicability_index applicability
+       ON applicability.revision_id = pak.revision_id
+     JOIN software_families family ON family.id = applicability.family_id
      ${whereClause}
      ORDER BY pak.revision_created_at DESC, pak.revision_id DESC
-     LIMIT $7 OFFSET $8`,
+     LIMIT $10 OFFSET $11`,
       [...filterParameters, input.limit, input.offset],
     ),
     database.query<{ total: number }>(
       `SELECT count(*)::int AS total
        FROM public_active_knowledge pak
+       JOIN knowledge_applicability_index applicability
+         ON applicability.revision_id = pak.revision_id
+       JOIN software_families family ON family.id = applicability.family_id
        ${whereClause}`,
       filterParameters,
     )
@@ -1897,8 +1915,10 @@ export async function listKnowledge(
 }
 
 export async function listImports(database: Database) {
-  const result = await database.query(
+  const [imports, applicability] = await Promise.all([
+    database.query(
     `SELECT
+       'legacy_import'::text AS run_kind,
        ir.*,
        coalesce((
          SELECT count(*)::int FROM import_items ii
@@ -1911,8 +1931,33 @@ export async function listImports(database: Database) {
      FROM import_runs ir
      ORDER BY ir.started_at DESC
      LIMIT 100`,
-  )
-  return result.rows
+    ),
+    database.query(
+      `SELECT
+         id,
+         'applicability_reindex'::text AS run_kind,
+         'Knowledge applicability index'::text AS source_label,
+         manifest_hash,
+         revisions_expected AS records_seen,
+         0::int AS records_quarantined,
+         revisions_indexed AS records_imported,
+         portable_revisions AS records_published,
+         CASE WHEN status = 'failed' THEN
+           greatest(revisions_expected - revisions_indexed, 0)
+         ELSE 0 END::int AS records_failed,
+         NULL::text AS last_legacy_key,
+         status,
+         started_at,
+         completed_at,
+         last_error AS error_message,
+         revisions_indexed AS reconciled_items,
+         revisions_indexed AS mapped_revisions
+       FROM applicability_reindex_runs
+       ORDER BY started_at DESC
+       LIMIT 1`,
+    )
+  ])
+  return [...applicability.rows, ...imports.rows]
 }
 
 export async function listAgentRuns(database: Database, limit: number) {

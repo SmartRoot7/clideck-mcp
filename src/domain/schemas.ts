@@ -24,6 +24,11 @@ export const resolvedNetworkContextSchema = z.object({
   platform_slug: z.string().nullable(),
   operating_system: z.string(),
   operating_system_slug: z.string(),
+  software_family: z.string().optional(),
+  software_family_slug: z.string().optional(),
+  portable_operating_system: z.boolean().optional(),
+  vendor_resolved: z.boolean().optional(),
+  model_resolved: z.boolean().optional(),
   version: z.string().nullable(),
   applicable_version: z.string(),
   resolution_confidence: z.number().min(0).max(1),
@@ -66,7 +71,27 @@ export const publicKnowledgeSchema = z.object({
       minimum: z.string().nullable(),
       maximum: z.string().nullable(),
       requested: z.string().nullable()
-    })
+    }),
+    match_level: z.enum([
+      'exact_model',
+      'vendor_os',
+      'architecture_os',
+      'os_family'
+    ]).optional(),
+    version_match: z.enum([
+      'exact',
+      'explicit_range',
+      'branch',
+      'unbounded',
+      'same_branch_fallback'
+    ]).optional(),
+    assurance_level: z.enum([
+      'exact',
+      'compatible',
+      'generic',
+      'best_effort'
+    ]).optional(),
+    requires_platform_confirmation: z.boolean().optional()
   }),
   cli_mode: z.string().nullable(),
   command: z.string().nullable(),
@@ -234,6 +259,25 @@ export const candidateRevisionSchema = z.object({
   operating_system_slug: z.string().regex(/^[a-z0-9][a-z0-9-]{1,62}$/),
   version_min: networkVersionSchema.optional(),
   version_max: networkVersionSchema.optional(),
+  software_family_slug: z.string()
+    .regex(/^[a-z0-9][a-z0-9-]{1,62}$/)
+    .optional(),
+  applicability_scope: z.enum([
+    'model',
+    'vendor_os',
+    'architecture',
+    'os_family'
+  ]).optional(),
+  architecture_slug: z.string()
+    .regex(/^[a-z0-9][a-z0-9-]{1,62}$/)
+    .optional(),
+  version_scope: z.enum([
+    'exact', 'range', 'branch', 'unbounded'
+  ]).optional(),
+  version_branch: networkVersionSchema.optional(),
+  portable_key: z.string()
+    .regex(/^[a-z0-9][a-z0-9._-]{2,159}$/)
+    .optional(),
   title: shortText,
   summary: z.string().trim().min(1).max(4_000),
   question_patterns: z.array(z.string().trim().min(3).max(300)).min(1).max(20),

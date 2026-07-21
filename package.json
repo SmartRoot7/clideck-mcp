@@ -1,6 +1,6 @@
 {
   "name": "clideck-mcp",
-  "version": "0.8.3",
+  "version": "0.8.4",
   "private": true,
   "description": "Agent-native framework for verified, continuously updated MCP knowledge systems",
   "type": "module",
@@ -36,6 +36,8 @@
     "db:seed": "tsx src/cli/seed.ts",
     "db:refresh-public-stats": "tsx src/cli/refresh-public-stats.ts",
     "db:activate-release": "tsx src/cli/activate-release.ts",
+    "knowledge:reindex-applicability": "tsx src/cli/reindex-applicability.ts",
+    "knowledge:repair-portable-risk": "tsx src/cli/repair-portable-risk.ts",
     "pipeline:reconcile-074": "tsx src/cli/reconcile-074.ts",
     "eval": "tsx src/cli/eval.ts",
     "legacy:export": "tsx src/cli/export-legacy.ts",

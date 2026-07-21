@@ -548,6 +548,9 @@ export const knowledgeRevisionSchema = z.object({
   platform_name: nullableStringSchema,
   operating_system_slug: nullableStringSchema,
   operating_system_name: nullableStringSchema,
+  software_family_slug: nullableStringSchema,
+  scope_level: nullableStringSchema,
+  version_scope: nullableStringSchema,
   version_min: nullableStringSchema,
   version_max: nullableStringSchema,
   title: z.string(),
@@ -569,6 +572,7 @@ export const knowledgePageSchema = z.object({
 
 export const importRunSchema = z.object({
   id: z.string(),
+  run_kind: z.enum(['legacy_import', 'applicability_reindex']).optional(),
   source_label: z.string(),
   manifest_hash: nullableStringSchema,
   records_seen: scalarNumberSchema,

@@ -25,6 +25,31 @@ const riskPriority: Record<KnowledgeRiskLevel, number> = {
   unknown: 4
 }
 
+function isDeterministicReadOnlyCommand(line: string): boolean {
+  if (
+    /^(?:show|display|ping|traceroute|tracert|terminal length|dir|more|verify)\b/i
+      .test(line)
+  ) return true
+  if (/^(?:onie-sysinfo|uname|uptime)(?:\s|$)/i.test(line)) return true
+  if (/^nv\s+show\b/i.test(line)) return true
+  if (
+    /^networkctl(?:\s+(?:list|status|lldp|label)(?:\s|$)|\s*$)/i.test(line)
+  ) {
+    return true
+  }
+  if (/^swconfig\s+dev\s+\S+\s+show(?:\s|$)/i.test(line)) return true
+  if (
+    /^ip(?:\s+-\S+)*\s+(?:link|address|addr|route|neighbor|neigh|rule)\s+(?:show|list)(?:\s|$)/i
+      .test(line)
+  ) return true
+  if (
+    /^ethtool(?:\s+(?:-[aAdgiklmnpST]|--show-[a-z-]+))*\s+\S+(?:\s|$)/i
+      .test(line) &&
+    !/\s(?:-s|--change|--set-[a-z-]+)\b/i.test(line)
+  ) return true
+  return false
+}
+
 export function classifyKnowledgeRisk(
   lines: string[],
 ): KnowledgeRiskLevel {
@@ -35,9 +60,7 @@ export function classifyKnowledgeRisk(
     .filter(Boolean)
   if (
     operationalLines.length > 0 &&
-    operationalLines.every((line) =>
-      /^(?:show|ping|traceroute|terminal length|dir|more|verify)\b/i.test(line),
-    )
+    operationalLines.every(isDeterministicReadOnlyCommand)
   ) {
     return 'safe_read_only'
   }

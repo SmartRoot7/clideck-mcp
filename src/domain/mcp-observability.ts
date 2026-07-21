@@ -227,6 +227,16 @@ async function prepareKnowledgeDemand(
   ) {
     return null
   }
+  contextValue = {
+    vendor: contextValue['vendor'],
+    vendor_slug: contextValue['vendor_slug'],
+    model: contextValue['model'],
+    platform_slug: contextValue['platform_slug'],
+    operating_system: contextValue['operating_system'],
+    operating_system_slug: contextValue['operating_system_slug'],
+    version: contextValue['version'],
+    applicable_version: contextValue['applicable_version']
+  }
   const question = sanitizeScalarString(questionValue).slice(0, 2_000)
   if (question.length < 3) return null
   const context = boundedPayload(contextValue, 16_384)
@@ -264,6 +274,41 @@ export async function queueUnknownKnowledgeDemand(
   }>(
     `SELECT demand_id
      FROM queue_network_knowledge_demand($1, $2, $3::jsonb, $4)`,
+    [
+      toolName,
+      prepared.question,
+      JSON.stringify(prepared.context),
+      prepared.demandKey
+    ],
+  )
+  return result.rows[0]?.demand_id ?? null
+}
+
+export async function queueApproximateKnowledgeDemand(
+  database: Database,
+  toolName: string,
+  input: unknown,
+  output: unknown,
+): Promise<string | null> {
+  const outputRecord = recordOf(output)
+  if (!outputRecord || classifyMcpOutcome(outputRecord) !== 'success') {
+    return null
+  }
+  const answers = outputRecord['answers']
+  const firstAnswer = Array.isArray(answers) ? recordOf(answers[0]) : null
+  const applicability = recordOf(firstAnswer?.['applicability'])
+  const assurance = applicability?.['assurance_level']
+  if (assurance !== 'generic' && assurance !== 'best_effort') return null
+  const prepared = await prepareKnowledgeDemand(
+    database,
+    toolName,
+    input,
+    output,
+  )
+  if (!prepared) return null
+  const result = await database.query<{ demand_id: string }>(
+    `SELECT demand_id
+     FROM queue_network_knowledge_gap($1, $2, $3::jsonb, $4)`,
     [
       toolName,
       prepared.question,

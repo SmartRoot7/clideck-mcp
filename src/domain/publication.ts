@@ -11,6 +11,7 @@ import { normalizeVendorVersion } from '../version.js'
 import { candidateRevisionSchema } from './schemas.js'
 import { getNetworkDomainPack } from './domain-packs.js'
 import { enforceKnowledgeRisk } from './risk.js'
+import { indexPublishedKnowledgeApplicability } from './applicability.js'
 
 const storedCandidateSchema = candidateRevisionSchema.omit({
   lease_token: true
@@ -270,6 +271,14 @@ export async function createKnowledgeRevision(
     ],
   )
   const revisionId = revision.rows[0]!.id
+
+  await indexPublishedKnowledgeApplicability(client, {
+    revisionId,
+    operatingSystemId: context.operatingSystemId,
+    vendorId: context.vendorId,
+    platformId: context.platformId,
+    candidate
+  })
 
   for (const source of provenance) {
     const document = await client.query<{ id: string }>(

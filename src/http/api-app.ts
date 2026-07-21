@@ -76,7 +76,10 @@ import {
   reviewNetworkChange,
   verifyNetworkChange
 } from '../domain/change.js'
-import { resolveNetworkContext } from '../domain/context.js'
+import {
+  publicNetworkContext,
+  resolveNetworkContext
+} from '../domain/context.js'
 import { searchKnowledge } from '../domain/knowledge.js'
 import { listPipelineTransitions } from '../domain/pipeline-transitions.js'
 import {
@@ -518,6 +521,9 @@ export function createApiApp(dependencies: ApiDependencies) {
         kind: query('kind'),
         risk: query('risk'),
         origin: query('origin'),
+        family: query('family'),
+        scope: query('scope'),
+        versionMatch: query('version_match'),
         limit,
         offset
       }),
@@ -677,12 +683,6 @@ export function createApiApp(dependencies: ApiDependencies) {
       resolved,
       Math.min(5, Math.max(1, parsed.data.limit)),
     )
-    const {
-      vendorId: _vendorId,
-      platformId: _platformId,
-      operatingSystemId: _operatingSystemId,
-      ...publicContext
-    } = resolved
     await recordPublicUsage(
       database,
       'query_network_knowledge',
@@ -690,7 +690,7 @@ export function createApiApp(dependencies: ApiDependencies) {
       performance.now() - startedAt,
     )
     return context.json({
-      context: publicContext,
+      context: publicNetworkContext(resolved),
       answers,
       unknown: answers.length === 0,
       next_action:
@@ -1031,6 +1031,9 @@ export function createApiApp(dependencies: ApiDependencies) {
       kind: query('kind'),
       risk: query('risk'),
       origin: query('origin'),
+      family: query('family'),
+      scope: query('scope'),
+      versionMatch: query('version_match'),
       limit,
       offset
     }))

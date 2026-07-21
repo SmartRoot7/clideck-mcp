@@ -258,6 +258,9 @@ export type KnowledgeFilters = {
   kind: string
   risk: string
   origin: string
+  family: string
+  scope: string
+  versionMatch: string
   limit: number
   offset: number
 }
@@ -276,6 +279,11 @@ export function useKnowledge(filters: KnowledgeFilters, enabled = true) {
   if (filters.kind) search.set('kind', filters.kind)
   if (filters.risk) search.set('risk', filters.risk)
   if (filters.origin) search.set('origin', filters.origin)
+  if (filters.family) search.set('family', filters.family)
+  if (filters.scope) search.set('scope', filters.scope)
+  if (filters.versionMatch) {
+    search.set('version_match', filters.versionMatch)
+  }
   return useQuery({
     queryKey: [apiPrefix, 'knowledge', filters],
     queryFn: () =>

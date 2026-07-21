@@ -7,7 +7,7 @@ const versionSchema = z.string().trim().min(1).max(64).regex(
 const boundedLine = z.string().trim().min(1).max(1_000)
 
 export const networkContextSchema = z.strictObject({
-  vendor: slugSchema,
+  vendor: slugSchema.optional(),
   model: slugSchema.optional(),
   operating_system: slugSchema,
   version: versionSchema.optional()
@@ -41,6 +41,18 @@ export const networkKnowledgeCandidateSchema = z.strictObject({
   operating_system_slug: slugSchema,
   version_min: versionSchema.optional(),
   version_max: versionSchema.optional(),
+  software_family_slug: slugSchema.optional(),
+  applicability_scope: z.enum([
+    'model', 'vendor_os', 'architecture', 'os_family'
+  ]).optional(),
+  architecture_slug: slugSchema.optional(),
+  version_scope: z.enum([
+    'exact', 'range', 'branch', 'unbounded'
+  ]).optional(),
+  version_branch: versionSchema.optional(),
+  portable_key: z.string()
+    .regex(/^[a-z0-9][a-z0-9._-]{2,159}$/)
+    .optional(),
   title: z.string().trim().min(1).max(240),
   summary: z.string().trim().min(1).max(4_000),
   question_patterns: z.array(
@@ -93,7 +105,18 @@ export const networkPublicRecordSchema = z.strictObject({
     model: z.string().nullable(),
     operating_system: z.string(),
     version_min: z.string().nullable(),
-    version_max: z.string().nullable()
+    version_max: z.string().nullable(),
+    match_level: z.enum([
+      'exact_model', 'vendor_os', 'architecture_os', 'os_family'
+    ]).optional(),
+    version_match: z.enum([
+      'exact', 'explicit_range', 'branch', 'unbounded',
+      'same_branch_fallback'
+    ]).optional(),
+    assurance_level: z.enum([
+      'exact', 'compatible', 'generic', 'best_effort'
+    ]).optional(),
+    requires_platform_confirmation: z.boolean().optional()
   }),
   content: z.strictObject({
     cli_mode: z.string().nullable(),

@@ -30,7 +30,10 @@ export function ImportsPage() {
   if (query.isLoading) return <LoadingState label="Loading import reconciliation…" />
   if (query.isError || !query.data) return <ErrorState onRetry={() => void query.refetch()}>Import data is unavailable.</ErrorState>
   const rows = query.data
-  const totals = rows.reduce((state, row) => ({
+  const importRows = rows.filter(
+    (row) => row.run_kind !== 'applicability_reindex'
+  )
+  const totals = importRows.reduce((state, row) => ({
     seen: state.seen + numberOf(row.records_seen),
     published: state.published + numberOf(row.records_published),
     failed: state.failed + numberOf(row.records_failed)
@@ -38,7 +41,7 @@ export function ImportsPage() {
   return (
     <div className="dashboard-stack">
       <section className="metric-grid metric-grid--four">
-        <Metric label="Import runs" value={rows.length} icon={Import} help="Read-only legacy import executions recorded by the new system." />
+        <Metric label="Import runs" value={importRows.length} icon={Import} help="Read-only legacy import executions recorded by the new system. Applicability reindex status is listed separately below." />
         <Metric label="Records seen" value={compactNumber(totals.seen)} icon={PackageCheck} help="Legacy records accounted for by all visible manifests." />
         <Metric label="Records published" value={compactNumber(totals.published)} icon={CheckCircle2} help="Imported revisions included in immutable releases." tone="good" />
         <Metric label="Records failed" value={totals.failed} icon={FileWarning} help="Legacy records that could not be reconciled or imported." tone={totals.failed ? 'danger' : 'good'} />

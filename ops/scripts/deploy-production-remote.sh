@@ -123,6 +123,8 @@ required_release_paths=(
   dist/cli/seed.js \
   dist/cli/reconcile-074.js \
   dist/cli/refresh-public-stats.js \
+  dist/cli/reindex-applicability.js \
+  dist/cli/repair-portable-risk.js \
   dist/cli/activate-release.js \
   dist-admin/index.html \
   ops/sql/grants.sql \
@@ -237,6 +239,9 @@ sudo -u postgres psql \
   cd "$release_directory"
   /usr/local/bin/node dist/cli/reconcile-074.js
   /usr/local/bin/node dist/cli/seed.js
+  /usr/local/bin/node dist/cli/reindex-applicability.js --dry-run
+  /usr/local/bin/node dist/cli/reindex-applicability.js --resume --verify
+  /usr/local/bin/node dist/cli/repair-portable-risk.js
   /usr/local/bin/node dist/cli/refresh-public-stats.js
 )
 

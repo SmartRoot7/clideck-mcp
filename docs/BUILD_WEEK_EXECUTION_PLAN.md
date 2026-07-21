@@ -13,7 +13,7 @@ Branch policy: `main` only; completed stages are committed and pushed directly.
 
 ## Current focus
 
-`0.7.4 — knowledge quality and public MCP reliability`
+`0.8.4 — portable software applicability and version compatibility`
 
 ## Baseline
 
@@ -752,6 +752,54 @@ Verified locally:
 Remaining for completion: one local `main` commit, the unified production
 deployment, reconciliation accounting, 20 live MCP acceptance scenarios, and
 production latency/security smoke checks.
+
+### [~] CliDeck MCP 0.8.4 — portable OS and version compatibility
+
+Goal: reuse OS-wide knowledge across equipment vendors without weakening
+model, architecture, version, risk, or provenance boundaries.
+
+Implemented locally:
+
+- migration 026 adds software families, aliases, inheritance, OS memberships,
+  platform architecture, revision applicability, exclusions, and resumable
+  reindex manifests;
+- ONIE, SONiC, OpenWrt, Debian/Linux tooling, and Cumulus/NVUE are portable
+  families; NX-OS and IOS-XE retain vendor ownership while gaining explicit
+  `major.minor` branch matching;
+- the context resolver accepts OS-only and unknown-vendor portable queries,
+  preserves an unrecognized requested model, and retains strict behavior for
+  vendor-specific operating systems;
+- retrieval ranks exact model, vendor OS, architecture, and OS-family scopes,
+  then exact, range, branch, unbounded, and same-branch patch compatibility;
+- public answers add match, version, assurance, and platform-confirmation
+  metadata without changing existing MCP tool names or removing commands;
+- generic and same-branch best-effort answers queue a lower-priority
+  specificity gap, while a true unknown retains priority 120;
+- `knowledge:reindex-applicability -- --resume --verify` processes immutable
+  revisions in committed batches, records a checksum manifest, verifies
+  conservation, and does not rebuild FTS;
+- deterministically safe portable inspection commands such as `onie-sysinfo`
+  receive new immutable safe revisions in one supplemental release; old
+  revisions are not edited;
+- Knowledge filters now expose family, scope, and version policy, while Imports
+  shows the latest applicability reconciliation run.
+
+Verified before release:
+
+- a fresh PostgreSQL database applied migrations 001–026, seeded knowledge,
+  completed the applicability index twice without duplicate rows, and retained
+  exact revision/index conservation;
+- integration coverage proves unknown-vendor ONIE reuse, exact model overlay
+  precedence, platform and version exclusions, and full command return;
+- unit coverage proves NX-OS same-branch patch fallback, cross-branch refusal,
+  calendar branches, match assurance, and safe portable inspection risk;
+- 153 backend/PostgreSQL tests, 14 Domain Pack tests, and 15 admin UI tests
+  passed without skip;
+- product eval passed 250/250 with dangerous false-safe 0 and known-query p95
+  9.45 ms; typecheck, production build, shell syntax, and diff checks passed.
+
+Remaining: production backup and canonical deployment, 14 real public MCP
+scenarios, latency/query-plan review, and production conservation accounting.
 
 ### [x] D3.1 — Security and release gate
 

@@ -444,9 +444,24 @@ Every candidate MUST contain every required field in this exact contract:
   }]
 }
 Optional string fields are "platform_slug", "version_min", "version_max",
-"cli_mode" (at most 120 characters), and "command". Optional provenance fields are "document_version"
-and "document_date". Emit every optional field and use null when unknown; the
-wire schema requires all keys and the bridge removes nulls before validation.
+"cli_mode" (at most 120 characters), "command", "software_family_slug",
+"applicability_scope", "architecture_slug", "version_scope",
+"version_branch", and "portable_key". Optional provenance fields are
+"document_version" and "document_date". Emit every optional field and use
+null when unknown; the wire schema requires all keys and the bridge removes
+nulls before validation.
+
+Applicability must follow the evidence, not the hardware label on the source.
+Use applicability_scope="os_family" only for an OS-wide command documented by
+the upstream ONIE, SONiC, OpenWrt, Debian/Linux, or Cumulus/NVUE project and set
+software_family_slug to the matching canonical family. Use "model" for
+hardware, boot-media, platform storage, firmware, ASIC, and model-specific
+procedures. Use "vendor_os" when a vendor owns the OS behavior. Use
+"architecture" only when the evidence explicitly bounds the instruction to a
+known architecture. Never infer broader portability merely from the word
+Linux. Set version_scope="branch" and version_branch only when the evidence
+supports the entire documented branch; otherwise use exact, range, or
+unbounded as stated by the source. A conservative narrow scope is valid.
 Dates MUST be YYYY-MM-DD, so convert a leased timestamp to its first 10
 characters. Slugs use lowercase letters, digits, and hyphens. Set
 platform_slug to null unless its exact registered slug is known from the input.

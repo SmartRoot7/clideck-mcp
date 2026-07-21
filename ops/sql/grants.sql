@@ -30,7 +30,14 @@ GRANT SELECT ON
   active_knowledge_state,
   pipeline_transition_events,
   public_stats_cache,
-  knowledge_demands
+  knowledge_demands,
+  software_families,
+  software_family_aliases,
+  software_family_inheritance,
+  operating_system_family_memberships,
+  platform_architectures,
+  knowledge_applicability_index,
+  knowledge_applicability_exclusions
 TO clideck_mcp_api;
 GRANT SELECT, UPDATE ON principals TO clideck_mcp_api;
 GRANT SELECT, INSERT, UPDATE ON expert_tasks TO clideck_mcp_api;
@@ -103,6 +110,14 @@ GRANT SELECT ON
   knowledge_demands,
   knowledge_demand_source_attempts,
   mcp_request_logs,
+  software_families,
+  software_family_aliases,
+  software_family_inheritance,
+  operating_system_family_memberships,
+  platform_architectures,
+  knowledge_applicability_index,
+  knowledge_applicability_exclusions,
+  applicability_reindex_runs,
   pipeline_ai_circuits
 TO clideck_mcp_admin;
 GRANT INSERT ON product_eval_runs TO clideck_mcp_admin;
@@ -135,7 +150,16 @@ TO clideck_mcp_admin;
 
 GRANT SELECT, INSERT ON
   knowledge_items,
-  knowledge_revisions
+  knowledge_revisions,
+  software_family_aliases,
+  software_family_inheritance,
+  operating_system_family_memberships,
+  platform_architectures,
+  knowledge_applicability_exclusions
+TO clideck_mcp_worker;
+GRANT SELECT, INSERT, UPDATE ON
+  software_families,
+  knowledge_applicability_index
 TO clideck_mcp_worker;
 GRANT SELECT ON
   domain_packs,
@@ -168,6 +192,13 @@ GRANT SELECT ON
   context_aliases,
   public_active_knowledge,
   public_active_release_summary,
+  software_families,
+  software_family_aliases,
+  software_family_inheritance,
+  operating_system_family_memberships,
+  platform_architectures,
+  knowledge_applicability_index,
+  knowledge_applicability_exclusions,
   public_lab_validation_summary,
   public_latest_eval_result,
   knowledge_conflicts,
@@ -229,6 +260,12 @@ GRANT EXECUTE ON FUNCTION current_knowledge_validation(uuid) TO
   clideck_mcp_worker,
   clideck_mcp_researcher;
 GRANT EXECUTE ON FUNCTION queue_network_knowledge_demand(
+  text,
+  text,
+  jsonb,
+  bytea
+) TO clideck_mcp_api;
+GRANT EXECUTE ON FUNCTION queue_network_knowledge_gap(
   text,
   text,
   jsonb,

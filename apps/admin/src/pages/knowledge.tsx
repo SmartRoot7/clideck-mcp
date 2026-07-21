@@ -34,12 +34,16 @@ const EMPTY_FILTERS: KnowledgeFilters = {
   kind: '',
   risk: '',
   origin: '',
+  family: '',
+  scope: '',
+  versionMatch: '',
   limit: 50,
   offset: 0
 }
 
 const FILTER_FIELDS: Array<{
-  key: 'vendor' | 'operatingSystem' | 'kind' | 'risk' | 'origin'
+  key: 'vendor' | 'operatingSystem' | 'kind' | 'risk' | 'origin' |
+    'family' | 'scope' | 'versionMatch'
   label: string
   values: string[]
 }> = [
@@ -47,7 +51,26 @@ const FILTER_FIELDS: Array<{
   { key: 'operatingSystem', label: 'Operating system', values: ['ios-xe', 'nx-os', 'ios-xr', 'asa', 'eos', 'junos', 'os10', 'fortios'] },
   { key: 'kind', label: 'Kind', values: ['command', 'diagnostic', 'workflow', 'change', 'upgrade'] },
   { key: 'risk', label: 'Risk', values: ['safe', 'low', 'medium', 'high', 'critical'] },
-  { key: 'origin', label: 'Origin', values: ['native', 'legacy', 'expert'] }
+  { key: 'origin', label: 'Origin', values: ['native', 'legacy', 'expert'] },
+  {
+    key: 'family',
+    label: 'Family',
+    values: [
+      'onie', 'sonic', 'openwrt', 'debian', 'linux-userspace',
+      'linux-iproute2', 'linux-netfilter', 'cumulus-linux',
+      'cisco-nx-os', 'cisco-ios-xe'
+    ]
+  },
+  {
+    key: 'scope',
+    label: 'Scope',
+    values: ['model', 'vendor_os', 'architecture', 'os_family']
+  },
+  {
+    key: 'versionMatch',
+    label: 'Version match',
+    values: ['exact', 'range', 'branch', 'unbounded']
+  }
 ]
 
 export function KnowledgePage() {
@@ -98,7 +121,7 @@ export function KnowledgePage() {
 
 const KNOWLEDGE_COLUMNS: Array<TableColumn<KnowledgeRevision>> = [
   { key: 'knowledge', label: 'Knowledge', render: (row) => <div className="primary-cell knowledge-title"><strong>{row.title}</strong><span>{row.summary}</span><code title={row.stable_key}>{shortId(row.stable_key)}</code></div> },
-  { key: 'scope', label: 'Scope', render: (row) => <div className="primary-cell"><strong>{row.vendor_name} · {row.operating_system_name ?? 'vendor-level'}</strong><span>{row.platform_name ?? 'Any platform'} · {row.version_min ?? '—'} to {row.version_max ?? '—'}</span></div> },
+  { key: 'scope', label: 'Scope', render: (row) => <div className="primary-cell"><strong>{row.vendor_name} · {row.operating_system_name ?? 'vendor-level'}</strong><span>{row.platform_name ?? 'Any platform'} · {row.version_min ?? '—'} to {row.version_max ?? '—'}</span><span>{titleCase(row.software_family_slug ?? 'unclassified')} · {titleCase(row.scope_level ?? 'legacy')} · {titleCase(row.version_scope ?? 'unbounded')}</span></div> },
   { key: 'kind', label: 'Kind', render: (row) => <Status>{titleCase(row.kind)}</Status> },
   { key: 'risk', label: 'Risk', render: (row) => row.dangerous
     ? <Status tone="danger">{titleCase(row.risk_level)}</Status>

@@ -48,7 +48,7 @@ export const networkDomainManifest = {
       display_name: 'Vendor',
       description: 'Equipment vendor.',
       value_type: 'string' as const,
-      required: true
+      required: false
     },
     {
       key: 'model',
@@ -112,6 +112,30 @@ function validationResult(
       path: 'risk_level'
     })
   }
+  if (candidate.applicability_scope === 'model' && !candidate.platform_slug) {
+    issues.push({
+      code: 'NETWORK_MODEL_SCOPE_REQUIRES_PLATFORM',
+      message: 'Model applicability requires a platform slug.',
+      path: 'platform_slug'
+    })
+  }
+  if (
+    candidate.applicability_scope === 'architecture' &&
+    !candidate.architecture_slug
+  ) {
+    issues.push({
+      code: 'NETWORK_ARCHITECTURE_SCOPE_REQUIRES_ARCHITECTURE',
+      message: 'Architecture applicability requires an architecture slug.',
+      path: 'architecture_slug'
+    })
+  }
+  if (candidate.version_scope === 'branch' && !candidate.version_branch) {
+    issues.push({
+      code: 'NETWORK_BRANCH_SCOPE_REQUIRES_BRANCH',
+      message: 'Branch applicability requires a version branch.',
+      path: 'version_branch'
+    })
+  }
   return { valid: issues.length === 0, issues }
 }
 
@@ -126,7 +150,7 @@ export const networkDomainPack: DomainPack<
   publicRecordSchema: networkPublicRecordSchema,
   deterministicExtractor: networkCommandReferenceExtractor,
   searchContext: {
-    hardKeys: ['vendor', 'operating_system']
+    hardKeys: ['operating_system']
   },
   normalizeContext(input) {
     return networkContextSchema.parse(input)
@@ -157,6 +181,24 @@ export const networkDomainPack: DomainPack<
           : {}),
         ...(candidate.version_max
           ? { version_max: candidate.version_max }
+          : {}),
+        ...(candidate.software_family_slug
+          ? { software_family: candidate.software_family_slug }
+          : {}),
+        ...(candidate.applicability_scope
+          ? { applicability_scope: candidate.applicability_scope }
+          : {}),
+        ...(candidate.architecture_slug
+          ? { architecture: candidate.architecture_slug }
+          : {}),
+        ...(candidate.version_scope
+          ? { version_scope: candidate.version_scope }
+          : {}),
+        ...(candidate.version_branch
+          ? { version_branch: candidate.version_branch }
+          : {}),
+        ...(candidate.portable_key
+          ? { portable_key: candidate.portable_key }
           : {})
       },
       payload: {

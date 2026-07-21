@@ -15,6 +15,7 @@ import type { Logger } from '../logger.js'
 import type { Metrics } from '../metrics.js'
 import type { PublicActor } from '../domain/auth.js'
 import {
+  publicNetworkContext,
   resolveNetworkContext
 } from '../domain/context.js'
 import {
@@ -40,6 +41,7 @@ import {
 } from '../domain/knowledge.js'
 import {
   classifyMcpOutcome,
+  queueApproximateKnowledgeDemand,
   queueUnknownKnowledgeDemand,
   reconcileKnownKnowledgeDemand,
   recordMcpRequest
@@ -161,11 +163,18 @@ function wrapTool<TInput, TOutput>(
             return null
           })
         : usageOutcome === 'success'
-          ? await reconcileKnownKnowledgeDemand(
+          ? await queueApproximateKnowledgeDemand(
               dependencies.database,
               toolName,
               input,
               publicOutput,
+            ).then((gapDemandId) => gapDemandId ??
+              reconcileKnownKnowledgeDemand(
+                dependencies.database,
+                toolName,
+                input,
+                publicOutput,
+              )
             ).catch((error: unknown) => {
               dependencies.logger.warn(
                 {
@@ -322,6 +331,28 @@ export function createPublicMcpServer(
       }
     },
     wrapTool(dependencies, 'query_domain_knowledge', async (input) => {
+      if (input.domain_id === 'network') {
+        const parsedContext = networkContextInputSchema.parse(input.context)
+        const context = await resolveNetworkContext(
+          dependencies.database,
+          parsedContext,
+        )
+        const answers = await searchKnowledge(
+          dependencies.database,
+          input.question,
+          context,
+          Math.min(20, Math.max(1, input.limit)),
+        )
+        return {
+          domain_id: 'network',
+          context: publicNetworkContext(context),
+          answers,
+          unknown: answers.length === 0,
+          next_action: answers.length === 0
+            ? 'knowledge_not_found' as const
+            : 'use_answer' as const
+        }
+      }
       const result = await searchDomainKnowledge(dependencies.database, {
         domainId: input.domain_id,
         question: input.question,
@@ -346,7 +377,7 @@ export function createPublicMcpServer(
     {
       title: 'Resolve Network Context',
       description:
-        'Resolve vendor, model/platform, network operating system, and vendor-specific version context.',
+        'Resolve vendor, model/platform, portable software family, operating system, and version context.',
       inputSchema: networkContextInputSchema,
       outputSchema: resolvedNetworkContextSchema,
       annotations: {
@@ -356,9 +387,8 @@ export function createPublicMcpServer(
       }
     },
     wrapTool(dependencies, 'resolve_network_context', async (input) => {
-      const { vendorId, platformId, operatingSystemId, ...publicContext } =
-        await resolveNetworkContext(dependencies.database, input)
-      return publicContext
+      const resolved = await resolveNetworkContext(dependencies.database, input)
+      return publicNetworkContext(resolved)
     }),
   )
 
@@ -390,14 +420,8 @@ export function createPublicMcpServer(
           Math.min(5, Math.max(1, input.limit)),
         ),
       )
-      const {
-        vendorId: _vendorId,
-        platformId: _platformId,
-        operatingSystemId: _operatingSystemId,
-        ...publicContext
-      } = context
       return {
-        context: publicContext,
+        context: publicNetworkContext(context),
         answers,
         unknown: answers.length === 0,
         next_action:
@@ -436,14 +460,8 @@ export function createPublicMcpServer(
         ),
         { requireAction: true },
       )
-      const {
-        vendorId: _vendorId,
-        platformId: _platformId,
-        operatingSystemId: _operatingSystemId,
-        ...publicContext
-      } = context
       return {
-        context: publicContext,
+        context: publicNetworkContext(context),
         answers,
         unknown: answers.length === 0,
         next_action:
