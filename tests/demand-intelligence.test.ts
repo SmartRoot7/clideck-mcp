@@ -58,9 +58,57 @@ describe('Demand Intelligence', () => {
     })
   })
 
+  it('repairs deterministic diagnosis wire-format variations', () => {
+    const parsed = parseDemandDiagnosisAgentArtifact({
+      failure_class: 'missing_knowledge',
+      answer_status: 'unknown',
+      canonical_context: {
+        vendor: 'Dell',
+        operating_system: 'ONIE',
+        runtime_mode: 'Rescue mode'
+      },
+      subquestions: [{
+        capability: 'system_reboot',
+        label: 'System reboot',
+        status: 'missing',
+        explanation: 'No applicable reboot command was found in active knowledge.',
+        search_terms: ['ONIE rescue reboot']
+      }],
+      existing_coverage_summary: 'No applicable reboot command is indexed.',
+      missing_capabilities: ['system reboot'],
+      search_expansions: ['ONIE rescue reboot'],
+      document_roles: ['command_reference'],
+      recommended_action: 'targeted_discovery',
+      reasoning_summary: 'Official ONIE command documentation is required.'
+    })
+
+    expect(parsed.canonical_context).toEqual({
+      vendor: 'Dell',
+      model: null,
+      operating_system: 'ONIE',
+      version: null,
+      runtime_mode: 'rescue',
+      shell_environment: null
+    })
+    expect(parsed.subquestions[0]?.capability).toBe('system-reboot')
+    expect(parsed.missing_capabilities).toEqual(['system-reboot'])
+    expect(parsed.document_roles).toEqual(['commands'])
+  })
+
   it('resolves ONIE Rescue as a software family plus runtime mode', () => {
     expect(normalizeOperatingSystemIntent({
       operatingSystem: 'ONIE Rescue'
+    })).toEqual({
+      familyRequest: 'ONIE',
+      runtimeMode: 'rescue',
+      shellEnvironment: null
+    })
+  })
+
+  it('normalizes an explicit runtime mode phrase', () => {
+    expect(normalizeOperatingSystemIntent({
+      operatingSystem: 'ONIE',
+      runtimeMode: 'Rescue mode'
     })).toEqual({
       familyRequest: 'ONIE',
       runtimeMode: 'rescue',

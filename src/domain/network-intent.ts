@@ -35,6 +35,17 @@ function normalizedWords(value: string): string[] {
     .filter(Boolean)
 }
 
+function normalizedRuntimeMode(value: string | undefined): NetworkRuntimeMode | null {
+  if (!value) return null
+  const direct = runtimeModeAliases[value.trim().toLowerCase()]
+  if (direct) return direct
+  for (const word of normalizedWords(value)) {
+    const matched = runtimeModeAliases[word.toLowerCase()]
+    if (matched) return matched
+  }
+  return null
+}
+
 export function normalizeOperatingSystemIntent(input: {
   operatingSystem?: string
   runtimeMode?: string
@@ -45,9 +56,7 @@ export function normalizeOperatingSystemIntent(input: {
   shellEnvironment: string | null
 } {
   const words = normalizedWords(input.operatingSystem ?? '')
-  let runtimeMode = input.runtimeMode
-    ? runtimeModeAliases[input.runtimeMode.toLowerCase()] ?? null
-    : null
+  let runtimeMode = normalizedRuntimeMode(input.runtimeMode)
   let shellEnvironment = input.shellEnvironment?.trim() || null
 
   const retained: string[] = []
@@ -57,6 +66,7 @@ export function normalizeOperatingSystemIntent(input: {
       runtimeMode = runtimeModeAliases[normalized]
       continue
     }
+    if (runtimeMode && normalized === 'mode') continue
     if (!shellEnvironment && shellAliases[normalized]) {
       shellEnvironment = shellAliases[normalized]
       continue

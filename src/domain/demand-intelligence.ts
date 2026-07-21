@@ -10,6 +10,7 @@ import {
 } from './knowledge.js'
 import {
   decomposeNetworkQuestion,
+  normalizeOperatingSystemIntent,
   normalizeTopicSlug,
   type NetworkQuestionPart
 } from './network-intent.js'
@@ -80,12 +81,117 @@ export type DemandDiagnosisArtifact = z.infer<
   typeof demandDiagnosisAgentArtifactSchema
 >
 
+function objectValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {}
+}
+
+function nullableText(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0
+    ? value.trim()
+    : null
+}
+
+function normalizeDiagnosisCapability(value: unknown): unknown {
+  return typeof value === 'string' && value.trim().length > 0
+    ? normalizeTopicSlug(value)
+    : value
+}
+
+function normalizeDocumentRole(value: unknown): unknown {
+  if (typeof value !== 'string') return value
+  const normalized = normalizeTopicSlug(value)
+  const aliases: Readonly<Record<string, string>> = {
+    command: 'commands',
+    commands: 'commands',
+    'command-reference': 'commands',
+    'cli-reference': 'commands',
+    configuration: 'configuration',
+    'configuration-guide': 'configuration',
+    diagnostic: 'diagnostics',
+    diagnostics: 'diagnostics',
+    troubleshooting: 'diagnostics',
+    upgrade: 'upgrades',
+    upgrades: 'upgrades',
+    'upgrade-guide': 'upgrades',
+    security: 'security_advisories',
+    advisory: 'security_advisories',
+    'security-advisory': 'security_advisories',
+    'security-advisories': 'security_advisories',
+    'release-note': 'release_notes',
+    'release-notes': 'release_notes'
+  }
+  return aliases[normalized] ?? value
+}
+
+/**
+ * Codex artifacts occasionally express a valid diagnosis with JSON-format
+ * variations: omitted nullable context keys, `rescue mode`, or capability
+ * labels containing spaces/underscores. Those are deterministic wire-format
+ * repairs, not semantic decisions, so normalize them server-side and keep the
+ * strict schema as the final authority.
+ */
+function normalizeDemandDiagnosisAgentArtifact(
+  value: unknown,
+): Record<string, unknown> {
+  const artifact = objectValue(value)
+  const rawContext = objectValue(artifact['canonical_context'])
+  const operatingSystem = nullableText(rawContext['operating_system'])
+  const runtimeMode = nullableText(rawContext['runtime_mode'])
+  const shellEnvironment = nullableText(rawContext['shell_environment'])
+  const normalizedIntent = normalizeOperatingSystemIntent({
+    ...(operatingSystem ? { operatingSystem } : {}),
+    ...(runtimeMode ? { runtimeMode } : {}),
+    ...(shellEnvironment ? { shellEnvironment } : {})
+  })
+  const rawSubquestions = artifact['subquestions']
+  const rawMissing = artifact['missing_capabilities']
+  const rawRoles = artifact['document_roles']
+
+  return {
+    failure_class: artifact['failure_class'],
+    answer_status: artifact['answer_status'],
+    canonical_context: {
+      vendor: nullableText(rawContext['vendor']),
+      model: nullableText(rawContext['model']),
+      operating_system: normalizedIntent.familyRequest ?? operatingSystem,
+      version: nullableText(rawContext['version']),
+      runtime_mode: normalizedIntent.runtimeMode,
+      shell_environment:
+        normalizedIntent.shellEnvironment ?? shellEnvironment
+    },
+    subquestions: Array.isArray(rawSubquestions)
+      ? rawSubquestions.map((value) => {
+          const part = objectValue(value)
+          return {
+            capability: normalizeDiagnosisCapability(part['capability']),
+            label: part['label'],
+            status: part['status'],
+            explanation: part['explanation'],
+            search_terms: part['search_terms']
+          }
+        })
+      : rawSubquestions,
+    existing_coverage_summary: artifact['existing_coverage_summary'],
+    missing_capabilities: Array.isArray(rawMissing)
+      ? rawMissing.map(normalizeDiagnosisCapability)
+      : rawMissing,
+    search_expansions: artifact['search_expansions'],
+    document_roles: Array.isArray(rawRoles)
+      ? rawRoles.map(normalizeDocumentRole)
+      : rawRoles,
+    recommended_action: artifact['recommended_action'],
+    reasoning_summary: artifact['reasoning_summary']
+  }
+}
+
 export function parseDemandDiagnosisAgentArtifact(
   value: unknown,
 ): DemandDiagnosisArtifact {
-  // Nullable context keys are part of the strict wire contract. Do not run
-  // the generic optional-field null stripper used by candidate artifacts.
-  return demandDiagnosisAgentArtifactSchema.parse(value)
+  return demandDiagnosisAgentArtifactSchema.parse(
+    normalizeDemandDiagnosisAgentArtifact(value),
+  )
 }
 
 export type KnowledgeCoverage = {

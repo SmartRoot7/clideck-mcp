@@ -951,6 +951,10 @@ fair learning loop without delaying the caller or allowing AI to publish.
 - `[x]` Fix strict Medium diagnosis ingestion so required nullable context
   fields remain present; valid Luna output no longer becomes an artifact
   rejection after generic optional-field normalization.
+- `[x]` Normalize only deterministic Medium artifact representation variants
+  before the strict schema: omitted nullable keys, runtime-mode phrases,
+  capability labels and common document-role aliases. Typecheck, 166 backend
+  tests, all Domain Pack tests and 15 UI tests pass after the correction.
 - `[~]` Complete canonical production rollout and live ONIE Rescue acceptance.
 
 ## Required acceptance suite

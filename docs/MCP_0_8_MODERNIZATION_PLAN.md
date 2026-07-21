@@ -293,6 +293,13 @@ manual intervention.
 - `[x]` Preserve required nullable keys in the strict Medium diagnosis
   artifact. The generic candidate normalizer previously removed those keys and
   caused valid Luna output to exhaust retries as `AGENT_ARTIFACT_REJECTED`.
+- `[x]` Repair deterministic Luna wire-format variations before strict
+  validation: absent nullable context fields become null, runtime phrases such
+  as `Rescue mode` resolve to the canonical enum, capability labels become
+  server-owned slugs, and common official-document role aliases normalize to
+  the existing contract. Semantic omissions still fail the strict schema.
+- `[x]` Re-run typecheck and 166 backend tests plus all Domain Pack and 15 UI
+  tests after the production artifact-rejection diagnosis.
 - `[~]` Deploy through the canonical script and run the live ONIE Rescue
   acceptance cycle.
 
