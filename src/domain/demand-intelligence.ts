@@ -194,6 +194,12 @@ export function parseDemandDiagnosisAgentArtifact(
   )
 }
 
+export function demandDiagnosisSubmissionPayload(
+  value: unknown,
+): { diagnosis: DemandDiagnosisArtifact } {
+  return { diagnosis: parseDemandDiagnosisAgentArtifact(value) }
+}
+
 export type KnowledgeCoverage = {
   answers: PublicKnowledge[]
   answerStatus: z.infer<typeof answerStatusSchema>

@@ -6,6 +6,7 @@ import {
 } from '../src/domain/network-intent.js'
 import {
   answerSupportsCapability,
+  demandDiagnosisSubmissionPayload,
   demandDiagnosisAgentArtifactSchema,
   diagnosticTopicIdentity,
   parseDemandDiagnosisAgentArtifact
@@ -59,7 +60,7 @@ describe('Demand Intelligence', () => {
   })
 
   it('repairs deterministic diagnosis wire-format variations', () => {
-    const parsed = parseDemandDiagnosisAgentArtifact({
+    const artifact = {
       failure_class: 'missing_knowledge',
       answer_status: 'unknown',
       canonical_context: {
@@ -80,7 +81,8 @@ describe('Demand Intelligence', () => {
       document_roles: ['command_reference'],
       recommended_action: 'targeted_discovery',
       reasoning_summary: 'Official ONIE command documentation is required.'
-    })
+    }
+    const parsed = parseDemandDiagnosisAgentArtifact(artifact)
 
     expect(parsed.canonical_context).toEqual({
       vendor: 'Dell',
@@ -93,6 +95,9 @@ describe('Demand Intelligence', () => {
     expect(parsed.subquestions[0]?.capability).toBe('system-reboot')
     expect(parsed.missing_capabilities).toEqual(['system-reboot'])
     expect(parsed.document_roles).toEqual(['commands'])
+    expect(demandDiagnosisSubmissionPayload(artifact)).toEqual({
+      diagnosis: parsed
+    })
   })
 
   it('resolves ONIE Rescue as a software family plus runtime mode', () => {

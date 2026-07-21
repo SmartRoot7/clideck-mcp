@@ -26,6 +26,7 @@ import {
   normalizeCandidateAnalysisStableKeys
 } from '../domain/pipeline.js'
 import {
+  demandDiagnosisSubmissionPayload,
   demandDiagnosisAgentArtifactSchema,
   parseDemandDiagnosisAgentArtifact
 } from '../domain/demand-intelligence.js'
@@ -274,8 +275,11 @@ async function runClient(
       'submit-deep-review': 'submit_candidate_deep_review',
       'submit-demand-diagnosis': 'submit_demand_diagnosis'
     }[action]!
+    const submission = action === 'submit-demand-diagnosis'
+      ? demandDiagnosisSubmissionPayload(draft)
+      : draft
     return callResearcherTool(tool, {
-      ...draft,
+      ...submission,
       pipeline_task_id: lease.pipeline_task_id,
       lease_token: lease.lease_token
     })

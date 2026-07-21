@@ -955,6 +955,9 @@ fair learning loop without delaying the caller or allowing AI to publish.
   before the strict schema: omitted nullable keys, runtime-mode phrases,
   capability labels and common document-role aliases. Typecheck, 166 backend
   tests, all Domain Pack tests and 15 UI tests pass after the correction.
+- `[x]` Correct the coordinator-to-researcher contract so a validated Medium
+  artifact is submitted inside the required `diagnosis` envelope rather than
+  flattened like discovery and analysis artifacts.
 - `[~]` Complete canonical production rollout and live ONIE Rescue acceptance.
 
 ## Required acceptance suite

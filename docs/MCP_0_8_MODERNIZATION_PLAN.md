@@ -298,6 +298,9 @@ manual intervention.
   as `Rescue mode` resolve to the canonical enum, capability labels become
   server-owned slugs, and common official-document role aliases normalize to
   the existing contract. Semantic omissions still fail the strict schema.
+- `[x]` Wrap the validated artifact in the researcher's required `diagnosis`
+  envelope. Production proved the former generic flat-artifact bridge passed
+  local validation but was rejected by the typed submission endpoint.
 - `[x]` Re-run typecheck and 166 backend tests plus all Domain Pack and 15 UI
   tests after the production artifact-rejection diagnosis.
 - `[~]` Deploy through the canonical script and run the live ONIE Rescue
