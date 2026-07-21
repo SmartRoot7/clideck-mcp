@@ -58,8 +58,18 @@ const nonSemanticSearchTerms = new Set([
 const operationalIntentPattern =
   /\b(?:add|apply|back\s+up|backup|change|configure|delete|disable|downgrade|enable|erase|migrate|recover|remove|replace|reset|restore|upgrade)\b/i
 
+const readOnlyDiagnosticCommandPattern =
+  /^(?:dir|display|more|ping|show|traceroute|tracert|verify)\b/i
+
 function hasExecutableAction(answer: PublicKnowledge): boolean {
-  return Boolean(answer.command?.trim()) || answer.procedure.length > 0
+  if (answer.procedure.length > 0) return true
+  const commands = answer.command
+    ?.split(/[;\n]+/)
+    .map((command) => command.trim())
+    .filter(Boolean) ?? []
+  return commands.some(
+    (command) => !readOnlyDiagnosticCommandPattern.test(command),
+  )
 }
 
 /**

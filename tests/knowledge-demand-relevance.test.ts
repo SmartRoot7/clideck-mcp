@@ -68,7 +68,7 @@ describe('knowledge-demand relevance', () => {
 describe('operational answer completeness', () => {
   const diagnosticOnly = {
     kind: 'diagnostic',
-    command: null,
+    command: 'show interfaces; show ip interface brief; show platform',
     procedure: [],
   } as unknown as PublicKnowledge
   const commandAnswer = {
