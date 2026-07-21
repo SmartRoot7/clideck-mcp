@@ -268,9 +268,9 @@ manual intervention.
   masks questions, context, diagnostic prose and source leads server-side.
 - `[x]` Make expert-task public progress follow its real Luna claim instead of
   showing `researching` together with a stale `queued` milestone.
-- `[x]` Verify migrations 001–028, applicability backfill, 163 backend and
+- `[x]` Verify migrations 001–028, applicability backfill, 164 backend and
   PostgreSQL tests, all Domain Pack tests, 15 shared UI tests, production
-  build, and eval 250/250 with dangerous false-safe 0 and p95 11.65 ms.
+  build, and eval 250/250 with dangerous false-safe 0 and p95 9.73 ms.
 - `[x]` Verify the production-shaped 027 → 028 upgrade with unfinished
   demands: obsolete queued discovery work is skipped and every unfinished
   demand receives exactly one queued Medium diagnosis.
@@ -290,6 +290,9 @@ manual intervention.
   A known replay also closes its prior demand and skips any not-yet-claimed
   Medium diagnosis, while best-effort and hardware-dependent generic answers
   continue through learning.
+- `[x]` Preserve required nullable keys in the strict Medium diagnosis
+  artifact. The generic candidate normalizer previously removed those keys and
+  caused valid Luna output to exhaust retries as `AGENT_ARTIFACT_REJECTED`.
 - `[~]` Deploy through the canonical script and run the live ONIE Rescue
   acceptance cycle.
 

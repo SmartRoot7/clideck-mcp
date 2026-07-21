@@ -7,7 +7,8 @@ import {
 import {
   answerSupportsCapability,
   demandDiagnosisAgentArtifactSchema,
-  diagnosticTopicIdentity
+  diagnosticTopicIdentity,
+  parseDemandDiagnosisAgentArtifact
 } from '../src/domain/demand-intelligence.js'
 import { sanitizeMcpLogPayload } from '../src/domain/mcp-observability.js'
 
@@ -20,6 +21,40 @@ describe('Demand Intelligence', () => {
     })).toEqual({
       operating_system: 'ONIE',
       nested: { runtime_mode: 'rescue' }
+    })
+  })
+
+  it('preserves required nullable diagnosis context fields', () => {
+    const parsed = parseDemandDiagnosisAgentArtifact({
+      failure_class: 'missing_knowledge',
+      answer_status: 'unknown',
+      canonical_context: {
+        vendor: null,
+        model: null,
+        operating_system: 'ONIE',
+        version: null,
+        runtime_mode: 'rescue',
+        shell_environment: null
+      },
+      subquestions: [{
+        capability: 'system-reboot',
+        label: 'System reboot',
+        status: 'missing',
+        explanation: 'No applicable reboot command was found in active knowledge.',
+        search_terms: ['ONIE rescue reboot']
+      }],
+      existing_coverage_summary: 'No applicable reboot command is indexed.',
+      missing_capabilities: ['system-reboot'],
+      search_expansions: ['ONIE rescue reboot'],
+      document_roles: ['commands'],
+      recommended_action: 'targeted_discovery',
+      reasoning_summary: 'Official ONIE command documentation is required.'
+    })
+    expect(parsed.canonical_context).toMatchObject({
+      vendor: null,
+      model: null,
+      version: null,
+      shell_environment: null
     })
   })
 

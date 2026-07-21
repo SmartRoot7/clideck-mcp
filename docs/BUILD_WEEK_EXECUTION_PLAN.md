@@ -931,9 +931,9 @@ fair learning loop without delaying the caller or allowing AI to publish.
   weak or single-part match cannot close the demand.
 - `[x]` Add structured MCP Request diagnosis, admin export and demo redaction.
 - `[x]` Verify migrations 001–028, seed, applicability reindex, typecheck,
-  163 backend/PostgreSQL tests, all Domain Pack tests, 15 shared UI tests,
+  164 backend/PostgreSQL tests, all Domain Pack tests, 15 shared UI tests,
   production build, and eval 250/250 with dangerous false-safe 0 and p95
-  11.65 ms.
+  9.73 ms.
 - `[x]` Verify a production-shaped migration from schema 027 with unfinished
   demands: each receives one Medium diagnosis and superseded queued discovery
   work is removed without touching immutable revisions.
@@ -948,6 +948,9 @@ fair learning loop without delaying the caller or allowing AI to publish.
 - `[x]` Avoid wasting Medium Luna on complete portable OS-family answers that
   require no platform confirmation; deterministic success closes and cancels
   the still-queued diagnosis for the same demand.
+- `[x]` Fix strict Medium diagnosis ingestion so required nullable context
+  fields remain present; valid Luna output no longer becomes an artifact
+  rejection after generic optional-field normalization.
 - `[~]` Complete canonical production rollout and live ONIE Rescue acceptance.
 
 ## Required acceptance suite

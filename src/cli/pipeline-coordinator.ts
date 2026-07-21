@@ -25,7 +25,10 @@ import {
   normalizeCandidateAnalysisOptionalFields,
   normalizeCandidateAnalysisStableKeys
 } from '../domain/pipeline.js'
-import { demandDiagnosisAgentArtifactSchema } from '../domain/demand-intelligence.js'
+import {
+  demandDiagnosisAgentArtifactSchema,
+  parseDemandDiagnosisAgentArtifact
+} from '../domain/demand-intelligence.js'
 import { candidateKnowledgeSchema } from '../domain/publication.js'
 import {
   omitNullObjectProperties,
@@ -825,9 +828,7 @@ function validateAgentArtifact(
         omitNullObjectProperties(parsed),
       )
     case 'demand_diagnosis':
-      return demandDiagnosisAgentArtifactSchema.parse(
-        omitNullObjectProperties(parsed),
-      )
+      return parseDemandDiagnosisAgentArtifact(parsed)
     case 'fragment_analysis':
       return candidateAnalysisArtifactSchema.parse(
         omitNullObjectProperties(

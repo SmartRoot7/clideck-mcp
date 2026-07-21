@@ -80,6 +80,14 @@ export type DemandDiagnosisArtifact = z.infer<
   typeof demandDiagnosisAgentArtifactSchema
 >
 
+export function parseDemandDiagnosisAgentArtifact(
+  value: unknown,
+): DemandDiagnosisArtifact {
+  // Nullable context keys are part of the strict wire contract. Do not run
+  // the generic optional-field null stripper used by candidate artifacts.
+  return demandDiagnosisAgentArtifactSchema.parse(value)
+}
+
 export type KnowledgeCoverage = {
   answers: PublicKnowledge[]
   answerStatus: z.infer<typeof answerStatusSchema>
