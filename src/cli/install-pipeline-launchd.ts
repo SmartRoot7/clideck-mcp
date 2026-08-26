@@ -200,9 +200,9 @@ const tunnelPlist = `<?xml version="1.0" encoding="UTF-8"?>
     <string>-o</string>
     <string>ExitOnForwardFailure=yes</string>
     <string>-o</string>
-    <string>ServerAliveInterval=30</string>
+    <string>ServerAliveInterval=15</string>
     <string>-o</string>
-    <string>ServerAliveCountMax=3</string>
+    <string>ServerAliveCountMax=2</string>
     <string>-o</string>
     <string>IdentitiesOnly=yes</string>
     <string>-i</string>

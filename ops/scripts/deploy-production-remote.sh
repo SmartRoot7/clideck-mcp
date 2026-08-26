@@ -264,6 +264,7 @@ set_deployed_sha() {
 }
 
 set_deployed_sha "$config_directory/api.env"
+set_deployed_sha "$config_directory/admin-ui.env"
 set_deployed_sha "$config_directory/worker.env"
 set_deployed_sha "$config_directory/researcher.env"
 

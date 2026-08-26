@@ -9,7 +9,8 @@ import {
 } from '../src/crypto.js'
 import {
   assertSafeProvenanceUrl,
-  isBlockedAddress
+  isBlockedAddress,
+  probePublicSourceUrl
 } from '../src/security/url-policy.js'
 import { purgeExpiredSourceArtifacts } from '../src/domain/pipeline-worker.js'
 import { createApiApp } from '../src/http/api-app.js'
@@ -98,6 +99,17 @@ describe('security primitives', () => {
     await expect(
       assertSafeProvenanceUrl('http://example.com/manual'),
     ).rejects.toThrow('UNSAFE_PROVENANCE_URL')
+  })
+
+  it('rejects unsafe source preflight targets before HTTP', async () => {
+    await expect(probePublicSourceUrl('http://example.com/manual'))
+      .resolves.toEqual({
+        ok: false,
+        code: 'UNSAFE_PROVENANCE_URL',
+        retryable: false
+      })
+    await expect(probePublicSourceUrl('https://127.0.0.1/manual'))
+      .resolves.toMatchObject({ ok: false, code: 'UNSAFE_PROVENANCE_URL' })
   })
 
   it('trusts only explicitly configured proxy ranges', () => {

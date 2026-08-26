@@ -217,6 +217,7 @@ export function sanitizeDemoOverview(overview: Overview): Overview {
       stage: executor.stage,
       task_id: executor.task_id,
       task_type: executor.task_type,
+      model: executor.model,
       work_units: executor.work_units,
       work_unit: executor.work_unit,
       heartbeat_at: executor.heartbeat_at,
@@ -228,7 +229,8 @@ export function sanitizeDemoOverview(overview: Overview): Overview {
       reasoning_effort: circuit.reasoning_effort,
       state: circuit.state,
       next_retry_at: circuit.next_retry_at,
-      probe_executor_id: circuit.probe_executor_id
+      probe_executor_id: circuit.probe_executor_id,
+      fallback_model: circuit.fallback_model
     })),
     active_work: overview.active_work
       ? {

@@ -112,6 +112,11 @@ import { IOS_XE_SEED_KNOWLEDGE } from '../src/seed-data/ios-xe-knowledge.js'
 const { Pool } = pg
 const describeIntegration = integrationDatabaseUrl ? describe : describe.skip
 const siteAdminActorId = '00000000-0000-4000-8000-000000000001'
+const successfulSourceProbe = async (url: string) => ({
+  ok: true as const,
+  finalUrl: url,
+  mediaType: 'text/html'
+})
 
 function signedAdminHeaders(
   config: ReturnType<typeof createTestConfig>,
@@ -211,6 +216,104 @@ describeIntegration('PostgreSQL integration', () => {
       }
     })
   }
+
+  it('keeps a single active demand diagnosis across all demands', async () => {
+    const client = await database.connect()
+    try {
+      await client.query('BEGIN')
+      await client.query(
+        `UPDATE pipeline_tasks
+            SET status = 'cancelled', completed_at = now(), updated_at = now()
+          WHERE task_type = 'demand_diagnosis'
+            AND status IN ('queued', 'claimed', 'running')`,
+      )
+      const transactional = client as unknown as Database
+      await queueUnknownKnowledgeDemand(
+        transactional,
+        'query_network_knowledge',
+        {
+          question: `How do I validate global diagnosis A ${randomUUID()}?`,
+          context: { vendor: 'Cisco', operating_system: 'IOS XE' }
+        },
+        { unknown: true, context: { vendor: 'Cisco', operating_system: 'IOS XE' } },
+      )
+      await queueUnknownKnowledgeDemand(
+        transactional,
+        'query_network_knowledge',
+        {
+          question: `How do I validate global diagnosis B ${randomUUID()}?`,
+          context: { vendor: 'Cisco', operating_system: 'IOS XE' }
+        },
+        { unknown: true, context: { vendor: 'Cisco', operating_system: 'IOS XE' } },
+      )
+      const transactionDatabase = {
+        connect: async () => ({
+          query: (sql: string, parameters?: unknown[]) =>
+            /^(BEGIN|COMMIT|ROLLBACK)$/.test(sql.trim())
+              ? Promise.resolve({ rows: [] })
+              : client.query(sql, parameters),
+          release: () => undefined
+        })
+      } as unknown as Database
+      await ensurePipelineWork(transactionDatabase)
+      const active = await client.query<{ count: number }>(
+        `SELECT count(*)::int AS count
+           FROM pipeline_tasks
+          WHERE task_type = 'demand_diagnosis'
+            AND status IN ('queued', 'claimed', 'running')`,
+      )
+      expect(active.rows[0]?.count).toBe(1)
+    } finally {
+      await client.query('ROLLBACK')
+      client.release()
+    }
+  })
+
+  it('does not reopen a covered discovery target before next_check_at', async () => {
+    const client = await database.connect()
+    try {
+      await client.query('BEGIN')
+      await client.query(
+        `UPDATE pipeline_tasks
+            SET status = 'cancelled', completed_at = now(), updated_at = now()
+          WHERE status IN ('queued', 'claimed', 'running');
+         UPDATE coverage_targets SET status = 'paused', updated_at = now();
+         UPDATE pipeline_settings
+            SET enabled = true, max_concurrent_ai_runs = 4,
+                source_buffer_target = 100, updated_at = now();`,
+      )
+      const target = await client.query<{ id: string }>(
+        `INSERT INTO coverage_targets (
+           vendor_slug, operating_system_slug, document_role,
+           status, priority, next_check_at
+         ) VALUES ($1, $2, 'commands', 'covered', 100,
+                   now() + interval '1 day')
+         RETURNING id`,
+        [`future-${randomUUID()}`, `future-os-${randomUUID()}`],
+      )
+      const transactionDatabase = {
+        connect: async () => ({
+          query: (sql: string, parameters?: unknown[]) =>
+            /^(BEGIN|COMMIT|ROLLBACK)$/.test(sql.trim())
+              ? Promise.resolve({ rows: [] })
+              : client.query(sql, parameters),
+          release: () => undefined
+        })
+      } as unknown as Database
+      await ensurePipelineWork(transactionDatabase)
+      const queued = await client.query<{ count: number }>(
+        `SELECT count(*)::int AS count FROM pipeline_tasks
+          WHERE coverage_target_id = $1
+            AND task_type IN ('source_discovery', 'source_refresh')
+            AND status IN ('queued', 'claimed', 'running')`,
+        [target.rows[0]!.id],
+      )
+      expect(queued.rows[0]?.count).toBe(0)
+    } finally {
+      await client.query('ROLLBACK')
+      client.release()
+    }
+  })
 
   it('journals an unanswered MCP request and queues one priority demand', async () => {
     const client = await database.connect()
@@ -579,6 +682,7 @@ describeIntegration('PostgreSQL integration', () => {
         }]
       },
       'demand-source-reuse-test',
+      successfulSourceProbe,
     )
     expect(firstResult).toMatchObject({
       inserted_sources: 0,
@@ -708,6 +812,7 @@ describeIntegration('PostgreSQL integration', () => {
         }]
       },
       'demand-source-reuse-test',
+      successfulSourceProbe,
     )
     expect(secondResult).toMatchObject({
       inserted_sources: 0,
@@ -4047,6 +4152,7 @@ describeIntegration('PostgreSQL integration', () => {
         }]
       },
       'integration-pipeline-coordinator',
+      successfulSourceProbe,
     )
     expect(discoveryResult).toMatchObject({
       inserted_sources: 1,
@@ -4425,7 +4531,7 @@ describeIntegration('PostgreSQL integration', () => {
       expect(retryableOmission.rows[0]).toMatchObject({
         status: 'deep_review',
         resolution_code: 'deep_reviewer_omitted',
-        deep_review_batch_limit: 10
+        deep_review_batch_limit: 4
       })
       await recordAgentRunResult(database, {
         agent_run_id: String(mediumReview['agent_run_id']),
@@ -4762,6 +4868,7 @@ describeIntegration('PostgreSQL integration', () => {
           }]
         },
         'integration-pipeline-coordinator',
+        successfulSourceProbe,
       )
       expect(duplicateResult).toMatchObject({
         inserted_sources: 0,
@@ -5106,8 +5213,8 @@ describeIntegration('PostgreSQL integration', () => {
         output_tokens: 0,
         reasoning_output_tokens: 0,
         duration_ms: 1,
-        error_code: 'CODEX_PROCESS_FAILED',
-        diagnostic_code: 'CODEX_PROCESS_FAILED',
+        error_code: 'CODEX_MODEL_UNAVAILABLE',
+        diagnostic_code: 'CODEX_MODEL_UNAVAILABLE',
         diagnostic_fingerprint: fingerprint,
       })
       await database.query(
@@ -5500,7 +5607,15 @@ describeIntegration('PostgreSQL integration', () => {
          'pipeline-executor-0' || executor,
          'overview-circuit-' || executor,
          now(),
-         jsonb_build_object('status', 'standby')
+         jsonb_build_object(
+           'status',
+           'standby',
+           'reason',
+           CASE
+             WHEN executor = 2 THEN 'circuit_cooldown'
+             ELSE 'scheduler_refill'
+           END
+         )
        FROM generate_series(1, 4) executor
        ON CONFLICT (worker_name)
        DO UPDATE SET
@@ -5542,7 +5657,7 @@ describeIntegration('PostgreSQL integration', () => {
     await database.query('DELETE FROM pipeline_ai_circuits')
   })
 
-  it('does not create an agent run when a circuit has no alternative work', async () => {
+  it('routes one marked Medium attempt through Terra while Luna cools down', async () => {
     const suffix = randomUUID().replaceAll('-', '').slice(0, 12)
     await database.query(
       `UPDATE pipeline_tasks
@@ -5607,24 +5722,36 @@ describeIntegration('PostgreSQL integration', () => {
          now() + interval '5 minutes'
        )`,
     )
-    const before = await database.query<{ count: number }>(
-      `SELECT count(*)::int AS count FROM agent_runs`,
-    )
-
     const claim = await claimPipelineTask(
       database,
       config,
       'pipeline-executor-04',
       'pipeline-executor-04:no-empty-circuit-run',
     )
-    const after = await database.query<{ count: number }>(
-      `SELECT count(*)::int AS count FROM agent_runs`,
-    )
-
     expect(claim).toMatchObject({
-      pipeline_state: 'scoped_ai_circuit_open'
+      task_type: 'candidate_deep_review',
+      requested_model: 'gpt-5.6-terra',
+      requested_reasoning_effort: 'medium'
     })
-    expect(after.rows[0]?.count).toBe(before.rows[0]?.count)
+    const run = await database.query<{ model: string }>(
+      `SELECT model FROM agent_runs WHERE id = $1`,
+      [String(claim['agent_run_id'])],
+    )
+    expect(run.rows[0]?.model).toBe('gpt-5.6-terra')
+    await recordAgentRunResult(database, {
+      agent_run_id: String(claim['agent_run_id']),
+      status: 'failed',
+      input_tokens: 0,
+      cached_input_tokens: 0,
+      output_tokens: 0,
+      reasoning_output_tokens: 0,
+      duration_ms: 1,
+      error_code: 'TERRA_FALLBACK_FAILED'
+    })
+    const stillOpen = await database.query<{ count: number }>(
+      `SELECT count(*)::int AS count FROM pipeline_ai_circuits`,
+    )
+    expect(stillOpen.rows[0]?.count).toBe(1)
     await database.query('DELETE FROM pipeline_ai_circuits')
   })
 
@@ -5874,7 +6001,7 @@ describeIntegration('PostgreSQL integration', () => {
     })
   })
 
-  it('reserves one discovery claim when only active targets remain', async () => {
+  it('does not reopen future active targets to fill an idle lane', async () => {
     const suffix = randomUUID().replaceAll('-', '')
     await database.query(
       `UPDATE pipeline_tasks
@@ -5932,31 +6059,16 @@ describeIntegration('PostgreSQL integration', () => {
     await ensurePipelineWork(database)
     await ensurePipelineWork(database)
     const reservedDiscovery = await database.query<{
-      id: string
-      status: string
       matching_count: number
     }>(
       `SELECT
-         latest.id,
-         latest.status,
-         (
-           SELECT count(*)::int
-           FROM pipeline_tasks task
-           WHERE task.task_type = 'source_discovery'
-             AND task.status IN ('queued', 'claimed', 'running')
-             AND task.knowledge_demand_id IS NULL
-         ) AS matching_count
-       FROM pipeline_tasks latest
-       WHERE latest.task_type = 'source_discovery'
-         AND latest.status = 'queued'
-         AND latest.knowledge_demand_id IS NULL
-       ORDER BY latest.created_at DESC
-       LIMIT 1`,
+         count(*)::int AS matching_count
+       FROM pipeline_tasks task
+       WHERE task.task_type = 'source_discovery'
+         AND task.status IN ('queued', 'claimed', 'running')
+         AND task.knowledge_demand_id IS NULL`,
     )
-    expect(reservedDiscovery.rows[0]).toMatchObject({
-      status: 'queued',
-      matching_count: 1
-    })
+    expect(reservedDiscovery.rows[0]?.matching_count).toBe(0)
     expect(deepTasks.rows).toHaveLength(3)
 
     await database.query(
@@ -5964,12 +6076,8 @@ describeIntegration('PostgreSQL integration', () => {
           SET status = 'cancelled',
               completed_at = now(),
               updated_at = now()
-        WHERE id = ANY($1::uuid[])
-           OR id = $2`,
-      [
-        deepTasks.rows.map((task) => task.id),
-        reservedDiscovery.rows[0]!.id
-      ],
+        WHERE id = ANY($1::uuid[])`,
+      [deepTasks.rows.map((task) => task.id)],
     )
   })
 
@@ -6159,6 +6267,11 @@ describeIntegration('PostgreSQL integration', () => {
         )
       }
       if (targetId) {
+        await database.query(
+          `DELETE FROM pipeline_tasks
+            WHERE coverage_target_id = $1`,
+          [targetId],
+        )
         await database.query(
           'DELETE FROM coverage_targets WHERE id = $1',
           [targetId],

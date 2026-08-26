@@ -325,6 +325,8 @@ export const candidateRevisionSchema = z.object({
   question_patterns: z.array(z.string().trim().min(3).max(300)).min(1).max(20),
   cli_mode: z.string().trim().min(1).max(120).optional(),
   command: z.string().trim().min(1).max(2_000).optional(),
+  syntax_options: z.array(z.string().trim().min(1).max(1_000))
+    .max(100).optional(),
   procedure: z.array(z.string().trim().min(1).max(1_000)).max(50).default([]),
   prerequisites: z.array(z.string().trim().min(1).max(1_000)).max(30).default([]),
   risks: z.array(z.string().trim().min(1).max(1_000)).max(30).default([]),

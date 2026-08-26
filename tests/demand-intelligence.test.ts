@@ -100,6 +100,38 @@ describe('Demand Intelligence', () => {
     })
   })
 
+  it('bounds diagnosis text and arrays to the strict persisted schema', () => {
+    const parsed = parseDemandDiagnosisAgentArtifact({
+      failure_class: 'missing_knowledge',
+      answer_status: 'unknown',
+      canonical_context: {
+        vendor: 'V'.repeat(400),
+        operating_system: 'ONIE',
+        runtime_mode: null
+      },
+      subquestions: Array.from({ length: 20 }, (_, index) => ({
+        capability: `capability_${index}`,
+        label: `Capability ${index}`,
+        status: 'missing',
+        explanation: `Missing evidence for capability ${index}.`,
+        search_terms: Array.from({ length: 20 }, (__, term) => `term ${term}`)
+      })),
+      existing_coverage_summary: 'E'.repeat(2_000),
+      missing_capabilities: Array.from({ length: 20 }, (_, index) => `capability_${index}`),
+      search_expansions: Array.from({ length: 30 }, (_, index) => `search ${index}`),
+      document_roles: Array.from({ length: 10 }, () => 'commands'),
+      recommended_action: 'targeted_discovery',
+      reasoning_summary: 'R'.repeat(2_000)
+    })
+    expect(parsed.canonical_context.vendor).toHaveLength(240)
+    expect(parsed.subquestions).toHaveLength(12)
+    expect(parsed.subquestions[0]?.search_terms).toHaveLength(12)
+    expect(parsed.missing_capabilities).toHaveLength(12)
+    expect(parsed.search_expansions).toHaveLength(20)
+    expect(parsed.document_roles).toEqual(['commands'])
+    expect(parsed.reasoning_summary).toHaveLength(1_500)
+  })
+
   it('resolves ONIE Rescue as a software family plus runtime mode', () => {
     expect(normalizeOperatingSystemIntent({
       operatingSystem: 'ONIE Rescue'

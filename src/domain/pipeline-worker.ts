@@ -49,7 +49,10 @@ import {
   createKnowledgeRevision,
   publishKnowledgeBatch
 } from './publication.js'
-import { recordPipelineTransition } from './pipeline-transitions.js'
+import {
+  recordPipelineTransition,
+  recordPipelineTransitions
+} from './pipeline-transitions.js'
 import { enforceKnowledgeRisk } from './risk.js'
 import { maxSourceFragmentBytes } from './pipeline-limits.js'
 
@@ -63,7 +66,8 @@ const sourcePayloadSchema = z.object({
   document_type: z.string().min(1),
   title: z.string().min(1),
   document_version: z.string().nullable().optional(),
-  document_date: z.string().nullable().optional()
+  document_date: z.string().nullable().optional(),
+  deterministic_backfill: z.boolean().optional()
 })
 
 const allowedMediaTypes = new Set([
@@ -1148,6 +1152,7 @@ async function convertSource(
 
 async function chunkSource(
   database: Database,
+  config: AppConfig,
   claimed: ClaimedMechanicalTask,
 ): Promise<Record<string, unknown>> {
   const payload = sourcePayloadSchema.parse(claimed.task.payload)
@@ -1208,6 +1213,7 @@ async function chunkSource(
   })
   const fastPath = await runDeterministicFastPath(
     database,
+    config,
     claimed.task,
     row.id,
     payload,
@@ -1244,8 +1250,44 @@ async function chunkSource(
   }
 }
 
+export function deterministicCandidateInitialStatus(input: {
+  readyForPublication: boolean
+  dangerous: boolean
+  confidence: number
+  qualityScore: number
+  autoPublishConfidence: number
+}): 'analyzed' | 'verified' {
+  return input.readyForPublication &&
+    !input.dangerous &&
+    input.confidence >= input.autoPublishConfidence &&
+    input.qualityScore >= 0.85
+    ? 'verified'
+    : 'analyzed'
+}
+
+export function deterministicCandidateEligibleForFastPath(input: {
+  fragmentFullyHandled: boolean
+  readyForPublication: boolean
+}): boolean {
+  return input.fragmentFullyHandled || input.readyForPublication
+}
+
+async function ensureDeterministicCoverageContext(
+  database: Database,
+  target: {
+    vendor_slug: string
+    operating_system_slug: string
+  },
+): Promise<void> {
+  await database.query(
+    'SELECT ensure_deterministic_coverage_context($1, $2)',
+    [target.vendor_slug, target.operating_system_slug],
+  )
+}
+
 async function runDeterministicFastPath(
   database: Database,
+  config: AppConfig,
   task: PipelineTaskRow,
   artifactId: string,
   source: z.infer<typeof sourcePayloadSchema>,
@@ -1285,12 +1327,9 @@ async function runDeterministicFastPath(
   const extractionContext = {
     vendor_slug: target.vendor_slug,
     operating_system_slug: target.operating_system_slug,
-    platform_slug:
-      target.model && /^[a-z0-9][a-z0-9-]{1,62}$/.test(target.model)
-        ? target.model
-        : null,
-    version_min: target.version_branch,
-    version_max: target.version_branch
+    platform_slug: null,
+    version_min: null,
+    version_max: null
   }
   const verifiedAt = new Date().toISOString().slice(0, 10)
   const supportProbe = {
@@ -1302,8 +1341,8 @@ async function runDeterministicFastPath(
   if (!extractor.supports(supportProbe)) {
     return { candidatesCreated: 0, fragmentsHandled: 0 }
   }
-
   let candidatesCreated = 0
+  let contextEnsured = false
   const handled = new Set<string>()
   let lastOrdinal = -1
   for (;;) {
@@ -1319,11 +1358,16 @@ async function runDeterministicFastPath(
          id, ordinal, section_title, source_locator, content, content_hash
        FROM source_fragments
        WHERE source_artifact_id = $1
-         AND status = 'queued'
+         AND ($4::boolean OR status = 'queued')
          AND ordinal > $2
        ORDER BY ordinal
        LIMIT $3`,
-      [artifactId, lastOrdinal, extractor.max_fragments_per_batch],
+      [
+        artifactId,
+        lastOrdinal,
+        extractor.max_fragments_per_batch,
+        source.deterministic_backfill === true
+      ],
     )
     if (fragments.rows.length === 0) break
     lastOrdinal = fragments.rows.at(-1)?.ordinal ?? lastOrdinal
@@ -1333,10 +1377,37 @@ async function runDeterministicFastPath(
       context: extractionContext,
       verified_at: verifiedAt
     })
+    const fullyHandledFragments = new Set(result.handled_fragment_ids)
+    if (!contextEnsured && source.canonical_url.startsWith('https://')) {
+      const hasValidatedCandidate = result.candidates.some((entry) => {
+        if (!deterministicCandidateEligibleForFastPath({
+          fragmentFullyHandled: fullyHandledFragments.has(entry.fragment_id),
+          readyForPublication: entry.ready_for_publication === true
+        })) return false
+        const parsed = networkDomainPack.candidateSchema.safeParse(
+          entry.candidate,
+        )
+        return parsed.success &&
+          networkDomainPack.validateCandidate(parsed.data).valid
+      })
+      if (hasValidatedCandidate) {
+        // Coverage targets can be newer than the static catalog seed. Register
+        // the exact context only after an acquired HTTPS document has yielded
+        // a schema-valid deterministic candidate. Otherwise publication sends
+        // valid records to an AI review that cannot repair missing catalog data.
+        await ensureDeterministicCoverageContext(database, target)
+        contextEnsured = true
+      }
+    }
     const demandRelevantFragments = new Set<string>()
     await withTransaction(database, async (client) => {
-      let batchCandidatesCreated = 0
+      let batchCandidatesReady = 0
+      let batchCandidatesForVerification = 0
       for (const entry of result.candidates) {
+        if (!deterministicCandidateEligibleForFastPath({
+          fragmentFullyHandled: fullyHandledFragments.has(entry.fragment_id),
+          readyForPublication: entry.ready_for_publication === true
+        })) continue
         const parsed = networkDomainPack.candidateSchema.parse(
           entry.candidate,
         )
@@ -1355,34 +1426,50 @@ async function runDeterministicFastPath(
         }
         demandRelevantFragments.add(entry.fragment_id)
         const serialized = JSON.stringify(candidate)
-        const inserted = await client.query<{ id: string }>(
+        const candidateStatus = deterministicCandidateInitialStatus({
+          readyForPublication: entry.ready_for_publication === true,
+          dangerous: candidate.dangerous,
+          confidence: candidate.confidence,
+          qualityScore: candidate.quality_score,
+          autoPublishConfidence: config.autoPublishConfidence
+        })
+        const inserted = await client.query<{
+          id: string
+          status: 'analyzed' | 'verified'
+        }>(
           `INSERT INTO knowledge_candidates (
              pipeline_task_id,
              source_fragment_id,
              stable_key,
              payload,
              content_hash,
+             status,
              dangerous,
              confidence,
              quality_score
            )
-           VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8)
+           VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9)
            ON CONFLICT (content_hash) DO NOTHING
-           RETURNING id`,
+           RETURNING id, status`,
           [
             task.id,
             entry.fragment_id,
             candidate.stable_key,
             serialized,
             sha256Label(serialized),
+            candidateStatus,
             candidate.dangerous,
             candidate.confidence,
             candidate.quality_score
           ],
         )
         if (inserted.rows[0]) {
+          if (inserted.rows[0].status === 'verified') {
+            batchCandidatesReady += 1
+          } else {
+            batchCandidatesForVerification += 1
+          }
           candidatesCreated += 1
-          batchCandidatesCreated += 1
         }
       }
       const handledFragmentIds = demandQuestion
@@ -1393,23 +1480,43 @@ async function runDeterministicFastPath(
       if (handledFragmentIds.length > 0) {
         await client.query(
           `UPDATE source_fragments
-              SET status = 'analyzed',
+              SET status = CASE
+                    WHEN EXISTS (
+                      SELECT 1
+                      FROM knowledge_candidates candidate
+                      WHERE candidate.pipeline_task_id = $3
+                        AND candidate.source_fragment_id = source_fragments.id
+                        AND candidate.status = 'analyzed'
+                    ) THEN 'analyzed'
+                    ELSE 'verified'
+                  END,
                   updated_at = now()
             WHERE id = ANY($1::uuid[])
               AND source_artifact_id = $2
               AND status = 'queued'`,
-          [handledFragmentIds, artifactId],
+          [handledFragmentIds, artifactId, task.id],
         )
       }
-      await recordPipelineTransition(client, {
-        scope: 'record',
-        fromStage: 'analyze',
-        toStage: 'verify',
-        count: batchCandidatesCreated,
-        kind: 'progress',
-        taskId: task.id,
-        dedupeSuffix: `deterministic-fast-path:${lastOrdinal}`
-      })
+      await recordPipelineTransitions(client, [
+        {
+          scope: 'record',
+          fromStage: 'analyze',
+          toStage: 'ready',
+          count: batchCandidatesReady,
+          kind: 'progress',
+          taskId: task.id,
+          dedupeSuffix: `deterministic-fast-path:${lastOrdinal}:ready`
+        },
+        {
+          scope: 'record',
+          fromStage: 'analyze',
+          toStage: 'verify',
+          count: batchCandidatesForVerification,
+          kind: 'progress',
+          taskId: task.id,
+          dedupeSuffix: `deterministic-fast-path:${lastOrdinal}:verify`
+        }
+      ])
     })
     const handledFragmentIds = demandQuestion
       ? result.handled_fragment_ids.filter((id) =>
@@ -1936,7 +2043,7 @@ async function executeMechanicalTask(
     case 'source_conversion':
       return convertSource(database, claimed)
     case 'source_chunking':
-      return chunkSource(database, claimed)
+      return chunkSource(database, config, claimed)
     case 'candidate_publication':
       return publishCandidateBatch(database, claimed)
     case 'source_publication':

@@ -1,5 +1,6 @@
 import { lookup as lookupCallback } from 'node:dns'
 import { lookup } from 'node:dns/promises'
+import { request as httpsRequest } from 'node:https'
 import { isIP } from 'node:net'
 import type { LookupFunction } from 'node:net'
 
@@ -147,7 +148,7 @@ export const safePublicLookup: LookupFunction = (
   )
 }
 
-export async function assertSafeProvenanceUrl(value: string): Promise<void> {
+export function assertSafePublicSourceUrlSyntax(value: string): void {
   const url = new URL(value)
   if (
     url.protocol !== 'https:' ||
@@ -167,8 +168,13 @@ export async function assertSafeProvenanceUrl(value: string): Promise<void> {
     if (isBlockedAddress(url.hostname)) {
       throw new Error('UNSAFE_PROVENANCE_URL')
     }
-    return
   }
+}
+
+export async function assertSafeProvenanceUrl(value: string): Promise<void> {
+  assertSafePublicSourceUrlSyntax(value)
+  const url = new URL(value)
+  if (isIP(url.hostname)) return
 
   const addresses = await lookup(url.hostname, { all: true, verbatim: true })
   if (
@@ -177,4 +183,100 @@ export async function assertSafeProvenanceUrl(value: string): Promise<void> {
   ) {
     throw new Error('UNSAFE_PROVENANCE_URL')
   }
+}
+
+const publicSourceMediaTypes = new Set([
+  'application/pdf',
+  'application/xhtml+xml',
+  'text/html',
+  'text/plain'
+])
+
+export type PublicSourceProbe =
+  | { ok: true; finalUrl: string; mediaType: string }
+  | { ok: false; code: string; retryable: boolean }
+
+export async function probePublicSourceUrl(
+  initialUrl: string,
+  timeoutMs = 5_000,
+): Promise<PublicSourceProbe> {
+  let currentUrl = initialUrl
+  try {
+    for (let redirects = 0; redirects <= 5; redirects += 1) {
+      assertSafePublicSourceUrlSyntax(currentUrl)
+      const response = await new Promise<{
+        status: number
+        headers: NodeJS.Dict<string | string[]>
+      }>((resolvePromise, rejectPromise) => {
+        const request = httpsRequest(
+          currentUrl,
+          {
+            method: 'GET',
+            agent: false,
+            lookup: safePublicLookup,
+            signal: AbortSignal.timeout(timeoutMs),
+            headers: {
+              accept:
+                'application/pdf,text/html,application/xhtml+xml,text/plain;q=0.9',
+              range: 'bytes=0-1023',
+              'user-agent': 'CliDeck-MCP-Source-Preflight/0.8'
+            }
+          },
+          (incoming) => {
+            resolvePromise({
+              status: incoming.statusCode ?? 0,
+              headers: incoming.headers
+            })
+            incoming.destroy()
+          },
+        )
+        request.once('error', rejectPromise)
+        request.end()
+      })
+      if (response.status >= 300 && response.status < 400) {
+        const rawLocation = response.headers['location']
+        const location = Array.isArray(rawLocation)
+          ? rawLocation[0]
+          : rawLocation
+        if (!location || redirects === 5) {
+          return { ok: false, code: 'SOURCE_REDIRECT_INVALID', retryable: false }
+        }
+        currentUrl = new URL(location, currentUrl).toString()
+        continue
+      }
+      if (response.status !== 200 && response.status !== 206) {
+        return {
+          ok: false,
+          code: `SOURCE_HTTP_${response.status}`,
+          retryable:
+            response.status === 403 ||
+            response.status === 408 ||
+            response.status === 429 ||
+            response.status >= 500
+        }
+      }
+      const rawContentType = response.headers['content-type']
+      const contentType = Array.isArray(rawContentType)
+        ? rawContentType[0]
+        : rawContentType
+      const mediaType = (contentType ?? '')
+        .split(';')[0]!.trim().toLowerCase()
+      if (!publicSourceMediaTypes.has(mediaType)) {
+        return { ok: false, code: 'SOURCE_MIME_NOT_ALLOWED', retryable: false }
+      }
+      const final = new URL(currentUrl)
+      final.hash = ''
+      return { ok: true, finalUrl: final.toString(), mediaType }
+    }
+  } catch (error) {
+    const code = error instanceof Error && error.message === 'UNSAFE_PROVENANCE_URL'
+      ? 'UNSAFE_PROVENANCE_URL'
+      : 'SOURCE_PREFLIGHT_UNAVAILABLE'
+    return {
+      ok: false,
+      code,
+      retryable: code !== 'UNSAFE_PROVENANCE_URL'
+    }
+  }
+  return { ok: false, code: 'SOURCE_REDIRECT_INVALID', retryable: false }
 }

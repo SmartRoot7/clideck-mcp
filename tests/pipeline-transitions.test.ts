@@ -276,6 +276,7 @@ describe('pipeline transition route contract', () => {
       'source:downloaded:convert',
       'source:convert:chunk',
       'source:chunk:analyze',
+      'record:analyze:ready',
       'record:analyze:verify',
       'record:verify:ready',
       'record:verify:deep_low',

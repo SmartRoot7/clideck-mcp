@@ -40,7 +40,11 @@ export function assertPipelineAiPolicy(input: {
   model: string
   reasoning: string
 }): void {
-  if (input.model !== 'gpt-5.6-luna') {
+  const fallbackEligible =
+    input.model === 'gpt-5.6-terra' &&
+    input.reasoning === 'medium' &&
+    ['candidate_deep_review', 'demand_diagnosis'].includes(input.taskType)
+  if (input.model !== 'gpt-5.6-luna' && !fallbackEligible) {
     throw new Error('PIPELINE_LUNA_MODEL_REQUIRED')
   }
   if (

@@ -176,7 +176,16 @@ async function resolveFamily(
         OR alias.normalized_alias = $2
         OR alias.normalized_alias % $2
      GROUP BY family.id
-     ORDER BY score DESC, family.slug
+     ORDER BY
+       CASE
+         WHEN lower(family.slug) = lower($1)
+           OR lower(family.display_name) = lower($1)
+           THEN 0
+         ELSE 1
+       END,
+       score DESC,
+       CASE family.portability_mode WHEN 'portable' THEN 0 ELSE 1 END,
+       family.slug
      LIMIT 1`,
     [operatingSystem, normalized],
   )

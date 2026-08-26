@@ -38,10 +38,15 @@ import {
 import {
   pipelineExecutorIds,
   pipelineExecutorPaths,
+  pipelineFallbackModel,
   pipelineModel,
   pipelineReasoning,
   normalizeTaskReasoning
 } from './pipeline-runtime.js'
+import {
+  containsWebSearchEvent,
+  retryBridgeArtifactSubmission
+} from './pipeline-coordinator-utils.js'
 import {
   assertArtifactContainsNoSecrets,
   codexExecutorArguments,
@@ -84,6 +89,8 @@ const claimedTaskSchema = z.object({
   ]),
   stage: z.string(),
   requested_reasoning_effort: z.enum(['low', 'medium']).default('low'),
+  requested_model: z.enum([pipelineModel, pipelineFallbackModel])
+    .default(pipelineModel),
   payload: z.record(z.string(), z.unknown())
 })
 
@@ -228,6 +235,10 @@ async function runClient(
       lease_until: result['lease_until'],
       requested_reasoning_effort:
         normalizeTaskReasoning(result['requested_reasoning_effort']),
+      requested_model:
+        result['requested_model'] === pipelineFallbackModel
+          ? pipelineFallbackModel
+          : pipelineModel,
       payload
     }
     await Promise.all([
@@ -377,14 +388,14 @@ short search expansions and official-document roles only when discovery is
 needed. Return exactly the strict diagnosis object requested by the schema.
 `,
     source_discovery: `
-Find 10-25 unique official, public, HTTPS vendor documents that exactly match the
+Find 1-5 unique official, public, HTTPS vendor documents that exactly match the
 coverage target. Do not use authenticated, mirrored, forum, blog, or unofficial
 sources. Prefer the most current uncovered document. Choose substantive leaf
 pages that contain command syntax, procedures, diagnostics, upgrade guidance,
 release details, or advisory facts. Never return a book landing page, table of
 contents, alphabetic command index, product list, search page, or document
-catalog. Use one focused web search and open at most three likely official
-results only far enough to confirm that each returned URL contains substantive
+catalog. You must use the web-search tool. Use one focused search and open every
+returned official result far enough to confirm that its exact URL contains substantive
 knowledge. Do not download or read a full manual; the deterministic Acquire
 stage performs that work. Submit:
 If the leased payload contains knowledge_demand, this is a real unanswered user
@@ -408,13 +419,13 @@ If no qualifying source is found, submit:
 {"sources":[],"rejection_reason":"bounded reason describing the search result"}
 `,
     fragment_analysis: `
-Analyze every leased fragment. For each useful fragment, create one or more
-candidate entries with fragment_id and a complete candidate object. Explicitly
-list every fragment with no publishable fact under rejected_fragments with a
-bounded reason. Never omit a fragment. Create at most ten high-value candidates
-per fragment and at most 50 candidates total per run. When the evidence supports
-more than six distinct high-value facts, continue extracting up to ten instead
-of stopping at six. Treat commands as dangerous whenever their effect is
+Analyze every leased fragment exhaustively. For each useful fragment, create a
+candidate entry for every distinct documented command, option, procedure, or
+operational fact supported by that fragment. Do not select only highlights and
+do not silently omit repeated command-reference sections. Explicitly list every
+fragment with no publishable fact under rejected_fragments with a bounded
+reason. Never omit a fragment. Return at most 50 candidates total per run.
+Treat commands as dangerous whenever their effect is
 uncertain. Preserve only the model and version applicability directly supported
 by the evidence. Never inherit an exact model or version solely from the user
 question or coverage target. When an official fragment supports generic IOS or
@@ -627,6 +638,7 @@ async function runCodex(
   cancelled: boolean
   durationMs: number
   usage: Usage
+  webSearchUsed: boolean
   diagnosticCode?: string
   diagnosticFingerprint?: string
 }> {
@@ -655,7 +667,7 @@ async function runCodex(
       environment.CLIDECK_PIPELINE_CODEX_BINARY,
       codexExecutorArguments({
         taskType: task.task_type,
-        model: environment.CLIDECK_PIPELINE_MODEL,
+        model: task.requested_model,
         reasoning: task.requested_reasoning_effort,
         outputPath: agentOutputPath,
         outputSchemaPath: agentOutputSchemaPath,
@@ -672,6 +684,7 @@ async function runCodex(
     let timedOut = false
     let paused = false
     let cancelled = false
+    let webSearchUsed = false
     let heartbeatRunning = false
     let forceKillTimer: NodeJS.Timeout | undefined
     const terminateChild = () => {
@@ -695,7 +708,9 @@ async function runCodex(
         const line = lineBuffer.slice(0, newline)
         lineBuffer = lineBuffer.slice(newline + 1)
         try {
-          updateUsage(usage, JSON.parse(line))
+          const event: unknown = JSON.parse(line)
+          updateUsage(usage, event)
+          webSearchUsed ||= containsWebSearchEvent(event)
         } catch {
           // Codex JSONL may include a partial/non-JSON diagnostic; never persist it.
         }
@@ -744,6 +759,7 @@ async function runCodex(
         cancelled,
         durationMs: Date.now() - startedAt,
         usage,
+        webSearchUsed,
         ...((code ?? 1) !== 0
           ? {
               diagnosticCode: classifyCodexDiagnostic(stderr),
@@ -949,7 +965,18 @@ async function submitAgentArtifact(
     candidate_deep_review: 'submit-deep-review',
     expert_research: 'submit-expert'
   }[task.task_type]
-  await runClient(action, submissionPath)
+  await retryBridgeArtifactSubmission({
+    submit: () => runClient(action, submissionPath).then(() => undefined),
+    isRecorded: () => runClient('status')
+      .then((status) => status['artifact_recorded'] === true)
+      .catch(() => false),
+    heartbeat: () => runClient('heartbeat')
+      .then((control) => control?.['should_stop'] !== true)
+      .catch(() => true),
+    sleep: (waitMs) => delay(waitMs, undefined, {
+      signal: abortController.signal
+    })
+  })
 }
 
 async function finishRun(
@@ -1081,16 +1108,27 @@ async function main(): Promise<void> {
         continue
       }
       if (run.exitCode === 0 && !run.timedOut) {
+        if (
+          ['source_discovery', 'source_refresh'].includes(task.task_type) &&
+          !run.webSearchUsed
+        ) {
+          throw new Error(
+            'WEB_SEARCH_NOT_OBSERVED: discovery must use the configured web-search tool.',
+          )
+        }
         await submitAgentArtifact(task)
         artifactSubmitted = true
       }
       const status = await runClient('status')
       const artifactRecorded = status['artifact_recorded'] === true
+      const processFailureCode = task.requested_model === pipelineFallbackModel
+        ? 'TERRA_FALLBACK_FAILED'
+        : run.diagnosticCode ?? 'CODEX_PROCESS_FAILED'
       if (!artifactRecorded) {
         const failureCode = run.timedOut
           ? 'AGENT_RUN_TIMEOUT'
           : run.exitCode !== 0
-            ? run.diagnosticCode ?? 'CODEX_PROCESS_FAILED'
+            ? processFailureCode
             : 'EMPTY_AGENT_RUN'
         await runClient(
           'fail',
@@ -1116,7 +1154,7 @@ async function main(): Promise<void> {
           : run.timedOut
             ? 'AGENT_RUN_TIMEOUT'
             : run.exitCode !== 0
-              ? run.diagnosticCode ?? 'CODEX_PROCESS_FAILED'
+              ? processFailureCode
               : 'EMPTY_AGENT_RUN',
         {
           exitCode: run.exitCode,
@@ -1153,7 +1191,9 @@ async function main(): Promise<void> {
       const failureCode = launchFailed
         ? 'AGENT_LAUNCH_FAILED'
         : retryablePlatformArtifact
-          ? 'CODEX_PROCESS_FAILED'
+          ? task.requested_model === pipelineFallbackModel
+            ? 'TERRA_FALLBACK_FAILED'
+            : 'CODEX_PROCESS_FAILED'
           : artifactRejected
           ? 'AGENT_ARTIFACT_REJECTED'
           : 'AGENT_REPORTING_FAILED'

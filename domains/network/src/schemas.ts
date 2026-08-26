@@ -74,6 +74,7 @@ export const networkKnowledgeCandidateSchema = z.strictObject({
   ).min(1).max(20),
   cli_mode: z.string().trim().min(1).max(120).optional(),
   command: z.string().trim().min(1).max(2_000).optional(),
+  syntax_options: z.array(boundedLine).max(100).optional(),
   procedure: z.array(boundedLine).max(50).default([]),
   prerequisites: z.array(boundedLine).max(30).default([]),
   risks: z.array(boundedLine).max(30).default([]),
@@ -135,6 +136,7 @@ export const networkPublicRecordSchema = z.strictObject({
   content: z.strictObject({
     cli_mode: z.string().nullable(),
     command: z.string().nullable(),
+    syntax_options: z.array(z.string()).default([]),
     procedure: z.array(z.string())
   }),
   prerequisites: z.array(z.string()),

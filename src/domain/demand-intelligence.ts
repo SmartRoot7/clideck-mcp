@@ -87,16 +87,31 @@ function objectValue(value: unknown): Record<string, unknown> {
     : {}
 }
 
-function nullableText(value: unknown): string | null {
+function nullableText(value: unknown, maxLength = Number.MAX_SAFE_INTEGER): string | null {
   return typeof value === 'string' && value.trim().length > 0
-    ? value.trim()
+    ? value.trim().slice(0, maxLength).trim()
     : null
 }
 
 function normalizeDiagnosisCapability(value: unknown): unknown {
-  return typeof value === 'string' && value.trim().length > 0
-    ? normalizeTopicSlug(value)
-    : value
+  if (typeof value !== 'string' || value.trim().length === 0) return value
+  const normalized = normalizeTopicSlug(value)
+    .slice(0, 63)
+    .replace(/-+$/, '')
+  return normalized.length >= 2 ? normalized : value
+}
+
+function boundedStringArray(
+  value: unknown,
+  maxItems: number,
+  maxLength: number,
+): unknown {
+  if (!Array.isArray(value)) return value
+  return [...new Set(value.flatMap((entry) => {
+    if (typeof entry !== 'string') return []
+    const text = entry.trim().slice(0, maxLength).trim()
+    return text.length >= 2 ? [text] : []
+  }))].slice(0, maxItems)
 }
 
 function normalizeDocumentRole(value: unknown): unknown {
@@ -137,7 +152,7 @@ function normalizeDemandDiagnosisAgentArtifact(
 ): Record<string, unknown> {
   const artifact = objectValue(value)
   const rawContext = objectValue(artifact['canonical_context'])
-  const operatingSystem = nullableText(rawContext['operating_system'])
+  const operatingSystem = nullableText(rawContext['operating_system'], 240)
   const runtimeMode = nullableText(rawContext['runtime_mode'])
   const shellEnvironment = nullableText(rawContext['shell_environment'])
   const normalizedIntent = normalizeOperatingSystemIntent({
@@ -153,36 +168,41 @@ function normalizeDemandDiagnosisAgentArtifact(
     failure_class: artifact['failure_class'],
     answer_status: artifact['answer_status'],
     canonical_context: {
-      vendor: nullableText(rawContext['vendor']),
-      model: nullableText(rawContext['model']),
+      vendor: nullableText(rawContext['vendor'], 240),
+      model: nullableText(rawContext['model'], 240),
       operating_system: normalizedIntent.familyRequest ?? operatingSystem,
-      version: nullableText(rawContext['version']),
+      version: nullableText(rawContext['version'], 64),
       runtime_mode: normalizedIntent.runtimeMode,
       shell_environment:
-        normalizedIntent.shellEnvironment ?? shellEnvironment
+        (normalizedIntent.shellEnvironment ?? shellEnvironment)?.slice(0, 120) ?? null
     },
     subquestions: Array.isArray(rawSubquestions)
-      ? rawSubquestions.map((value) => {
+      ? rawSubquestions.slice(0, 12).map((value) => {
           const part = objectValue(value)
           return {
             capability: normalizeDiagnosisCapability(part['capability']),
-            label: part['label'],
+            label: nullableText(part['label'], 120),
             status: part['status'],
-            explanation: part['explanation'],
-            search_terms: part['search_terms']
+            explanation: nullableText(part['explanation'], 600),
+            search_terms: boundedStringArray(part['search_terms'], 12, 120)
           }
         })
       : rawSubquestions,
-    existing_coverage_summary: artifact['existing_coverage_summary'],
+    existing_coverage_summary:
+      nullableText(artifact['existing_coverage_summary'], 1_000),
     missing_capabilities: Array.isArray(rawMissing)
-      ? rawMissing.map(normalizeDiagnosisCapability)
+      ? [...new Set(rawMissing.map(normalizeDiagnosisCapability))].slice(0, 12)
       : rawMissing,
-    search_expansions: artifact['search_expansions'],
+    search_expansions: boundedStringArray(
+      artifact['search_expansions'],
+      20,
+      160,
+    ),
     document_roles: Array.isArray(rawRoles)
-      ? rawRoles.map(normalizeDocumentRole)
+      ? [...new Set(rawRoles.map(normalizeDocumentRole))].slice(0, 6)
       : rawRoles,
     recommended_action: artifact['recommended_action'],
-    reasoning_summary: artifact['reasoning_summary']
+    reasoning_summary: nullableText(artifact['reasoning_summary'], 1_500)
   }
 }
 

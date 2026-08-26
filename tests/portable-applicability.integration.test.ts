@@ -54,6 +54,18 @@ describeIntegration('portable software applicability', () => {
          VALUES ($1, 'onie', 'ONIE')`,
         [dell.rows[0]!.id],
       )
+      const misleadingFamily = await client.query<{ id: string }>(
+        `INSERT INTO software_families (
+           slug, display_name, portability_mode, version_strategy
+         ) VALUES ($1, $2, 'vendor_specific', 'vendor')
+         RETURNING id`,
+        [`aaa-vendor-onie-${suffix}`, `Vendor ONIE ${suffix}`],
+      )
+      await client.query(
+        `INSERT INTO software_family_aliases (family_id, alias)
+         VALUES ($1, 'onie')`,
+        [misleadingFamily.rows[0]!.id],
+      )
       const platform = await client.query<{ id: string }>(
         `INSERT INTO platforms (vendor_id, slug, display_name)
          VALUES ($1, $2, $3)
@@ -134,6 +146,8 @@ describeIntegration('portable software applicability', () => {
           operating_system: 'ONIE'
         },
       )
+      expect(exactContext.software_family_slug).toBe('onie')
+      expect(exactContext.portable_operating_system).toBe(true)
       const exactAnswers = await searchKnowledge(
         client as unknown as Database,
         'How do I inspect ONIE system information?',

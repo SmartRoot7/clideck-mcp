@@ -10,7 +10,10 @@ import {
 } from '../crypto.js'
 import type { Database, DatabaseClient } from '../db.js'
 import { withTransaction } from '../db.js'
-import { assertSafeProvenanceUrl } from '../security/url-policy.js'
+import {
+  assertSafePublicSourceUrlSyntax,
+  probePublicSourceUrl
+} from '../security/url-policy.js'
 import { normalizeVendorVersion } from '../version.js'
 import {
   fillWeightedAiCapacity,
@@ -324,11 +327,13 @@ export const candidateVerificationArtifactSchema = z.object(
 export const candidateVerificationSubmissionSchema =
   pipelineLeaseSchema.extend(candidateVerificationArtifactShape)
 
+const candidateVerificationAgentDecisionSchema = z.object({
+  candidate_index: z.number().int().min(0).max(99),
+  ...candidateVerificationDecisionShape
+})
+
 export const candidateVerificationAgentArtifactSchema = z.object({
-  decisions: z.array(z.object({
-    candidate_index: z.number().int().min(0).max(99),
-    ...candidateVerificationDecisionShape
-  })).min(1).max(100)
+  decisions: z.array(candidateVerificationAgentDecisionSchema).min(1).max(100)
 })
 
 const candidateDeepReviewDecisionShape = {
@@ -404,11 +409,13 @@ export const candidateDeepReviewArtifactSchema = z.object(
 export const candidateDeepReviewSubmissionSchema =
   pipelineLeaseSchema.extend(candidateDeepReviewArtifactShape)
 
+const candidateDeepReviewAgentDecisionSchema = z.object({
+  candidate_index: z.number().int().min(0).max(19),
+  ...candidateDeepReviewSubmissionDecisionShape
+})
+
 export const candidateDeepReviewAgentArtifactSchema = z.object({
-  decisions: z.array(z.object({
-    candidate_index: z.number().int().min(0).max(19),
-    ...candidateDeepReviewSubmissionDecisionShape
-  })).min(1).max(20)
+  decisions: z.array(candidateDeepReviewAgentDecisionSchema).min(1).max(20)
 })
 
 /**
@@ -469,19 +476,12 @@ export function materializeCandidateDeepReviewArtifact(
   candidateIds: string[],
 ): z.infer<typeof candidateDeepReviewArtifactSchema> {
   const artifact = candidateDeepReviewAgentArtifactSchema.parse(
-    stripUntrustedDeepReviewProvenance(unparsedArtifact),
+    normalizeLeasedDecisionIndexes(
+      stripUntrustedDeepReviewProvenance(unparsedArtifact),
+      candidateIds.length,
+      candidateDeepReviewAgentDecisionSchema,
+    ),
   )
-  const indexes = new Set(
-    artifact.decisions.map((decision) => decision.candidate_index),
-  )
-  if (
-    indexes.size !== artifact.decisions.length ||
-    [...indexes].some((index) => index >= candidateIds.length)
-  ) {
-    throw new Error(
-      'Deep-review candidate indexes must be unique and leased.',
-    )
-  }
   return candidateDeepReviewArtifactSchema.parse({
     decisions: artifact.decisions.map((decision) => {
       const { candidate_index: candidateIndex, ...result } = decision
@@ -524,20 +524,14 @@ export function materializeCandidateVerificationArtifact(
   unparsedArtifact: unknown,
   candidateIds: string[],
 ): z.infer<typeof candidateVerificationArtifactSchema> {
-  const artifact = candidateVerificationAgentArtifactSchema.parse(
+  const normalized = normalizeLeasedDecisionIndexes(
     unparsedArtifact,
+    candidateIds.length,
+    candidateVerificationAgentDecisionSchema,
   )
-  const indexes = new Set(
-    artifact.decisions.map((decision) => decision.candidate_index),
+  const artifact = candidateVerificationAgentArtifactSchema.parse(
+    normalized,
   )
-  if (
-    indexes.size !== artifact.decisions.length ||
-    [...indexes].some((index) => index >= candidateIds.length)
-  ) {
-    throw new Error(
-      'Verification artifact candidate indexes must be unique and leased.',
-    )
-  }
   return candidateVerificationArtifactSchema.parse({
     decisions: artifact.decisions.map((decision) => {
       const {
@@ -550,6 +544,40 @@ export function materializeCandidateVerificationArtifact(
       }
     })
   })
+}
+
+function normalizeLeasedDecisionIndexes(
+  unparsedArtifact: unknown,
+  leasedCount: number,
+  decisionSchema: z.ZodType<{ candidate_index: number }>,
+): unknown {
+  if (
+    !unparsedArtifact ||
+    typeof unparsedArtifact !== 'object' ||
+    Array.isArray(unparsedArtifact)
+  ) {
+    return unparsedArtifact
+  }
+  const artifact = unparsedArtifact as Record<string, unknown>
+  if (!Array.isArray(artifact['decisions'])) return unparsedArtifact
+  const indexes = new Set<number>()
+  const decisions: unknown[] = []
+  for (const value of artifact['decisions']) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) continue
+    const index = (value as Record<string, unknown>)['candidate_index']
+    if (
+      !Number.isInteger(index) ||
+      Number(index) < 0 ||
+      Number(index) >= leasedCount
+    ) {
+      continue
+    }
+    const parsed = decisionSchema.safeParse(value)
+    if (!parsed.success || indexes.has(parsed.data.candidate_index)) continue
+    indexes.add(parsed.data.candidate_index)
+    decisions.push(parsed.data)
+  }
+  return { ...artifact, decisions }
 }
 
 export const expertResearchArtifactSchema = z.union([
@@ -728,6 +756,16 @@ export function demandFailureDisposition(input: {
 async function queueDemandDiagnosisWork(
   client: DatabaseClient,
 ): Promise<boolean> {
+  const active = await client.query<{ active: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1
+       FROM pipeline_tasks
+       WHERE task_type = 'demand_diagnosis'
+         AND status IN ('queued', 'claimed', 'running')
+     ) AS active`,
+  )
+  if (active.rows[0]?.active) return false
+
   const demand = await client.query<{
     id: string
     question: string
@@ -786,6 +824,7 @@ async function queueDemandDiagnosisWork(
 }
 
 const requiredPipelineModel = 'gpt-5.6-luna'
+const fallbackPipelineModel = 'gpt-5.6-terra'
 const requiredPipelineReasoning = 'low'
 const aiPriorities = {
   expert: 100,
@@ -797,6 +836,16 @@ const aiPriorities = {
   analyze: 80,
   discover: 50
 } as const
+
+function supportsTerraFallback(
+  taskType: PipelineTaskRow['task_type'],
+  reasoningEffort: 'low' | 'medium',
+): boolean {
+  return reasoningEffort === 'medium' && [
+    'candidate_deep_review',
+    'demand_diagnosis'
+  ].includes(taskType)
+}
 
 export function demandCapacityAtLimit(input: {
   baselineAvailable: boolean
@@ -871,9 +920,9 @@ export function nextDeepReviewBatchLimitAfterCleanPass(
   currentBatchLimit: number,
   handledRecords: number,
 ): number {
-  const current = Math.min(20, Math.max(1, Math.trunc(currentBatchLimit)))
+  const current = Math.min(8, Math.max(1, Math.trunc(currentBatchLimit)))
   if (Math.trunc(handledRecords) < current) return current
-  return Math.min(20, current * 2)
+  return Math.min(8, current * 2)
 }
 
 /**
@@ -885,8 +934,11 @@ export function nextDeepReviewBatchLimitAfterCleanPass(
 export function isRetryableCodexPlatformArtifactFailure(
   failureMessage: string,
 ): boolean {
-  return /\bINTERNAL_ERROR\b[\s\S]{0,240}\b(?:request could not be completed|retry later)\b/i
-    .test(failureMessage)
+  return (
+    /\bINTERNAL_ERROR\b[\s\S]{0,240}\b(?:request could not be completed|retry later)\b/i
+      .test(failureMessage) ||
+    /\bWEB_SEARCH_NOT_OBSERVED\b/i.test(failureMessage)
+  )
 }
 
 /**
@@ -898,10 +950,16 @@ export function isRetryableCodexPlatformArtifactFailure(
 export function codexCircuitCooldownSeconds(
   matchingFailures: number,
 ): number {
-  if (matchingFailures < 4) return 0
-  const escalation = Math.floor((matchingFailures - 4) / 4)
+  if (matchingFailures < 2) return 0
+  const escalation = matchingFailures - 2
   return Math.min(300, 30 * (2 ** escalation))
 }
+
+const retryableCodexPlatformDiagnosticCodes = [
+  'CODEX_PROCESS_FAILED',
+  'CODEX_MODEL_UNAVAILABLE',
+  'CODEX_RATE_LIMITED',
+] as const
 
 type AiCircuitRow = {
   task_type: PipelineTaskRow['task_type']
@@ -1271,6 +1329,7 @@ async function queueExpertWork(client: DatabaseClient): Promise<boolean> {
 }
 
 type DeepReviewMode = 'low' | 'medium'
+const maxDeepReviewBatchSize = 8
 
 function deepReviewModeFromTask(task: Pick<
   PipelineTaskRow,
@@ -1334,6 +1393,10 @@ async function queueDeepReviewWork(
   )
   const first = seed.rows[0]
   if (!first) return false
+  const batchLimit = Math.min(
+    maxDeepReviewBatchSize,
+    Math.max(1, first.deep_review_batch_limit),
+  )
 
   const batch = await client.query<{
     id: string
@@ -1383,7 +1446,7 @@ async function queueDeepReviewWork(
       first.source_candidate_id,
       reviewMode,
       first.resolution_code,
-      first.deep_review_batch_limit,
+      batchLimit,
       first.deep_review_batch_limit
     ],
   )
@@ -1402,7 +1465,7 @@ async function queueDeepReviewWork(
     knowledgeDemandId: first.knowledge_demand_id,
     payload: {
       review_pass: reviewMode,
-      batch_limit: first.deep_review_batch_limit,
+      batch_limit: batchLimit,
       resolution_code: first.resolution_code,
       candidates: batch.rows
     },
@@ -1816,9 +1879,9 @@ async function queueDiscoveryWork(client: DatabaseClient): Promise<boolean> {
   )
   if (activeDiscovery.rows[0]?.exists) return false
 
-  // A fully covered catalog can have every target scheduled for a later
-  // refresh. Requeue one target and select it in the same scheduler pass so a
-  // drained source buffer never leaves a Luna lane empty for an extra cycle.
+  // A covered target is eligible only when its durable refresh time is due.
+  // Reopening a future target here created an unbounded discovery loop while
+  // the source buffer was low.
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const targetResult = await client.query<{
       id: string
@@ -1892,6 +1955,7 @@ async function queueDiscoveryWork(client: DatabaseClient): Promise<boolean> {
           SELECT id
           FROM coverage_targets
           WHERE status IN ('active', 'covered')
+            AND next_check_at <= now()
           ORDER BY next_check_at NULLS FIRST, updated_at, priority DESC
           LIMIT 1
         )
@@ -3190,7 +3254,8 @@ async function ensureStreamingWorkInTransaction(
   const isCircuitBlocked = (
     taskType: PipelineTaskRow['task_type'],
     reasoningEffort: 'low' | 'medium',
-  ) => blockedCircuits.rows.some((circuit) =>
+  ) => !supportsTerraFallback(taskType, reasoningEffort) &&
+    blockedCircuits.rows.some((circuit) =>
     circuit.task_type === taskType &&
     circuit.reasoning_effort === reasoningEffort,
   )
@@ -3231,6 +3296,15 @@ async function ensureStreamingWorkInTransaction(
                  circuit.open_until > now()
                  OR circuit.probe_executor_id IS NOT NULL
                )
+               AND NOT (
+                 pipeline_tasks.requested_reasoning_effort = 'medium'
+                 AND pipeline_tasks.task_type IN (
+                   'candidate_deep_review',
+                   'demand_diagnosis'
+                 )
+                 AND pipeline_tasks.payload->>'terra_fallback_attempted'
+                   IS DISTINCT FROM 'true'
+               )
            )
          )
        )
@@ -3256,12 +3330,7 @@ async function ensureStreamingWorkInTransaction(
     WeightedAiStage,
     () => Promise<boolean>
   > = {
-    deep_medium: () => isCircuitBlocked(
-      'candidate_deep_review',
-      'medium',
-    )
-      ? Promise.resolve(false)
-      : queueDeepReviewWork(client, 'medium'),
+    deep_medium: () => queueDeepReviewWork(client, 'medium'),
     deep_low: () => isCircuitBlocked(
       'candidate_deep_review',
       'low',
@@ -3431,6 +3500,15 @@ export async function claimPipelineTask(
                      circuit.open_until > now()
                      OR circuit.probe_executor_id IS NOT NULL
                    )
+                   AND NOT (
+                     baseline.requested_reasoning_effort = 'medium'
+                     AND baseline.task_type IN (
+                       'candidate_deep_review',
+                       'demand_diagnosis'
+                     )
+                     AND baseline.payload->>'terra_fallback_attempted'
+                       IS DISTINCT FROM 'true'
+                   )
               )
               AND (
                 baseline.task_type NOT IN (
@@ -3488,6 +3566,15 @@ export async function claimPipelineTask(
              AND (
                circuit.open_until > now()
                OR circuit.probe_executor_id IS NOT NULL
+             )
+             AND NOT (
+               pipeline_tasks.requested_reasoning_effort = 'medium'
+               AND pipeline_tasks.task_type IN (
+                 'candidate_deep_review',
+                 'demand_diagnosis'
+               )
+               AND pipeline_tasks.payload->>'terra_fallback_attempted'
+                 IS DISTINCT FROM 'true'
              )
          )
          AND (
@@ -3569,12 +3656,15 @@ export async function claimPipelineTask(
     }
 
     const taskReasoning = task.requested_reasoning_effort ?? 'low'
-    const expiredCircuit = circuits.rows.find((circuit) =>
+    const matchingCircuit = circuits.rows.find((circuit) =>
       circuit.task_type === task.task_type &&
-      circuit.reasoning_effort === taskReasoning &&
-      circuit.probe_executor_id === null &&
-      new Date(circuit.open_until).getTime() <= Date.now(),
+      circuit.reasoning_effort === taskReasoning,
     )
+    const expiredCircuit = matchingCircuit &&
+      matchingCircuit.probe_executor_id === null &&
+      new Date(matchingCircuit.open_until).getTime() <= Date.now()
+        ? matchingCircuit
+        : null
     if (expiredCircuit) {
       const probe = await client.query<{ task_type: string }>(
         `UPDATE pipeline_ai_circuits
@@ -3589,6 +3679,16 @@ export async function claimPipelineTask(
       )
       if (!probe.rows[0]) throw new Error('AI_CIRCUIT_PROBE_NOT_AVAILABLE')
     }
+    const requestedModel = matchingCircuit && !expiredCircuit
+      ? fallbackPipelineModel
+      : requiredPipelineModel
+    if (
+      requestedModel === fallbackPipelineModel &&
+      !supportsTerraFallback(task.task_type, taskReasoning)
+    ) {
+      throw new Error('PIPELINE_TERRA_FALLBACK_NOT_ALLOWED')
+    }
+    const usingTerraFallback = requestedModel === fallbackPipelineModel
 
     const leaseToken = randomUrlToken()
     const leaseUntil = new Date(
@@ -3602,13 +3702,23 @@ export async function claimPipelineTask(
               lease_until = $4,
               heartbeat_at = now(),
               attempts = attempts + 1,
+              payload = CASE WHEN $5::boolean
+                THEN jsonb_set(
+                  payload,
+                  '{terra_fallback_attempted}',
+                  'true'::jsonb,
+                  true
+                )
+                ELSE payload
+              END,
               updated_at = now()
         WHERE id = $1`,
       [
         task.id,
         researcherId,
         sha256(leaseToken),
-        leaseUntil.toISOString()
+        leaseUntil.toISOString(),
+        usingTerraFallback
       ],
     )
     const run = await client.query<{ id: string }>(
@@ -3618,11 +3728,9 @@ export async function claimPipelineTask(
          reasoning_effort,
          status
        )
-       SELECT $1, ai_model, $2, 'running'
-       FROM pipeline_settings
-       WHERE singleton
+       VALUES ($1, $2, $3, 'running')
        RETURNING id`,
-      [task.id, taskReasoning],
+      [task.id, requestedModel, taskReasoning],
     )
     await client.query(
       `UPDATE agent_runs
@@ -3636,7 +3744,10 @@ export async function claimPipelineTask(
       researcherInstanceId,
       {
         status: 'running',
-        model: pipeline.ai_model,
+        model: requestedModel,
+        fallback_from_model: usingTerraFallback
+          ? requiredPipelineModel
+          : null,
         reasoning_effort: taskReasoning,
         task_id: task.id,
         task_type: task.task_type,
@@ -3644,7 +3755,9 @@ export async function claimPipelineTask(
       },
     )
 
-    let payload = task.payload
+    let payload = usingTerraFallback
+      ? { ...task.payload, terra_fallback_attempted: true }
+      : task.payload
     if (task.task_type === 'expert_research' && task.expert_task_id) {
       const expert = await client.query<{
         public_id: string
@@ -3772,6 +3885,7 @@ export async function claimPipelineTask(
       agent_run_id: run.rows[0]!.id,
       requested_reasoning_effort:
         task.requested_reasoning_effort ?? 'low',
+      requested_model: requestedModel,
       payload
     }
   })
@@ -3941,6 +4055,7 @@ export async function recordAgentRunResult(
     executor_id: string | null
     task_type: PipelineTaskRow['task_type'] | null
     reasoning_effort: 'low' | 'medium'
+    model: string
   }>(
     `UPDATE agent_runs run
         SET status = $2,
@@ -3966,7 +4081,8 @@ export async function recordAgentRunResult(
       RETURNING run.id,
                 run.executor_id,
                 task.task_type,
-                run.reasoning_effort`,
+                run.reasoning_effort,
+                run.model`,
     [
       input.agent_run_id,
       input.status,
@@ -3985,10 +4101,12 @@ export async function recordAgentRunResult(
   const executorId = result.rows[0].executor_id
   const taskType = result.rows[0].task_type
   const reasoningEffort = result.rows[0].reasoning_effort
+  const runModel = result.rows[0].model
   if (
     input.status === 'completed' &&
     executorId &&
     taskType &&
+    runModel === requiredPipelineModel &&
     isAiTaskType(taskType)
   ) {
     await database.query(
@@ -4000,9 +4118,12 @@ export async function recordAgentRunResult(
     )
   } else if (
     input.status === 'failed' &&
-    input.diagnostic_code === 'CODEX_PROCESS_FAILED' &&
+    retryableCodexPlatformDiagnosticCodes.includes(
+      input.diagnostic_code as typeof retryableCodexPlatformDiagnosticCodes[number],
+    ) &&
     input.diagnostic_fingerprint &&
     taskType &&
+    runModel === requiredPipelineModel &&
     isAiTaskType(taskType)
   ) {
     const failures = await database.query<{ count: number }>(
@@ -4010,12 +4131,19 @@ export async function recordAgentRunResult(
        FROM agent_runs run
        JOIN pipeline_tasks task ON task.id = run.pipeline_task_id
        WHERE run.status = 'failed'
-         AND run.diagnostic_code = 'CODEX_PROCESS_FAILED'
+         AND run.diagnostic_code = ANY($5::text[])
          AND run.diagnostic_fingerprint = $1
          AND task.task_type = $2
          AND run.reasoning_effort = $3
+         AND run.model = $4
          AND run.completed_at >= now() - interval '15 minutes'`,
-      [input.diagnostic_fingerprint, taskType, reasoningEffort],
+      [
+        input.diagnostic_fingerprint,
+        taskType,
+        reasoningEffort,
+        requiredPipelineModel,
+        retryableCodexPlatformDiagnosticCodes,
+      ],
     )
     const cooldownSeconds = codexCircuitCooldownSeconds(
       failures.rows[0]?.count ?? 0,
@@ -4043,13 +4171,19 @@ export async function recordAgentRunResult(
              pipeline_ai_circuits.open_until,
              excluded.open_until
            ),
-           probe_executor_id = NULL,
+           probe_executor_id = CASE
+             WHEN pipeline_ai_circuits.probe_executor_id IS NULL
+               OR pipeline_ai_circuits.probe_executor_id = $5
+               THEN NULL
+             ELSE pipeline_ai_circuits.probe_executor_id
+           END,
            updated_at = now()`,
         [
           taskType,
           reasoningEffort,
           input.diagnostic_fingerprint,
           cooldownSeconds,
+          executorId,
         ],
       )
     }
@@ -4506,11 +4640,49 @@ export async function submitSourceDiscovery(
   database: Database,
   input: z.infer<typeof discoverySubmissionSchema>,
   researcherId: string,
+  probeSource: typeof probePublicSourceUrl = probePublicSourceUrl,
 ): Promise<Record<string, unknown>> {
   const safeSources: z.infer<typeof discoverySourceSchema>[] = []
+  const preflightFailures = new Map<string, number>()
+  let transientPreflightFailure = false
+  const seenUrls = new Set<string>()
+  const eligibleSources: typeof input.sources = []
   for (const source of input.sources) {
-    await assertSafeProvenanceUrl(source.canonical_url)
-    safeSources.push(source)
+    try {
+      assertSafePublicSourceUrlSyntax(source.canonical_url)
+      eligibleSources.push(source)
+    } catch {
+      preflightFailures.set(
+        'UNSAFE_PROVENANCE_URL',
+        (preflightFailures.get('UNSAFE_PROVENANCE_URL') ?? 0) + 1,
+      )
+    }
+  }
+  for (let offset = 0; offset < eligibleSources.length; offset += 8) {
+    const batch = eligibleSources.slice(offset, offset + 8)
+    const probes = await Promise.all(batch.map(async (source) => ({
+      source,
+      probe: await probeSource(source.canonical_url)
+    })))
+    for (const { source, probe } of probes) {
+      if (!probe.ok) {
+        preflightFailures.set(
+          probe.code,
+          (preflightFailures.get(probe.code) ?? 0) + 1,
+        )
+        transientPreflightFailure ||= probe.retryable
+        continue
+      }
+      if (seenUrls.has(probe.finalUrl)) {
+        preflightFailures.set(
+          'SOURCE_PREFLIGHT_DUPLICATE',
+          (preflightFailures.get('SOURCE_PREFLIGHT_DUPLICATE') ?? 0) + 1,
+        )
+        continue
+      }
+      seenUrls.add(probe.finalUrl)
+      safeSources.push({ ...source, canonical_url: probe.finalUrl })
+    }
   }
   const result = await withTransaction(database, async (client) => {
     const task = await assertPipelineLease(
@@ -4597,12 +4769,17 @@ export async function submitSourceDiscovery(
                 ELSE coverage_percent
               END,
               next_check_at = now() + CASE
+                WHEN $3 THEN interval '30 minutes'
                 WHEN $2 > 0 THEN interval '7 days'
                 ELSE interval '24 hours'
               END,
               updated_at = now()
         WHERE id = $1`,
-      [task.coverage_target_id, usefulSourceIds.length],
+      [
+        task.coverage_target_id,
+        usefulSourceIds.length,
+        transientPreflightFailure
+      ],
     )
     if (usefulSourceIds[0]) {
       await client.query(
@@ -4632,7 +4809,10 @@ export async function submitSourceDiscovery(
                 END,
                 next_retry_at = CASE
                   WHEN $2::uuid IS NULL AND $3::uuid IS NULL
-                  THEN now() + interval '15 minutes'
+                  THEN now() + CASE WHEN $4
+                    THEN interval '30 minutes'
+                    ELSE interval '15 minutes'
+                  END
                   ELSE now()
                 END,
                 last_seen_at = now()
@@ -4642,6 +4822,7 @@ export async function submitSourceDiscovery(
           task.knowledge_demand_id,
           insertedIds[0] ?? null,
           reused.sourceIds[0] ?? null,
+          transientPreflightFailure,
         ],
       )
       if (usefulSourceIds.length === 0) {
@@ -4697,6 +4878,9 @@ export async function submitSourceDiscovery(
       reused_sources: reused.sourceIds.length,
       reused_fragments: reused.fragmentCount,
       reopened_candidates: reused.candidateCount,
+      preflight_rejected_sources:
+        [...preflightFailures.values()].reduce((sum, count) => sum + count, 0),
+      preflight_failures: Object.fromEntries(preflightFailures),
       active_source_id: activeSource.rows[0]?.active_source_id ?? null,
       rejection_reason: input.rejection_reason ?? null
     }
@@ -5295,7 +5479,8 @@ export async function submitCandidateVerification(
       verified: 0,
       rejected: 0,
       conflict: 0,
-      deep_review: 0
+      deep_review: 0,
+      requeued: 0
     }
     for (const decision of input.decisions) {
       if (!allowedCandidateIds.has(decision.candidate_id)) {
@@ -5410,17 +5595,54 @@ export async function submitCandidateVerification(
     if (omitted.length > 0) {
       await client.query(
         `UPDATE knowledge_candidates
-            SET status = 'deep_review',
-                verification_task_id = NULL,
-                resolution_code = 'verifier_omitted',
-                resolution_reason = 'Standard verifier omitted the leased candidate.',
-                next_review_at = now(),
+            SET verification_task_id = NULL,
                 updated_at = now()
           WHERE id = ANY($1::uuid[])
             AND verification_task_id = $2`,
         [omitted, task.id],
       )
-      counts.deep_review += omitted.length
+      const retryBatchSize = Math.max(
+        1,
+        Math.floor(allowedCandidateIds.size / 2),
+      )
+      const leasedCandidates = Array.isArray(task.payload['candidates'])
+        ? task.payload['candidates']
+        : []
+      const omittedSet = new Set(omitted)
+      const retryCandidates = leasedCandidates.filter((candidate) =>
+        candidate &&
+        typeof candidate === 'object' &&
+        'id' in candidate &&
+        typeof candidate.id === 'string' &&
+        omittedSet.has(candidate.id),
+      )
+      for (let offset = 0; offset < retryCandidates.length; offset += retryBatchSize) {
+        const candidates = retryCandidates.slice(offset, offset + retryBatchSize)
+        const ids = candidates.flatMap((candidate) =>
+          candidate && typeof candidate === 'object' && 'id' in candidate &&
+          typeof candidate.id === 'string' ? [candidate.id] : [],
+        )
+        const retryTaskId = await insertTask(client, {
+          type: 'candidate_verification',
+          stage: 'verify',
+          priority: aiPriorities.verify,
+          dedupeKey: `verify-retry:${task.id}:${sha256Label(ids.join(','))}`,
+          coverageTargetId: task.coverage_target_id,
+          sourceId: task.source_candidate_id,
+          knowledgeDemandId: task.knowledge_demand_id,
+          payload: { ...task.payload, candidates }
+        })
+        if (!retryTaskId) continue
+        await client.query(
+          `UPDATE knowledge_candidates
+              SET verification_task_id = $1, updated_at = now()
+            WHERE id = ANY($2::uuid[])
+              AND status = 'analyzed'
+              AND verification_task_id IS NULL`,
+          [retryTaskId, ids],
+        )
+        counts.requeued += ids.length
+      }
     }
     await client.query(
       `UPDATE source_fragments sf
@@ -5525,8 +5747,8 @@ export async function submitCandidateDeepReview(
     }
     const configuredBatchLimit = Number(task.payload['batch_limit'])
     const taskBatchLimit = Number.isInteger(configuredBatchLimit)
-      ? Math.min(20, Math.max(1, configuredBatchLimit))
-      : Math.min(20, Math.max(1, allowedCandidateIds.size))
+      ? Math.min(maxDeepReviewBatchSize, Math.max(1, configuredBatchLimit))
+      : Math.min(maxDeepReviewBatchSize, Math.max(1, allowedCandidateIds.size))
     let cohortResolutionCode = typeof task.payload['resolution_code'] ===
       'string'
       ? task.payload['resolution_code']
@@ -5698,7 +5920,7 @@ export async function submitCandidateDeepReview(
                   THEN now()
                   ELSE NULL
                 END,
-                deep_review_batch_limit = 20,
+                deep_review_batch_limit = 8,
                 technical_retry_count = 0,
                 last_technical_failure_code = NULL,
                 updated_at = now()

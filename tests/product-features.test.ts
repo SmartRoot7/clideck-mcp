@@ -33,11 +33,14 @@ import {
 } from '../src/domain/pipeline.js'
 import {
   chunkSourceText,
+  deterministicCandidateInitialStatus,
+  deterministicCandidateEligibleForFastPath,
   isCandidatePublicationValidationError
 } from '../src/domain/pipeline-worker.js'
 import { maxSourceFragmentBytes } from '../src/domain/pipeline-limits.js'
 import { CorePolicyError } from '@clideck/domain-kit'
 import { enforceKnowledgeRisk } from '../src/domain/risk.js'
+import { candidateKnowledgeSchema } from '../src/domain/publication.js'
 import { buildSearchQueries } from '../src/domain/search-query.js'
 import {
   analyzeDeviceSnapshot,
@@ -183,6 +186,52 @@ describe('knowledge safety classification', () => {
     expect(inspected.risk_level).toBe('safe_read_only')
   })
 
+  it('keeps syntax descriptions out of executable publication steps', () => {
+    const candidate = candidateKnowledgeSchema.parse({
+      stable_key: 'cisco-iosxe-show-reload-syntax-options',
+      kind: 'diagnostic' as const,
+      vendor_slug: 'cisco',
+      operating_system_slug: 'ios-xe',
+      title: 'Inspect reload information',
+      summary: 'Shows reload state without changing the device.',
+      question_patterns: ['How do I inspect reload state?'],
+      command: 'show reload',
+      syntax_options: [
+        'reload Displays the scheduled reload state.',
+        'erase Displays whether erase was requested.'
+      ],
+      procedure: [],
+      prerequisites: [],
+      risks: [],
+      verification: ['Confirm the command returns operational state.'],
+      rollback: [],
+      limitations: [],
+      dangerous: false,
+      risk_level: 'safe_read_only' as const,
+      confidence: 0.94,
+      quality_score: 0.9,
+      confidence_reason:
+        'Deterministically extracted from an official command reference.',
+      last_verified_at: '2026-08-26',
+      provenance: [{
+        url: 'https://www.cisco.com/example-show-syntax',
+        document_type: 'command_reference',
+        title: 'Internal test evidence',
+        verified_at: '2026-08-26',
+        content_hash: `sha256:${'c'.repeat(64)}`,
+        evidence_fragment: 'show reload',
+        evidence_role: 'primary' as const
+      }]
+    })
+
+    expect(enforceKnowledgeRisk(candidate)).toMatchObject({
+      dangerous: false,
+      risk_level: 'safe_read_only',
+      procedure: [],
+      syntax_options: candidate.syntax_options
+    })
+  })
+
   it('routes publication-invalid records to automatic review before Ready', () => {
     const candidate = {
       stable_key: 'cisco-iosxe-preflight-content-required',
@@ -225,15 +274,56 @@ describe('knowledge safety classification', () => {
 })
 
 describe('deterministic source processing', () => {
+  it('keeps a structured command when neighboring prose needs AI analysis', () => {
+    expect(deterministicCandidateEligibleForFastPath({
+      fragmentFullyHandled: false,
+      readyForPublication: true
+    })).toBe(true)
+    expect(deterministicCandidateEligibleForFastPath({
+      fragmentFullyHandled: false,
+      readyForPublication: false
+    })).toBe(false)
+  })
+
+  it('directly readies only explicit safe command entries above configured thresholds', () => {
+    expect(deterministicCandidateInitialStatus({
+      readyForPublication: true,
+      dangerous: false,
+      confidence: 0.94,
+      qualityScore: 0.9,
+      autoPublishConfidence: 0.9
+    })).toBe('verified')
+    expect(deterministicCandidateInitialStatus({
+      readyForPublication: false,
+      dangerous: false,
+      confidence: 0.99,
+      qualityScore: 0.99,
+      autoPublishConfidence: 0.9
+    })).toBe('analyzed')
+    expect(deterministicCandidateInitialStatus({
+      readyForPublication: true,
+      dangerous: true,
+      confidence: 0.99,
+      qualityScore: 0.99,
+      autoPublishConfidence: 0.9
+    })).toBe('analyzed')
+    expect(deterministicCandidateInitialStatus({
+      readyForPublication: true,
+      dangerous: false,
+      confidence: 0.94,
+      qualityScore: 0.9,
+      autoPublishConfidence: 0.95
+    })).toBe('analyzed')
+  })
+
   it('backs off repeated identical Codex platform failures adaptively', () => {
     expect(codexCircuitCooldownSeconds(0)).toBe(0)
-    expect(codexCircuitCooldownSeconds(3)).toBe(0)
-    expect(codexCircuitCooldownSeconds(4)).toBe(30)
-    expect(codexCircuitCooldownSeconds(7)).toBe(30)
-    expect(codexCircuitCooldownSeconds(8)).toBe(60)
-    expect(codexCircuitCooldownSeconds(12)).toBe(120)
-    expect(codexCircuitCooldownSeconds(16)).toBe(240)
-    expect(codexCircuitCooldownSeconds(20)).toBe(300)
+    expect(codexCircuitCooldownSeconds(1)).toBe(0)
+    expect(codexCircuitCooldownSeconds(2)).toBe(30)
+    expect(codexCircuitCooldownSeconds(3)).toBe(60)
+    expect(codexCircuitCooldownSeconds(4)).toBe(120)
+    expect(codexCircuitCooldownSeconds(5)).toBe(240)
+    expect(codexCircuitCooldownSeconds(6)).toBe(300)
     expect(codexCircuitCooldownSeconds(100)).toBe(300)
   })
 
@@ -265,9 +355,9 @@ describe('deterministic source processing', () => {
   it('recovers Deep Review capacity only after a complete clean batch', () => {
     expect(nextDeepReviewBatchLimitAfterCleanPass(1, 1)).toBe(2)
     expect(nextDeepReviewBatchLimitAfterCleanPass(2, 2)).toBe(4)
-    expect(nextDeepReviewBatchLimitAfterCleanPass(10, 10)).toBe(20)
-    expect(nextDeepReviewBatchLimitAfterCleanPass(20, 20)).toBe(20)
-    expect(nextDeepReviewBatchLimitAfterCleanPass(10, 4)).toBe(10)
+    expect(nextDeepReviewBatchLimitAfterCleanPass(10, 10)).toBe(8)
+    expect(nextDeepReviewBatchLimitAfterCleanPass(20, 20)).toBe(8)
+    expect(nextDeepReviewBatchLimitAfterCleanPass(10, 4)).toBe(8)
   })
 
   it('adds an unknown-question context only to the leased AI payload', () => {
@@ -498,7 +588,7 @@ describe('deterministic source processing', () => {
       candidateIds[1],
       candidateIds[0]
     ])
-    expect(() =>
+    expect(
       materializeCandidateVerificationArtifact({
         decisions: [
           {
@@ -516,8 +606,8 @@ describe('deterministic source processing', () => {
             findings: []
           }
         ]
-      }, candidateIds),
-    ).toThrow('candidate indexes must be unique and leased')
+      }, candidateIds).decisions,
+    ).toHaveLength(1)
 
     expect(materializeCandidateVerificationArtifact({
       decisions: [{
@@ -528,6 +618,73 @@ describe('deterministic source processing', () => {
         findings: []
       }]
     }, candidateIds).decisions).toHaveLength(1)
+
+    expect(() => materializeCandidateVerificationArtifact({
+      decisions: [{
+        candidate_index: 99,
+        decision: 'verified',
+        confidence: 0.96,
+        quality_score: 0.94,
+        findings: []
+      }]
+    }, candidateIds)).toThrow()
+  })
+
+  it('keeps the first fully valid leased decision from mixed artifacts', () => {
+    const candidateIds = [
+      '00000000-0000-4000-8000-000000000001',
+      '00000000-0000-4000-8000-000000000002'
+    ]
+    const verification = materializeCandidateVerificationArtifact({
+      decisions: [
+        {
+          candidate_index: 0,
+          decision: 'verified',
+          confidence: 2,
+          quality_score: 0.95,
+          findings: []
+        },
+        {
+          candidate_index: 0,
+          decision: 'verified',
+          confidence: 0.96,
+          quality_score: 0.95,
+          findings: ['The second record is the first valid decision.']
+        },
+        {
+          candidate_index: 1,
+          decision: 'not-a-decision',
+          confidence: 0.96,
+          quality_score: 0.95,
+          findings: []
+        }
+      ]
+    }, candidateIds)
+    expect(verification.decisions).toHaveLength(1)
+    expect(verification.decisions[0]?.candidate_id).toBe(candidateIds[0])
+
+    const deepReview = materializeCandidateDeepReviewArtifact({
+      decisions: [
+        {
+          candidate_index: 1,
+          decision: 'verified',
+          confidence: -1,
+          quality_score: 0.95,
+          findings: [],
+          repaired_candidate: null
+        },
+        {
+          candidate_index: 1,
+          decision: 'verified',
+          confidence: 0.97,
+          quality_score: 0.95,
+          findings: ['The first fully valid review is retained.'],
+          repaired_candidate: null
+        }
+      ]
+    }, candidateIds)
+    expect(deepReview.decisions).toHaveLength(1)
+    expect(deepReview.decisions[0]?.candidate_id).toBe(candidateIds[1])
   })
 
   it('preserves trusted provenance when a deep reviewer repairs a candidate', () => {

@@ -16,6 +16,7 @@ export const PIPELINE_TRANSITION_ROUTES = [
   'source:downloaded:convert',
   'source:convert:chunk',
   'source:chunk:analyze',
+  'record:analyze:ready',
   'record:analyze:verify',
   'record:verify:ready',
   'record:verify:deep_low',

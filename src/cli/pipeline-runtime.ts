@@ -1,6 +1,10 @@
 import { resolve } from 'node:path'
 
 export const pipelineModel = 'gpt-5.6-luna' as const
+export const pipelineFallbackModel = 'gpt-5.6-terra' as const
+export type PipelineModel =
+  | typeof pipelineModel
+  | typeof pipelineFallbackModel
 export const pipelineReasoning = 'low' as const
 export const pipelineExecutorIds = [
   'pipeline-executor-01',

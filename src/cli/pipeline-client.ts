@@ -12,6 +12,8 @@ import { candidateKnowledgeSchema } from '../domain/publication.js'
 import {
   normalizeTaskReasoning,
   pipelineExecutorIds,
+  pipelineFallbackModel,
+  pipelineModel,
   pipelineExecutorPaths
 } from './pipeline-runtime.js'
 
@@ -156,6 +158,10 @@ async function run(): Promise<void> {
         lease_until: result['lease_until'],
         requested_reasoning_effort:
           normalizeTaskReasoning(result['requested_reasoning_effort']),
+        requested_model:
+          result['requested_model'] === pipelineFallbackModel
+            ? pipelineFallbackModel
+            : pipelineModel,
         payload
       }
       await writeFile(leasePath, JSON.stringify(lease), {

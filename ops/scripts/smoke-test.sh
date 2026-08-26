@@ -76,12 +76,10 @@ response="$(
       "params": {
         "name": "query_network_knowledge",
         "arguments": {
-          "question": "show ip interface brief",
+          "question": "Configure remote syslog server",
           "context": {
-            "vendor": "Cisco",
-            "model": "C9300",
-            "operating_system": "IOS XE",
-            "version": "17.9.4"
+            "vendor": "Open Compute Project",
+            "operating_system": "ONIE"
           }
         }
       }
@@ -90,7 +88,7 @@ response="$(
 )"
 
 command="$(printf '%s\n' "$response" | jq -r '.result.structuredContent.answers[0].command')"
-if [[ "$command" != 'show ip interface brief' ]]; then
+if [[ "$command" != 'option log-servers <ip-address>;' ]]; then
   printf 'Unexpected smoke-test result\n' >&2
   exit 1
 fi
@@ -216,12 +214,10 @@ workflow="$(
       "params":{
         "name":"get_network_workflow",
         "arguments":{
-          "goal":"recover a port-security err-disabled interface",
+          "goal":"Configure ONIE Installer and Updater URLs",
           "context":{
-            "vendor":"Cisco",
-            "model":"C9300",
-            "operating_system":"IOS XE",
-            "version":"17.15.5"
+            "vendor":"Open Compute Project",
+            "operating_system":"ONIE"
           },
           "limit":10
         }
@@ -231,7 +227,7 @@ workflow="$(
 )"
 if [[ "$(printf '%s\n' "$workflow" |
   jq -r '.result.structuredContent.unknown')" != 'false' ]]; then
-  printf 'Port-security operational workflow was not found\n' >&2
+  printf 'ONIE operational workflow was not found\n' >&2
   exit 1
 fi
 

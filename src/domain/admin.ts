@@ -591,6 +591,10 @@ export async function getAdminOverview(
            task.stage,
            task.id AS task_id,
            task.task_type,
+           coalesce(
+             heartbeat.metadata->>'model',
+             latest_run.model
+           ) AS model,
            CASE
              WHEN task.id IS NOT NULL
                AND EXISTS (
@@ -601,10 +605,13 @@ export async function getAdminOverview(
                      executor.executor_id
                ) THEN 'circuit_probe'
              WHEN task.id IS NULL
-               AND EXISTS (
-                 SELECT 1
-                 FROM ai_circuit_runtime
-               ) THEN 'circuit_cooldown'
+               AND (
+                 heartbeat.heartbeat_at IS NULL
+                 OR heartbeat.heartbeat_at <
+                    snapshot.snapshot_at - interval '2 minutes'
+               ) THEN 'stale_heartbeat'
+             WHEN task.id IS NULL AND settings.enabled = false
+               THEN 'pipeline_paused'
              WHEN task.id IS NULL
                THEN heartbeat.metadata->>'reason'
              ELSE NULL
@@ -641,6 +648,13 @@ export async function getAdminOverview(
              live.created_at DESC
            LIMIT 1
          ) task ON true
+         LEFT JOIN LATERAL (
+           SELECT run.model
+           FROM agent_runs run
+           WHERE run.executor_id = executor.executor_id
+           ORDER BY run.started_at DESC
+           LIMIT 1
+         ) latest_run ON true
        )
        SELECT
          snapshot.snapshot_at,
@@ -677,6 +691,7 @@ export async function getAdminOverview(
                'stage', stage,
                'task_id', task_id,
                'task_type', task_type,
+               'model', model,
                'work_units', work_units,
                'work_unit', work_unit,
                'heartbeat_at', heartbeat_at,
@@ -695,7 +710,15 @@ export async function getAdminOverview(
                  'reasoning_effort', reasoning_effort,
                  'state', state,
                  'next_retry_at', next_retry_at,
-                 'probe_executor_id', probe_executor_id
+                 'probe_executor_id', probe_executor_id,
+                 'fallback_model', CASE
+                   WHEN reasoning_effort = 'medium'
+                     AND task_type IN (
+                       'candidate_deep_review',
+                       'demand_diagnosis'
+                     ) THEN 'gpt-5.6-terra'
+                   ELSE NULL
+                 END
                )
                ORDER BY task_type, reasoning_effort
              ),

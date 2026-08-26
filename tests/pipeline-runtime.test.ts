@@ -4,6 +4,7 @@ import {
   normalizeTaskReasoning,
   pipelineExecutorIds,
   pipelineExecutorPaths,
+  pipelineFallbackModel,
   pipelineModel,
   pipelineReasoning
 } from '../src/cli/pipeline-runtime.js'
@@ -122,6 +123,32 @@ describe('parallel Luna runtime', () => {
     expect(
       diagnosis[diagnosis.indexOf('standalone_web_search') - 1]
     ).toBe('--disable')
+  })
+
+  it('allows Terra only as a medium fallback for bounded work types', () => {
+    const common = {
+      model: pipelineFallbackModel,
+      reasoning: 'medium',
+      outputPath: '/tmp/output.json',
+      outputSchemaPath: '/tmp/schema.json',
+      workingDirectory: '/tmp/lane'
+    }
+    expect(codexExecutorArguments({
+      ...common,
+      taskType: 'candidate_deep_review'
+    })).toContain(pipelineFallbackModel)
+    expect(codexExecutorArguments({
+      ...common,
+      taskType: 'demand_diagnosis'
+    })).toContain(pipelineFallbackModel)
+    for (const taskType of [
+      'source_discovery',
+      'fragment_analysis',
+      'candidate_verification'
+    ] as const) {
+      expect(() => codexExecutorArguments({ ...common, taskType }))
+        .toThrow('PIPELINE_LUNA_MODEL_REQUIRED')
+    }
   })
 
   it('rejects generated artifacts that contain a real secret', () => {

@@ -43,6 +43,7 @@ export type DeterministicExtractionResult<Candidate> = {
   candidates: Array<{
     fragment_id: string
     candidate: Candidate
+    ready_for_publication?: boolean
   }>
   handled_fragment_ids: string[]
 }

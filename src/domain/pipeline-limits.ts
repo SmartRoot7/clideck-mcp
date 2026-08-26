@@ -6,7 +6,10 @@
  */
 export const fragmentAnalysisEvidenceBudgetBytes = 64 * 1024
 export const targetFragmentsPerAnalysisBatch = 8
-export const maxSourceFragmentBytes = Math.floor(
-  fragmentAnalysisEvidenceBudgetBytes / targetFragmentsPerAnalysisBatch,
-)
 export const maxFragmentAnalysisBatchSize = 16
+// Keep even a fully packed 16-fragment analysis task within the evidence
+// budget. Smaller fragments also prevent a single dense manual section from
+// exceeding the bounded 50-record structured response.
+export const maxSourceFragmentBytes = Math.floor(
+  fragmentAnalysisEvidenceBudgetBytes / maxFragmentAnalysisBatchSize,
+)

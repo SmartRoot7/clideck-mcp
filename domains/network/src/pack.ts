@@ -227,6 +227,9 @@ export const networkDomainPack: DomainPack<
       payload: {
         ...(candidate.cli_mode ? { cli_mode: candidate.cli_mode } : {}),
         ...(candidate.command ? { command: candidate.command } : {}),
+        ...(candidate.syntax_options
+          ? { syntax_options: candidate.syntax_options }
+          : {}),
         procedure: candidate.procedure
       },
       prerequisites: candidate.prerequisites,
@@ -260,6 +263,7 @@ export const networkDomainPack: DomainPack<
       content: {
         cli_mode: payload['cli_mode'] ?? null,
         command: payload['command'] ?? null,
+        syntax_options: payload['syntax_options'] ?? [],
         procedure: payload['procedure'] ?? []
       },
       prerequisites: revision.prerequisites,
