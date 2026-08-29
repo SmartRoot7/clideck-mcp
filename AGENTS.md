@@ -7,6 +7,10 @@
 - Do not create feature branches, worktree branches, or pull requests unless the user explicitly requests one.
 - Keep local `main` synchronized with `origin/main`.
 
+The production application host is `val@100.116.82.78` over Tailscale. Its
+internal address is `10.77.0.10`. The former host `10.11.5.83` is rollback-only
+and must not receive normal deployments.
+
 ## Production deployment
 
 - Run full production deployments only with
@@ -19,6 +23,11 @@
   application plus knowledge-release rollback.
 - A production release must be a clean commit from `main`. Do not deploy a
   dirty working tree.
+- Keep `.secrets/clideck-mcp-server.env` pointed at `100.116.82.78`; never put
+  a sudo password in that file. Authorize sudo interactively before deployment.
+- The one-time host move is owned only by
+  `ops/scripts/migrate-production-host.sh`. Do not reproduce its database,
+  secret, artifact, tunnel, or certificate transfer with ad hoc commands.
 
 ## Domain Pack workflow
 

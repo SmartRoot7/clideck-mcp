@@ -210,7 +210,7 @@ const tunnelPlist = `<?xml version="1.0" encoding="UTF-8"?>
     <string>-o</string>
     <string>UserKnownHostsFile=${xml(knownHostsPath)}</string>
     <string>-L</string>
-    <string>127.0.0.1:${tunnelPort}:${xml(sshHost)}:8788</string>
+    <string>127.0.0.1:${tunnelPort}:127.0.0.1:8788</string>
     <string>${xml(sshUser)}@${xml(sshHost)}</string>
   </array>
   <key>RunAtLoad</key>

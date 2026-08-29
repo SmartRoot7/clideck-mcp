@@ -15,7 +15,7 @@ fi
 : "${CLIDECK_MCP_HOST:?CLIDECK_MCP_HOST is required}"
 : "${CLIDECK_MCP_USER:?CLIDECK_MCP_USER is required}"
 
-for command_name in git pnpm ssh scp curl createdb dropdb; do
+for command_name in git pnpm ssh scp curl docker openssl; do
   if ! command -v "$command_name" >/dev/null 2>&1; then
     printf 'Missing required command: %s\n' "$command_name" >&2
     exit 1
@@ -35,8 +35,9 @@ commit_sha="$(git rev-parse HEAD)"
 short_sha="${commit_sha:0:12}"
 remote_host="$CLIDECK_MCP_USER@$CLIDECK_MCP_HOST"
 temporary_directory="$(mktemp -d)"
-test_database="clideck_mcp_deploy_${short_sha}_$$"
-test_database_created=0
+test_database_container="clideck-mcp-deploy-${short_sha}-$$"
+test_database_password="$(openssl rand -hex 24)"
+test_database_port=''
 pipeline_pool_was_running=0
 pipeline_pool_stopped=0
 pipeline_pool_restarted=0
@@ -54,20 +55,57 @@ cleanup() {
         "$pipeline_pool_restarted" -eq 0 ]]; then
     pnpm pipeline:pool-start >/dev/null 2>&1 || true
   fi
-  if [[ "$test_database_created" -eq 1 ]]; then
-    dropdb --if-exists "$test_database" >/dev/null 2>&1
-  fi
+  docker rm --force "$test_database_container" >/dev/null 2>&1 || true
   rm -rf "$temporary_directory"
   exit "$status"
 }
 trap cleanup EXIT INT TERM
 
+printf '==> Verify remote sudo authorization\n'
+if ! ssh -o ConnectTimeout=10 "$remote_host" sudo -n true 2>/dev/null; then
+  if [[ ! -t 0 || ! -t 1 ]]; then
+    printf '%s\n' \
+      'Remote sudo needs authorization; rerun this deployment in an interactive terminal.' \
+      >&2
+    exit 1
+  fi
+  ssh -tt -o ConnectTimeout=10 "$remote_host" sudo -v
+fi
+if ! ssh -o ConnectTimeout=10 "$remote_host" sudo -n true; then
+  printf '%s\n' \
+    'Remote sudo authorization is not reusable; verify timestamp_type=global.' \
+    >&2
+  exit 1
+fi
+
 printf '==> Preflight %s\n' "$commit_sha"
 pnpm check
 
-createdb "$test_database"
-test_database_created=1
-test_database_url="postgresql:///$test_database"
+docker run --detach --rm \
+  --name "$test_database_container" \
+  --publish 127.0.0.1::5432 \
+  --env POSTGRES_PASSWORD="$test_database_password" \
+  postgres:16-alpine >/dev/null
+for attempt in {1..60}; do
+  if docker exec "$test_database_container" \
+    pg_isready --username postgres --dbname postgres >/dev/null 2>&1; then
+    break
+  fi
+  sleep 1
+done
+docker exec "$test_database_container" \
+  pg_isready --username postgres --dbname postgres >/dev/null
+for role_name in \
+  clideck_mcp_api clideck_mcp_admin clideck_mcp_worker \
+  clideck_mcp_researcher clideck_mcp_quarantine clideck_mcp_backup \
+  clideck_mcp_migrator; do
+  docker exec "$test_database_container" psql \
+    --username postgres --dbname postgres --set=ON_ERROR_STOP=1 \
+    --command="CREATE ROLE $role_name LOGIN"
+done
+test_database_port="$(docker port "$test_database_container" 5432/tcp | sed 's/.*://')"
+[[ "$test_database_port" =~ ^[0-9]+$ ]]
+test_database_url="postgresql://postgres:$test_database_password@127.0.0.1:$test_database_port/postgres"
 DATABASE_URL="$test_database_url" \
   QUARANTINE_DATABASE_URL="$test_database_url" \
   pnpm db:migrate
@@ -166,14 +204,8 @@ if pnpm pipeline:pool-status >/dev/null 2>&1; then
   pipeline_pool_stopped=1
 fi
 
-if [[ -n "${CLIDECK_MCP_PASSWORD:-}" ]]; then
-  ssh -o ConnectTimeout=10 "$remote_host" \
-    "if test -f /tmp/clideck-mcp-build-$commit_sha/ops/scripts/deploy-production-remote.sh; then sudo -S -p '' /bin/bash /tmp/clideck-mcp-build-$commit_sha/ops/scripts/deploy-production-remote.sh '$commit_sha' '/tmp/clideck-mcp-build-$commit_sha'; else sudo -S -p '' /bin/bash /opt/clideck-mcp/releases/$commit_sha/ops/scripts/deploy-production-remote.sh '$commit_sha' '/tmp/clideck-mcp-build-$commit_sha'; fi" \
-    <<< "$CLIDECK_MCP_PASSWORD"
-else
-  ssh -o ConnectTimeout=10 "$remote_host" \
-    "if test -f /tmp/clideck-mcp-build-$commit_sha/ops/scripts/deploy-production-remote.sh; then sudo -n /bin/bash /tmp/clideck-mcp-build-$commit_sha/ops/scripts/deploy-production-remote.sh '$commit_sha' '/tmp/clideck-mcp-build-$commit_sha'; else sudo -n /bin/bash /opt/clideck-mcp/releases/$commit_sha/ops/scripts/deploy-production-remote.sh '$commit_sha' '/tmp/clideck-mcp-build-$commit_sha'; fi"
-fi
+ssh -o ConnectTimeout=10 "$remote_host" \
+  "if test -f /tmp/clideck-mcp-build-$commit_sha/ops/scripts/deploy-production-remote.sh; then sudo -n /bin/bash /tmp/clideck-mcp-build-$commit_sha/ops/scripts/deploy-production-remote.sh '$commit_sha' '/tmp/clideck-mcp-build-$commit_sha'; else sudo -n /bin/bash /opt/clideck-mcp/releases/$commit_sha/ops/scripts/deploy-production-remote.sh '$commit_sha' '/tmp/clideck-mcp-build-$commit_sha'; fi"
 
 if [[ "$pipeline_pool_was_running" -eq 1 ]]; then
   printf '==> Start local Luna pool on %s\n' "$commit_sha"

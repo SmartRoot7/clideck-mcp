@@ -7,6 +7,11 @@ health endpoint. The API binds to loopback on the server. The website reaches
 the allowlisted playground facade with a shared BFF token. PostgreSQL and the
 researcher process bind to loopback and must not be published.
 
+The production host is `val@100.116.82.78` over Tailscale, with internal address
+`10.77.0.10`. The former `10.11.5.83` host is retained only for rollback. SSH
+and the LAN admin are reachable through Tailscale; PostgreSQL, API, admin and
+researcher listeners remain loopback-only.
+
 ## Services
 
 ```text
@@ -35,7 +40,7 @@ or smoke-test steps. The script requires a clean commit on `main` and performs:
 2. a clean temporary PostgreSQL migration and seed;
 3. every PostgreSQL integration test without skip;
 4. the 250-case product eval;
-5. an isolated Linux dependency install and build on `clideck-mcp.lan`;
+5. an isolated Linux dependency install and build on `100.116.82.78`;
 6. a PostgreSQL and `/etc/clideck-mcp` backup;
 7. preserve the current pipeline settings, pause Luna, and drain active leases;
 8. additive migrations, least-privilege grants, reconciliation, seed, and
@@ -52,6 +57,29 @@ The default local credentials file is
 `.secrets/clideck-mcp-server.env`; it is ignored by Git. Override it with
 `CLIDECK_MCP_DEPLOY_SECRETS_FILE` when necessary. The previous immutable
 release and deployment backup are retained for rollback.
+
+`val` uses a three-hour global sudo timestamp on the production VM. Run
+`sudo -v` interactively before deployment; the deploy script never reads or
+stores the password. Use `sudo -K` to invalidate the ticket immediately.
+
+## Production host migration
+
+The supported one-time move from `10.11.5.83` to `100.116.82.78` is:
+
+```bash
+ops/scripts/migrate-production-host.sh preflight
+ops/scripts/migrate-production-host.sh prepare
+ops/scripts/migrate-production-host.sh rehearsal
+CLIDECK_MCP_CONFIRM_CUTOVER=YES \
+  ops/scripts/migrate-production-host.sh cutover
+ops/scripts/migrate-production-host.sh verify
+```
+
+The script checkpoints every phase under the ignored `tmp/` tree, verifies
+SHA-256 manifests, rehearses a complete restore, keeps the pipeline paused
+during the traffic switch, and leaves the old host intact. Rollback before new
+writes requires `CLIDECK_MCP_CONFIRM_ROLLBACK=YES`; after new writes, migrate
+the new database back instead of starting the stale copy.
 
 Lab validation and initial legacy import are separate one-time release gates;
 they are not repeated by every application deployment. Import only a lab report
@@ -103,6 +131,11 @@ Run daily `pg_dump --format=custom`, encrypt before offsite transfer, retain 14
 daily and 8 weekly copies, and test restore monthly. The repository does not
 contain offsite credentials. Recovery is incomplete until offsite storage is
 provided.
+
+`/var/backups/clideck-mcp` must be owned by
+`clideck_mcp_backup:clideck_mcp` with mode `0700`. A successful timer invocation
+is not sufficient: verify its checksum and restore the newest dump into a
+temporary database after every host migration.
 
 ## Knowledge rollback
 
