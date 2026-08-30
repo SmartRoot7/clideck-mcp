@@ -8,6 +8,7 @@ import {
   expertTasksSchema,
   feedbackRowsSchema,
   importRunsSchema,
+  intakeJobsSchema,
   knowledgePageSchema,
   labSchema,
   mcpRequestLogDetailSchema,
@@ -180,6 +181,15 @@ export function useSources(status: string, limit: number, enabled = true) {
       getJson(`${apiPrefix}/sources?${search.toString()}`, sourcesSchema),
     enabled,
     placeholderData: keepPreviousData
+  })
+}
+
+export function useIntakeJobs(enabled = true) {
+  return useQuery({
+    queryKey: ['admin', 'intake-jobs'],
+    queryFn: () => getJson('/admin/api/v1/intake/jobs', intakeJobsSchema),
+    enabled,
+    refetchInterval: enabled ? 5_000 : false
   })
 }
 

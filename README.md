@@ -167,7 +167,7 @@ for work that requires semantic reasoning:
 - Deep Review;
 - expert tasks.
 
-Up to four isolated executors lease work atomically. The pipeline can be paused
+Up to eight isolated executors lease work atomically. The pipeline can be paused
 and resumed without duplicating tasks or published knowledge. Routine
 discovery, analysis, verification, and Deep Review use GPT-5.6 Luna with low
 reasoning effort. Medium reasoning is reserved for unresolved Deep Review

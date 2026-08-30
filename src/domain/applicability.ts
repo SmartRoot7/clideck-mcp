@@ -198,12 +198,15 @@ export async function indexPublishedKnowledgeApplicability(
   },
 ): Promise<void> {
   const { candidate } = input
+  if (!candidate.vendor_slug || !candidate.operating_system_slug) return
+  const vendorSlug = candidate.vendor_slug
+  const operatingSystemSlug = candidate.operating_system_slug
   const desiredFamily = candidate.software_family_slug ??
     knownSoftwareFamilySlug(
-      candidate.vendor_slug,
-      candidate.operating_system_slug,
+      vendorSlug,
+      operatingSystemSlug,
     ) ??
-    fallbackFamilySlug(candidate.vendor_slug, candidate.operating_system_slug)
+    fallbackFamilySlug(vendorSlug, operatingSystemSlug)
   const family = await client.query<{ id: string; version_strategy: SoftwareVersionStrategy }>(
     `INSERT INTO software_families (
        slug, display_name, portability_mode, version_strategy
@@ -215,10 +218,10 @@ export async function indexPublishedKnowledgeApplicability(
       desiredFamily,
       desiredFamily.replace(/-/g, ' '),
       knownSoftwareFamilySlug(
-        candidate.vendor_slug,
-        candidate.operating_system_slug,
+        vendorSlug,
+        operatingSystemSlug,
       ) ? 'portable' : 'vendor_specific',
-      ['nx-os', 'ios-xe'].includes(candidate.operating_system_slug)
+      ['nx-os', 'ios-xe'].includes(operatingSystemSlug)
         ? 'major_minor'
         : 'vendor'
     ],

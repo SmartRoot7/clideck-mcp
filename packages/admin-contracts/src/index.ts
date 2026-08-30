@@ -735,7 +735,18 @@ export const qualitySchema = z.object({
     severity: z.string(),
     status: z.string(),
     count: scalarNumberSchema
-  }))
+  })),
+  pipeline_checks: z.array(z.object({
+    stage: z.string(),
+    status: z.string(),
+    model: nullableStringSchema,
+    checks: scalarNumberSchema,
+    material_errors: scalarNumberSchema,
+    coverage_count: scalarNumberSchema,
+    input_tokens: scalarNumberSchema,
+    output_tokens: scalarNumberSchema,
+    latest_at: timestampSchema
+  })).default([])
 })
 
 export const labSchema = z.object({
@@ -772,6 +783,29 @@ export const mutationAckSchema = z.object({
   message: z.string(),
   audit_target: z.string().nullable()
 })
+
+export const intakeJobSchema = z.object({
+  id: z.string(),
+  job_kind: z.enum(['website', 'paste_text', 'files', 'logs', 'reprocess']),
+  status: z.enum([
+    'queued', 'running', 'paused', 'completed', 'completed_with_errors',
+    'failed', 'cancelled'
+  ]),
+  title: z.string(),
+  total_items: scalarNumberSchema,
+  queued_items: scalarNumberSchema,
+  running_items: scalarNumberSchema,
+  completed_items: scalarNumberSchema,
+  failed_items: scalarNumberSchema,
+  unavailable_items: scalarNumberSchema,
+  current_stage: nullableStringSchema,
+  last_error: nullableStringSchema,
+  created_at: timestampSchema,
+  updated_at: timestampSchema,
+  completed_at: nullableStringSchema
+})
+
+export const intakeJobsSchema = z.array(intakeJobSchema)
 
 export const coverageTargetsSchema = z.array(coverageTargetSchema)
 export const sourcesSchema = z.array(sourceSchema)
@@ -815,3 +849,4 @@ export type Feedback = z.infer<typeof feedbackSchema>
 export type Approval = z.infer<typeof approvalSchema>
 export type Provenance = z.infer<typeof provenanceSchema>
 export type MutationAck = z.infer<typeof mutationAckSchema>
+export type IntakeJob = z.infer<typeof intakeJobSchema>

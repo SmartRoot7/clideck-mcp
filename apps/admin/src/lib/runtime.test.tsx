@@ -25,11 +25,11 @@ afterEach(() => {
 })
 
 describe('shared operations runtime', () => {
-  it('uses the same complete 18-page registry and navigation for both roles', () => {
+  it('keeps Intake local while sharing the remaining complete registry', () => {
     const sectionIds = NAVIGATION_GROUPS.flatMap((group) =>
       group.items.map((item) => item.id),
     )
-    expect(sectionIds).toHaveLength(18)
+    expect(sectionIds).toHaveLength(19)
     expect(Object.keys(OPERATIONS_PAGE_REGISTRY).sort()).toEqual(
       [...sectionIds].sort(),
     )
@@ -54,7 +54,8 @@ describe('shared operations runtime', () => {
     const sectionLabels = NAVIGATION_GROUPS.flatMap((group) =>
       group.items.map((item) => item.label),
     )
-    const demoSections = sectionLabels.map((label) =>
+    const demoLabels = sectionLabels.filter((label) => label !== 'Intake')
+    const demoSections = demoLabels.map((label) =>
       screen.getByRole('button', { name: label }).textContent,
     )
     cleanup()
@@ -79,7 +80,7 @@ describe('shared operations runtime', () => {
     const adminSections = sectionLabels.map((label) =>
       screen.getByRole('button', { name: label }).textContent,
     )
-    expect(demoSections).toEqual(adminSections)
+    expect(demoSections).toEqual(adminSections.filter((label) => label !== 'Intake'))
     for (const label of sectionLabels) {
       expect(screen.getByRole('button', { name: label })).toBeInTheDocument()
     }

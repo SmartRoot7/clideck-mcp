@@ -12,6 +12,7 @@ type WeightedAiAllocationInput = {
   occupied: number
   activeByStage: Record<WeightedAiStage, number>
   queueStage: (stage: WeightedAiStage) => Promise<boolean>
+  fidelityAndRepairCap?: number
 }
 
 export type WeightedAiAllocation = {
@@ -21,12 +22,9 @@ export type WeightedAiAllocation = {
 }
 
 /**
- * Keeps the pipeline work-conserving while favouring work nearest publication.
- *
- * With four available lanes, at most three distinct background stages receive
- * a guaranteed lane. Remaining capacity is assigned downstream-first. This
- * produces a 2/1/1 split when three stages have work, a 3/1 split when two
- * stages have work, and uses every lane when only one stage has a backlog.
+ * Keeps extraction productive while bounding source-fidelity and repair work.
+ * Discovery is serialized outside this allocator. Verify represents Fidelity
+ * QA during the additive compatibility release.
  */
 export async function fillWeightedAiCapacity(
   input: WeightedAiAllocationInput,
@@ -35,32 +33,45 @@ export async function fillWeightedAiCapacity(
   let occupied = Math.max(0, Math.trunc(input.occupied))
   const activeByStage = { ...input.activeByStage }
   const queuedStages: WeightedAiStage[] = []
+  const cap = Math.max(
+    1,
+    Math.min(2, Math.trunc(input.fidelityAndRepairCap ?? 2)),
+  )
+  const restricted = new Set<WeightedAiStage>([
+    'deep_medium', 'deep_low', 'verify'
+  ])
   const hasCapacity = () => occupied < concurrency
+  const restrictedCount = () => [...restricted].reduce(
+    (total, stage) => total + activeByStage[stage],
+    0,
+  )
   const queue = async (stage: WeightedAiStage): Promise<boolean> => {
-    if (!hasCapacity() || !(await input.queueStage(stage))) return false
+    if (!hasCapacity()) return false
+    if (restricted.has(stage) && restrictedCount() >= cap) return false
+    if (!(await input.queueStage(stage))) return false
     occupied += 1
     activeByStage[stage] += 1
     queuedStages.push(stage)
     return true
   }
 
-  // Preserve enough diversity to keep records flowing toward publication.
-  // Analyze intentionally sits last: it receives a lane only after the more
-  // mature record stages, unless those stages have no work.
-  const diversityTarget = Math.min(3, concurrency)
-  let activeStageCount = weightedAiStages.filter(
-    (stage) => activeByStage[stage] > 0,
-  ).length
-  for (const stage of weightedAiStages) {
-    if (!hasCapacity() || activeStageCount >= diversityTarget) break
-    if (activeByStage[stage] > 0) continue
-    if (await queue(stage)) activeStageCount += 1
+  // Extract is the productive lane and cannot be starved by audit backlog.
+  if (activeByStage.analyze === 0 && hasCapacity()) await queue('analyze')
+
+  // Fidelity/repair stays downstream-first but never occupies more than two.
+  for (const stage of ['deep_medium', 'deep_low', 'verify'] as const) {
+    while (hasCapacity() && restrictedCount() < cap && await queue(stage)) {
+      // Fill the bounded stage until its queue or shared cap is exhausted.
+    }
   }
 
-  // Give every remaining lane to the highest stage that can reserve work.
+  // Remaining lanes are work-conserving; extraction receives them first.
   while (hasCapacity()) {
     let queued = false
-    for (const stage of weightedAiStages) {
+    for (const stage of [
+      'analyze', 'deep_medium', 'deep_low', 'verify'
+    ] as const) {
+      if (restricted.has(stage) && restrictedCount() >= cap) continue
       if (await queue(stage)) {
         queued = true
         break

@@ -453,7 +453,7 @@ tar -C / -xzf "$snapshot/state.tar.gz" \
   var/lib/clideck-mcp/source-artifacts
 chown -R clideck_mcp_worker:clideck_mcp \
   /var/lib/clideck-mcp/source-artifacts
-chmod 0750 /var/lib/clideck-mcp/source-artifacts
+chmod 2770 /var/lib/clideck-mcp/source-artifacts
 REMOTE
   checkpoint rehearsal
   printf 'Rehearsal snapshot restored successfully.\n'
@@ -532,7 +532,7 @@ find /etc/clideck-mcp -maxdepth 1 -type f -exec chmod 0600 {} +
 chmod 0600 /etc/cloudflared/token
 chown -R clideck_mcp_worker:clideck_mcp \
   /var/lib/clideck-mcp/source-artifacts
-chmod 0750 /var/lib/clideck-mcp/source-artifacts
+chmod 2770 /var/lib/clideck-mcp/source-artifacts
 chown -R caddy:caddy /var/lib/caddy
 sed -i 's/^RESEARCHER_HOST=.*/RESEARCHER_HOST=127.0.0.1/' \
   /etc/clideck-mcp/researcher.env

@@ -232,6 +232,94 @@ const scopePriority: Record<ApplicabilityScope, number> = {
   os_family: 1
 }
 
+async function searchBroadKnowledgeRows(
+  database: Database,
+  normalizedQuestion: string,
+  strictTsQuery: string,
+  relaxedTsQuery: string,
+  semanticTerms: readonly string[],
+  limit: number,
+  kind?: PublicKnowledge['kind'] | PublicKnowledge['kind'][],
+): Promise<KnowledgeRow[]> {
+  const terms = semanticTerms.length > 0
+    ? semanticTerms
+    : normalizedQuestion.toLowerCase().match(/[a-z0-9]+/g) ?? []
+  if (terms.length === 0) return []
+  const result = await database.query<KnowledgeRow>(
+    `SELECT
+       revision.id AS revision_id,
+       revision.public_ref,
+       item.kind,
+       coalesce(vendor.display_name, 'Not specified') AS vendor_name,
+       platform.display_name AS platform_name,
+       coalesce(os.display_name, 'Not specified') AS operating_system_name,
+       revision.version_min,
+       revision.version_max,
+       revision.version_normalized_min,
+       revision.version_normalized_max,
+       coalesce(applicability.scope_level, 'os_family') AS scope_level,
+       coalesce(applicability.version_scope, 'unbounded') AS version_scope,
+       applicability.version_branch,
+       coalesce(family.version_strategy, 'vendor') AS version_strategy,
+       coalesce(applicability.requires_platform_confirmation, false)
+         AS requires_platform_confirmation,
+       coalesce(applicability.portable_semantic_key,
+         digest(item.stable_key, 'sha256')) AS portable_semantic_key,
+       revision.title, revision.summary, revision.cli_mode,
+       revision.command_text, revision.procedure_steps,
+       revision.prerequisites, revision.risks, revision.verification_steps,
+       revision.rollback_steps, revision.limitations, revision.dangerous,
+       revision.confidence, revision.quality_score,
+       revision.last_verified_at,
+       coalesce(trust.validation_level, 'documentation_reviewed')
+         AS validation_level,
+       coalesce(trust.independent_confirmations, 1)
+         AS independent_confirmations,
+       coalesce(trust.confidence_explanation,
+         'Source-backed knowledge; device context was widened for retrieval.')
+         AS confidence_explanation,
+       coalesce(trust.next_review_at, revision.last_verified_at + 180)
+         AS next_review_at,
+       NULL::timestamptz AS lab_validated_at,
+       (ts_rank_cd(revision.search_document, to_tsquery('simple', $2), 32)
+         + ts_rank_cd(revision.search_document, to_tsquery('simple', $3), 32)
+         + similarity(lower(revision.title), lower($1)) * 0.15
+         + revision.confidence::float8 * 0.03
+         + revision.quality_score::float8 * 0.03)::float8 AS rank
+     FROM active_knowledge_state active
+     JOIN knowledge_revisions revision ON revision.id = active.revision_id
+     JOIN knowledge_items item ON item.id = active.knowledge_item_id
+     LEFT JOIN vendors vendor ON vendor.id = revision.vendor_id
+     LEFT JOIN platforms platform ON platform.id = revision.platform_id
+     LEFT JOIN operating_systems os ON os.id = revision.operating_system_id
+     LEFT JOIN knowledge_applicability_index applicability
+       ON applicability.revision_id = revision.id
+     LEFT JOIN software_families family ON family.id = applicability.family_id
+     LEFT JOIN knowledge_public_trust trust ON trust.revision_id = revision.id
+     WHERE item.domain_id = 'network' AND revision.domain_id = 'network'
+       AND ($4::text[] IS NULL OR item.kind = ANY($4))
+       AND (
+         revision.search_document @@ to_tsquery('simple', $2)
+         OR revision.search_document @@ to_tsquery('simple', $3)
+         OR lower(revision.title) % lower($1)
+       )
+       AND (SELECT count(*) FROM unnest($5::text[]) term
+              WHERE revision.search_document @@
+                to_tsquery('simple', term || ':*')) >= 1
+     ORDER BY rank DESC, revision.last_verified_at DESC
+     LIMIT $6`,
+    [
+      normalizedQuestion,
+      strictTsQuery,
+      relaxedTsQuery,
+      kind ? Array.isArray(kind) ? kind : [kind] : null,
+      terms,
+      Math.max(limit * 4, 20)
+    ],
+  )
+  return result.rows
+}
+
 export async function searchKnowledge(
   database: Database,
   question: string,
@@ -254,8 +342,9 @@ export async function searchKnowledge(
   })
   const semanticTerms = semanticSearchTerms(search.tokens, context)
   const minimumSemanticMatches = Math.min(2, semanticTerms.length)
-  if (minimumSemanticMatches === 0) return []
-  const result = await database.query<KnowledgeRow>(
+  const result = minimumSemanticMatches === 0
+    ? { rows: [] as KnowledgeRow[] }
+    : await database.query<KnowledgeRow>(
     `WITH ranked_revisions AS MATERIALIZED (
        SELECT
          kr.id AS revision_id,
@@ -430,7 +519,7 @@ export async function searchKnowledge(
     ],
   )
 
-  const applicableRows = result.rows
+  const exactRows = result.rows
     .flatMap((row) => {
       const versionMatch = matchVersionApplicability({
         requested: context.version,
@@ -455,7 +544,26 @@ export async function searchKnowledge(
         Buffer.from(candidate.row.portable_semantic_key).toString('hex') === key
       ) === index
     })
-    .slice(0, limit)
+  const broadRows = await searchBroadKnowledgeRows(
+    database,
+    search.normalizedQuestion,
+    search.strictTsQuery,
+    search.relaxedTsQuery,
+    semanticTerms,
+    limit,
+    kind,
+  )
+  const seen = new Set(exactRows.map(({ row }) =>
+    Buffer.from(row.portable_semantic_key).toString('hex'),
+  ))
+  const applicableRows = [
+    ...exactRows,
+    ...broadRows
+      .filter((row) => !seen.has(
+        Buffer.from(row.portable_semantic_key).toString('hex'),
+      ))
+      .map((row) => ({ row, versionMatch: 'same_branch_fallback' as const }))
+  ].slice(0, limit)
 
   if (applicableRows.length === 0) return []
   const revisionIds = applicableRows.map(({ row }) => row.revision_id)
@@ -495,18 +603,21 @@ export async function getPublicRevision(
     `SELECT
        pak.*,
        kr.public_ref,
-       applicability.scope_level,
-       applicability.version_scope,
+       coalesce(applicability.scope_level, 'os_family') AS scope_level,
+       coalesce(applicability.version_scope, 'unbounded') AS version_scope,
        applicability.version_branch,
-       software_family.version_strategy,
-       applicability.requires_platform_confirmation,
-       applicability.portable_semantic_key,
+       coalesce(software_family.version_strategy, 'vendor') AS version_strategy,
+       coalesce(applicability.requires_platform_confirmation, false)
+         AS requires_platform_confirmation,
+       coalesce(applicability.portable_semantic_key,
+         digest(ki.stable_key, 'sha256')) AS portable_semantic_key,
        1::float8 AS rank
      FROM public_active_knowledge pak
      JOIN knowledge_revisions kr ON kr.id = pak.revision_id
-     JOIN knowledge_applicability_index applicability
+     JOIN knowledge_items ki ON ki.id = kr.knowledge_item_id
+     LEFT JOIN knowledge_applicability_index applicability
        ON applicability.revision_id = kr.id
-     JOIN software_families software_family
+     LEFT JOIN software_families software_family
        ON software_family.id = applicability.family_id
      WHERE pak.revision_id = $1 OR kr.public_ref = $1`,
     [revisionId],

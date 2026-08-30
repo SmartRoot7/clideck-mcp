@@ -17,14 +17,18 @@ import {
 import { demandCapacityAtLimit } from '../src/domain/pipeline.js'
 
 describe('parallel Luna runtime', () => {
-  it('uses four isolated executor lanes with the economical model', () => {
+  it('uses eight isolated executor lanes with the economical model', () => {
     expect(pipelineModel).toBe('gpt-5.6-luna')
     expect(pipelineReasoning).toBe('low')
     expect(pipelineExecutorIds).toEqual([
       'pipeline-executor-01',
       'pipeline-executor-02',
       'pipeline-executor-03',
-      'pipeline-executor-04'
+      'pipeline-executor-04',
+      'pipeline-executor-05',
+      'pipeline-executor-06',
+      'pipeline-executor-07',
+      'pipeline-executor-08'
     ])
 
     const workspaces = pipelineExecutorIds.map((executorId) =>
@@ -32,10 +36,10 @@ describe('parallel Luna runtime', () => {
     )
     expect(new Set(
       workspaces.map((workspace) => workspace.secretDirectory),
-    ).size).toBe(4)
+    ).size).toBe(8)
     expect(new Set(
       workspaces.map((workspace) => workspace.tempDirectory),
-    ).size).toBe(4)
+    ).size).toBe(8)
   })
 
   it('starts Luna with local tools disabled and a minimal environment', () => {

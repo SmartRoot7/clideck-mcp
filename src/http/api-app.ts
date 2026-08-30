@@ -288,6 +288,51 @@ export function createApiApp(dependencies: ApiDependencies) {
     }
   })
 
+  app.get('/sources/:sourceRef', async (context) => {
+    const sourceRef = context.req.param('sourceRef')
+    if (!/^src_[a-z0-9_-]{12,96}$/.test(sourceRef)) {
+      return context.json({ error: 'not_found' }, 404)
+    }
+    const result = await database.query<{
+      source_ref: string
+      source_kind: string
+      title: string
+      document_type: string
+      content_hash: string | null
+      document_date: string | null
+      declared_vendor: string | null
+      declared_operating_system: string | null
+      declared_model: string | null
+      discovered_at: string
+      updated_at: string
+    }>(
+      `SELECT source_ref, source_kind, title, document_type, content_hash,
+              document_date, declared_vendor, declared_operating_system,
+              declared_model, discovered_at, updated_at
+         FROM source_candidates
+        WHERE source_ref = $1`,
+      [sourceRef],
+    )
+    const source = result.rows[0]
+    if (!source) return context.json({ error: 'not_found' }, 404)
+    return context.json({
+      source_ref: source.source_ref,
+      source_kind: source.source_kind,
+      title: source.title,
+      document_type: source.document_type,
+      content_hash: source.content_hash,
+      document_date: source.document_date,
+      declared_context: {
+        vendor: source.declared_vendor,
+        operating_system: source.declared_operating_system,
+        model: source.declared_model
+      },
+      discovered_at: source.discovered_at,
+      updated_at: source.updated_at,
+      content_available: false
+    })
+  })
+
   app.get('/metrics', async (context) => {
     const authorization = context.req.header('authorization')
     const token = authorization?.startsWith('Bearer ')
@@ -1093,7 +1138,7 @@ export function createApiApp(dependencies: ApiDependencies) {
       return context.json({ error: 'forbidden' }, 403)
     }
     const parsed = z.object({
-      max_concurrent_ai_runs: z.number().int().min(1).max(4)
+      max_concurrent_ai_runs: z.number().int().min(1).max(8)
     }).safeParse(await context.req.json<unknown>())
     if (!parsed.success) {
       return context.json({ error: 'invalid_pipeline_concurrency' }, 400)

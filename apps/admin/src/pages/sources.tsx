@@ -33,6 +33,7 @@ import { useSources } from '../lib/queries'
 
 export function SourcesPage() {
   const [status, setStatus] = useState('')
+  const [selected, setSelected] = useState<Set<string>>(() => new Set())
   const query = useSources(status, 200)
   const action = useAdminAction()
   if (query.isLoading) return <LoadingState label="Loading discovered sources…" />
@@ -69,11 +70,29 @@ export function SourcesPage() {
               confirmText: 'DISCOVER',
               buildBody: () => ({ coverage_target_id: null })
             })}><Search size={16} />Discover source</Button>
+            <Button variant="secondary" disabled={selected.size === 0} onClick={() => action.open({
+              title: 'Reprocess selected sources',
+              summary: `Create a versioned processing run for ${selected.size} selected source materials. Active knowledge remains available during processing.`,
+              path: '/admin/api/v1/intake/reprocess',
+              confirmText: 'REPROCESS',
+              buildBody: () => ({ source_ids: [...selected], confirmed: true })
+            })}><RotateCcw size={15} />Reprocess selected ({selected.size})</Button>
           </div>
         }
       >
-        <DataTable rows={rows} columns={SOURCE_COLUMNS} rowKey={(row) => row.id} empty="No sources match this status." actions={(row) => (
+        <DataTable rows={rows} columns={sourceColumns(selected, (id, checked) => setSelected((current) => {
+          const next = new Set(current)
+          if (checked) next.add(id); else next.delete(id)
+          return next
+        }))} rowKey={(row) => row.id} empty="No sources match this status." actions={(row) => (
           <div className="row-actions">
+            <Button variant="quiet" onClick={() => action.open({
+              title: 'Reprocess source',
+              summary: `Create a new immutable processing run for “${row.title}”.`,
+              path: '/admin/api/v1/intake/reprocess',
+              confirmText: 'REPROCESS',
+              buildBody: () => ({ source_ids: [row.id], confirmed: true })
+            })}><RotateCcw size={15} />Reprocess</Button>
             <Button variant="quiet" onClick={() => action.open({
               title: 'Retry source',
               summary: `Return “${row.title}” to its last safe processing stage. Existing accepted work is kept.`,
@@ -106,7 +125,11 @@ export function SourcesPage() {
   )
 }
 
-const SOURCE_COLUMNS: Array<TableColumn<Source>> = [
+function sourceColumns(
+  selected: Set<string>,
+  onToggle: (id: string, checked: boolean) => void,
+): Array<TableColumn<Source>> { return [
+  { key: 'select', label: 'Select', render: (row) => <input type="checkbox" aria-label={`Select ${row.title}`} checked={selected.has(row.id)} onChange={(event) => onToggle(row.id, event.target.checked)} /> },
   { key: 'source', label: 'Source', render: (row) => <div className="primary-cell"><strong>{row.title}</strong><span>{row.vendor_slug} · {row.operating_system_slug ?? 'vendor-level'} · {titleCase(row.document_role)}</span></div> },
   { key: 'status', label: 'Status', render: (row) => <div><Status>{titleCase(row.status)}</Status>{row.failure_code && <small className="cell-error">{row.failure_code}</small>}</div> },
   { key: 'progress', label: 'Fragments', render: (row) => {
@@ -117,4 +140,4 @@ const SOURCE_COLUMNS: Array<TableColumn<Source>> = [
   { key: 'artifact', label: 'Artifact', render: (row) => <div className="primary-cell"><strong>{row.artifact_status ? titleCase(row.artifact_status) : 'Not acquired'}</strong><span>{row.page_count ?? '—'} pages · {row.byte_size ? `${formatNumber(numberOf(row.byte_size) / 1_048_576, 1)} MB` : '—'}</span></div> },
   { key: 'updated', label: 'Updated', render: (row) => formatDate(row.updated_at) },
   { key: 'id', label: 'ID', render: (row) => <code title={row.id}>{shortId(row.id)}</code> }
-]
+] }

@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 
 import {
-  CorePolicyError,
   DomainPackRegistry,
   assertManifestCompatibility,
   domainPackManifestV1Schema,
@@ -149,20 +148,20 @@ describe('Domain Kit', () => {
     )
   })
 
-  it('enforces dangerous publication policy', () => {
-    expect(() => enforceCoreCandidatePolicy({
+  it('keeps risk, confidence and rollback as informational fields', () => {
+    expect(enforceCoreCandidatePolicy({
       ...coreCandidate(),
       dangerous: true,
       confidence: 0.94,
       risk_level: 'safe_read_only'
-    })).toThrow(CorePolicyError)
-    expect(() => enforceCoreCandidatePolicy({
+    })).toMatchObject({ dangerous: true, confidence: 0.94 })
+    expect(enforceCoreCandidatePolicy({
       ...coreCandidate(),
       dangerous: true,
       confidence: 0.99,
       risk_level: 'service_disruptive',
       rollback: []
-    })).toThrow('Dangerous candidates require')
+    })).toMatchObject({ dangerous: true, rollback: [] })
   })
 
   it('exports strict JSON Schema 2020-12 documents', () => {

@@ -415,13 +415,24 @@ export async function reconcileKnownKnowledgeDemand(
             last_seen_at = now()
        FROM knowledge_revisions revision
        CROSS JOIN active_release active
-      WHERE demand.demand_key = $1
+      WHERE (
+          demand.demand_key = $1
+          OR (
+            demand.tool_name = $3
+            AND lower(demand.question) = lower($4)
+          )
+        )
         AND revision.public_ref = $2
         AND demand.status <> 'published'
       RETURNING demand.id
      )
      SELECT id FROM resolved`,
-    [prepared.demandKey, revisionRef],
+    [
+      prepared.demandKey,
+      revisionRef,
+      toolName,
+      prepared.question
+    ],
   )
   if (result.rows.length > 0) {
     await database.query(

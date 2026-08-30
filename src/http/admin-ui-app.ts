@@ -40,7 +40,22 @@ import { timeout } from 'hono/timeout'
 import { z, type ZodType } from 'zod'
 
 import type { AppConfig } from '../config.js'
+import type { Database } from '../db.js'
+import {
+  acceptSourceUpload,
+  controlIntakeJob,
+  createReprocessJob,
+  previewReprocessJob,
+  createWebsiteIntakeJob,
+  listIntakeJobs,
+  uploadMetadataSchema,
+  websiteIntakeSchema
+} from '../domain/intake.js'
 import type { Logger } from '../logger.js'
+import {
+  previewProcessingRunRollback,
+  rollbackProcessingRun
+} from '../domain/publication.js'
 import { createAdminActorSignature } from './admin-auth.js'
 import {
   LocalAdminSessionStore,
@@ -54,12 +69,22 @@ const DEVELOPMENT_COOKIE = 'clideck_mcp_admin'
 const UUID_SCHEMA = z.uuid()
 const EXPERT_TASK_ID = /^ekt_[A-Za-z0-9_-]{32}$/
 
+function decodeHeader(value: string | undefined): string | undefined {
+  if (!value) return value
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
 type InternalFetch = (request: Request) => Promise<Response>
 
 type AdminUiDependencies = {
   config: AppConfig
   logger: Logger
   internalFetch: InternalFetch
+  adminDatabase?: Database
 }
 
 type AdminUiBindings = {
@@ -110,7 +135,7 @@ function normalizeAllowedHosts(config: AppConfig): Set<string> {
 }
 
 export function createAdminUiApp(dependencies: AdminUiDependencies) {
-  const { config, logger, internalFetch } = dependencies
+  const { config, logger, internalFetch, adminDatabase } = dependencies
   const app = new Hono<AdminUiBindings>()
   const cookieName =
     config.nodeEnv === 'production' ? PRODUCTION_COOKIE : DEVELOPMENT_COOKIE
@@ -152,15 +177,24 @@ export function createAdminUiApp(dependencies: AdminUiDependencies) {
       xFrameOptions: 'DENY'
     }),
   )
-  app.use(
-    '*',
-    bodyLimit({
-      maxSize: 64 * 1_024,
-      onError: (context) =>
-        context.json({ error: 'request_body_too_large' }, 413)
-    }),
-  )
-  app.use('*', timeout(30_000))
+  const boundedJsonBody = bodyLimit({
+    maxSize: 64 * 1_024,
+    onError: (context) =>
+      context.json({ error: 'request_body_too_large' }, 413)
+  })
+  app.use('*', async (context, next) => {
+    if (context.req.path === '/admin/api/v1/intake/upload') {
+      await next()
+      return
+    }
+    return boundedJsonBody(context, next)
+  })
+  app.use('*', async (context, next) => {
+    const handler = context.req.path === '/admin/api/v1/intake/upload'
+      ? timeout(15 * 60_000)
+      : timeout(30_000)
+    return handler(context, next)
+  })
   app.use('*', async (context, next) => {
     const host = context.req.header('host')?.toLowerCase()
     if (config.nodeEnv === 'production' && (!host || !allowedHosts.has(host))) {
@@ -396,6 +430,139 @@ export function createAdminUiApp(dependencies: AdminUiDependencies) {
 
   app.use('/admin/api/v1/*', requireSession)
 
+  app.get('/admin/api/v1/intake/jobs', async (context) => {
+    if (!adminDatabase) return context.json({ error: 'intake_unavailable' }, 503)
+    return context.json(await listIntakeJobs(adminDatabase))
+  })
+
+  app.post('/admin/api/v1/intake/website', async (context) => {
+    if (!adminDatabase) return context.json({ error: 'intake_unavailable' }, 503)
+    const parsed = websiteIntakeSchema.safeParse(await context.req.json<unknown>())
+    if (!parsed.success) return context.json({ error: 'invalid_intake_website' }, 400)
+    const actor = context.get('localAdminActor')
+    try {
+      return context.json({ ok: true, ...await createWebsiteIntakeJob(
+        adminDatabase,
+        parsed.data,
+        actor.id,
+      ) }, 201)
+    } catch (error) {
+      logger.warn({ err: error }, 'Website intake could not be created')
+      return context.json({ error: 'intake_website_failed' }, 409)
+    }
+  })
+
+  app.post('/admin/api/v1/intake/upload', async (context) => {
+    if (!adminDatabase) return context.json({ error: 'intake_unavailable' }, 503)
+    if (!context.req.raw.body) return context.json({ error: 'upload_body_required' }, 400)
+    const parsed = uploadMetadataSchema.safeParse({
+      title: decodeHeader(context.req.header('x-clideck-title')),
+      file_name: decodeHeader(context.req.header('x-clideck-file-name')),
+      source_kind: context.req.header('x-clideck-source-kind'),
+      media_type: context.req.header('content-type')?.split(';')[0],
+      vendor: context.req.header('x-clideck-vendor') || undefined,
+      operating_system:
+        context.req.header('x-clideck-operating-system') || undefined,
+      model: context.req.header('x-clideck-model') || undefined
+    })
+    if (!parsed.success) return context.json({ error: 'invalid_upload_metadata' }, 400)
+    const actor = context.get('localAdminActor')
+    const existingJobId = context.req.header('x-clideck-job-id') || null
+    if (existingJobId && !z.uuid().safeParse(existingJobId).success) {
+      return context.json({ error: 'invalid_upload_job' }, 400)
+    }
+    try {
+      return context.json({ ok: true, ...await acceptSourceUpload(
+        adminDatabase,
+        config,
+        parsed.data,
+        context.req.raw.body,
+        actor.id,
+        existingJobId,
+      ) }, 201)
+    } catch (error) {
+      logger.warn({ err: error }, 'Source upload failed')
+      const code = error instanceof Error ? error.message : ''
+      return context.json({ error: code || 'source_upload_failed' },
+        code === 'UPLOAD_TOO_LARGE' ? 413 : 400)
+    }
+  })
+
+  app.post('/admin/api/v1/intake/reprocess', async (context) => {
+    if (!adminDatabase) return context.json({ error: 'intake_unavailable' }, 503)
+    const parsed = z.strictObject({
+      source_ids: z.array(z.uuid()).max(10_000).nullable(),
+      confirmed: z.literal(true)
+    }).safeParse(await context.req.json<unknown>())
+    if (!parsed.success) return context.json({ error: 'reprocess_confirmation_required' }, 400)
+    try {
+      return context.json({ ok: true, ...await createReprocessJob(
+        adminDatabase,
+        parsed.data.source_ids,
+        context.get('localAdminActor').id,
+      ) }, 201)
+    } catch (error) {
+      logger.warn({ err: error }, 'Reprocess job could not be created')
+      return context.json({ error: 'reprocess_already_active' }, 409)
+    }
+  })
+
+  app.get('/admin/api/v1/intake/reprocess/preview', async (context) => {
+    if (!adminDatabase) return context.json({ error: 'intake_unavailable' }, 503)
+    return context.json(await previewReprocessJob(adminDatabase, null))
+  })
+
+  app.post('/admin/api/v1/intake/jobs/:jobId/action', async (context) => {
+    if (!adminDatabase) return context.json({ error: 'intake_unavailable' }, 503)
+    const jobId = context.req.param('jobId')
+    const parsed = z.strictObject({
+      action: z.enum(['pause', 'resume', 'cancel', 'retry'])
+    }).safeParse(await context.req.json<unknown>())
+    if (!z.uuid().safeParse(jobId).success || !parsed.success) {
+      return context.json({ error: 'invalid_intake_action' }, 400)
+    }
+    const result = await controlIntakeJob(
+      adminDatabase,
+      jobId,
+      parsed.data.action,
+      context.get('localAdminActor').id,
+    )
+    return result
+      ? context.json({ ok: true, ...result })
+      : context.json({ error: 'intake_job_not_actionable' }, 409)
+  })
+
+  app.get('/admin/api/v1/intake/runs/:runId/rollback', async (context) => {
+    if (!adminDatabase) return context.json({ error: 'intake_unavailable' }, 503)
+    const runId = context.req.param('runId')
+    if (!z.uuid().safeParse(runId).success) {
+      return context.json({ error: 'invalid_processing_run' }, 400)
+    }
+    return context.json(await previewProcessingRunRollback(adminDatabase, runId))
+  })
+
+  app.post('/admin/api/v1/intake/runs/:runId/rollback', async (context) => {
+    if (!adminDatabase) return context.json({ error: 'intake_unavailable' }, 503)
+    const runId = context.req.param('runId')
+    const parsed = z.strictObject({
+      confirm_processing_run_id: z.literal(runId)
+    }).safeParse(await context.req.json<unknown>())
+    if (!z.uuid().safeParse(runId).success || !parsed.success) {
+      return context.json({ error: 'rollback_confirmation_required' }, 400)
+    }
+    try {
+      return context.json(await rollbackProcessingRun(
+        adminDatabase,
+        runId,
+        context.get('localAdminActor').id,
+      ))
+    } catch (error) {
+      return context.json({
+        error: error instanceof Error ? error.message : 'processing_run_rollback_failed'
+      }, 409)
+    }
+  })
+
   app.get('/admin/api/v1/overview', (context) =>
     readEndpoint(context, '/admin/v1/overview', overviewSchema),
   )
@@ -582,7 +749,7 @@ export function createAdminUiApp(dependencies: AdminUiDependencies) {
   })
   app.post('/admin/api/v1/pipeline/concurrency', async (context) => {
     const parsed = z.object({
-      max_concurrent_ai_runs: z.number().int().min(1).max(4)
+      max_concurrent_ai_runs: z.number().int().min(1).max(8)
     }).strict().safeParse(await context.req.json<unknown>())
     if (!parsed.success) return context.json({ error: 'invalid_input' }, 400)
     return mutationEndpoint(

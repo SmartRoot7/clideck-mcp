@@ -130,14 +130,14 @@ const negativeKnowledgeCases: EvalCase[] = [
     id: `unsupported-version-${index + 1}`,
     type: 'knowledge' as const,
     question: fact.questionPatterns[0]!,
-    expected_known: false,
+    expected_known: true,
     context: { ...ciscoContext, version: '16.3.1' }
   })),
   ...IOS_XE_SEED_KNOWLEDGE.slice(0, 5).map((fact, index) => ({
     id: `junos-scope-${index + 1}`,
     type: 'knowledge' as const,
     question: fact.questionPatterns[0]!,
-    expected_known: false,
+    expected_known: true,
     context: {
       vendor: 'Juniper',
       model: 'EX4400',
@@ -149,7 +149,7 @@ const negativeKnowledgeCases: EvalCase[] = [
     id: `eos-scope-${index + 1}`,
     type: 'knowledge' as const,
     question: fact.questionPatterns[0]!,
-    expected_known: false,
+    expected_known: true,
     context: {
       vendor: 'Arista',
       model: 'DCS-7050SX3',

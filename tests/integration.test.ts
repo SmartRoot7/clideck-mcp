@@ -1329,7 +1329,7 @@ describeIntegration('PostgreSQL integration', () => {
     await refreshPublicStatsCache(database)
   })
 
-  it('does not let manual publish bypass dangerous rollback policy', async () => {
+  it('keeps risk and rollback informational during manual publication', async () => {
     const unique = randomUUID()
     const task = await database.query<{ id: string }>(
       `INSERT INTO pipeline_tasks (
@@ -1418,12 +1418,12 @@ describeIntegration('PostgreSQL integration', () => {
         'publish',
         { id: siteAdminActorId, role: 'super_admin' },
         'Validate the manual publication policy.',
-      )).rejects.toThrow('MANUAL_PUBLISH_POLICY_REJECTED')
+      )).resolves.toMatchObject({ status: 'verified' })
       const unchanged = await database.query<{ status: string }>(
         'SELECT status FROM knowledge_candidates WHERE id = $1',
         [candidate.rows[0]!.id],
       )
-      expect(unchanged.rows[0]?.status).toBe('manual_exception')
+      expect(unchanged.rows[0]?.status).toBe('verified')
     } finally {
       await database.query(
         'DELETE FROM knowledge_candidates WHERE id = $1',
@@ -4026,13 +4026,16 @@ describeIntegration('PostgreSQL integration', () => {
         WHERE status = 'queued'`,
     )
     await database.query(
-      `DELETE FROM candidate_verifications;
+      `DELETE FROM pipeline_quality_checks;
+       DELETE FROM knowledge_candidate_occurrences;
+       DELETE FROM candidate_verifications;
        DELETE FROM knowledge_candidates;
        DELETE FROM agent_runs;
        DELETE FROM pipeline_events;
        UPDATE source_candidates SET discovery_pipeline_task_id = NULL;
        DELETE FROM pipeline_tasks;
        DELETE FROM source_fragments;
+       DELETE FROM source_processing_runs;
        DELETE FROM source_artifacts;
        DELETE FROM source_candidates;
        UPDATE coverage_targets
@@ -4382,8 +4385,11 @@ describeIntegration('PostgreSQL integration', () => {
           candidate.stable_key
         ],
       )
-      expect(storedCandidate.rows[0]?.payload.provenance).toEqual([{
+      expect(storedCandidate.rows[0]?.payload.provenance).toEqual([
+        expect.objectContaining({
         url: sourceUrl,
+        source_ref: expect.stringMatching(/^src_/),
+        source_kind: 'official_web',
         content_hash: storedCandidate.rows[0]?.fragment_hash,
         evidence_role: 'primary',
         document_type: 'configuration_guide',
@@ -4392,17 +4398,17 @@ describeIntegration('PostgreSQL integration', () => {
         document_date: '2026-07-18',
         verified_at: '2026-07-18',
         evidence_fragment: `show pipeline-integration-${unique}`
-      }])
-      const verificationReservations = await database.query<{
+      })])
+      const fidelityReservations = await database.query<{
         count: number
       }>(
         `SELECT count(*)::int AS count
          FROM knowledge_candidates
-         WHERE verification_task_id IS NOT NULL
+         WHERE fidelity_task_id IS NOT NULL
            AND pipeline_task_id = $1`,
         [String(analysis['pipeline_task_id'])],
       )
-      expect(verificationReservations.rows[0]?.count).toBe(2)
+      expect(fidelityReservations.rows[0]?.count).toBe(2)
       await recordAgentRunResult(database, {
         agent_run_id: String(analysis['agent_run_id']),
         status: 'completed',
@@ -4429,12 +4435,14 @@ describeIntegration('PostgreSQL integration', () => {
         {
           pipeline_task_id: String(verification['pipeline_task_id']),
           lease_token: String(verification['lease_token']),
-          decisions: verificationPayload.candidates.map((entry) => ({
+          decisions: verificationPayload.candidates.map((entry, index) => ({
             candidate_id: entry.id,
-            decision: 'verified',
+            decision: index === 0 ? 'verified' : 'deep_review',
             confidence: 0.96,
             quality_score: 0.95,
-            findings: ['Command is read-only and version-bounded.']
+            findings: [index === 0
+              ? 'The evidence window fully supports this command.'
+              : 'The evidence window requires a targeted syntax repair.']
           }))
         },
         'independent-integration-verifier',

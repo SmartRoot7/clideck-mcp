@@ -287,9 +287,9 @@ export const candidateRevisionSchema = z.object({
     'change',
     'upgrade'
   ]),
-  vendor_slug: z.string().regex(/^[a-z0-9][a-z0-9-]{1,62}$/),
+  vendor_slug: z.string().regex(/^[a-z0-9][a-z0-9-]{1,62}$/).optional(),
   platform_slug: z.string().regex(/^[a-z0-9][a-z0-9-]{1,62}$/).optional(),
-  operating_system_slug: z.string().regex(/^[a-z0-9][a-z0-9-]{1,62}$/),
+  operating_system_slug: z.string().regex(/^[a-z0-9][a-z0-9-]{1,62}$/).optional(),
   version_min: networkVersionSchema.optional(),
   version_max: networkVersionSchema.optional(),
   software_family_slug: z.string()
@@ -330,7 +330,7 @@ export const candidateRevisionSchema = z.object({
   procedure: z.array(z.string().trim().min(1).max(1_000)).max(50).default([]),
   prerequisites: z.array(z.string().trim().min(1).max(1_000)).max(30).default([]),
   risks: z.array(z.string().trim().min(1).max(1_000)).max(30).default([]),
-  verification: z.array(z.string().trim().min(1).max(1_000)).min(1).max(30),
+  verification: z.array(z.string().trim().min(1).max(1_000)).max(30).default([]),
   rollback: z.array(z.string().trim().min(1).max(1_000)).max(30).default([]),
   limitations: z.array(z.string().trim().min(1).max(1_000)).max(30).default([]),
   dangerous: z.boolean(),
@@ -352,6 +352,10 @@ export const candidateRevisionSchema = z.object({
   last_verified_at: z.iso.date(),
   provenance: z.array(z.object({
     url: z.url().startsWith('https://'),
+    source_ref: z.string().trim().min(1).max(120).optional(),
+    source_kind: z.enum([
+      'official_web', 'admin_web', 'admin_document', 'pasted_text', 'field_log'
+    ]).optional(),
     document_type: z.string().trim().min(1).max(80),
     title: shortText,
     document_version: z.string().trim().max(120).optional(),

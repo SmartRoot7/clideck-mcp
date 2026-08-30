@@ -9,7 +9,7 @@ const boundedLine = z.string().trim().min(1).max(1_000)
 export const networkContextSchema = z.strictObject({
   vendor: slugSchema.optional(),
   model: slugSchema.optional(),
-  operating_system: slugSchema,
+  operating_system: slugSchema.optional(),
   runtime_mode: z.enum([
     'normal', 'rescue', 'installer', 'update', 'uninstall', 'recovery',
     'diagnostic'
@@ -41,9 +41,9 @@ export const networkKnowledgeCandidateSchema = z.strictObject({
     'change',
     'upgrade'
   ]),
-  vendor_slug: slugSchema,
+  vendor_slug: slugSchema.optional(),
   platform_slug: slugSchema.optional(),
-  operating_system_slug: slugSchema,
+  operating_system_slug: slugSchema.optional(),
   version_min: versionSchema.optional(),
   version_max: versionSchema.optional(),
   software_family_slug: slugSchema.optional(),
@@ -78,7 +78,7 @@ export const networkKnowledgeCandidateSchema = z.strictObject({
   procedure: z.array(boundedLine).max(50).default([]),
   prerequisites: z.array(boundedLine).max(30).default([]),
   risks: z.array(boundedLine).max(30).default([]),
-  verification: z.array(boundedLine).min(1).max(30),
+  verification: z.array(boundedLine).max(30).default([]),
   rollback: z.array(boundedLine).max(30).default([]),
   limitations: z.array(boundedLine).max(30).default([]),
   dangerous: z.boolean(),
@@ -89,6 +89,10 @@ export const networkKnowledgeCandidateSchema = z.strictObject({
   last_verified_at: z.iso.date(),
   provenance: z.array(z.strictObject({
     url: z.url().startsWith('https://'),
+    source_ref: z.string().trim().min(1).max(120).optional(),
+    source_kind: z.enum([
+      'official_web', 'admin_web', 'admin_document', 'pasted_text', 'field_log'
+    ]).optional(),
     document_type: z.string().trim().min(1).max(80),
     title: z.string().trim().min(1).max(240),
     document_version: z.string().trim().min(1).max(120).optional(),

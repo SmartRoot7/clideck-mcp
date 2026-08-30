@@ -1,8 +1,9 @@
 # Parallel Luna pipeline
 
-The macOS `launchd` service runs one local pool supervisor and four isolated
+The macOS `launchd` service runs one local pool supervisor and eight isolated
 executor lanes. PostgreSQL is the source of truth for the configured
-concurrency, which defaults to three and may be set from one through four.
+concurrency may be set from one through eight. Fidelity and Deep Repair remain
+bounded to two shared lanes so extraction cannot be starved.
 Standby lanes poll the restricted researcher bridge but never start Codex until
 they atomically lease useful work.
 
@@ -40,6 +41,10 @@ Each executor uses its own ignored lease directory:
 .secrets/pipeline/pipeline-executor-02/
 .secrets/pipeline/pipeline-executor-03/
 .secrets/pipeline/pipeline-executor-04/
+.secrets/pipeline/pipeline-executor-05/
+.secrets/pipeline/pipeline-executor-06/
+.secrets/pipeline/pipeline-executor-07/
+.secrets/pipeline/pipeline-executor-08/
 ```
 
 Temporary schemas, output, submissions, and usage files are likewise isolated

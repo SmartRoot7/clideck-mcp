@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto'
+
 import { z } from 'zod'
 
 import { enforceCoreCandidatePolicy } from '@clideck/domain-kit'
@@ -40,8 +42,12 @@ import {
   replayDemandCoverage
 } from './demand-intelligence.js'
 import { decomposeNetworkQuestion, normalizeTopicSlug } from './network-intent.js'
-import { candidateKnowledgeSchema } from './publication.js'
+import {
+  candidateKnowledgeSchema,
+  deactivatePublishedCandidates
+} from './publication.js'
 import { enforceKnowledgeRisk } from './risk.js'
+import { batchEvidenceUnits, shouldRunQualityCheck } from './pipeline-v2.js'
 
 const pipelineLeaseSchema = z.object({
   pipeline_task_id: z.string().uuid(),
@@ -58,6 +64,10 @@ export const discoverySourceSchema = z.object({
 
 const pipelineSourcePayloadSchema = z.object({
   canonical_url: z.url().startsWith('https://'),
+  source_ref: z.string().trim().min(1).max(120).optional(),
+  source_kind: z.enum([
+    'official_web', 'admin_web', 'admin_document', 'pasted_text', 'field_log'
+  ]).optional(),
   document_type: z.string().trim().min(1).max(80),
   title: z.string().trim().min(1).max(500),
   document_version: z.string().trim().min(1).max(160).nullable().optional(),
@@ -97,11 +107,23 @@ const candidateAnalysisArtifactShape = {
   candidates: z.array(z.object({
     fragment_id: z.string().uuid(),
     candidate: pipelineCandidatePayloadSchema
-  })).max(50),
+  })).max(200),
   rejected_fragments: z.array(z.object({
     fragment_id: z.string().uuid(),
     reason: z.string().trim().min(8).max(500)
-  })).max(50).default([])
+  })).max(50).default([]),
+  fragment_dispositions: z.array(z.object({
+    fragment_id: z.string().uuid(),
+    disposition: z.enum([
+      'non_knowledge', 'continuation_required', 'targeted_retry'
+    ]),
+    reason: z.enum([
+      'navigation_or_toc', 'legal_or_copyright', 'part_inventory',
+      'physical_installation', 'general_safety', 'other_non_operational',
+      'boundary_continuation', 'targeted_retry'
+    ]),
+    detail: z.string().trim().min(1).max(500).optional()
+  })).max(50).optional()
 }
 const requireHandledAnalysisArtifact = (
   value: z.infer<z.ZodObject<typeof candidateAnalysisArtifactShape>>,
@@ -109,8 +131,29 @@ const requireHandledAnalysisArtifact = (
 ) => {
   const handled = new Set([
     ...value.candidates.map((entry) => entry.fragment_id),
-    ...value.rejected_fragments.map((entry) => entry.fragment_id)
+    ...value.rejected_fragments.map((entry) => entry.fragment_id),
+    ...(value.fragment_dispositions ?? []).map((entry) => entry.fragment_id)
   ])
+  const candidateIds = new Set(value.candidates.map((entry) => entry.fragment_id))
+  const rejectedIds = new Set(value.rejected_fragments.map((entry) => entry.fragment_id))
+  const dispositions = new Map(
+    (value.fragment_dispositions ?? []).map((entry) => [entry.fragment_id, entry]),
+  )
+  for (const fragmentId of handled) {
+    const disposition = dispositions.get(fragmentId)
+    if (rejectedIds.has(fragmentId) && (candidateIds.has(fragmentId) || disposition)) {
+      context.addIssue({
+        code: 'custom',
+        message: `Rejected fragment ${fragmentId} cannot also contain knowledge.`
+      })
+    }
+    if (candidateIds.has(fragmentId) && disposition?.disposition === 'non_knowledge') {
+      context.addIssue({
+        code: 'custom',
+        message: `Knowledge fragment ${fragmentId} cannot be non-knowledge.`
+      })
+    }
+  }
   if (handled.size === 0) {
     context.addIssue({
       code: 'custom',
@@ -665,6 +708,7 @@ export type PipelineTaskRow = {
   source_candidate_id: string | null
   expert_task_id: string | null
   knowledge_demand_id: string | null
+  processing_run_id?: string | null
   requested_reasoning_effort?: 'low' | 'medium'
   queue_class?: 'baseline' | 'demand'
   attempts?: number
@@ -1052,6 +1096,7 @@ async function insertTask(
     payload?: Record<string, unknown>
     reasoningEffort?: 'low' | 'medium'
     queueClass?: 'baseline' | 'demand'
+    processingRunId?: string | null
   },
 ): Promise<string | null> {
   const inserted = await client.query<{ id: string }>(
@@ -1063,12 +1108,13 @@ async function insertTask(
        source_candidate_id,
        expert_task_id,
        knowledge_demand_id,
+       processing_run_id,
        dedupe_key,
        payload,
        requested_reasoning_effort,
        queue_class
      )
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12)
      ON CONFLICT (dedupe_key)
        WHERE status IN ('queued', 'claimed', 'running')
      DO NOTHING
@@ -1081,6 +1127,7 @@ async function insertTask(
       input.sourceId ?? null,
       input.expertTaskId ?? null,
       input.knowledgeDemandId ?? null,
+      input.processingRunId ?? null,
       input.dedupeKey,
       JSON.stringify(input.payload ?? {}),
       input.reasoningEffort ?? 'low',
@@ -1329,7 +1376,6 @@ async function queueExpertWork(client: DatabaseClient): Promise<boolean> {
 }
 
 type DeepReviewMode = 'low' | 'medium'
-const maxDeepReviewBatchSize = 8
 
 function deepReviewModeFromTask(task: Pick<
   PipelineTaskRow,
@@ -1354,6 +1400,8 @@ async function queueDeepReviewWork(
     resolution_reason: string | null
     resolution_code: string | null
     deep_review_batch_limit: number
+    processing_run_id: string | null
+    evidence_window: number | null
   }>(
     `SELECT
        kc.id,
@@ -1363,9 +1411,12 @@ async function queueDeepReviewWork(
        kc.resolution_attempts,
        kc.resolution_reason,
        kc.resolution_code,
-       kc.deep_review_batch_limit
+       kc.deep_review_batch_limit,
+       kc.processing_run_id,
+       floor(fragment.ordinal / 8.0)::int AS evidence_window
      FROM knowledge_candidates kc
      JOIN pipeline_tasks pt ON pt.id = kc.pipeline_task_id
+     LEFT JOIN source_fragments fragment ON fragment.id = kc.source_fragment_id
      LEFT JOIN source_candidates source
        ON source.id = pt.source_candidate_id
      WHERE kc.status IN ('deep_review', 'quarantined')
@@ -1394,7 +1445,7 @@ async function queueDeepReviewWork(
   const first = seed.rows[0]
   if (!first) return false
   const batchLimit = Math.min(
-    maxDeepReviewBatchSize,
+    reviewMode === 'medium' ? 4 : 8,
     Math.max(1, first.deep_review_batch_limit),
   )
 
@@ -1408,6 +1459,9 @@ async function queueDeepReviewWork(
     resolution_attempts: number
     resolution_reason: string | null
     resolution_code: string | null
+    evidence_span_id: string | null
+    evidence_content: string | null
+    evidence_window: number | null
   }>(
     `SELECT
        kc.id,
@@ -1418,9 +1472,13 @@ async function queueDeepReviewWork(
        kc.quality_score,
        kc.resolution_attempts,
        kc.resolution_reason,
-       kc.resolution_code
+       kc.resolution_code,
+       fragment.id AS evidence_span_id,
+       fragment.content AS evidence_content,
+       floor(fragment.ordinal / 8.0)::int AS evidence_window
      FROM knowledge_candidates kc
      JOIN pipeline_tasks pt ON pt.id = kc.pipeline_task_id
+     LEFT JOIN source_fragments fragment ON fragment.id = kc.source_fragment_id
      WHERE kc.status IN ('deep_review', 'quarantined')
        AND kc.deep_review_task_id IS NULL
        AND pt.source_candidate_id IS NOT DISTINCT FROM $1::uuid
@@ -1439,6 +1497,8 @@ async function queueDeepReviewWork(
        AND coalesce(kc.resolution_code, 'unspecified') =
            coalesce($3::text, 'unspecified')
        AND kc.deep_review_batch_limit = $5
+       AND kc.processing_run_id IS NOT DISTINCT FROM $6::uuid
+       AND floor(fragment.ordinal / 8.0)::int IS NOT DISTINCT FROM $7::int
      ORDER BY kc.created_at
      LIMIT $4
      FOR UPDATE OF kc SKIP LOCKED`,
@@ -1447,11 +1507,30 @@ async function queueDeepReviewWork(
       reviewMode,
       first.resolution_code,
       batchLimit,
-      first.deep_review_batch_limit
+      first.deep_review_batch_limit,
+      first.processing_run_id,
+      first.evidence_window
     ],
   )
   if (batch.rows.length === 0) return false
-  const candidateIds = batch.rows.map((candidate) => candidate.id)
+  const bounded = batchEvidenceUnits(
+    batch.rows.map((candidate) => ({
+      id: candidate.id,
+      estimatedTokens: Math.ceil((
+        JSON.stringify(candidate.payload).length +
+        (candidate.evidence_content?.length ?? 0)
+      ) / 4),
+      evidenceWindow: `${first.processing_run_id ?? first.source_candidate_id ?? 'legacy'}:${first.evidence_window ?? 'legacy'}`,
+      errorClass: first.resolution_code
+    })),
+    reviewMode === 'medium'
+      ? { maximumRecords: 4, targetTokens: 16_000, hardTokens: 24_000 }
+      : { maximumRecords: 8, targetTokens: 24_000, hardTokens: 32_000 },
+  )[0] ?? []
+  const selectedIds = new Set(bounded.map((unit) => unit.id))
+  const selectedBatch = batch.rows.filter((candidate) => selectedIds.has(candidate.id))
+  if (selectedBatch.length === 0) return false
+  const candidateIds = selectedBatch.map((candidate) => candidate.id)
   const taskId = await insertTask(client, {
     type: 'candidate_deep_review',
     stage: 'deep_review',
@@ -1467,7 +1546,19 @@ async function queueDeepReviewWork(
       review_pass: reviewMode,
       batch_limit: batchLimit,
       resolution_code: first.resolution_code,
-      candidates: batch.rows
+      evidence_window: [...new Map(selectedBatch.flatMap((candidate) =>
+        candidate.evidence_span_id && candidate.evidence_content
+          ? [[candidate.evidence_span_id, {
+              span_id: candidate.evidence_span_id,
+              content: candidate.evidence_content
+            }] as const]
+          : [],
+      )).values()],
+      candidates: selectedBatch.map(({ evidence_content: _evidence,
+        evidence_span_id, evidence_window: _window, ...candidate }) => ({
+        ...candidate,
+        evidence_span_ids: evidence_span_id ? [evidence_span_id] : []
+      }))
     },
     reasoningEffort: reviewMode === 'medium' ? 'medium' : 'low'
   })
@@ -1493,13 +1584,17 @@ async function queueSourceWork(
     id: string
     status: string
     coverage_target_id: string
-    vendor_slug: string
+    vendor_slug: string | null
     product_family: string | null
     model: string | null
-    operating_system_slug: string
+    operating_system_slug: string | null
     version_branch: string | null
     document_role: string
-    canonical_url: string
+    canonical_url: string | null
+    source_ref: string
+    source_kind: string
+    display_locator: string
+    processing_run_id: string | null
     document_type: string
     title: string
     document_version: string | null
@@ -1511,13 +1606,18 @@ async function queueSourceWork(
        sc.id,
        sc.status,
        sc.coverage_target_id,
-       ct.vendor_slug,
+       coalesce(ct.vendor_slug, sc.declared_vendor) AS vendor_slug,
        ct.product_family,
        ct.model,
-       ct.operating_system_slug,
+       coalesce(ct.operating_system_slug, sc.declared_operating_system)
+         AS operating_system_slug,
        ct.version_branch,
        ct.document_role,
        sc.canonical_url,
+       sc.source_ref,
+       sc.source_kind,
+       sc.display_locator,
+       run.id AS processing_run_id,
        sc.document_type,
        sc.title,
        sc.document_version,
@@ -1525,7 +1625,14 @@ async function queueSourceWork(
        sc.knowledge_demand_id,
        demand.question AS demand_question
      FROM source_candidates sc
-     JOIN coverage_targets ct ON ct.id = sc.coverage_target_id
+     LEFT JOIN coverage_targets ct ON ct.id = sc.coverage_target_id
+     LEFT JOIN LATERAL (
+       SELECT current_run.id
+       FROM source_processing_runs current_run
+       WHERE current_run.source_candidate_id = sc.id
+       ORDER BY current_run.created_at DESC
+       LIMIT 1
+     ) run ON true
      LEFT JOIN knowledge_demands demand ON demand.id = sc.knowledge_demand_id
      WHERE sc.id = $1
      FOR UPDATE OF sc`,
@@ -1571,7 +1678,10 @@ async function queueSourceWork(
 
   const basePayload = {
     source_id: source.id,
-    canonical_url: source.canonical_url,
+    canonical_url: source.canonical_url ??
+      `https://mcp.clideck.com/sources/${source.source_ref}`,
+    source_ref: source.source_ref,
+    source_kind: source.source_kind,
     document_type: source.document_type,
     title: source.title,
     document_version: source.document_version,
@@ -1586,6 +1696,7 @@ async function queueSourceWork(
       version_branch: source.version_branch,
       document_role: source.document_role
     }
+    ,processing_run_id: source.processing_run_id
   }
   const taskPriority = source.knowledge_demand_id ? aiPriorities.demand : null
   if (source.knowledge_demand_id) {
@@ -1618,6 +1729,7 @@ async function queueSourceWork(
       coverageTargetId: source.coverage_target_id,
       sourceId: source.id,
       knowledgeDemandId: source.knowledge_demand_id,
+      processingRunId: source.processing_run_id,
       payload: basePayload
     }))
   }
@@ -1631,6 +1743,7 @@ async function queueSourceWork(
       coverageTargetId: source.coverage_target_id,
       sourceId: source.id,
       knowledgeDemandId: source.knowledge_demand_id,
+      processingRunId: source.processing_run_id,
       payload: basePayload
     }))
   }
@@ -1644,6 +1757,7 @@ async function queueSourceWork(
       coverageTargetId: source.coverage_target_id,
       sourceId: source.id,
       knowledgeDemandId: source.knowledge_demand_id,
+      processingRunId: source.processing_run_id,
       payload: basePayload
     }))
   }
@@ -1653,7 +1767,130 @@ async function queueSourceWork(
     mode === 'verification' ||
     mode === 'analysis'
   ) {
-    if (mode === 'ai' || mode === 'verification') {
+    // Fidelity is an asynchronous audit lane and may be scheduled whenever
+    // source work is considered; it is no longer coupled to the legacy
+    // mandatory verification lane.
+    if (mode === 'ai' || mode === 'verification' || mode === 'analysis') {
+    const fidelityCandidates = await client.query<{
+      id: string
+      stable_key: string
+      payload: Record<string, unknown>
+      dangerous: boolean
+      confidence: string
+      quality_score: string
+      evidence_span_id: string | null
+      evidence_content: string | null
+      evidence_window: number | null
+    }>(
+      `SELECT kc.id, kc.stable_key, kc.payload, kc.dangerous,
+              kc.confidence, kc.quality_score,
+              fragment.id AS evidence_span_id,
+              fragment.content AS evidence_content,
+              floor(fragment.ordinal / 8.0)::int AS evidence_window
+         FROM knowledge_candidates kc
+         JOIN pipeline_tasks origin ON origin.id = kc.pipeline_task_id
+         LEFT JOIN source_fragments fragment ON fragment.id = kc.source_fragment_id
+        WHERE origin.source_candidate_id = $1
+          AND kc.processing_run_id IS NOT DISTINCT FROM $2::uuid
+          AND kc.status IN ('verified', 'published')
+          AND kc.fidelity_status = 'pending'
+          AND kc.fidelity_task_id IS NULL
+        ORDER BY kc.created_at
+        LIMIT 80
+        FOR UPDATE OF kc SKIP LOCKED`,
+      [source.id, source.processing_run_id],
+    )
+    if (fidelityCandidates.rows.length > 0) {
+      const profile = await client.query<{
+        checked_count: number
+        material_error_count: number
+        forced_full_batches_remaining: number
+      }>(
+        `INSERT INTO pipeline_quality_profiles (
+           stage, profile_key, extractor_version, prompt_version, model
+         ) VALUES (
+           'extract_fidelity', 'pipeline-v2-default',
+           'pipeline-v2-extract-1', 'pipeline-v2-fidelity-1',
+           'gpt-5.6-luna'
+         ) ON CONFLICT (stage, profile_key) DO UPDATE SET updated_at = now()
+         RETURNING checked_count, material_error_count,
+                   forced_full_batches_remaining`,
+      )
+      const quality = profile.rows[0]!
+      const sampled = fidelityCandidates.rows.filter((candidate) =>
+        shouldRunQualityCheck({
+          profileKey: 'pipeline-v2-default',
+          sampleKey: candidate.id,
+          checkedCount: Number(quality.checked_count),
+          materialErrorCount: Number(quality.material_error_count),
+          forcedFullBatchesRemaining: quality.forced_full_batches_remaining
+        }),
+      )
+      const sampledIds = new Set(sampled.map((candidate) => candidate.id))
+      const sampledOut = fidelityCandidates.rows
+        .filter((candidate) => !sampledIds.has(candidate.id))
+        .map((candidate) => candidate.id)
+      if (sampledOut.length > 0) {
+        await client.query(
+          `UPDATE knowledge_candidates
+              SET fidelity_status = 'sampled_out', updated_at = now()
+            WHERE id = ANY($1::uuid[]) AND fidelity_status = 'pending'`,
+          [sampledOut],
+        )
+      }
+      const bounded = batchEvidenceUnits(
+        sampled.map((candidate) => ({
+          id: candidate.id,
+          estimatedTokens: Math.ceil((
+            JSON.stringify(candidate.payload).length +
+            (candidate.evidence_content?.length ?? 0)
+          ) / 4),
+          evidenceWindow: `${source.processing_run_id ?? source.id}:${candidate.evidence_window ?? 'legacy'}`
+        })),
+        { maximumRecords: 8, targetTokens: 32_000, hardTokens: 40_000 },
+      )[0] ?? []
+      const boundedIds = new Set(bounded.map((unit) => unit.id))
+      const selected = sampled.filter((candidate) => boundedIds.has(candidate.id))
+      const ids = selected.map((row) => row.id)
+      if (ids.length === 0) return false
+      const taskId = await insertTask(client, {
+        type: 'candidate_verification',
+        stage: 'verify',
+        priority: taskPriority ?? aiPriorities.verify,
+        dedupeKey: `source:${source.id}:fidelity:${sha256Label(ids.join(','))}`,
+        coverageTargetId: source.coverage_target_id,
+        sourceId: source.id,
+        knowledgeDemandId: source.knowledge_demand_id,
+        processingRunId: source.processing_run_id,
+        payload: {
+          ...basePayload,
+          audit_mode: 'fidelity',
+          evidence_window: [...new Map(selected.flatMap((candidate) =>
+            candidate.evidence_span_id && candidate.evidence_content
+              ? [[candidate.evidence_span_id, {
+                  span_id: candidate.evidence_span_id,
+                  content: candidate.evidence_content
+                }] as const]
+              : [],
+          )).values()],
+          candidates: selected.map(({ evidence_content: _evidence,
+            evidence_span_id, evidence_window: _window, ...candidate }) => ({
+            ...candidate,
+            evidence_span_ids: evidence_span_id ? [evidence_span_id] : []
+          }))
+        }
+      })
+      if (!taskId) return false
+      await client.query(
+        `UPDATE knowledge_candidates
+            SET fidelity_task_id = $1, fidelity_status = 'checking',
+                updated_at = now()
+          WHERE id = ANY($2::uuid[])
+            AND fidelity_status = 'pending' AND fidelity_task_id IS NULL`,
+        [taskId, ids],
+      )
+      return true
+    }
     const verificationReadiness = await client.query<{
       ready: boolean
     }>(
@@ -1714,6 +1951,7 @@ async function queueSourceWork(
         coverageTargetId: source.coverage_target_id,
         sourceId: source.id,
         knowledgeDemandId: source.knowledge_demand_id,
+        processingRunId: source.processing_run_id,
         payload: {
           ...basePayload,
           candidates: analyzedCandidates.rows
@@ -1751,6 +1989,7 @@ async function queueSourceWork(
       source_locator: string | null
       content: string
       content_hash: string
+      prior_candidate_keys: string[]
     }>(
       `SELECT
          sf.id,
@@ -1758,7 +1997,12 @@ async function queueSourceWork(
          sf.section_title,
          sf.source_locator,
          sf.content,
-         sf.content_hash
+         sf.content_hash,
+         coalesce((
+           SELECT array_agg(candidate.stable_key ORDER BY candidate.stable_key)
+             FROM knowledge_candidates candidate
+            WHERE candidate.source_fragment_id = sf.id
+         ), '{}'::text[]) AS prior_candidate_keys
        FROM source_fragments sf
        JOIN source_artifacts sa ON sa.id = sf.source_artifact_id
        WHERE sa.source_candidate_id = $1
@@ -1798,6 +2042,7 @@ async function queueSourceWork(
         coverageTargetId: source.coverage_target_id,
         sourceId: source.id,
         knowledgeDemandId: source.knowledge_demand_id,
+        processingRunId: source.processing_run_id,
         payload: {
           ...basePayload,
           fragments: analysisFragments
@@ -1862,6 +2107,7 @@ async function queueSourceWork(
       coverageTargetId: source.coverage_target_id,
       sourceId: source.id,
       knowledgeDemandId: source.knowledge_demand_id,
+      processingRunId: source.processing_run_id,
       payload: basePayload
     }))
   }
@@ -2735,8 +2981,17 @@ async function queueVerificationFromAnySource(
      JOIN pipeline_tasks task ON task.id = candidate.pipeline_task_id
      LEFT JOIN source_candidates source
        ON source.id = task.source_candidate_id
-     WHERE candidate.status = 'analyzed'
-       AND candidate.verification_task_id IS NULL
+     WHERE (
+         (
+           candidate.status IN ('verified', 'published')
+           AND candidate.fidelity_status = 'pending'
+           AND candidate.fidelity_task_id IS NULL
+         )
+         OR (
+           candidate.status = 'analyzed'
+           AND candidate.verification_task_id IS NULL
+         )
+       )
        AND task.source_candidate_id IS NOT NULL
      GROUP BY task.source_candidate_id
      ORDER BY
@@ -2764,14 +3019,20 @@ async function queueAnalysisFromLanes(
 async function ensureLegacyWorkInTransaction(
   client: DatabaseClient,
 ): Promise<void> {
+  const scheduler = await client.query<{ acquired: boolean }>(
+    `SELECT pg_try_advisory_xact_lock(
+       hashtext('clideck-mcp:pipeline-scheduler')
+     ) AS acquired`,
+  )
+  if (!scheduler.rows[0]?.acquired) return
   await reconcileExpiredAndCompletedWork(client)
   const settings = await client.query<{
     enabled: boolean
     ai_model: string
     reasoning_effort: string
     max_concurrent_ai_runs: number
-    max_active_sources: number
     max_deep_review_runs: number
+    max_active_sources: number
     source_buffer_target: number
   }>(
     `SELECT
@@ -2779,8 +3040,8 @@ async function ensureLegacyWorkInTransaction(
        ai_model,
        reasoning_effort,
        max_concurrent_ai_runs,
-       max_active_sources,
        max_deep_review_runs,
+       max_active_sources,
        source_buffer_target
      FROM pipeline_settings
      WHERE singleton
@@ -3117,12 +3378,23 @@ async function ensureLegacyWorkInTransaction(
 async function ensureStreamingWorkInTransaction(
   client: DatabaseClient,
 ): Promise<void> {
+  // Every executor asks the scheduler for work before attempting a lease.
+  // Serialize that relatively expensive reconciliation without making the
+  // other executors wait: a caller that misses the advisory lock can still
+  // proceed immediately to claim work already materialized in the queue.
+  const scheduler = await client.query<{ acquired: boolean }>(
+    `SELECT pg_try_advisory_xact_lock(
+       hashtext('clideck-mcp:pipeline-scheduler')
+     ) AS acquired`,
+  )
+  if (!scheduler.rows[0]?.acquired) return
   await reconcileExpiredAndCompletedWork(client)
   const settings = await client.query<{
     enabled: boolean
     ai_model: string
     reasoning_effort: string
     max_concurrent_ai_runs: number
+    max_deep_review_runs: number
     max_active_sources: number
     source_buffer_target: number
     prepared_source_target: number
@@ -3132,6 +3404,7 @@ async function ensureStreamingWorkInTransaction(
        ai_model,
        reasoning_effort,
        max_concurrent_ai_runs,
+       max_deep_review_runs,
        max_active_sources,
        source_buffer_target,
        prepared_source_target
@@ -3344,6 +3617,7 @@ async function ensureStreamingWorkInTransaction(
     concurrency: pipeline.max_concurrent_ai_runs,
     occupied,
     activeByStage: activeCounts,
+    fidelityAndRepairCap: pipeline.max_deep_review_runs,
     queueStage: (stage) => queueByStage[stage]()
   })
   occupied = allocation.occupied
@@ -3394,8 +3668,7 @@ export async function claimPipelineTask(
          max_concurrent_ai_runs,
          max_deep_review_runs
        FROM pipeline_settings
-       WHERE singleton
-       FOR UPDATE`,
+       WHERE singleton`,
     )
     const pipeline = settings.rows[0]
     if (!pipeline?.enabled) {
@@ -3989,6 +4262,51 @@ export async function completeMechanicalPipelineTask(
     const task = await assertPipelineLease(client, taskId, leaseToken)
     if (!mechanicalTaskTypes.includes(task.task_type)) {
       throw new Error('PIPELINE_TASK_TYPE_INVALID')
+    }
+    // Compatibility for acquisition adapters that still persist the artifact
+    // themselves before acknowledging the task. Native Pipeline 2.0 downloads
+    // already create this run and therefore take the no-op branch.
+    if (task.task_type === 'source_acquisition' && task.source_candidate_id) {
+      const bound = await client.query<{ id: string }>(
+        `SELECT id FROM source_processing_runs
+          WHERE source_candidate_id = $1
+          ORDER BY created_at DESC LIMIT 1`,
+        [task.source_candidate_id],
+      )
+      if (!bound.rows[0]) {
+        const artifact = await client.query<{ id: string; content_hash: string }>(
+          `SELECT id, content_hash FROM source_artifacts
+            WHERE source_candidate_id = $1 AND status <> 'purged'
+            ORDER BY acquired_at DESC LIMIT 1`,
+          [task.source_candidate_id],
+        )
+        if (artifact.rows[0]) {
+          const processingVersion = `pipeline-v2-${artifact.rows[0].content_hash.slice(-16)}`
+          const run = await client.query<{ id: string }>(
+            `INSERT INTO source_processing_runs (
+               source_candidate_id, source_artifact_id, processing_version,
+               converter_version, segmenter_version, extractor_version,
+               prompt_version, model_profile, status, started_at
+             ) VALUES (
+               $1, $2, $3, 'pipeline-v2-convert-1', 'pipeline-v2-segment-1',
+               'pipeline-v2-extract-1', 'pipeline-v2-fidelity-1',
+               'gpt-5.6-luna-low', 'converting', now()
+             )
+             ON CONFLICT (source_candidate_id, processing_version)
+             DO UPDATE SET source_artifact_id = excluded.source_artifact_id,
+                           updated_at = now()
+             RETURNING id`,
+            [task.source_candidate_id, artifact.rows[0].id, processingVersion],
+          )
+          await client.query(
+            `UPDATE pipeline_tasks SET processing_run_id = $2::uuid,
+                    payload = jsonb_set(payload, '{processing_run_id}',
+                      to_jsonb($2::text), true), updated_at = now()
+              WHERE id = $1`,
+            [task.id, run.rows[0]!.id],
+          )
+        }
+      }
     }
     await completeTask(client, task, result)
   })
@@ -4711,9 +5029,15 @@ export async function submitSourceDiscovery(
            status,
            discovered_by,
            discovery_pipeline_task_id,
-           knowledge_demand_id
+           knowledge_demand_id,
+           source_kind,
+           source_ref,
+           display_locator
          )
-         VALUES ($1, $2, $3, $4, $5, $6, 'approved', $7, $8, $9)
+         VALUES (
+           $1, $2, $3, $4, $5, $6, 'approved', $7, $8, $9,
+           'official_web', $10, $2
+         )
          ON CONFLICT (canonical_url) DO NOTHING
          RETURNING id`,
         [
@@ -4725,7 +5049,8 @@ export async function submitSourceDiscovery(
           source.document_date ?? null,
           researcherId,
           task.id,
-          task.knowledge_demand_id
+          task.knowledge_demand_id,
+          `src_${randomUUID().replaceAll('-', '')}`
         ],
       )
       if (inserted.rows[0]) {
@@ -5113,14 +5438,6 @@ export async function submitCandidateAnalysis(
     if (task.task_type !== 'fragment_analysis') {
       throw new Error('PIPELINE_TASK_TYPE_INVALID')
     }
-    const demandQuestion = task.knowledge_demand_id
-      ? (await client.query<{ question: string }>(
-          `SELECT question
-           FROM knowledge_demands
-           WHERE id = $1`,
-          [task.knowledge_demand_id],
-        )).rows[0]?.question ?? null
-      : null
     const allowedFragmentIds = new Set(
       (
         Array.isArray(task.payload['fragments'])
@@ -5138,8 +5455,9 @@ export async function submitCandidateAnalysis(
     const reservedFragments = await client.query<{
       id: string
       content_hash: string
+      processing_run_id: string
     }>(
-      `SELECT id, content_hash
+      `SELECT id, content_hash, processing_run_id
        FROM source_fragments
        WHERE id = ANY($1::uuid[])
          AND reservation_task_id = $2
@@ -5157,6 +5475,12 @@ export async function submitCandidateAnalysis(
         fragment.content_hash
       ]),
     )
+    const fragmentRuns = new Map(
+      reservedFragments.rows.map((fragment) => [
+        fragment.id,
+        fragment.processing_run_id
+      ]),
+    )
     const sourceIdentity = pipelineSourcePayloadSchema.parse(task.payload)
     const insertedIds: string[] = []
     let demandIrrelevantCandidates = 0
@@ -5172,6 +5496,12 @@ export async function submitCandidateAnalysis(
         ...unboundCandidate,
         provenance: [{
           url: sourceIdentity.canonical_url,
+          ...(sourceIdentity.source_ref
+            ? { source_ref: sourceIdentity.source_ref }
+            : {}),
+          ...(sourceIdentity.source_kind
+            ? { source_kind: sourceIdentity.source_kind }
+            : {}),
           document_type: sourceIdentity.document_type,
           title: sourceIdentity.title.slice(0, 240),
           ...(sourceIdentity.document_version
@@ -5187,33 +5517,32 @@ export async function submitCandidateAnalysis(
           evidence_role: 'primary' as const
         }]
       }
-      if (
-        demandQuestion &&
-        !isRelevantToKnowledgeDemand(demandQuestion, [
-          JSON.stringify(candidate)
-        ])
-      ) {
-        demandIrrelevantCandidates += 1
-        continue
-      }
       const serialized = JSON.stringify(candidate)
-      const inserted = await client.query<{ id: string }>(
+      const inserted = await client.query<{
+        id: string
+        inserted: boolean
+        processing_run_id: string | null
+      }>(
         `INSERT INTO knowledge_candidates (
            pipeline_task_id,
            source_fragment_id,
+           processing_run_id,
            stable_key,
            payload,
            content_hash,
+           status,
            dangerous,
            confidence,
            quality_score
          )
-         VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8)
-         ON CONFLICT (content_hash) DO NOTHING
-         RETURNING id`,
+         VALUES ($1, $2, $3, $4, $5::jsonb, $6, 'verified', $7, $8, $9)
+         ON CONFLICT (content_hash) DO UPDATE SET
+           updated_at = knowledge_candidates.updated_at
+         RETURNING id, (xmax = 0) AS inserted, processing_run_id`,
         [
           task.id,
           submission.fragment_id,
+          fragmentRuns.get(submission.fragment_id),
           candidate.stable_key,
           serialized,
           sha256Label(serialized),
@@ -5222,13 +5551,32 @@ export async function submitCandidateAnalysis(
           candidate.quality_score
         ],
       )
-      if (inserted.rows[0]) insertedIds.push(inserted.rows[0].id)
+      if (inserted.rows[0]) {
+        await client.query(
+          `INSERT INTO knowledge_candidate_occurrences (
+             knowledge_candidate_id, processing_run_id, source_fragment_id,
+             occurrence_kind, content_hash
+           ) VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT DO NOTHING`,
+          [
+            inserted.rows[0].id,
+            fragmentRuns.get(submission.fragment_id),
+            submission.fragment_id,
+            inserted.rows[0].inserted ? 'created' : 'exact_duplicate',
+            sha256Label(serialized)
+          ],
+        )
+        if (inserted.rows[0].inserted) insertedIds.push(inserted.rows[0].id)
+      }
     }
     const submittedFragmentIds = [
       ...new Set(input.candidates.map((entry) => entry.fragment_id))
     ]
     const rejectedFragmentIds = [
       ...new Set(input.rejected_fragments.map((entry) => entry.fragment_id))
+    ]
+    const dispositionFragmentIds = [
+      ...new Set((input.fragment_dispositions ?? []).map((entry) => entry.fragment_id))
     ]
     for (const fragmentId of rejectedFragmentIds) {
       if (!allowedFragmentIds.has(fragmentId)) {
@@ -5237,7 +5585,8 @@ export async function submitCandidateAnalysis(
     }
     const handledFragmentIds = new Set([
       ...submittedFragmentIds,
-      ...rejectedFragmentIds
+      ...rejectedFragmentIds,
+      ...dispositionFragmentIds
     ])
     if (
       handledFragmentIds.size !== allowedFragmentIds.size ||
@@ -5245,19 +5594,30 @@ export async function submitCandidateAnalysis(
     ) {
       throw new Error('PIPELINE_ANALYSIS_INCOMPLETE')
     }
+    const continuedFragmentIds = new Set((input.fragment_dispositions ?? [])
+      .filter((entry) => entry.disposition !== 'non_knowledge')
+      .map((entry) => entry.fragment_id))
+    const completedCandidateFragmentIds = submittedFragmentIds.filter((id) =>
+      !continuedFragmentIds.has(id)
+    )
     await client.query(
       `UPDATE source_fragments
           SET status = 'analyzed',
+              disposition = 'knowledge_extracted',
+              disposition_reason = 'knowledge_extracted',
               reservation_task_id = NULL,
               updated_at = now()
         WHERE id = ANY($1::uuid[])
           AND reservation_task_id = $2`,
-      [submittedFragmentIds, task.id],
+      [completedCandidateFragmentIds, task.id],
     )
     if (rejectedFragmentIds.length > 0) {
       await client.query(
         `UPDATE source_fragments
-            SET status = 'rejected',
+            SET status = 'analyzed',
+                disposition = 'non_knowledge',
+                disposition_reason = 'other_non_operational',
+                disposition_detail = 'Legacy extractor no-candidate disposition.',
                 reservation_task_id = NULL,
                 updated_at = now()
           WHERE id = ANY($1::uuid[])
@@ -5265,11 +5625,85 @@ export async function submitCandidateAnalysis(
         [rejectedFragmentIds, task.id],
       )
     }
+    for (const disposition of input.fragment_dispositions ?? []) {
+      await client.query(
+        `UPDATE source_fragments
+            SET status = CASE
+                  WHEN $3 = 'non_knowledge' THEN 'analyzed'
+                  ELSE 'queued'
+                END,
+                disposition = $3,
+                disposition_reason = $4,
+                disposition_detail = $5,
+                reservation_task_id = NULL,
+                updated_at = now()
+          WHERE id = $1
+            AND reservation_task_id = $2`,
+        [
+          disposition.fragment_id,
+          task.id,
+          disposition.disposition,
+          disposition.reason,
+          disposition.detail ?? null
+        ],
+      )
+    }
+    const affectedRunIds = [...new Set(
+      [...fragmentRuns.values()].filter((id): id is string => Boolean(id)),
+    )]
+    if (affectedRunIds.length > 0) {
+      await client.query(
+        `UPDATE source_processing_runs run
+            SET status = CASE
+                  WHEN EXISTS (
+                    SELECT 1 FROM knowledge_candidates candidate
+                     WHERE candidate.processing_run_id = run.id
+                       AND candidate.status IN (
+                         'analyzed', 'verified', 'deep_review', 'quarantined'
+                       )
+                  ) THEN 'auditing'
+                  ELSE 'completed'
+                END,
+                completed_at = CASE
+                  WHEN NOT EXISTS (
+                    SELECT 1 FROM knowledge_candidates candidate
+                     WHERE candidate.processing_run_id = run.id
+                       AND candidate.status IN (
+                         'analyzed', 'verified', 'deep_review', 'quarantined'
+                       )
+                  ) THEN now() ELSE NULL END,
+                counters = counters || jsonb_build_object(
+                  'candidates_created', (
+                    SELECT count(*)::int FROM knowledge_candidate_occurrences occurrence
+                     WHERE occurrence.processing_run_id = run.id
+                  ),
+                  'open_fragments', (
+                    SELECT count(*)::int FROM source_fragments fragment
+                     WHERE fragment.processing_run_id = run.id
+                       AND (fragment.disposition IS NULL OR fragment.disposition IN (
+                         'continuation_required', 'targeted_retry'
+                       ))
+                  )
+                ),
+                updated_at = now()
+          WHERE run.id = ANY($1::uuid[])
+            AND NOT EXISTS (
+              SELECT 1 FROM source_fragments fragment
+               WHERE fragment.processing_run_id = run.id
+                 AND (fragment.disposition IS NULL OR fragment.disposition IN (
+                   'continuation_required', 'targeted_retry'
+                 ))
+            )`,
+        [affectedRunIds],
+      )
+    }
     const completion = {
       candidates_created: insertedIds.length,
       demand_irrelevant_candidates_ignored: demandIrrelevantCandidates,
-      fragments_analyzed: submittedFragmentIds.length,
-      fragments_without_candidates: rejectedFragmentIds.length,
+      fragments_analyzed: completedCandidateFragmentIds.length,
+      fragments_requeued: continuedFragmentIds.size,
+      fragments_without_candidates:
+        rejectedFragmentIds.length + dispositionFragmentIds.length,
       rejection_reasons: input.rejected_fragments.map((entry) => ({
         fragment_id: entry.fragment_id,
         reason: entry.reason
@@ -5296,19 +5730,7 @@ export function getDeterministicRiskDisposition(
   decision: 'conflict' | 'deep_review'
   finding: string
 } | null {
-  const normalized = enforceKnowledgeRisk(candidate)
-
-  // This is deliberately the same non-negotiable safety invariant enforced by
-  // createKnowledgeRevision at publication time.  Catch it before a candidate
-  // becomes Ready so the mechanical publisher never spends a cycle discovering
-  // that an otherwise "verified" dangerous procedure is incomplete.
-  if (normalized.dangerous && normalized.rollback.length === 0) {
-    return {
-      decision: 'deep_review',
-      finding:
-        'Dangerous candidates require an explicit rollback procedure before they can be verified.'
-    }
-  }
+  void candidate
   return null
 }
 
@@ -5377,66 +5799,14 @@ async function getDeterministicCandidateDisposition(
     }
   }
 
-  const context = await client.query<{
-    vendor_exists: boolean
-    operating_system_exists: boolean
-    platform_exists: boolean
-    existing_kind: string | null
-  }>(
-    `SELECT
-       EXISTS (
-         SELECT 1 FROM vendors v
-         WHERE v.slug = $1
-       ) AS vendor_exists,
-       EXISTS (
-         SELECT 1
-         FROM operating_systems os
-         JOIN vendors v ON v.id = os.vendor_id
-         WHERE v.slug = $1 AND os.slug = $2
-       ) AS operating_system_exists,
-       (
-         $3::text IS NULL OR EXISTS (
-           SELECT 1
-           FROM platforms p
-           JOIN vendors v ON v.id = p.vendor_id
-           WHERE v.slug = $1 AND p.slug = $3
-         )
-       ) AS platform_exists,
-       (
-         SELECT ki.kind
-         FROM knowledge_items ki
-         WHERE ki.stable_key = $4
-       ) AS existing_kind`,
-    [
-      candidate.vendor_slug,
-      candidate.operating_system_slug,
-      candidate.platform_slug ?? null,
-      candidate.stable_key
-    ],
+  const context = await client.query<{ existing_kind: string | null }>(
+    `SELECT (
+       SELECT ki.kind FROM knowledge_items ki WHERE ki.stable_key = $1
+     ) AS existing_kind`,
+    [candidate.stable_key],
   )
   const state = context.rows[0]
-  if (!state?.vendor_exists) {
-    return {
-      decision: 'deep_review',
-      finding:
-        'Deterministic context validation could not resolve the declared vendor.'
-    }
-  }
-  if (!state.operating_system_exists) {
-    return {
-      decision: 'deep_review',
-      finding:
-        'Deterministic context validation could not resolve the declared operating system.'
-    }
-  }
-  if (!state.platform_exists) {
-    return {
-      decision: 'deep_review',
-      finding:
-        'Deterministic context validation could not resolve the declared platform.'
-    }
-  }
-  if (state.existing_kind && state.existing_kind !== candidate.kind) {
+  if (state?.existing_kind && state.existing_kind !== candidate.kind) {
     return {
       decision: 'conflict',
       finding:
@@ -5482,6 +5852,142 @@ export async function submitCandidateVerification(
       deep_review: 0,
       requeued: 0
     }
+    if (task.payload['audit_mode'] === 'fidelity') {
+      const profile = await client.query<{ id: string }>(
+        `INSERT INTO pipeline_quality_profiles (
+           stage, profile_key, extractor_version, prompt_version, model
+         ) VALUES (
+           'extract_fidelity', 'pipeline-v2-default',
+           'pipeline-v2-extract-1', 'pipeline-v2-fidelity-1',
+           'gpt-5.6-luna'
+         )
+         ON CONFLICT (stage, profile_key) DO UPDATE SET updated_at = now()
+         RETURNING id`,
+      )
+      const completed = new Set<string>()
+      const publishedRejections: string[] = []
+      for (const decision of input.decisions) {
+        if (!allowedCandidateIds.has(decision.candidate_id)) {
+          throw new Error('PIPELINE_CANDIDATE_NOT_IN_TASK')
+        }
+        const reserved = await client.query<{
+          processing_run_id: string | null
+          status: string
+        }>(
+          `SELECT processing_run_id, status
+             FROM knowledge_candidates
+            WHERE id = $1 AND fidelity_task_id = $2
+              AND fidelity_status = 'checking'
+            FOR UPDATE`,
+          [decision.candidate_id, task.id],
+        )
+        if (!reserved.rows[0]) {
+          throw new Error('PIPELINE_CANDIDATE_RESERVATION_INVALID')
+        }
+        const passed = decision.decision === 'verified'
+        if (!passed && decision.decision === 'rejected' &&
+            reserved.rows[0].status === 'published') {
+          publishedRejections.push(decision.candidate_id)
+        }
+        await client.query(
+          `INSERT INTO candidate_verifications (
+             knowledge_candidate_id, pipeline_task_id, decision,
+             confidence, quality_score, findings, verified_by, review_type
+           ) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, 'fidelity')`,
+          [
+            decision.candidate_id,
+            task.id,
+            passed ? 'verified' : 'deep_review',
+            decision.confidence,
+            decision.quality_score,
+            JSON.stringify(decision.findings),
+            researcherId
+          ],
+        )
+        await client.query(
+          `UPDATE knowledge_candidates
+              SET fidelity_status = $3,
+                  fidelity_task_id = NULL,
+                  fidelity_checked_at = now(),
+                  status = CASE WHEN $4::boolean THEN status ELSE 'deep_review' END,
+                  resolution_reason = CASE WHEN $4::boolean THEN resolution_reason
+                    ELSE $5 END,
+                  resolution_code = CASE WHEN $4::boolean THEN resolution_code
+                    ELSE 'fidelity_targeted_repair' END,
+                  next_review_at = CASE WHEN $4::boolean THEN next_review_at
+                    ELSE now() END,
+                  updated_at = now()
+            WHERE id = $1 AND fidelity_task_id = $2`,
+          [
+            decision.candidate_id,
+            task.id,
+            passed ? 'passed' : 'repair',
+            passed,
+            decision.findings.join('; ').slice(0, 2_000) ||
+              'Fidelity audit requested a targeted repair.'
+          ],
+        )
+        await client.query(
+          `INSERT INTO pipeline_quality_checks (
+             profile_id, processing_run_id, pipeline_task_id, stage, status,
+             error_categories, material_error, coverage_count, model, findings
+           ) VALUES (
+             $1, $2, $3, 'extract_fidelity', $4, $5::text[], $6, 1,
+             'gpt-5.6-luna', $7::jsonb
+           )`,
+          [
+            profile.rows[0]!.id,
+            reserved.rows[0].processing_run_id,
+            task.id,
+            passed ? 'passed' : 'repair',
+            passed ? [] : ['fidelity_mismatch'],
+            !passed,
+            JSON.stringify(decision.findings)
+          ],
+        )
+        await client.query(
+          `UPDATE pipeline_quality_profiles
+              SET checked_count = checked_count + 1,
+                  material_error_count = material_error_count +
+                    CASE WHEN $2::boolean THEN 1 ELSE 0 END,
+                  forced_full_batches_remaining = CASE
+                    WHEN $2::boolean THEN 20
+                    ELSE greatest(0, forced_full_batches_remaining - 1)
+                  END,
+                  sample_percent = CASE
+                    WHEN checked_count + 1 >= 1000
+                     AND (material_error_count +
+                       CASE WHEN $2::boolean THEN 1 ELSE 0 END)::numeric /
+                       (checked_count + 1) < 0.01
+                     AND forced_full_batches_remaining = 0
+                    THEN 10 ELSE 100 END,
+                  updated_at = now()
+            WHERE id = $1`,
+          [profile.rows[0]!.id, !passed],
+        )
+        completed.add(decision.candidate_id)
+        if (passed) counts.verified += 1
+        else counts.deep_review += 1
+      }
+      const omitted = [...allowedCandidateIds].filter((id) => !completed.has(id))
+      if (omitted.length > 0) {
+        await client.query(
+          `UPDATE knowledge_candidates
+              SET fidelity_status = 'pending', fidelity_task_id = NULL,
+                  updated_at = now()
+            WHERE id = ANY($1::uuid[]) AND fidelity_task_id = $2`,
+          [omitted, task.id],
+        )
+        counts.requeued = omitted.length
+      }
+      await deactivatePublishedCandidates(
+        client,
+        publishedRejections,
+        `Fidelity QA exclusion from task ${task.id}`,
+      )
+      await completeTask(client, task, counts)
+      return counts
+    }
     for (const decision of input.decisions) {
       if (!allowedCandidateIds.has(decision.candidate_id)) {
         throw new Error('PIPELINE_CANDIDATE_NOT_IN_TASK')
@@ -5501,9 +6007,6 @@ export async function submitCandidateVerification(
       if (!candidate.rows[0]) {
         throw new Error('PIPELINE_CANDIDATE_RESERVATION_INVALID')
       }
-      const threshold = candidate.rows[0].dangerous
-        ? config.dangerousAutoPublishConfidence
-        : config.autoPublishConfidence
       const deterministicDisposition =
         decision.decision === 'verified'
           ? await getDeterministicCandidateDisposition(
@@ -5511,15 +6014,7 @@ export async function submitCandidateVerification(
               candidate.rows[0].payload,
             )
           : null
-      const finalDecision = deterministicDisposition?.decision ?? (
-        decision.decision === 'verified' &&
-        (
-          decision.confidence < threshold ||
-          decision.quality_score < 0.85
-        )
-          ? 'deep_review'
-          : decision.decision
-      )
+      const finalDecision = deterministicDisposition?.decision ?? decision.decision
       counts[finalDecision] += 1
       await client.query(
         `INSERT INTO candidate_verifications (
@@ -5746,9 +6241,10 @@ export async function submitCandidateDeepReview(
       manual_exception: 0
     }
     const configuredBatchLimit = Number(task.payload['batch_limit'])
+    const maximumBatchLimit = reviewMode === 'medium' ? 4 : 8
     const taskBatchLimit = Number.isInteger(configuredBatchLimit)
-      ? Math.min(maxDeepReviewBatchSize, Math.max(1, configuredBatchLimit))
-      : Math.min(maxDeepReviewBatchSize, Math.max(1, allowedCandidateIds.size))
+      ? Math.min(maximumBatchLimit, Math.max(1, configuredBatchLimit))
+      : Math.min(maximumBatchLimit, Math.max(1, allowedCandidateIds.size))
     let cohortResolutionCode = typeof task.payload['resolution_code'] ===
       'string'
       ? task.payload['resolution_code']
@@ -5818,16 +6314,11 @@ export async function submitCandidateDeepReview(
       const dangerous = parsedCandidate.success
         ? enforceKnowledgeRisk(parsedCandidate.data).dangerous
         : row.dangerous
-      const threshold = dangerous
-        ? config.dangerousAutoPublishConfidence
-        : config.autoPublishConfidence
       if (
         requestedDecision === 'verified' &&
         (
           !parsedCandidate.success ||
-          validationFinding ||
-          decision.confidence < threshold ||
-          decision.quality_score < 0.85
+          validationFinding
         )
       ) {
         requestedDecision = 'unresolved'

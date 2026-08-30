@@ -46,6 +46,7 @@ export type SectionId =
   | 'coverage'
   | 'sources'
   | 'knowledge'
+  | 'intake'
   | 'imports'
   | 'quality'
   | 'lab'
@@ -77,6 +78,7 @@ const GROUPS: Array<{
       { id: 'coverage', label: 'Coverage', icon: Activity },
       { id: 'sources', label: 'Sources', icon: Database },
       { id: 'knowledge', label: 'Knowledge', icon: BookOpen },
+      { id: 'intake', label: 'Intake', icon: Import },
       { id: 'imports', label: 'Imports', icon: Import }
     ]
   },
@@ -152,7 +154,7 @@ export function AppShell({
           {GROUPS.map((group) => (
             <div className="nav-group" key={group.label}>
               <span className="nav-group__label">{group.label}</span>
-              {group.items.map((item) => {
+              {group.items.filter((item) => !(publicDemo && item.id === 'intake')).map((item) => {
                 const Icon = item.icon
                 return (
                   <button
@@ -214,7 +216,7 @@ export function AppShell({
                 onChange={(event) =>
                   onConcurrency?.(Number(event.target.value))}
               >
-                {[1, 2, 3, 4].map((value) => (
+                {[1, 2, 3, 4, 5, 6, 7, 8].map((value) => (
                   <option value={value} key={value}>{value} executors</option>
                 ))}
               </select>
@@ -246,11 +248,12 @@ const SECTION_COPY: Record<SectionId, string> = {
   overview: 'Published knowledge, live throughput, cost and operational health.',
   'mcp-requests': 'Questions, safe responses, latency, errors and demand-driven learning.',
   pipeline: 'Every stage from source discovery through immutable publication.',
-  'active-source': 'Four concurrent source lanes, extraction progress and candidate outcomes.',
+  'active-source': 'Up to eight concurrent source lanes, extraction progress and candidate outcomes.',
   'agent-runs': 'Luna capacity, token efficiency, duration and run outcomes.',
   coverage: 'Prioritised vendor, model, operating system and document gaps.',
   sources: 'Discovered documents, acquisition state and source-level controls.',
   knowledge: 'Search the complete active knowledge release with precise filters.',
+  intake: 'Add websites, documents, text and sanitized field logs; monitor reprocessing.',
   imports: 'Legacy reconciliation, completeness and atomic import history.',
   quality: 'Confidence, evaluation results, latency and dangerous-safety gates.',
   lab: 'Batfish and containerlab evidence linked to revisions and commits.',

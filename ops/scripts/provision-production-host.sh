@@ -74,7 +74,7 @@ done
 
 install -d -m 0750 -o root -g clideck_mcp /opt/clideck-mcp/releases
 install -d -m 0700 -o root -g root /etc/clideck-mcp /etc/cloudflared
-install -d -m 0750 -o clideck_mcp_worker -g clideck_mcp \
+install -d -m 2770 -o clideck_mcp_worker -g clideck_mcp \
   /var/lib/clideck-mcp/source-artifacts
 install -d -m 0700 -o clideck_mcp_backup -g clideck_mcp \
   /var/backups/clideck-mcp

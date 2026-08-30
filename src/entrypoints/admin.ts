@@ -63,6 +63,7 @@ const internalApi = createApiApp({
 const app = createAdminUiApp({
   config,
   logger,
+  adminDatabase,
   internalFetch: async (request) => internalApi.fetch(request)
 })
 

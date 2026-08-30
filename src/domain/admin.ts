@@ -1911,9 +1911,9 @@ export async function listKnowledge(
        pak.last_verified_at,
        pak.revision_created_at
      FROM public_active_knowledge pak
-     JOIN knowledge_applicability_index applicability
+     LEFT JOIN knowledge_applicability_index applicability
        ON applicability.revision_id = pak.revision_id
-     JOIN software_families family ON family.id = applicability.family_id
+     LEFT JOIN software_families family ON family.id = applicability.family_id
      ${whereClause}
      ORDER BY pak.revision_created_at DESC, pak.revision_id DESC
      LIMIT $10 OFFSET $11`,
@@ -1922,9 +1922,9 @@ export async function listKnowledge(
     database.query<{ total: number }>(
       `SELECT count(*)::int AS total
        FROM public_active_knowledge pak
-       JOIN knowledge_applicability_index applicability
+       LEFT JOIN knowledge_applicability_index applicability
          ON applicability.revision_id = pak.revision_id
-       JOIN software_families family ON family.id = applicability.family_id
+       LEFT JOIN software_families family ON family.id = applicability.family_id
        ${whereClause}`,
       filterParameters,
     )
@@ -2024,7 +2024,7 @@ export async function listAgentRuns(database: Database, limit: number) {
 }
 
 export async function getQualityDashboard(database: Database) {
-  const [summary, evals, latency, conflicts] = await Promise.all([
+  const [summary, evals, latency, conflicts, pipelineChecks] = await Promise.all([
     database.query(
       `SELECT
          count(*)::int AS revisions,
@@ -2062,13 +2062,26 @@ export async function getQualityDashboard(database: Database) {
        FROM knowledge_conflicts
        GROUP BY severity, status
        ORDER BY severity, status`,
+    ),
+    database.query(
+      `SELECT stage, status, model, count(*)::int AS checks,
+              count(*) FILTER (WHERE material_error)::int AS material_errors,
+              sum(coverage_count)::bigint AS coverage_count,
+              sum(input_tokens)::bigint AS input_tokens,
+              sum(output_tokens)::bigint AS output_tokens,
+              max(created_at) AS latest_at
+         FROM pipeline_quality_checks
+        WHERE created_at >= now() - interval '30 days'
+        GROUP BY stage, status, model
+        ORDER BY max(created_at) DESC`,
     )
   ])
   return {
     summary: summary.rows[0],
     eval_runs: evals.rows,
     operation_latency_30d: latency.rows,
-    conflicts: conflicts.rows
+    conflicts: conflicts.rows,
+    pipeline_checks: pipelineChecks.rows
   }
 }
 
@@ -2334,7 +2347,6 @@ export async function setPipelineConcurrency(
     const updated = await client.query(
       `UPDATE pipeline_settings
           SET max_concurrent_ai_runs = $1,
-              max_deep_review_runs = $1,
               control_generation = control_generation + 1,
               updated_at = now(),
               updated_by = $2

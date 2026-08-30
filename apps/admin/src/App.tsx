@@ -48,6 +48,7 @@ const ConflictsPage = lazy(() => import('./pages/conflicts').then((module) => ({
 const CoveragePage = lazy(() => import('./pages/coverage').then((module) => ({ default: module.CoveragePage })))
 const FeedbackPage = lazy(() => import('./pages/feedback').then((module) => ({ default: module.FeedbackPage })))
 const ImportsPage = lazy(() => import('./pages/imports').then((module) => ({ default: module.ImportsPage })))
+const IntakePage = lazy(() => import('./pages/intake').then((module) => ({ default: module.IntakePage })))
 const KnowledgePage = lazy(() => import('./pages/knowledge').then((module) => ({ default: module.KnowledgePage })))
 const LabPage = lazy(() => import('./pages/lab').then((module) => ({ default: module.LabPage })))
 const McpRequestsPage = lazy(() => import('./pages/mcp-requests').then((module) => ({ default: module.McpRequestsPage })))
@@ -217,10 +218,13 @@ function OperationsApp() {
     window.scrollTo({ top: 0, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
   }
   const overview = overviewQuery.data
+  const visibleSection = runtime.role === 'public_demo' && section === 'intake'
+    ? 'overview'
+    : section
   return (
     <>
       <AppShell
-        section={section}
+        section={visibleSection}
         overview={overview}
         refreshing={overviewQuery.isFetching}
         onNavigate={navigate}
@@ -239,7 +243,7 @@ function OperationsApp() {
           : {})}
       >
         <Suspense fallback={<LoadingState label="Opening section…" />}>
-          <CurrentPage section={section} overview={overview} />
+          <CurrentPage section={visibleSection} overview={overview} />
         </Suspense>
       </AppShell>
       {toast && <Toast tone="success" onClose={() => setToast(null)}>{toast}</Toast>}
@@ -273,6 +277,7 @@ export const OPERATIONS_PAGE_REGISTRY: Record<
   coverage: () => <CoveragePage />,
   sources: () => <SourcesPage />,
   knowledge: () => <KnowledgePage />,
+  intake: () => <IntakePage />,
   imports: () => <ImportsPage />,
   quality: () => <QualityPage />,
   lab: () => <LabPage />,

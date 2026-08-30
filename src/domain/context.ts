@@ -309,6 +309,21 @@ export function publicNetworkContext(
   return publicContext
 }
 
+function unresolvedInternalNetworkContext(
+  input: NetworkContextInput,
+): InternalResolvedContext {
+  return {
+    ...unresolvedNetworkContext(input),
+    vendorId: null,
+    platformId: null,
+    operatingSystemId: null,
+    softwareFamilyId: '',
+    softwareFamilyIds: [],
+    softwareVersionStrategy: 'vendor',
+    architectureSlug: null
+  }
+}
+
 export async function resolveNetworkContext(
   database: Database,
   input: NetworkContextInput,
@@ -326,13 +341,13 @@ export async function resolveNetworkContext(
     ? await resolveFamily(database, operatingSystemRequest)
     : undefined
   if (explicitFamily && explicitFamily.score < minimumFamilyScore) {
-    throw new Error('NETWORK_CONTEXT_OS_NOT_RESOLVED')
+    return unresolvedInternalNetworkContext(input)
   }
   if (
     (!vendor || vendor.score < minimumVendorScore) &&
     explicitFamily?.portability_mode !== 'portable'
   ) {
-    throw new Error('NETWORK_CONTEXT_VENDOR_NOT_RESOLVED')
+    return unresolvedInternalNetworkContext(input)
   }
 
   const platform = vendor && vendor.score >= minimumVendorScore
@@ -351,13 +366,13 @@ export async function resolveNetworkContext(
       : undefined
   )
   if (!family || family.score < minimumFamilyScore) {
-    throw new Error('NETWORK_CONTEXT_OS_NOT_RESOLVED')
+    return unresolvedInternalNetworkContext(input)
   }
   if (
     family.portability_mode === 'vendor_specific' &&
     !vendorOperatingSystem
   ) {
-    throw new Error('NETWORK_CONTEXT_OS_NOT_RESOLVED')
+    return unresolvedInternalNetworkContext(input)
   }
   const architecture = platform
     ? await database.query<{ architecture_slug: string }>(

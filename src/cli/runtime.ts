@@ -4,6 +4,7 @@ import { createLogger } from '../logger.js'
 
 export function createCliRuntime(
   databaseRole: 'default' | 'admin' | 'worker' = 'default',
+  options: { queryTimeoutMs?: number } = {},
 ) {
   const config = getConfig()
   const logger = createLogger(config)
@@ -13,6 +14,6 @@ export function createCliRuntime(
       : databaseRole === 'worker'
         ? config.workerDatabaseUrl
         : config.databaseUrl
-  const database = createDatabase(config, logger, databaseUrl)
+  const database = createDatabase(config, logger, databaseUrl, options)
   return { config, logger, database }
 }

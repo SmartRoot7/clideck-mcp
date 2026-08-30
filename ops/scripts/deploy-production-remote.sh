@@ -84,8 +84,10 @@ SET enabled =
     END,
     max_concurrent_ai_runs =
       (:'deployment_pipeline_state'::jsonb ->> 'max_concurrent_ai_runs')::smallint,
-    max_deep_review_runs =
-      (:'deployment_pipeline_state'::jsonb ->> 'max_concurrent_ai_runs')::smallint,
+    max_deep_review_runs = least(
+      2,
+      (:'deployment_pipeline_state'::jsonb ->> 'max_deep_review_runs')::smallint
+    ),
     control_generation = control_generation + 1,
     updated_at = now(),
     updated_by = 'deploy-production'
@@ -209,7 +211,8 @@ pipeline_state_json="$(
     --command="SELECT json_build_object(
       'enabled', enabled,
       'paused_reason', paused_reason,
-      'max_concurrent_ai_runs', max_concurrent_ai_runs
+      'max_concurrent_ai_runs', max_concurrent_ai_runs,
+      'max_deep_review_runs', max_deep_review_runs
     )::text FROM pipeline_settings WHERE singleton"
 )"
 previous_active_release="$(
@@ -220,6 +223,12 @@ pipeline_state_captured=1
 printf '%s\n' "$pipeline_state_json" > "$backup_directory/pipeline-state.json"
 printf '%s\n' "$previous_active_release" \
   > "$backup_directory/previous-active-release.txt"
+
+# Admin Intake and the worker share immutable source storage through their
+# common clideck_mcp group. The setgid bit keeps newly staged directories
+# writable by the worker after admin handoff.
+install -d -m 2770 -o clideck_mcp_worker -g clideck_mcp \
+  /var/lib/clideck-mcp/source-artifacts
 
 psql "$DATABASE_URL" --set=ON_ERROR_STOP=1 <<'SQL'
 UPDATE pipeline_settings

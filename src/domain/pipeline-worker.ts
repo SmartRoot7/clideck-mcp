@@ -55,14 +55,23 @@ import {
 } from './pipeline-transitions.js'
 import { enforceKnowledgeRisk } from './risk.js'
 import { maxSourceFragmentBytes } from './pipeline-limits.js'
+import { processNextReprocessItem } from './intake.js'
+import {
+  classifyFragmentDisposition,
+  isUrlInsideCollectionScope,
+  sourceKindSchema
+} from './pipeline-v2.js'
 
 const execFileAsync = promisify(execFile)
-const maxOcrPages = 100
-const maxOcrDurationMs = 10 * 60_000
+const ocrRangePages = 25
+const maxOcrRangeDurationMs = 10 * 60_000
 
 const sourcePayloadSchema = z.object({
   source_id: z.string().uuid(),
   canonical_url: z.url().startsWith('https://'),
+  source_ref: z.string().optional(),
+  source_kind: sourceKindSchema.optional(),
+  processing_run_id: z.string().uuid().nullable().optional(),
   document_type: z.string().min(1),
   title: z.string().min(1),
   document_version: z.string().nullable().optional(),
@@ -73,6 +82,8 @@ const sourcePayloadSchema = z.object({
 const allowedMediaTypes = new Set([
   'application/pdf',
   'application/xhtml+xml',
+  'application/xml',
+  'text/xml',
   'text/html',
   'text/plain'
 ])
@@ -361,6 +372,40 @@ async function fetchPublicDocument(
 
 type PublicDocumentFetcher = typeof fetchPublicDocument
 
+async function recordMechanicalQualityCheck(
+  client: DatabaseClient,
+  input: {
+    stage: 'convert' | 'segment' | 'normalize_deduplicate'
+    profileKey: string
+    processingRunId: string | null
+    pipelineTaskId: string
+    coverageCount: number
+  },
+): Promise<void> {
+  const profile = await client.query<{ id: string }>(
+    `INSERT INTO pipeline_quality_profiles (stage, profile_key, checked_count)
+     VALUES ($1, $2, 1)
+     ON CONFLICT (stage, profile_key) DO UPDATE SET
+       checked_count = pipeline_quality_profiles.checked_count + 1,
+       updated_at = now()
+     RETURNING id`,
+    [input.stage, input.profileKey],
+  )
+  await client.query(
+    `INSERT INTO pipeline_quality_checks (
+       profile_id, processing_run_id, pipeline_task_id, stage, status,
+       coverage_count, findings
+     ) VALUES ($1, $2, $3, $4, 'passed', $5, '[]'::jsonb)`,
+    [
+      profile.rows[0]!.id,
+      input.processingRunId,
+      input.pipelineTaskId,
+      input.stage,
+      input.coverageCount
+    ],
+  )
+}
+
 function htmlToText(html: string): string {
   return html
     .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
@@ -445,6 +490,17 @@ function collectionDocumentType(url: string): string {
   return 'official_vendor_document'
 }
 
+function isCollectionSitemap(url: string, root: string): boolean {
+  try {
+    const candidate = new URL(url)
+    const collectionRoot = new URL(root)
+    return candidate.origin === collectionRoot.origin &&
+      /(?:^|\/)[^/]*sitemap[^/]*\.xml$/i.test(candidate.pathname)
+  } catch {
+    return false
+  }
+}
+
 async function expandNextSourceCollection(
   database: Database,
   logger: Logger,
@@ -452,11 +508,14 @@ async function expandNextSourceCollection(
   const collection = await withTransaction(database, async (client) => {
     const selected = await client.query<{
       id: string
-      coverage_target_id: string
+      coverage_target_id: string | null
       canonical_url: string
       vendor_domain: string
       crawl_depth: number
       link_limit: number
+      path_prefix: string
+      intake_job_id: string | null
+      pages_seen: number
       cursor: { queue?: Array<{ url: string; depth: number }> }
     }>(
       `SELECT
@@ -466,14 +525,25 @@ async function expandNextSourceCollection(
          vendor_domain,
          crawl_depth,
          link_limit,
+         path_prefix,
+         intake_job_id,
+         pages_seen,
          cursor
        FROM source_collections
        WHERE (
-         status = 'active' AND next_scan_at <= now()
-       ) OR (
-         status = 'refreshing'
-         AND updated_at <= now() - interval '10 minutes'
-       )
+           (status = 'active' AND next_scan_at <= now())
+           OR (
+             status = 'refreshing'
+             AND updated_at <= now() - interval '10 minutes'
+           )
+         )
+         AND (
+           intake_job_id IS NULL OR EXISTS (
+             SELECT 1 FROM intake_jobs job
+              WHERE job.id = source_collections.intake_job_id
+                AND job.status IN ('queued', 'running')
+           )
+         )
        ORDER BY next_scan_at, updated_at
        LIMIT 1
        FOR UPDATE SKIP LOCKED`,
@@ -492,7 +562,10 @@ async function expandNextSourceCollection(
 
   const initialQueue = collection.cursor.queue?.length
     ? collection.cursor.queue
-    : [{ url: collection.canonical_url, depth: 0 }]
+    : [
+        { url: new URL('/sitemap.xml', collection.canonical_url).toString(), depth: 0 },
+        { url: collection.canonical_url, depth: 0 }
+      ]
   const queue = [...initialQueue]
   const seen = new Set<string>()
   const discovered = new Set<string>()
@@ -501,54 +574,149 @@ async function expandNextSourceCollection(
     while (
       queue.length > 0 &&
       pages < 20 &&
+      collection.pages_seen + pages < collection.link_limit &&
       discovered.size < collection.link_limit
     ) {
       const current = queue.shift()!
       if (seen.has(current.url)) continue
       seen.add(current.url)
-      const host = new URL(current.url).hostname.toLowerCase()
-      if (!isVendorCollectionHost(host, collection.vendor_domain)) {
-        continue
-      }
-      const response = await fetchPublicDocument(
+      if (!isCollectionSitemap(current.url, collection.canonical_url) &&
+        !isUrlInsideCollectionScope(
         current.url,
-        2 * 1024 * 1024,
-      )
-      pages += 1
-      if (
-        !isVendorCollectionHost(
-          new URL(response.finalUrl).hostname,
-          collection.vendor_domain,
+        collection.canonical_url,
+        collection.path_prefix,
+        )) {
+        await database.query(
+          `INSERT INTO source_collection_pages (
+             source_collection_id, requested_url, depth, status,
+             failure_message, attempts, updated_at
+           ) VALUES ($1, $2, $3, 'out_of_scope', 'Outside collection scope', 1, now())
+           ON CONFLICT (source_collection_id, requested_url) DO UPDATE SET
+             status = 'out_of_scope', failure_message = excluded.failure_message,
+             attempts = source_collection_pages.attempts + 1, updated_at = now()`,
+          [collection.id, current.url, current.depth],
         )
-      ) {
         continue
       }
+      const prior = await database.query<{ terminal: boolean }>(
+        `SELECT status IN ('accepted', 'duplicate', 'permanent_failure') AS terminal
+           FROM source_collection_pages
+          WHERE source_collection_id = $1 AND requested_url = $2`,
+        [collection.id, current.url],
+      )
+      if (prior.rows[0]?.terminal) continue
+      let response: Awaited<ReturnType<typeof fetchPublicDocument>>
+      try {
+        response = await fetchPublicDocument(current.url, 2 * 1024 * 1024)
+      } catch (error) {
+        pages += 1
+        const message = error instanceof Error ? error.message : 'SOURCE_FETCH_FAILED'
+        const status = /SOURCE_HTTP_(?:404|410)\b/.test(message)
+          ? 'permanent_failure'
+          : /(?:SSRF|UNSAFE|PRIVATE|REDIRECT_INVALID)/.test(message)
+            ? 'unsafe'
+            : 'temporary_failure'
+        await database.query(
+          `INSERT INTO source_collection_pages (
+             source_collection_id, requested_url, depth, status,
+             failure_message, attempts, available_at, updated_at
+           ) VALUES ($1, $2, $3, $4, $5, 1,
+             CASE WHEN $4 = 'temporary_failure' THEN now() + interval '1 hour'
+                  ELSE now() END, now())
+           ON CONFLICT (source_collection_id, requested_url) DO UPDATE SET
+             status = excluded.status, failure_message = excluded.failure_message,
+             attempts = least(10, source_collection_pages.attempts + 1),
+             available_at = excluded.available_at, updated_at = now()`,
+          [collection.id, current.url, current.depth, status, message.slice(0, 2_000)],
+        )
+        continue
+      }
+      pages += 1
+      if (!isCollectionSitemap(response.finalUrl, collection.canonical_url) &&
+        !isUrlInsideCollectionScope(
+        response.finalUrl,
+        collection.canonical_url,
+        collection.path_prefix,
+        )) {
+        await database.query(
+          `INSERT INTO source_collection_pages (
+             source_collection_id, requested_url, canonical_url, depth,
+             status, failure_message, attempts, updated_at
+           ) VALUES ($1, $2, $3, $4, 'out_of_scope',
+             'Canonical redirect escaped collection scope', 1, now())
+           ON CONFLICT (source_collection_id, requested_url) DO UPDATE SET
+             canonical_url = excluded.canonical_url, status = 'out_of_scope',
+             failure_message = excluded.failure_message,
+             attempts = source_collection_pages.attempts + 1, updated_at = now()`,
+          [collection.id, current.url, response.finalUrl, current.depth],
+        )
+        continue
+      }
+      const contentHash = bufferHash(response.body)
+      const duplicateContent = await database.query<{ exists: boolean }>(
+        `SELECT EXISTS (
+           SELECT 1 FROM source_collection_pages
+            WHERE source_collection_id = $1 AND content_hash = $2
+         ) AS exists`,
+        [collection.id, contentHash],
+      )
+      await database.query(
+        `INSERT INTO source_collection_pages (
+           source_collection_id, requested_url, canonical_url, depth, status,
+           media_type, content_hash, attempts, updated_at
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, 1, now())
+         ON CONFLICT (source_collection_id, requested_url) DO UPDATE SET
+           canonical_url = excluded.canonical_url,
+           status = excluded.status,
+           media_type = excluded.media_type,
+           content_hash = excluded.content_hash,
+           attempts = source_collection_pages.attempts + 1,
+           updated_at = now()`,
+        [
+          collection.id,
+          current.url,
+          response.finalUrl,
+          current.depth,
+          duplicateContent.rows[0]?.exists ? 'duplicate' : 'accepted',
+          response.mediaType,
+          contentHash
+        ],
+      )
+      if (duplicateContent.rows[0]?.exists) continue
       if (
         response.mediaType !== 'text/html' &&
-        response.mediaType !== 'application/xhtml+xml'
+        response.mediaType !== 'application/xhtml+xml' &&
+        response.mediaType !== 'application/xml' &&
+        response.mediaType !== 'text/xml'
       ) {
         discovered.add(response.finalUrl)
         continue
       }
+      if (response.mediaType.includes('xml')) {
+        for (const match of response.body.toString('utf8').matchAll(/<loc>\s*([^<]+)\s*<\/loc>/gi)) {
+          const next = canonicalCollectionUrl(match[1] ?? '', response.finalUrl)
+          if (next && (
+            isCollectionSitemap(next, collection.canonical_url) ||
+            isUrlInsideCollectionScope(next, collection.canonical_url, collection.path_prefix)
+          )) {
+            queue.push({ url: next, depth: current.depth })
+          }
+        }
+        continue
+      }
+      discovered.add(response.finalUrl)
       for (const link of collectionLinks(
         response.body.toString('utf8'),
         response.finalUrl,
       )) {
-        const linkHost = new URL(link).hostname.toLowerCase()
-        if (!isVendorCollectionHost(
-          linkHost,
-          collection.vendor_domain,
+        if (!isUrlInsideCollectionScope(
+          link,
+          collection.canonical_url,
+          collection.path_prefix,
         )) {
           continue
         }
-        if (
-          /\.(?:pdf|txt)(?:\?|$)/i.test(link) ||
-          /(?:command|configuration|diagnostic|manual|reference|release|advisory|upgrade)/i.test(
-            link,
-          )
-        ) {
-          discovered.add(link)
-        }
+        discovered.add(link)
         if (
           current.depth < collection.crawl_depth &&
           !seen.has(link) &&
@@ -571,11 +739,12 @@ async function expandNextSourceCollection(
              document_type,
              title,
              status,
-             discovered_by
+             discovered_by, source_kind, source_ref, display_locator
            )
            VALUES (
              $1, $2, $3, $4, 'approved',
-             'deterministic-source-collection'
+             'deterministic-source-collection', $5,
+             $6, $2
            )
            ON CONFLICT (canonical_url) DO NOTHING
            RETURNING id`,
@@ -583,7 +752,9 @@ async function expandNextSourceCollection(
             collection.coverage_target_id,
             url,
             collectionDocumentType(url),
-            collectionSourceTitle(url)
+            collectionSourceTitle(url),
+            collection.intake_job_id ? 'admin_web' : 'official_web',
+            `src_${randomUUID().replaceAll('-', '')}`
           ],
         )
         if (result.rows[0]) inserted += 1
@@ -609,15 +780,49 @@ async function expandNextSourceCollection(
                 END,
                 unique_yield = unique_yield + $3,
                 duplicates_avoided = duplicates_avoided + $4,
+                pages_seen = pages_seen + $5,
+                pages_accepted = pages_accepted + $3,
+                checkpoint_at = now(),
                 updated_at = now()
           WHERE id = $1`,
         [
           collection.id,
           JSON.stringify({ queue: remaining }),
           inserted,
-          duplicates
+          duplicates,
+          pages
         ],
       )
+      if (collection.intake_job_id) {
+        await client.query(
+          `UPDATE intake_jobs
+              SET status = CASE WHEN jsonb_array_length($2::jsonb->'queue') > 0
+                                THEN 'running' ELSE 'completed' END,
+                  configuration = configuration || jsonb_build_object(
+                    'current_stage', CASE
+                      WHEN jsonb_array_length($2::jsonb->'queue') > 0
+                      THEN 'crawl' ELSE 'completed' END
+                  ),
+                  counters = counters || jsonb_build_object(
+                    'pages', coalesce((counters->>'pages')::int, 0) + $5::int,
+                    'sources', coalesce((counters->>'sources')::int, 0) + $3::int,
+                    'duplicates', coalesce((counters->>'duplicates')::int, 0) + $4::int
+                  ),
+                  started_at = coalesce(started_at, now()),
+                  completed_at = CASE
+                    WHEN jsonb_array_length($2::jsonb->'queue') = 0 THEN now()
+                    ELSE NULL END,
+                  updated_at = now()
+            WHERE id = $1`,
+          [
+            collection.intake_job_id,
+            JSON.stringify({ queue: remaining }),
+            inserted,
+            duplicates,
+            pages
+          ],
+        )
+      }
     })
     logger.info(
       {
@@ -650,6 +855,7 @@ async function expandNextSourceCollection(
 
 async function ocrPdfPages(
   pdfPath: string,
+  selectedPages?: number[],
 ): Promise<{ text: string; pageCount: number | null }> {
   const info = await execFileAsync('pdfinfo', [pdfPath], {
     timeout: 30_000,
@@ -660,33 +866,36 @@ async function ocrPdfPages(
   if (!pageCount) {
     return { text: '', pageCount }
   }
-  if (pageCount > maxOcrPages) throw new Error('SOURCE_OCR_PAGE_LIMIT')
-
   const scratch = await mkdtemp(join(tmpdir(), 'clideck-mcp-ocr-'))
   const pages: string[] = []
-  const deadline = Date.now() + maxOcrDurationMs
+  const requestedPages = selectedPages?.length
+    ? [...new Set(selectedPages)].filter((page) => page >= 1 && page <= pageCount)
+    : Array.from({ length: pageCount }, (_, index) => index + 1)
   try {
-    for (let page = 1; page <= pageCount; page += 1) {
-      if (Date.now() >= deadline) throw new Error('SOURCE_OCR_TIME_LIMIT')
-      const prefix = join(scratch, `page-${page}`)
-      try {
-        await execFileAsync(
-          'pdftoppm',
-          ['-f', String(page), '-l', String(page), '-png', '-singlefile',
-            '-r', '180', pdfPath, prefix],
-          { timeout: 60_000, maxBuffer: 2 * 1024 * 1024 },
-        )
-        const ocr = await execFileAsync(
-          'tesseract',
-          [`${prefix}.png`, 'stdout', '--dpi', '180'],
-          { timeout: 60_000, maxBuffer: 16 * 1024 * 1024 },
-        )
-        if (ocr.stdout.trim()) {
-          pages.push(`\n[Page ${page}]\n${ocr.stdout.trim()}`)
+    for (let offset = 0; offset < requestedPages.length; offset += ocrRangePages) {
+      const range = requestedPages.slice(offset, offset + ocrRangePages)
+      const deadline = Date.now() + maxOcrRangeDurationMs
+      for (const page of range) {
+        if (Date.now() >= deadline) throw new Error('SOURCE_OCR_RANGE_TIME_LIMIT')
+        const prefix = join(scratch, `page-${page}`)
+        try {
+          await execFileAsync(
+            'pdftoppm',
+            ['-f', String(page), '-l', String(page), '-png', '-singlefile',
+              '-r', '180', pdfPath, prefix],
+            { timeout: 60_000, maxBuffer: 2 * 1024 * 1024 },
+          )
+          const ocr = await execFileAsync(
+            'tesseract',
+            [`${prefix}.png`, 'stdout', '--dpi', '180'],
+            { timeout: 60_000, maxBuffer: 16 * 1024 * 1024 },
+          )
+          if (ocr.stdout.trim()) {
+            pages.push(`\n[Page ${page}]\n${ocr.stdout.trim()}`)
+          }
+        } catch {
+          pages.push(`\n[Page ${page} unreadable; targeted retry required]\n`)
         }
-      } catch {
-        // A failed scanned page is recorded by omission and does not block
-        // usable pages from the same public document.
       }
     }
   } finally {
@@ -732,7 +941,31 @@ async function convertArtifact(
       ? /^Pages:\s+(\d+)$/im.exec(info.stdout)
       : null
     const pageCount = pageMatch?.[1] ? Number(pageMatch[1]) : null
-    if (extracted.length >= 200) return { text: extracted, pageCount }
+    if (extracted.length >= 200) {
+      const pageTexts = extracted.split('\f')
+      const weakPages = pageTexts.flatMap((page, index) =>
+        page.replace(/\s+/g, '').length < 40 ? [index + 1] : [],
+      )
+      if (pageCount && weakPages.length > 0) {
+        const ocr = await ocrPdfPages(sourcePath, weakPages)
+        const ocrByPage = new Map<number, string>()
+        for (const match of ocr.text.matchAll(
+          /\[Page (\d+)(?: unreadable; targeted retry required)?\]\n([\s\S]*?)(?=\n\[Page \d+|$)/g,
+        )) {
+          ocrByPage.set(Number(match[1]), match[0].trim())
+        }
+        const merged = pageTexts.map((page, index) => {
+          const pageNumber = index + 1
+          const text = page.trim()
+          return text.replace(/\s+/g, '').length >= 40
+            ? `[Page ${pageNumber}]\n${text}`
+            : ocrByPage.get(pageNumber) ??
+              `[Page ${pageNumber} unreadable; targeted retry required]`
+        }).join('\n\f\n')
+        return { text: merged, pageCount }
+      }
+      return { text: extracted, pageCount }
+    }
   } finally {
     await unlink(outputPath).catch(() => undefined)
   }
@@ -820,14 +1053,14 @@ function normalizeSourcePages(text: string): string {
   const normalized = text.replace(/\r/g, '')
   if (!normalized.includes('\f')) return normalized
 
-  const pages = normalized.split('\f')
-  const retainedPages = pages.filter(
-    (page) => !isLikelyTableOfContentsPage(page),
-  )
-  return (retainedPages.length > 0 ? retainedPages : pages)
-    .map((page) => page.trim())
+  return normalized.split('\f')
+    .map((page, index) => {
+      const content = page.trim()
+      if (!content) return ''
+      return `[Page ${index + 1}]\n${content}`
+    })
     .filter(Boolean)
-    .join('\n')
+    .join('\n\n')
 }
 
 export function chunkSourceText(text: string): TextFragment[] {
@@ -936,7 +1169,7 @@ async function acquireSource(
   await mkdir(storageRoot, { recursive: true, mode: 0o750 })
   const finalPath = join(
     storageRoot,
-    `${payload.source_id}${extensionForMediaType(downloaded.mediaType)}`,
+    `${payload.source_id}-${contentHash.slice(-16)}${extensionForMediaType(downloaded.mediaType)}`,
   )
   const tempPath = join(storageRoot, `.${payload.source_id}.${randomUUID()}.tmp`)
   await writeFile(tempPath, downloaded.body, { mode: 0o640 })
@@ -971,25 +1204,7 @@ async function acquireSource(
           content_hash: contentHash
         }
       }
-      const duplicate = await client.query<{ source_candidate_id: string }>(
-      `SELECT source_candidate_id
-       FROM source_artifacts
-       WHERE content_hash = $1
-       LIMIT 1`,
-      [contentHash],
-      )
-      if (
-        duplicate.rows[0] &&
-        duplicate.rows[0].source_candidate_id !== payload.source_id
-      ) {
-        await markSourceCandidateDuplicate(client, payload.source_id)
-        return {
-          duplicate: true,
-          duplicate_of: duplicate.rows[0].source_candidate_id,
-          content_hash: contentHash
-        }
-      }
-      await client.query(
+      const artifact = await client.query<{ id: string }>(
         `INSERT INTO source_artifacts (
          source_candidate_id,
          media_type,
@@ -998,23 +1213,54 @@ async function acquireSource(
          storage_path,
          purge_after
        )
-       VALUES ($1, $2, $3, $4, $5, now() + make_interval(days => $6))
-       ON CONFLICT (source_candidate_id)
+       VALUES ($1, $2, $3, $4, $5, NULL)
+       ON CONFLICT (source_candidate_id, content_hash)
        DO UPDATE SET
          media_type = excluded.media_type,
          byte_size = excluded.byte_size,
          content_hash = excluded.content_hash,
          storage_path = excluded.storage_path,
          status = 'downloaded',
-         updated_at = now()`,
+         purge_after = NULL,
+         updated_at = now()
+       RETURNING id`,
         [
           payload.source_id,
           downloaded.mediaType,
           downloaded.body.byteLength,
           contentHash,
-          finalPath,
-          config.sourceRetentionDays
+          finalPath
         ],
+      )
+      const version = `pipeline-v2-${contentHash.slice(-16)}`
+      const run = await client.query<{ id: string }>(
+        `INSERT INTO source_processing_runs (
+           source_candidate_id, source_artifact_id, processing_version,
+           converter_version, segmenter_version, extractor_version,
+           prompt_version, model_profile, status, started_at
+         ) VALUES (
+           $1, $2, $3, 'pipeline-v2-convert-1', 'pipeline-v2-segment-1',
+           'pipeline-v2-extract-1', 'pipeline-v2-fidelity-1',
+           'gpt-5.6-luna-low', 'converting', now()
+         )
+         ON CONFLICT (source_candidate_id, processing_version)
+         DO UPDATE SET source_artifact_id = excluded.source_artifact_id,
+                       status = 'converting', updated_at = now()
+         RETURNING id`,
+        [payload.source_id, artifact.rows[0]!.id, version],
+      )
+      await client.query(
+        `UPDATE pipeline_tasks
+            SET processing_run_id = $2,
+                payload = jsonb_set(
+                  payload,
+                  '{processing_run_id}',
+                  to_jsonb($2::text),
+                  true
+                ),
+                updated_at = now()
+          WHERE id = $1`,
+        [claimed.task.id, run.rows[0]!.id],
       )
       await client.query(
         `UPDATE source_candidates
@@ -1039,7 +1285,8 @@ async function acquireSource(
         duplicate: false,
         byte_size: downloaded.body.byteLength,
         media_type: downloaded.mediaType,
-        content_hash: contentHash
+        content_hash: contentHash,
+        processing_run_id: run.rows[0]!.id
       }
     })
   } catch (error) {
@@ -1062,54 +1309,23 @@ async function convertSource(
     id: string
     storage_path: string
     media_type: string
+    processing_run_id: string
   }>(
-    `SELECT id, storage_path, media_type
-     FROM source_artifacts
-     WHERE source_candidate_id = $1`,
-    [payload.source_id],
+    `SELECT artifact.id, artifact.storage_path, artifact.media_type,
+            run.id AS processing_run_id
+     FROM source_processing_runs run
+     JOIN source_artifacts artifact ON artifact.id = run.source_artifact_id
+     WHERE run.source_candidate_id = $1
+       AND ($2::uuid IS NULL OR run.id = $2)
+     ORDER BY run.created_at DESC
+     LIMIT 1`,
+    [payload.source_id, payload.processing_run_id ?? null],
   )
   const row = artifact.rows[0]
   if (!row) throw new Error('SOURCE_ARTIFACT_NOT_FOUND')
   const converted = await convertArtifact(row.storage_path, row.media_type)
   const text = converted.text.trim()
   if (!text) throw new Error('SOURCE_CONVERSION_EMPTY')
-  const demandQuestion = await demandQuestionForTask(
-    database,
-    claimed.task.knowledge_demand_id,
-  )
-  const demandRelevance = demandQuestion
-    ? assessKnowledgeDemandRelevance(demandQuestion, [
-        payload.title,
-        payload.canonical_url,
-        text
-      ])
-    : null
-  if (
-    demandRelevance &&
-    demandRelevance.terms.length > 0 &&
-    demandRelevance.matchedTerms.length === 0
-  ) {
-    await withTransaction(database, async (client) => {
-      await client.query(
-        `UPDATE source_candidates
-            SET status = 'rejected',
-                failure_code = 'DEMAND_TERM_NOT_FOUND',
-                failure_message =
-                  'Converted source does not contain a demand-specific technical term.',
-                updated_at = now()
-          WHERE id = $1`,
-        [payload.source_id],
-      )
-    })
-    return {
-      rejected_as_unrelated: true,
-      demand_terms_considered: demandRelevance.terms.length,
-      matched_demand_terms: 0,
-      converter: row.media_type === 'application/pdf'
-        ? 'pdftotext_with_local_ocr_fallback'
-        : 'deterministic_text'
-    }
-  }
   const textPath = `${row.storage_path}.txt`
   const tempPath = `${textPath}.${randomUUID()}.tmp`
   await writeFile(tempPath, text, { mode: 0o640 })
@@ -1132,6 +1348,36 @@ async function convertSource(
         WHERE id = $1`,
       [payload.source_id],
     )
+    if (payload.processing_run_id) {
+      await client.query(
+        `UPDATE source_processing_runs
+            SET status = 'segmenting',
+                source_artifact_id = $2,
+                converted_output_path = $3,
+                page_count = $4,
+                next_page = coalesce($4, 1),
+                counters = counters || jsonb_build_object(
+                  'converted_bytes', $5::int,
+                  'page_count', coalesce($4::int, 0)
+                ),
+                updated_at = now()
+          WHERE id = $1`,
+        [
+          payload.processing_run_id,
+          row.id,
+          textPath,
+          converted.pageCount,
+          Buffer.byteLength(text, 'utf8')
+        ],
+      )
+    }
+    await recordMechanicalQualityCheck(client, {
+      stage: 'convert',
+      profileKey: 'pipeline-v2-convert-1',
+      processingRunId: row.processing_run_id,
+      pipelineTaskId: claimed.task.id,
+      coverageCount: converted.pageCount ?? 1
+    })
     await recordPipelineTransition(client, {
       scope: 'source',
       fromStage: 'downloaded',
@@ -1159,11 +1405,16 @@ async function chunkSource(
   const artifact = await database.query<{
     id: string
     extracted_text_path: string | null
+    processing_run_id: string
   }>(
-    `SELECT id, extracted_text_path
-     FROM source_artifacts
-     WHERE source_candidate_id = $1`,
-    [payload.source_id],
+    `SELECT artifact.id, artifact.extracted_text_path, run.id AS processing_run_id
+     FROM source_processing_runs run
+     JOIN source_artifacts artifact ON artifact.id = run.source_artifact_id
+     WHERE run.source_candidate_id = $1
+       AND ($2::uuid IS NULL OR run.id = $2)
+     ORDER BY run.created_at DESC
+     LIMIT 1`,
+    [payload.source_id, payload.processing_run_id ?? null],
   )
   const row = artifact.rows[0]
   if (!row?.extracted_text_path) throw new Error('SOURCE_TEXT_NOT_FOUND')
@@ -1174,24 +1425,33 @@ async function chunkSource(
 
   await withTransaction(database, async (client) => {
     for (const fragment of fragments) {
+      const disposition = classifyFragmentDisposition(fragment.content)
       await client.query(
         `INSERT INTO source_fragments (
            source_artifact_id,
+           processing_run_id,
            ordinal,
            section_title,
            source_locator,
            content,
-           content_hash
+           content_hash,
+           status,
+           disposition,
+           disposition_reason
          )
-         VALUES ($1, $2, $3, $4, $5, $6)
-         ON CONFLICT DO NOTHING`,
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         ON CONFLICT (processing_run_id, ordinal) DO NOTHING`,
         [
           row.id,
+          row.processing_run_id,
           fragment.ordinal,
           fragment.sectionTitle,
           fragment.sourceLocator,
           fragment.content,
-          fragment.contentHash
+          fragment.contentHash,
+          disposition?.disposition === 'non_knowledge' ? 'analyzed' : 'queued',
+          disposition?.disposition ?? null,
+          disposition?.reason ?? null
         ],
       )
     }
@@ -1202,6 +1462,31 @@ async function chunkSource(
         WHERE id = $1`,
       [row.id],
     )
+    await client.query(
+      `UPDATE source_processing_runs
+          SET status = 'extracting',
+              counters = counters || jsonb_build_object(
+                'fragments_total', $2::int,
+                'fragments_non_knowledge', $3::int
+              ),
+              updated_at = now()
+        WHERE id = $1`,
+      [
+        row.processing_run_id,
+        fragments.length,
+        fragments.filter((fragment) =>
+          classifyFragmentDisposition(fragment.content)?.disposition ===
+            'non_knowledge'
+        ).length
+      ],
+    )
+    await recordMechanicalQualityCheck(client, {
+      stage: 'segment',
+      profileKey: 'pipeline-v2-segment-1',
+      processingRunId: row.processing_run_id,
+      pipelineTaskId: claimed.task.id,
+      coverageCount: fragments.length
+    })
     await recordPipelineTransition(client, {
       scope: 'source',
       fromStage: 'convert',
@@ -1257,12 +1542,9 @@ export function deterministicCandidateInitialStatus(input: {
   qualityScore: number
   autoPublishConfidence: number
 }): 'analyzed' | 'verified' {
-  return input.readyForPublication &&
-    !input.dangerous &&
-    input.confidence >= input.autoPublishConfidence &&
-    input.qualityScore >= 0.85
-    ? 'verified'
-    : 'analyzed'
+  // Source-backed deterministic records publish immediately. Fidelity QA is
+  // an observer/repair loop and confidence/risk are retained only as signals.
+  return input.readyForPublication ? 'verified' : 'analyzed'
 }
 
 export function deterministicCandidateEligibleForFastPath(input: {
@@ -1312,10 +1594,6 @@ async function runDeterministicFastPath(
   )
   const target = context.rows[0]
   if (!target) return { candidatesCreated: 0, fragmentsHandled: 0 }
-  const demandQuestion = await demandQuestionForTask(
-    database,
-    task.knowledge_demand_id,
-  )
 
   const inputSource = {
     canonical_url: source.canonical_url,
@@ -1353,9 +1631,11 @@ async function runDeterministicFastPath(
       source_locator: string | null
       content: string
       content_hash: string
+      processing_run_id: string | null
     }>(
       `SELECT
-         id, ordinal, section_title, source_locator, content, content_hash
+         id, ordinal, section_title, source_locator, content, content_hash,
+         processing_run_id
        FROM source_fragments
        WHERE source_artifact_id = $1
          AND ($4::boolean OR status = 'queued')
@@ -1370,6 +1650,12 @@ async function runDeterministicFastPath(
       ],
     )
     if (fragments.rows.length === 0) break
+    const fragmentRunIds = new Map(
+      fragments.rows.map((fragment) => [
+        fragment.id,
+        fragment.processing_run_id
+      ]),
+    )
     lastOrdinal = fragments.rows.at(-1)?.ordinal ?? lastOrdinal
     const result = extractor.extract({
       fragments: fragments.rows,
@@ -1416,14 +1702,6 @@ async function runDeterministicFastPath(
         const candidate = enforceKnowledgeRisk(
           pipelineCandidatePayloadSchema.parse(parsed),
         )
-        if (
-          demandQuestion &&
-          !isRelevantToKnowledgeDemand(demandQuestion, [
-            JSON.stringify(candidate)
-          ])
-        ) {
-          continue
-        }
         demandRelevantFragments.add(entry.fragment_id)
         const serialized = JSON.stringify(candidate)
         const candidateStatus = deterministicCandidateInitialStatus({
@@ -1436,10 +1714,13 @@ async function runDeterministicFastPath(
         const inserted = await client.query<{
           id: string
           status: 'analyzed' | 'verified'
+          inserted: boolean
+          processing_run_id: string | null
         }>(
           `INSERT INTO knowledge_candidates (
              pipeline_task_id,
              source_fragment_id,
+             processing_run_id,
              stable_key,
              payload,
              content_hash,
@@ -1448,9 +1729,13 @@ async function runDeterministicFastPath(
              confidence,
              quality_score
            )
-           VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9)
-           ON CONFLICT (content_hash) DO NOTHING
-           RETURNING id, status`,
+           SELECT $1, $2, fragment.processing_run_id, $3, $4::jsonb,
+                  $5, $6, $7, $8, $9
+             FROM source_fragments fragment
+            WHERE fragment.id = $2
+           ON CONFLICT (content_hash) DO UPDATE SET
+             updated_at = knowledge_candidates.updated_at
+           RETURNING id, status, (xmax = 0) AS inserted, processing_run_id`,
           [
             task.id,
             entry.fragment_id,
@@ -1464,19 +1749,29 @@ async function runDeterministicFastPath(
           ],
         )
         if (inserted.rows[0]) {
+          await client.query(
+            `INSERT INTO knowledge_candidate_occurrences (
+               knowledge_candidate_id, processing_run_id, source_fragment_id,
+               occurrence_kind, content_hash
+             ) VALUES ($1, $2, $3, $4, $5)
+             ON CONFLICT DO NOTHING`,
+            [
+              inserted.rows[0].id,
+              fragmentRunIds.get(entry.fragment_id),
+              entry.fragment_id,
+              inserted.rows[0].inserted ? 'created' : 'exact_duplicate',
+              sha256Label(serialized)
+            ],
+          )
           if (inserted.rows[0].status === 'verified') {
             batchCandidatesReady += 1
           } else {
             batchCandidatesForVerification += 1
           }
-          candidatesCreated += 1
+          if (inserted.rows[0].inserted) candidatesCreated += 1
         }
       }
-      const handledFragmentIds = demandQuestion
-        ? result.handled_fragment_ids.filter((id) =>
-            demandRelevantFragments.has(id),
-          )
-        : result.handled_fragment_ids
+      const handledFragmentIds = result.handled_fragment_ids
       if (handledFragmentIds.length > 0) {
         await client.query(
           `UPDATE source_fragments
@@ -1490,11 +1785,24 @@ async function runDeterministicFastPath(
                     ) THEN 'analyzed'
                     ELSE 'verified'
                   END,
+                  disposition = CASE
+                    WHEN id = ANY($4::uuid[]) THEN 'knowledge_extracted'
+                    ELSE coalesce(disposition, 'targeted_retry')
+                  END,
+                  disposition_reason = CASE
+                    WHEN id = ANY($4::uuid[]) THEN 'knowledge_extracted'
+                    ELSE coalesce(disposition_reason, 'targeted_retry')
+                  END,
                   updated_at = now()
             WHERE id = ANY($1::uuid[])
               AND source_artifact_id = $2
               AND status = 'queued'`,
-          [handledFragmentIds, artifactId, task.id],
+          [
+            handledFragmentIds,
+            artifactId,
+            task.id,
+            [...demandRelevantFragments]
+          ],
         )
       }
       await recordPipelineTransitions(client, [
@@ -1518,11 +1826,7 @@ async function runDeterministicFastPath(
         }
       ])
     })
-    const handledFragmentIds = demandQuestion
-      ? result.handled_fragment_ids.filter((id) =>
-          demandRelevantFragments.has(id),
-        )
-      : result.handled_fragment_ids
+    const handledFragmentIds = result.handled_fragment_ids
     for (const fragmentId of handledFragmentIds) {
       handled.add(fragmentId)
     }
@@ -1556,12 +1860,14 @@ async function publishSource(
     payload: unknown
     revision_id: string | null
     knowledge_demand_id: string | null
+    processing_run_id: string | null
   }>(
       `SELECT DISTINCT ON (kc.stable_key)
          kc.id,
          kc.payload,
          kc.revision_id,
-         pt.knowledge_demand_id
+         pt.knowledge_demand_id,
+         kc.processing_run_id
        FROM knowledge_candidates kc
        JOIN pipeline_tasks pt ON pt.id = kc.pipeline_task_id
        WHERE pt.source_candidate_id = ANY($1::uuid[])
@@ -1576,6 +1882,7 @@ async function publishSource(
     itemId: string
     revisionId: string
     knowledgeDemandId: string | null
+    processingRunId: string | null
   }> = []
   let exceptions = 0
   for (const candidate of candidates.rows) {
@@ -1635,6 +1942,7 @@ async function publishSource(
       revisions.push({
         candidateId: candidate.id,
         knowledgeDemandId: candidate.knowledge_demand_id,
+        processingRunId: candidate.processing_run_id,
         ...created
       })
     } catch (error) {
@@ -1717,6 +2025,21 @@ async function publishSource(
           )`,
         [sourceIds],
       )
+      for (const processingRunId of new Set(
+        revisions.flatMap((revision) =>
+          revision.processingRunId ? [revision.processingRunId] : [],
+        ),
+      )) {
+        await recordMechanicalQualityCheck(client, {
+          stage: 'normalize_deduplicate',
+          profileKey: 'pipeline-v2-normalize-deduplicate-1',
+          processingRunId,
+          pipelineTaskId: claimed.task.id,
+          coverageCount: revisions.filter((revision) =>
+            revision.processingRunId === processingRunId
+          ).length
+        })
+      }
     }
 
     const remaining = await client.query<{ count: number }>(
@@ -1814,9 +2137,10 @@ async function publishCandidateBatch(
     payload: unknown
     revision_id: string | null
     knowledge_demand_id: string | null
+    processing_run_id: string | null
   }>(
     `SELECT candidate.id, candidate.payload, candidate.revision_id,
-            origin.knowledge_demand_id
+            origin.knowledge_demand_id, candidate.processing_run_id
        FROM knowledge_candidates candidate
        JOIN pipeline_tasks origin ON origin.id = candidate.pipeline_task_id
       WHERE candidate.id = ANY($1::uuid[])
@@ -1831,6 +2155,7 @@ async function publishCandidateBatch(
     itemId: string
     revisionId: string
     knowledgeDemandId: string | null
+    processingRunId: string | null
   }> = []
   const deferred: Array<{
     candidateId: string
@@ -1889,6 +2214,7 @@ async function publishCandidateBatch(
       revisions.push({
         candidateId: candidate.id,
         knowledgeDemandId: candidate.knowledge_demand_id,
+        processingRunId: candidate.processing_run_id,
         ...created
       })
     } catch (error) {
@@ -1988,6 +2314,53 @@ async function publishCandidateBatch(
           )`,
         [revisions.map((revision) => revision.candidateId)],
       )
+      await client.query(
+        `UPDATE source_processing_runs processing
+            SET status = 'completed', completed_at = now(), updated_at = now(),
+                counters = counters || jsonb_build_object(
+                  'candidates_published', (
+                    SELECT count(*)::int FROM knowledge_candidates candidate
+                     WHERE candidate.processing_run_id = processing.id
+                       AND candidate.status = 'published'
+                  )
+                )
+          WHERE processing.id IN (
+            SELECT DISTINCT candidate.processing_run_id
+              FROM knowledge_candidates candidate
+             WHERE candidate.id = ANY($1::uuid[])
+               AND candidate.processing_run_id IS NOT NULL
+          )
+            AND NOT EXISTS (
+              SELECT 1 FROM source_fragments fragment
+               WHERE fragment.processing_run_id = processing.id
+                 AND (fragment.disposition IS NULL OR fragment.disposition IN (
+                   'continuation_required', 'targeted_retry'
+                 ))
+            )
+            AND NOT EXISTS (
+              SELECT 1 FROM knowledge_candidates candidate
+               WHERE candidate.processing_run_id = processing.id
+                 AND candidate.status IN (
+                   'analyzed', 'verified', 'deep_review', 'quarantined'
+                 )
+            )`,
+        [revisions.map((revision) => revision.candidateId)],
+      )
+      for (const processingRunId of new Set(
+        revisions.flatMap((revision) =>
+          revision.processingRunId ? [revision.processingRunId] : [],
+        ),
+      )) {
+        await recordMechanicalQualityCheck(client, {
+          stage: 'normalize_deduplicate',
+          profileKey: 'pipeline-v2-normalize-deduplicate-1',
+          processingRunId,
+          pipelineTaskId: claimed.task.id,
+          coverageCount: revisions.filter((revision) =>
+            revision.processingRunId === processingRunId
+          ).length
+        })
+      }
     }
     await recordPipelineTransition(client, {
       scope: 'record',
@@ -2067,12 +2440,15 @@ export async function processNextPipelineTask(
   workerId: string,
   fetchDocument: PublicDocumentFetcher = fetchPublicDocument,
 ): Promise<boolean> {
+  if (await processNextReprocessItem(database)) return true
   const claimed = await claimMechanicalPipelineTask(
     database,
     config,
     workerId,
   )
-  if (!claimed) return expandNextSourceCollection(database, logger)
+  if (!claimed) {
+    return expandNextSourceCollection(database, logger)
+  }
 
   try {
     const result = await executeMechanicalTask(

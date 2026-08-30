@@ -62,13 +62,14 @@ export function createDatabase(
   config: AppConfig,
   logger: Logger,
   databaseUrl = config.databaseUrl,
+  options: { queryTimeoutMs?: number } = {},
 ): Database {
   const pool = new Pool({
     connectionString: databaseUrl,
     max: config.databaseMaxConnections,
     connectionTimeoutMillis: 5_000,
     idleTimeoutMillis: 30_000,
-    query_timeout: 10_000,
+    query_timeout: options.queryTimeoutMs ?? 10_000,
     application_name: 'clideck-mcp',
     ssl:
       config.databaseSslMode === 'verify-full'

@@ -141,7 +141,7 @@ function SourceLanesPanel({
     <Panel
       title="Active source lanes"
       icon={Layers3}
-      help="Up to four documents can occupy fragment-analysis lanes. A source leaves this panel as soon as extraction finishes, while downstream work remains visible separately."
+      help="Up to eight documents can occupy fragment-analysis lanes. A source leaves this panel as soon as extraction finishes, while downstream work remains visible separately."
       action={<Status tone={lanes.length > 0 ? 'good' : 'neutral'}>{lanes.length} active</Status>}
     >
       <div className="source-lanes">

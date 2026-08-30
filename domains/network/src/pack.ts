@@ -62,7 +62,7 @@ export const networkDomainManifest = {
       display_name: 'Operating system',
       description: 'Network operating system.',
       value_type: 'string' as const,
-      required: true
+      required: false
     },
     {
       key: 'version',
@@ -163,9 +163,7 @@ export const networkDomainPack: DomainPack<
   candidateSchema: networkKnowledgeCandidateSchema,
   publicRecordSchema: networkPublicRecordSchema,
   deterministicExtractor: networkCommandReferenceExtractor,
-  searchContext: {
-    hardKeys: ['operating_system']
-  },
+  searchContext: { hardKeys: [] },
   normalizeContext(input) {
     return networkContextSchema.parse(input)
   },
@@ -185,11 +183,13 @@ export const networkDomainPack: DomainPack<
       summary: candidate.summary,
       question_patterns: candidate.question_patterns,
       context: {
-        vendor: candidate.vendor_slug,
+        ...(candidate.vendor_slug ? { vendor: candidate.vendor_slug } : {}),
         ...(candidate.platform_slug
           ? { model: candidate.platform_slug }
           : {}),
-        operating_system: candidate.operating_system_slug,
+        ...(candidate.operating_system_slug
+          ? { operating_system: candidate.operating_system_slug }
+          : {}),
         ...(candidate.version_min
           ? { version_min: candidate.version_min }
           : {}),

@@ -67,9 +67,9 @@ function uniqueProvenanceDocuments(
 function scopedResearcherStableKey(candidate: CandidateKnowledge): string {
   const scopeHash = sha256Label([
     candidate.kind,
-    candidate.vendor_slug,
+    candidate.vendor_slug ?? 'all-vendors',
     candidate.platform_slug ?? 'all-platforms',
-    candidate.operating_system_slug,
+    candidate.operating_system_slug ?? 'all-operating-systems',
     candidate.version_min ?? 'unbounded-minimum',
     candidate.version_max ?? 'unbounded-maximum'
   ].join('\0')).slice('sha256:'.length, 'sha256:'.length + 12)
@@ -102,11 +102,16 @@ async function resolveCandidateContext(
   client: DatabaseClient,
   candidate: CandidateKnowledge,
 ) {
+  if (!candidate.vendor_slug || !candidate.operating_system_slug) {
+    return { vendorId: null, operatingSystemId: null, platformId: null }
+  }
   const vendor = await client.query<{ id: string }>(
     'SELECT id FROM vendors WHERE slug = $1',
     [candidate.vendor_slug],
   )
-  if (!vendor.rows[0]) throw new Error('CANDIDATE_VENDOR_UNKNOWN')
+  if (!vendor.rows[0]) {
+    return { vendorId: null, operatingSystemId: null, platformId: null }
+  }
 
   const operatingSystem = await client.query<{ id: string }>(
     `SELECT id
@@ -114,7 +119,9 @@ async function resolveCandidateContext(
      WHERE vendor_id = $1 AND slug = $2`,
     [vendor.rows[0].id, candidate.operating_system_slug],
   )
-  if (!operatingSystem.rows[0]) throw new Error('CANDIDATE_OS_UNKNOWN')
+  if (!operatingSystem.rows[0]) {
+    return { vendorId: vendor.rows[0].id, operatingSystemId: null, platformId: null }
+  }
 
   let platformId: string | null = null
   if (candidate.platform_slug) {
@@ -124,8 +131,7 @@ async function resolveCandidateContext(
        WHERE vendor_id = $1 AND slug = $2`,
       [vendor.rows[0].id, candidate.platform_slug],
     )
-    if (!platform.rows[0]) throw new Error('CANDIDATE_PLATFORM_UNKNOWN')
-    platformId = platform.rows[0].id
+    platformId = platform.rows[0]?.id ?? null
   }
 
   return {
@@ -272,13 +278,15 @@ export async function createKnowledgeRevision(
   )
   const revisionId = revision.rows[0]!.id
 
-  await indexPublishedKnowledgeApplicability(client, {
-    revisionId,
-    operatingSystemId: context.operatingSystemId,
-    vendorId: context.vendorId,
-    platformId: context.platformId,
-    candidate
-  })
+  if (context.vendorId && context.operatingSystemId) {
+    await indexPublishedKnowledgeApplicability(client, {
+      revisionId,
+      operatingSystemId: context.operatingSystemId,
+      vendorId: context.vendorId,
+      platformId: context.platformId,
+      candidate
+    })
+  }
 
   for (const source of provenance) {
     const document = await client.query<{ id: string }>(
@@ -292,14 +300,17 @@ export async function createKnowledgeRevision(
          document_date,
          verified_at,
          content_hash,
-         evidence_fragment
+         evidence_fragment,
+         source_ref,
+         source_kind
        )
-       VALUES ('network', $1, $2, $3, $4, $5, $6, $7, $8, $9)
+       VALUES ('network', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        ON CONFLICT (domain_id, canonical_url, content_hash)
        DO UPDATE SET verified_at = greatest(
          source_documents.verified_at,
          excluded.verified_at
-       )
+       ), source_ref = coalesce(source_documents.source_ref, excluded.source_ref),
+          source_kind = coalesce(source_documents.source_kind, excluded.source_kind)
        RETURNING id`,
       [
         source.url,
@@ -310,7 +321,9 @@ export async function createKnowledgeRevision(
         source.document_date ?? null,
         source.verified_at,
         source.content_hash,
-        source.evidence_fragment
+        source.evidence_fragment,
+        source.source_ref ?? null,
+        source.source_kind ?? null
       ],
     )
     await client.query(
@@ -493,6 +506,218 @@ export async function publishKnowledgeBatch(
   }
 }
 
+async function publishCompensatingChanges(
+  client: DatabaseClient,
+  changes: Array<{ itemId: string; newRevisionId: string | null }>,
+  reason: string,
+  createdBy: string,
+): Promise<{ releaseId: string; sequence: number }> {
+  if (changes.length === 0) throw new Error('RELEASE_REQUIRES_ITEMS')
+  await client.query(
+    `SELECT pg_advisory_xact_lock(hashtext('clideck-mcp-release-publication'))`,
+  )
+  const current = await client.query<{ release_id: string }>(
+    'SELECT release_id FROM active_release WHERE singleton FOR UPDATE',
+  )
+  const release = await client.query<{ id: string; sequence: number }>(
+    `INSERT INTO releases (
+       status, reason, created_by, parent_release_id, release_mode
+     ) VALUES ('published', $1, $2, $3, 'delta')
+     RETURNING id, sequence`,
+    [reason, createdBy, current.rows[0]?.release_id ?? null],
+  )
+  const releaseId = release.rows[0]!.id
+  for (const change of changes) {
+    const active = await client.query<{ revision_id: string }>(
+      `SELECT revision_id FROM active_knowledge_state
+        WHERE knowledge_item_id = $1 FOR UPDATE`,
+      [change.itemId],
+    )
+    const previous = active.rows[0]?.revision_id ?? null
+    if (previous === change.newRevisionId) continue
+    await client.query(
+      `INSERT INTO release_changes (
+         release_id, knowledge_item_id, previous_revision_id,
+         new_revision_id, change_kind
+       ) VALUES ($1, $2, $3, $4, $5)`,
+      [
+        releaseId,
+        change.itemId,
+        previous,
+        change.newRevisionId,
+        change.newRevisionId ? 'upsert' : 'deactivate'
+      ],
+    )
+    if (change.newRevisionId) {
+      await client.query(
+        `INSERT INTO active_knowledge_state (
+           knowledge_item_id, revision_id, activated_release_id
+         ) VALUES ($1, $2, $3)
+         ON CONFLICT (knowledge_item_id) DO UPDATE SET
+           revision_id = excluded.revision_id,
+           activated_release_id = excluded.activated_release_id,
+           updated_at = now()`,
+        [change.itemId, change.newRevisionId, releaseId],
+      )
+    } else {
+      await client.query(
+        'DELETE FROM active_knowledge_state WHERE knowledge_item_id = $1',
+        [change.itemId],
+      )
+    }
+  }
+  const checkpoint = !current.rows[0] || Number(release.rows[0]!.sequence) % 120 === 0
+  if (checkpoint) {
+    await client.query(`UPDATE releases SET release_mode = 'checkpoint' WHERE id = $1`, [releaseId])
+    await client.query(
+      `INSERT INTO release_items (release_id, knowledge_item_id, revision_id)
+       SELECT $1, knowledge_item_id, revision_id FROM active_knowledge_state`,
+      [releaseId],
+    )
+  }
+  await client.query(
+    `UPDATE releases SET item_count = (
+       SELECT count(*)::int FROM active_knowledge_state
+     ) WHERE id = $1`,
+    [releaseId],
+  )
+  if (current.rows[0]) {
+    await client.query(
+      `UPDATE releases SET status = 'superseded'
+        WHERE id = $1 AND status = 'published'`,
+      [current.rows[0].release_id],
+    )
+  }
+  await client.query(
+    `INSERT INTO active_release (singleton, release_id, switched_by)
+     VALUES (true, $1, $2)
+     ON CONFLICT (singleton) DO UPDATE SET release_id = excluded.release_id,
+       switched_at = now(), switched_by = excluded.switched_by`,
+    [releaseId, createdBy],
+  )
+  return { releaseId, sequence: Number(release.rows[0]!.sequence) }
+}
+
+export async function deactivatePublishedCandidates(
+  client: DatabaseClient,
+  candidateIds: string[],
+  reason: string,
+): Promise<{ releaseId: string; sequence: number } | null> {
+  if (candidateIds.length === 0) return null
+  const active = await client.query<{ item_id: string }>(
+    `SELECT DISTINCT revision.knowledge_item_id AS item_id
+       FROM knowledge_candidates candidate
+       JOIN knowledge_revisions revision ON revision.id = candidate.revision_id
+       JOIN active_knowledge_state state
+         ON state.knowledge_item_id = revision.knowledge_item_id
+        AND state.revision_id = revision.id
+      WHERE candidate.id = ANY($1::uuid[])`,
+    [candidateIds],
+  )
+  if (active.rows.length === 0) return null
+  await client.query(
+    `UPDATE knowledge_candidates
+        SET exclusion_status = 'hallucinated', excluded_at = now(),
+            excluded_by = 'fidelity_qa', updated_at = now()
+      WHERE id = ANY($1::uuid[])`,
+    [candidateIds],
+  )
+  return publishCompensatingChanges(
+    client,
+    active.rows.map((row) => ({ itemId: row.item_id, newRevisionId: null })),
+    reason,
+    'clideck-mcp-fidelity-qa',
+  )
+}
+
+const processingRunRollbackStateSql = `
+  WITH run_changes AS (
+    SELECT revision.knowledge_item_id AS item_id,
+           change.previous_revision_id,
+           change.new_revision_id,
+           release.sequence
+      FROM knowledge_candidates candidate
+      JOIN knowledge_revisions revision ON revision.id = candidate.revision_id
+      JOIN release_changes change ON change.new_revision_id = revision.id
+      JOIN releases release ON release.id = change.release_id
+     WHERE candidate.processing_run_id = $1
+  ), net_changes AS (
+    SELECT item_id,
+           (array_agg(new_revision_id ORDER BY sequence DESC))[1]
+             AS expected_revision_id,
+           (array_agg(previous_revision_id ORDER BY sequence ASC))[1]
+             AS previous_revision_id
+      FROM run_changes
+     GROUP BY item_id
+  )
+  SELECT net.item_id, net.expected_revision_id, net.previous_revision_id,
+         active.revision_id AS active_revision_id
+    FROM net_changes net
+    LEFT JOIN active_knowledge_state active
+      ON active.knowledge_item_id = net.item_id`
+
+export async function previewProcessingRunRollback(
+  database: Database,
+  processingRunId: string,
+): Promise<{
+  processing_run_id: string
+  reversible: number
+  conflicts: Array<{ item_id: string; expected_revision_id: string; active_revision_id: string | null }>
+}> {
+  const result = await database.query<{
+    item_id: string
+    expected_revision_id: string
+    previous_revision_id: string | null
+    active_revision_id: string | null
+  }>(
+    `${processingRunRollbackStateSql} ORDER BY net.item_id`,
+    [processingRunId],
+  )
+  const conflicts = result.rows
+    .filter((row) => row.active_revision_id !== row.expected_revision_id)
+    .map((row) => ({
+      item_id: row.item_id,
+      expected_revision_id: row.expected_revision_id,
+      active_revision_id: row.active_revision_id
+    }))
+  return {
+    processing_run_id: processingRunId,
+    reversible: result.rows.length - conflicts.length,
+    conflicts
+  }
+}
+
+export async function rollbackProcessingRun(
+  database: Database,
+  processingRunId: string,
+  actorId: string,
+): Promise<{ release_id: string; sequence: number; changed: number }> {
+  return withTransaction(database, async (client) => {
+    const rows = await client.query<{
+      item_id: string
+      expected_revision_id: string
+      previous_revision_id: string | null
+      active_revision_id: string | null
+    }>(
+      `${processingRunRollbackStateSql} FOR UPDATE OF active`,
+      [processingRunId],
+    )
+    if (rows.rows.some((row) => row.active_revision_id !== row.expected_revision_id)) {
+      throw new Error('PROCESSING_RUN_ROLLBACK_CONFLICT')
+    }
+    const release = await publishCompensatingChanges(
+      client,
+      rows.rows.map((row) => ({
+        itemId: row.item_id,
+        newRevisionId: row.previous_revision_id
+      })),
+      `Compensating rollback of processing run ${processingRunId}`,
+      actorId,
+    )
+    return { release_id: release.releaseId, sequence: release.sequence, changed: rows.rows.length }
+  })
+}
+
 export async function activateKnowledgeRelease(
   database: Database,
   releaseId: string,
@@ -586,9 +811,17 @@ export async function activateKnowledgeRelease(
          )
          SELECT knowledge_item_id, new_revision_id
          FROM release_changes
-         WHERE release_id = $1
+         WHERE release_id = $1 AND change_kind = 'upsert'
          ON CONFLICT (knowledge_item_id) DO UPDATE SET
            revision_id = excluded.revision_id`,
+        [release.id],
+      )
+      await client.query(
+        `DELETE FROM desired_active_knowledge_state desired
+          USING release_changes change
+         WHERE change.release_id = $1
+           AND change.change_kind = 'deactivate'
+           AND desired.knowledge_item_id = change.knowledge_item_id`,
         [release.id],
       )
     }
@@ -680,29 +913,6 @@ export async function processNextCandidate(
 
   try {
     const candidate = storedCandidateSchema.parse(candidateTask.payload)
-    const threshold = candidate.dangerous
-      ? config.dangerousAutoPublishConfidence
-      : config.autoPublishConfidence
-
-    if (
-      candidate.confidence < threshold ||
-      candidate.quality_score < 0.85
-    ) {
-      await database.query(
-        `UPDATE expert_tasks
-            SET status = 'failed',
-                failure_code = 'MANUAL_REVIEW_REQUIRED',
-                failure_message = 'Candidate retained internally; automatic publication threshold was not met.',
-                claim_owner = NULL,
-                lease_until = NULL,
-                completed_at = now(),
-                updated_at = now()
-          WHERE id = $1 AND status = 'publishing'`,
-        [candidateTask.id],
-      )
-      return true
-    }
-
     const publication = await withTransaction(database, async (client) => {
       const lockedTask = await client.query<{ id: string }>(
         `SELECT id
@@ -760,8 +970,8 @@ export async function processNextCandidate(
       )
       const validationPayload = {
         policy_version: 1,
-        confidence_threshold: threshold,
-        quality_threshold: 0.85,
+        confidence_is_informational: true,
+        quality_is_informational: true,
         dangerous: candidate.dangerous,
         decision: 'published',
         release_id: release.releaseId,

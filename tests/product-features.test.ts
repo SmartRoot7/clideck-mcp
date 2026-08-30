@@ -57,6 +57,7 @@ import {
   queryKnowledgeInputSchema
 } from '../src/domain/schemas.js'
 import { createTestConfig } from './helpers.js'
+import { classifyFragmentDisposition } from '../src/domain/pipeline-v2.js'
 
 describe('knowledge safety classification', () => {
   it('never permits a disruptive command to remain safe', () => {
@@ -100,7 +101,7 @@ describe('knowledge safety classification', () => {
     expect(guarded.risk_level).toBe('service_disruptive')
   })
 
-  it('requires an explicit rollback before a dangerous candidate can be verified', () => {
+  it('keeps rollback informative rather than blocking source-backed knowledge', () => {
     const guarded = enforceKnowledgeRisk({
       stable_key: 'cisco-iosxe-dangerous-rollback-gate',
       kind: 'command',
@@ -137,10 +138,7 @@ describe('knowledge safety classification', () => {
       }]
     })
 
-    expect(getDeterministicRiskDisposition(guarded)).toMatchObject({
-      decision: 'deep_review',
-      finding: expect.stringContaining('rollback')
-    })
+    expect(getDeterministicRiskDisposition(guarded)).toBeNull()
     expect(getDeterministicRiskDisposition({
       ...guarded,
       rollback: ['Restore the approved saved configuration if recovery fails.']
@@ -285,7 +283,7 @@ describe('deterministic source processing', () => {
     })).toBe(false)
   })
 
-  it('directly readies only explicit safe command entries above configured thresholds', () => {
+  it('readies explicit source-backed entries without confidence or risk gates', () => {
     expect(deterministicCandidateInitialStatus({
       readyForPublication: true,
       dangerous: false,
@@ -306,14 +304,14 @@ describe('deterministic source processing', () => {
       confidence: 0.99,
       qualityScore: 0.99,
       autoPublishConfidence: 0.9
-    })).toBe('analyzed')
+    })).toBe('verified')
     expect(deterministicCandidateInitialStatus({
       readyForPublication: true,
       dangerous: false,
       confidence: 0.94,
       qualityScore: 0.9,
       autoPublishConfidence: 0.95
-    })).toBe('analyzed')
+    })).toBe('verified')
   })
 
   it('backs off repeated identical Codex platform failures adaptively', () => {
@@ -895,13 +893,34 @@ describe('deterministic source processing', () => {
       rejected_fragments: []
     }
 
-    const normalized = normalizeCandidateAnalysisStableKeys(artifact)
-    expect(
-      candidateAnalysisArtifactSchema.parse(normalized)
-        .candidates[0]!.candidate.stable_key,
-    ).toBe('cisco-ios-xe-show-clock-detail')
+    const normalized = candidateAnalysisArtifactSchema.parse(
+      normalizeCandidateAnalysisStableKeys(artifact),
+    )
+    expect(normalized.candidates[0]!.candidate.stable_key)
+      .toBe('cisco-ios-xe-show-clock-detail')
     expect(artifact.candidates[0]!.candidate.stable_key)
       .toBe(' Cisco IOS-XE / Show Clock (Detail) ')
+
+    const first = normalized.candidates[0]!
+    expect(candidateAnalysisArtifactSchema.parse({
+      candidates: [
+        first,
+        {
+          ...first,
+          candidate: {
+            ...first.candidate,
+            stable_key: 'cisco-ios-xe-show-clock-timezone',
+            title: 'Show clock timezone'
+          }
+        }
+      ],
+      rejected_fragments: [],
+      fragment_dispositions: [{
+        fragment_id: first.fragment_id,
+        disposition: 'continuation_required',
+        reason: 'boundary_continuation'
+      }]
+    }).candidates).toHaveLength(2)
   })
 
   it('leaves irreparable stable keys invalid', () => {
@@ -1147,9 +1166,14 @@ describe('deterministic source processing', () => {
       )).toBe(true)
     }
     expect(fragments.length).toBeLessThan(bodyPages.length)
-    expect(fragments.every((fragment) =>
-      !fragment.content.includes('Initial configuration........'),
-    )).toBe(true)
+    const contentsFragment = fragments.find((fragment) =>
+      fragment.content.includes('Initial configuration........'),
+    )
+    expect(contentsFragment).toBeDefined()
+    expect(classifyFragmentDisposition(contentsPage)).toEqual({
+      disposition: 'non_knowledge',
+      reason: 'navigation_or_toc'
+    })
   })
 })
 

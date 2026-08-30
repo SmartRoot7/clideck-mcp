@@ -182,13 +182,13 @@ function wrapTool<TInput, TOutput>(
             return null
           })
         : usageOutcome === 'success'
-          ? await queueApproximateKnowledgeDemand(
+          ? await reconcileKnownKnowledgeDemand(
               dependencies.database,
               toolName,
               input,
               publicOutput,
-            ).then((gapDemandId) => gapDemandId ??
-              reconcileKnownKnowledgeDemand(
+            ).then((reconciledDemandId) => reconciledDemandId ??
+              queueApproximateKnowledgeDemand(
                 dependencies.database,
                 toolName,
                 input,
@@ -201,7 +201,7 @@ function wrapTool<TInput, TOutput>(
                   requestId: dependencies.requestId,
                   tool: toolName
                 },
-                'Known MCP request could not reconcile its learning demand',
+                'Known MCP request could not reconcile or extend its learning demand',
               )
               return null
             })

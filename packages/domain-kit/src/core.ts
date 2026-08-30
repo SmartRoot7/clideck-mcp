@@ -13,6 +13,10 @@ const boundedLine = z.string().trim().min(1).max(1_000)
 
 export const coreProvenanceSchema = z.strictObject({
   url: z.url().startsWith('https://'),
+  source_ref: z.string().trim().min(1).max(120).optional(),
+  source_kind: z.enum([
+    'official_web', 'admin_web', 'admin_document', 'pasted_text', 'field_log'
+  ]).optional(),
   document_type: z.string().trim().min(1).max(80),
   title: z.string().trim().min(1).max(240),
   document_version: z.string().trim().min(1).max(120).optional(),
@@ -54,7 +58,7 @@ export const coreKnowledgeCandidateSchema = z.strictObject({
   payload: jsonObjectSchema,
   prerequisites: z.array(boundedLine).max(30).default([]),
   risks: z.array(boundedLine).max(30).default([]),
-  verification: z.array(boundedLine).min(1).max(30),
+  verification: z.array(boundedLine).max(30).default([]),
   rollback: z.array(boundedLine).max(30).default([]),
   limitations: z.array(boundedLine).max(30).default([]),
   dangerous: z.boolean(),
@@ -109,30 +113,10 @@ export class CorePolicyError extends Error {
 export function enforceCoreCandidatePolicy(
   input: unknown,
 ): CoreKnowledgeCandidate {
-  const candidate = coreKnowledgeCandidateSchema.parse(input)
-  const confidenceThreshold = candidate.dangerous ? 0.95 : 0.9
-  if (candidate.confidence < confidenceThreshold) {
-    throw new CorePolicyError(
-      'CONFIDENCE_BELOW_PUBLICATION_THRESHOLD',
-      `Confidence must be at least ${confidenceThreshold.toFixed(2)}.`,
-    )
-  }
-  if (candidate.dangerous && candidate.rollback.length === 0) {
-    throw new CorePolicyError(
-      'DANGEROUS_CANDIDATE_REQUIRES_ROLLBACK',
-      'Dangerous candidates require an explicit rollback procedure.',
-    )
-  }
-  if (
-    candidate.dangerous &&
-    candidate.risk_level === 'safe_read_only'
-  ) {
-    throw new CorePolicyError(
-      'DANGEROUS_CANDIDATE_FALSE_SAFE',
-      'A dangerous candidate cannot be classified as safe_read_only.',
-    )
-  }
-  return candidate
+  // Pipeline 2.0 treats confidence, risk and rollback as descriptive metadata.
+  // Publication requires a schema-valid, source-backed fact; downstream
+  // execution policy belongs to the caller rather than this reference index.
+  return coreKnowledgeCandidateSchema.parse(input)
 }
 
 export function coreCandidateWith(

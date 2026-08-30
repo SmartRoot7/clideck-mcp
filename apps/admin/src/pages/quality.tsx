@@ -42,7 +42,7 @@ export function QualityPage() {
         <Panel title="Operation latency · 30 days" icon={Gauge} help="Average response time by public MCP operation over the last 30 days.">
           <Chart option={chart} height={300} />
         </Panel>
-        <Panel title="Confidence gates" icon={ShieldCheck} help="Safety threshold violations in the active release. Dangerous knowledge requires at least 0.95 confidence.">
+        <Panel title="Knowledge signals" icon={ShieldCheck} help="Confidence and risk are visible ranking signals. They do not block source-backed publication.">
           <div className="gate-list">
             <article><span>Dangerous revisions</span><strong>{quality.summary.dangerous_revisions}</strong></article>
             <article className={numberOf(quality.summary.dangerous_below_threshold) ? 'is-danger' : 'is-good'}><span>Dangerous below 0.95</span><strong>{quality.summary.dangerous_below_threshold}</strong></article>
@@ -51,6 +51,17 @@ export function QualityPage() {
           </div>
         </Panel>
       </div>
+      <Panel title="Pipeline quality checks" icon={ShieldCheck} help="Measured converter, segmenter, Fidelity and normalize/deduplicate checks. No synthetic AI completion percentage is shown.">
+        <DataTable rows={quality.pipeline_checks} columns={[
+          { key: 'stage', label: 'Stage', render: (row) => titleCase(row.stage) },
+          { key: 'status', label: 'Result', render: (row) => <Status tone={row.status === 'passed' ? 'good' : row.status === 'unavailable' ? 'warning' : 'danger'}>{titleCase(row.status)}</Status> },
+          { key: 'coverage', label: 'Coverage', render: (row) => `${row.coverage_count} units / ${row.checks} checks` },
+          { key: 'errors', label: 'Material errors', render: (row) => row.material_errors },
+          { key: 'model', label: 'Model', render: (row) => row.model ?? 'Deterministic' },
+          { key: 'tokens', label: 'Tokens in / out', render: (row) => `${row.input_tokens} / ${row.output_tokens}` },
+          { key: 'latest', label: 'Latest', render: (row) => formatDate(row.latest_at) }
+        ]} rowKey={(row) => `${row.stage}-${row.status}-${row.model ?? 'deterministic'}`} empty="No Pipeline 2.0 quality checks have run yet." />
+      </Panel>
       <Panel title="Evaluation history" icon={TestTube2} help="Versioned product evaluation reports with safety failures and measured latency.">
         <DataTable rows={quality.eval_runs} columns={[
           { key: 'suite', label: 'Suite', render: (row) => <div className="primary-cell"><strong>{row.suite}</strong><span>{formatDate(row.executed_at)}</span></div> },

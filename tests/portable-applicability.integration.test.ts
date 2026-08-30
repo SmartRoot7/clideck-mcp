@@ -238,12 +238,14 @@ describeIntegration('portable software applicability', () => {
           version: '2024.11'
         },
       )
-      expect(await searchKnowledge(
+      const widened = await searchKnowledge(
         client as unknown as Database,
         'How do I inspect ONIE system information?',
         versionedContext,
         5,
-      )).toHaveLength(0)
+      )
+      expect(widened.length).toBeGreaterThan(0)
+      expect(widened[0]?.applicability.assurance_level).toBe('best_effort')
       await client.query('ROLLBACK')
     } catch (error) {
       await client.query('ROLLBACK')
