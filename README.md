@@ -30,8 +30,56 @@ scientific domains.
 
 - Public MCP: `https://mcp.clideck.com/mcp`
 - Live read-only demo: `https://mcp.clideck.com/demo`
+- WebMCP Network Change Room: `https://mcp.clideck.com/webmcp`
 - Product page: `https://clideck.com/software/mcp`
 - Code license: Apache-2.0
+
+## The WebMCP Challenge extension
+
+CliDeck MCP existed before The WebMCP Challenge. The immutable knowledge
+system, public MCP endpoint, version-aware network tools, change review,
+snapshot redaction, signed verification, continuous research pipeline, and
+operations console are pre-existing capabilities.
+
+The **Network Change Room** was added after August 25, 2026 specifically for
+the challenge. It makes those capabilities available as a state-aware WebMCP
+experience where a person and an agent recover a simulated Cisco Catalyst 9300
+incident together.
+
+### What is new
+
+- a separate public `/webmcp` experience that leaves `/admin` and `/demo`
+  unchanged;
+- five browser-native WebMCP tools for inspection, guidance, staging,
+  sandbox execution, and signed verification;
+- dynamic capability registration: `run_lab_commands` does not exist in the
+  browser tool surface until the operator reviews the staged commands and
+  clicks **Reviewed — approve in sandbox**;
+- a deterministic C9300 / IOS-XE 17.12.4 simulator with an atomic command
+  allowlist and no connection to real network devices;
+- a shared activity timeline showing agent calls, the human decision, active
+  knowledge references, risk review, execution target, and verification;
+- automated lifecycle, unsafe-batch, fallback, MCP-bridge, route, and security
+  tests.
+
+### Judge walkthrough
+
+1. Open `https://mcp.clideck.com/webmcp` in ChatGPT's in-app browser, or in
+   Chrome 149+ with `chrome://flags/#enable-webmcp-testing` enabled.
+2. Ask: `Inspect the simulated switch incident on this page.`
+3. Ask: `Find version-aware guidance to recover Gi1/0/24 after its
+   port-security err-disabled event.`
+4. Ask the agent to stage the exact command sequence returned by guidance.
+5. Confirm that no execution tool is available. Review the visible commands
+   and click **Reviewed — approve in sandbox**.
+6. Ask the agent to execute the approved commands. The target must be reported
+   as `deterministic_browser_simulator`.
+7. Ask the agent to verify the result. The expected final state is `up/up` with
+   signed verification result `passed`.
+
+The page never accepts a device address or credential, never opens SSH, and
+never executes an arbitrary command. CLI-derived data is marked as untrusted,
+strictly redacted by the existing MCP tool, and not stored.
 
 ## Why this project exists
 

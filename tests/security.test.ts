@@ -147,6 +147,26 @@ describe('security primitives', () => {
     expect(unmatched).toHaveLength(1)
   })
 
+  it('serves the WebMCP surface with an origin-scoped tools policy', async () => {
+    const config = createTestConfig()
+    const database = {
+      query: async () => ({ rows: [] })
+    } as unknown as Database
+    const app = createApiApp({
+      config,
+      database,
+      adminDatabase: database,
+      quarantineDatabase: database,
+      logger: createLogger(config),
+      metrics: createMetrics()
+    })
+    const response = await app.request('http://localhost/webmcp')
+
+    expect(response.status).not.toBe(404)
+    expect(response.headers.get('permissions-policy')).toBe('tools=(self)')
+    expect(response.headers.get('cache-control')).toBe('no-cache')
+  })
+
   it('does not mark an artifact purged when file deletion fails', async () => {
     const statements: string[] = []
     const database = {

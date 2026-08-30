@@ -463,6 +463,108 @@ code { font-size: .78rem; color: #344054; }
 .login-pipeline b { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: rgba(255,255,255,.13); font-size: .6rem; }
 .login-context .eyebrow { color: #86adff; }
 
+/* Public WebMCP challenge surface. It reuses the existing CliDeck operations
+   tokens without changing the admin or public-demo shells. */
+.webmcp-page { min-height: 100vh; color: var(--ink); }
+.webmcp-header {
+  min-height: 68px; padding: 12px clamp(18px, 4vw, 52px); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between; gap: 18px;
+  background: rgba(255,255,255,.96); position: sticky; top: 0; z-index: 30;
+  backdrop-filter: blur(12px);
+}
+.webmcp-brand { display: flex; align-items: center; gap: 10px; color: inherit; text-decoration: none; }
+.webmcp-brand > span:last-child { display: flex; flex-direction: column; gap: 1px; }
+.webmcp-brand strong { font-size: .9rem; }
+.webmcp-brand small { color: #98a2b3; font-size: .6rem; }
+.webmcp-header__actions { display: flex; align-items: center; gap: 10px; }
+.webmcp-header__actions .button { display: inline-flex; align-items: center; gap: 7px; }
+.webmcp-main { width: min(1320px, calc(100% - 36px)); margin: 0 auto; padding: 42px 0 60px; }
+.webmcp-intro { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 32px; align-items: end; }
+.webmcp-intro h1 { margin: 0; font-size: clamp(2.2rem, 5vw, 4.6rem); line-height: .98; letter-spacing: -.065em; }
+.webmcp-intro p { max-width: 790px; margin: 18px 0 0; color: var(--muted); font-size: clamp(.85rem, 1.4vw, 1.03rem); line-height: 1.65; }
+.webmcp-device { min-width: 330px; padding: 14px 15px; border: 1px solid var(--border); border-radius: 10px; display: grid; grid-template-columns: 28px 1fr auto; gap: 10px; align-items: center; background: var(--surface); box-shadow: var(--shadow); }
+.webmcp-device > svg { color: var(--blue); }
+.webmcp-device > span { display: flex; flex-direction: column; gap: 2px; }
+.webmcp-device small { color: #98a2b3; font-size: .56rem; font-weight: 750; letter-spacing: .1em; }
+.webmcp-device strong { font-size: .8rem; }
+.webmcp-support { margin-top: 24px; padding: 14px 16px; border: 1px solid #f0bf73; border-radius: 9px; display: flex; gap: 12px; color: #7a4500; background: var(--amber-soft); }
+.webmcp-support > div { display: flex; flex-direction: column; gap: 4px; }
+.webmcp-support strong { font-size: .75rem; }
+.webmcp-support span { font-size: .68rem; line-height: 1.5; }
+.webmcp-phases { margin: 34px 0 18px; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(7, 1fr); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--surface); }
+.webmcp-phases li { min-height: 64px; padding: 12px; border-right: 1px solid var(--border); display: flex; align-items: center; gap: 9px; color: #98a2b3; }
+.webmcp-phases li:last-child { border-right: 0; }
+.webmcp-phases li > span { width: 25px; height: 25px; border-radius: 50%; display: grid; place-items: center; background: #f2f4f7; font-size: .62rem; font-weight: 720; }
+.webmcp-phases small { font-size: .66rem; font-weight: 650; }
+.webmcp-phases li.is-current { color: var(--blue); background: var(--blue-soft); }
+.webmcp-phases li.is-current > span { color: white; background: var(--blue); box-shadow: 0 4px 10px rgba(15,95,255,.24); }
+.webmcp-phases li.is-complete { color: var(--green); }
+.webmcp-phases li.is-complete > span { color: white; background: var(--green); }
+.webmcp-grid { display: grid; grid-template-columns: minmax(0, 1.12fr) minmax(390px, .88fr); gap: 18px; }
+.webmcp-grid--lower { margin-top: 18px; grid-template-columns: minmax(0, 1.12fr) minmax(390px, .88fr); }
+.webmcp-panel { min-width: 0; padding: 18px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); box-shadow: var(--shadow); }
+.webmcp-panel > header { min-height: 31px; margin-bottom: 15px; display: flex; align-items: center; gap: 9px; }
+.webmcp-panel > header svg { color: var(--blue); }
+.webmcp-panel h2 { margin: 0; font-size: .84rem; letter-spacing: -.01em; }
+.webmcp-terminal { overflow: hidden; border: 1px solid #27364c; border-radius: 8px; background: #101828; box-shadow: inset 0 1px rgba(255,255,255,.05); }
+.webmcp-terminal > div { height: 34px; padding: 0 12px; border-bottom: 1px solid #27364c; display: flex; align-items: center; gap: 6px; color: #98a2b3; background: #172033; }
+.webmcp-terminal > div i { width: 8px; height: 8px; border-radius: 50%; background: #f97066; }
+.webmcp-terminal > div i:nth-child(2) { background: #fdb022; }
+.webmcp-terminal > div i:nth-child(3) { background: #32d583; }
+.webmcp-terminal > div span { margin-left: 6px; font-family: "JetBrains Mono Variable", monospace; font-size: .56rem; }
+.webmcp-terminal pre { min-height: 220px; margin: 0; padding: 17px; overflow: auto; color: #d0d5dd; font-size: .67rem; line-height: 1.65; white-space: pre-wrap; }
+.webmcp-facts { margin: 14px 0 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--border); }
+.webmcp-facts div { min-width: 0; padding: 10px 11px; display: flex; flex-direction: column; gap: 4px; background: white; }
+.webmcp-facts dt { color: #98a2b3; font-size: .56rem; text-transform: uppercase; letter-spacing: .075em; }
+.webmcp-facts dd { margin: 0; overflow: hidden; text-overflow: ellipsis; color: #344054; font-size: .65rem; font-weight: 630; white-space: nowrap; }
+.webmcp-prompt { min-height: 110px; padding: 18px; border: 1px solid #bad0ff; border-radius: 9px; display: flex; align-items: center; gap: 13px; color: #175cd3; background: var(--blue-soft); }
+.webmcp-prompt--good { border-color: #a6dfc6; color: #067647; background: var(--green-soft); }
+.webmcp-prompt > span { display: flex; flex-direction: column; gap: 5px; }
+.webmcp-prompt strong { font-size: .78rem; }
+.webmcp-prompt small { max-width: 430px; color: #475467; font-size: .67rem; line-height: 1.5; }
+.webmcp-approval { display: flex; flex-direction: column; gap: 13px; }
+.webmcp-approval > div:first-child { padding: 14px; border: 1px solid #f0bf73; border-radius: 9px; display: flex; gap: 11px; color: #7a4500; background: var(--amber-soft); }
+.webmcp-approval > div:first-child > span { display: flex; flex-direction: column; gap: 4px; }
+.webmcp-approval strong { font-size: .76rem; }
+.webmcp-approval small { font-size: .64rem; }
+.webmcp-approval .button { align-self: stretch; min-height: 42px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.webmcp-commands { margin: 0; padding: 11px 11px 11px 38px; border: 1px solid var(--border); border-radius: 8px; background: #f8fafc; }
+.webmcp-commands li { padding: 3px 0; color: #667085; font-size: .68rem; }
+.webmcp-guidance, .webmcp-review { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+.webmcp-guidance h3, .webmcp-review h3 { margin: 0 0 10px; font-size: .67rem; text-transform: uppercase; letter-spacing: .075em; color: #667085; }
+.webmcp-guidance article { padding: 8px 0; border-bottom: 1px solid #eef1f5; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.webmcp-guidance article:last-child { border-bottom: 0; }
+.webmcp-guidance article > span { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.webmcp-guidance strong { overflow: hidden; text-overflow: ellipsis; font-size: .67rem; white-space: nowrap; }
+.webmcp-guidance small { color: #98a2b3; font-size: .58rem; }
+.webmcp-guidance code { flex: 0 0 auto; font-size: .6rem; }
+.webmcp-review dl { margin: 0; display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.webmcp-review dl > div { padding: 9px; border: 1px solid var(--border); border-radius: 7px; background: #fafbfc; }
+.webmcp-review dt { color: #98a2b3; font-size: .56rem; }
+.webmcp-review dd { margin: 4px 0 0; color: #344054; font-size: .67rem; font-weight: 650; }
+.webmcp-timeline { display: flex; flex-direction: column; }
+.webmcp-timeline article { min-height: 54px; display: grid; grid-template-columns: 22px 1fr; gap: 10px; }
+.webmcp-timeline article > span { position: relative; }
+.webmcp-timeline article > span::before { content: ''; position: absolute; top: 5px; left: 6px; width: 9px; height: 9px; border-radius: 50%; background: #98a2b3; box-shadow: 0 0 0 4px #f2f4f7; }
+.webmcp-timeline article > span::after { content: ''; position: absolute; top: 18px; bottom: -2px; left: 10px; width: 1px; background: var(--border); }
+.webmcp-timeline article:last-child > span::after { display: none; }
+.webmcp-timeline article.is-agent > span::before { background: var(--blue); box-shadow: 0 0 0 4px var(--blue-soft); }
+.webmcp-timeline article.is-human > span::before { background: var(--amber); box-shadow: 0 0 0 4px var(--amber-soft); }
+.webmcp-timeline article.is-error > span::before { background: var(--red); box-shadow: 0 0 0 4px var(--red-soft); }
+.webmcp-timeline article > div { padding: 0 0 14px; display: flex; flex-direction: column; gap: 4px; }
+.webmcp-timeline strong { font-size: .68rem; }
+.webmcp-timeline small { max-width: 700px; color: var(--muted); font-size: .62rem; line-height: 1.5; }
+.webmcp-tools { display: flex; flex-direction: column; gap: 7px; }
+.webmcp-tools > div { min-height: 40px; padding: 8px 9px; border: 1px solid var(--border); border-radius: 7px; display: grid; grid-template-columns: 23px minmax(0, 1fr) auto; gap: 7px; align-items: center; color: #98a2b3; background: #fafbfc; }
+.webmcp-tools > div > span { width: 23px; height: 23px; border-radius: 6px; display: grid; place-items: center; background: #eef1f5; }
+.webmcp-tools code { overflow: hidden; text-overflow: ellipsis; font-size: .62rem; white-space: nowrap; }
+.webmcp-tools small { font-size: .56rem; }
+.webmcp-tools > div.is-registered { border-color: #98b9ff; color: #175cd3; background: var(--blue-soft); }
+.webmcp-tools > div.is-registered > span { color: white; background: var(--blue); }
+.webmcp-tools > div.is-used { color: #067647; }
+.webmcp-tools > div.is-used > span { color: white; background: var(--green); }
+.webmcp-tool-note { margin: 12px 0 0; color: var(--muted); font-size: .62rem; line-height: 1.5; }
+
 @media (max-width: 1600px) {
   .pipeline-rail { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .pipeline-rail--five { grid-template-columns: repeat(5, minmax(0, 1fr)); }
@@ -483,6 +585,9 @@ code { font-size: .78rem; color: #344054; }
   .login-page { grid-template-columns: minmax(380px, 480px) 1fr; }
   .login-context { padding: 50px; }
   .login-pipeline { grid-template-columns: repeat(4, 1fr); }
+  .webmcp-intro { align-items: start; }
+  .webmcp-device { min-width: 290px; }
+  .webmcp-grid, .webmcp-grid--lower { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 900px) {
@@ -506,6 +611,12 @@ code { font-size: .78rem; color: #344054; }
   .login-page { grid-template-columns: 1fr; }
   .login-context { display: none; }
   .login-brand { margin-bottom: 52px; }
+  .webmcp-intro { grid-template-columns: 1fr; }
+  .webmcp-device { width: 100%; min-width: 0; }
+  .webmcp-phases { grid-template-columns: repeat(4, 1fr); }
+  .webmcp-phases li { border-bottom: 1px solid var(--border); }
+  .webmcp-phases li:nth-child(4n) { border-right: 0; }
+  .webmcp-phases li:nth-last-child(-n+3) { border-bottom: 0; }
 }
 
 @media (max-width: 620px) {
@@ -545,6 +656,22 @@ code { font-size: .78rem; color: #344054; }
   .provenance-search { grid-template-columns: 1fr; }
   .chart-footnote { flex-direction: column; gap: 4px; }
   .login-card { width: min(390px, calc(100% - 30px)); }
+  .webmcp-header { align-items: stretch; flex-direction: column; }
+  .webmcp-header__actions { align-items: center; justify-content: space-between; }
+  .webmcp-header__actions .button { min-height: 34px; }
+  .webmcp-main { width: min(100% - 24px, 1320px); padding-top: 28px; }
+  .webmcp-intro h1 { max-width: 100%; font-size: 2.3rem; line-height: 1.02; overflow-wrap: anywhere; }
+  .webmcp-support > div { min-width: 0; }
+  .webmcp-support code { overflow-wrap: anywhere; }
+  .webmcp-device { grid-template-columns: 26px 1fr; }
+  .webmcp-device .status { grid-column: 1 / -1; justify-self: stretch; justify-content: center; }
+  .webmcp-phases { grid-template-columns: 1fr; }
+  .webmcp-phases li, .webmcp-phases li:nth-child(4n) { min-height: 45px; border-right: 0; border-bottom: 1px solid var(--border); }
+  .webmcp-phases li:last-child { border-bottom: 0; }
+  .webmcp-facts { grid-template-columns: 1fr 1fr; }
+  .webmcp-review dl { grid-template-columns: 1fr; }
+  .webmcp-tools > div { grid-template-columns: 23px minmax(0, 1fr); }
+  .webmcp-tools small { grid-column: 2; }
 }
 
 @media (prefers-reduced-motion: reduce) {

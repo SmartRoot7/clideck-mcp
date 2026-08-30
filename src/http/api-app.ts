@@ -229,6 +229,7 @@ export function createApiApp(dependencies: ApiDependencies) {
     context.header('x-request-id', requestId)
     const startedAt = performance.now()
     await next()
+    context.header('permissions-policy', 'tools=(self)')
     if (context.req.path.startsWith('/_clideck-mcp-ui/assets/')) {
       context.header(
         'cache-control',
@@ -1407,34 +1408,38 @@ export function createApiApp(dependencies: ApiDependencies) {
   })
   }
 
+  const sharedUiAssetRoot = resolve(config.adminUi.assetRoot)
+  const publicUiIndexPath = resolve(sharedUiAssetRoot, 'index.html')
+  if (existsSync(sharedUiAssetRoot)) {
+    app.use(
+      '/_clideck-mcp-ui/assets/*',
+      serveStatic({
+        root: sharedUiAssetRoot,
+        rewriteRequestPath: (path) =>
+          path.replace(/^\/_clideck-mcp-ui/, ''),
+        onFound: (_path, context) => {
+          context.header(
+            'cache-control',
+            'public, max-age=31536000, immutable',
+          )
+        }
+      }),
+    )
+  }
+  const servePublicUiIndex = async (context: Context<ApiBindings>) => {
+    context.header('cache-control', 'no-cache')
+    try {
+      const html = await readFile(publicUiIndexPath, 'utf8')
+      return context.html(html)
+    } catch {
+      return context.json({ error: 'public_ui_not_built' }, 503)
+    }
+  }
+  app.get('/webmcp', servePublicUiIndex)
+  app.get('/webmcp/*', servePublicUiIndex)
+
   if (config.enablePublicDemo) {
-    const sharedUiAssetRoot = resolve(config.adminUi.assetRoot)
-    const demoIndexPath = resolve(sharedUiAssetRoot, 'index.html')
-    if (existsSync(sharedUiAssetRoot)) {
-      app.use(
-        '/_clideck-mcp-ui/assets/*',
-        serveStatic({
-          root: sharedUiAssetRoot,
-          rewriteRequestPath: (path) =>
-            path.replace(/^\/_clideck-mcp-ui/, ''),
-          onFound: (_path, context) => {
-            context.header(
-              'cache-control',
-              'public, max-age=31536000, immutable',
-            )
-          }
-        }),
-      )
-    }
-    const serveDemoIndex = async (context: Context<ApiBindings>) => {
-      try {
-        const html = await readFile(demoIndexPath, 'utf8')
-        context.header('cache-control', 'no-cache')
-        return context.html(html)
-      } catch {
-        return context.json({ error: 'demo_not_built' }, 503)
-      }
-    }
+    const serveDemoIndex = servePublicUiIndex
     app.get('/demo', serveDemoIndex)
     app.get('/demo/*', serveDemoIndex)
   }

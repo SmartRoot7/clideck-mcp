@@ -15,3 +15,4 @@ coverage/
 tmp/
 backups/
 artifacts/
+.devpost-hackathon-state.json

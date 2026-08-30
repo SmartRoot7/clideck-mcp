@@ -59,8 +59,19 @@ const ReleasesPage = lazy(() => import('./pages/releases').then((module) => ({ d
 const ReviewExceptionsPage = lazy(() => import('./pages/review-exceptions').then((module) => ({ default: module.ReviewExceptionsPage })))
 const SourcesPage = lazy(() => import('./pages/sources').then((module) => ({ default: module.SourcesPage })))
 const TasksPage = lazy(() => import('./pages/tasks').then((module) => ({ default: module.TasksPage })))
+const WebMcpApp = lazy(() => import('./webmcp/webmcp-app').then((module) => ({ default: module.WebMcpApp })))
 
 export default function App() {
+  if (
+    window.location.pathname.startsWith('/webmcp') ||
+    window.location.pathname.startsWith('/_clideck-mcp-ui/webmcp')
+  ) {
+    return (
+      <Suspense fallback={<AppBoot />}>
+        <WebMcpApp />
+      </Suspense>
+    )
+  }
   if (window.location.pathname.startsWith('/demo')) {
     return (
       <OperationsRuntimeProvider role="public_demo">
