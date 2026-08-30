@@ -17,6 +17,11 @@ if [[ "$(. /etc/os-release; printf '%s' "$ID:$VERSION_ID")" != 'ubuntu:24.04' ]]
   printf 'Production host must run Ubuntu 24.04\n' >&2
   exit 1
 fi
+if ! command -v tailscale >/dev/null 2>&1 ||
+   ! systemctl is-active --quiet tailscaled; then
+  printf 'Tailscale must be installed, connected and active before provisioning\n' >&2
+  exit 1
+fi
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
@@ -79,6 +84,7 @@ for unit in "$candidate_directory"/ops/systemd/*.service \
   install -m 0644 "$unit" "/etc/systemd/system/${unit##*/}"
 done
 install -m 0644 "$candidate_directory/ops/caddy/Caddyfile" /etc/caddy/Caddyfile
+tailscale set --operator=caddy
 
 systemctl daemon-reload
 systemctl disable --now cloudflared.service caddy.service 2>/dev/null || true

@@ -1,15 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-: "${CLIDECK_MCP_ADMIN_URL:=https://clideck-mcp.lan}"
-: "${CLIDECK_MCP_ADMIN_CA:?CLIDECK_MCP_ADMIN_CA must point to the local Caddy root certificate}"
+: "${CLIDECK_MCP_ADMIN_URL:=https://clideck-mcp.taild43e46.ts.net}"
+
+curl_options=(
+  --fail
+  --silent
+  --show-error
+)
+if [[ -n "${CLIDECK_MCP_ADMIN_CA:-}" ]]; then
+  curl_options+=(--cacert "$CLIDECK_MCP_ADMIN_CA")
+fi
 
 health="$(
-  curl \
-    --fail \
-    --silent \
-    --show-error \
-    --cacert "$CLIDECK_MCP_ADMIN_CA" \
+  curl "${curl_options[@]}" \
     "$CLIDECK_MCP_ADMIN_URL/admin/health"
 )"
 
@@ -23,7 +27,7 @@ status="$(
     --silent \
     --output /dev/null \
     --write-out '%{http_code}' \
-    --cacert "$CLIDECK_MCP_ADMIN_CA" \
+    "${curl_options[@]:1}" \
     "$CLIDECK_MCP_ADMIN_URL/admin/api/v1/overview"
 )"
 
@@ -33,11 +37,7 @@ if [[ "$status" != '401' ]]; then
 fi
 
 html="$(
-  curl \
-    --fail \
-    --silent \
-    --show-error \
-    --cacert "$CLIDECK_MCP_ADMIN_CA" \
+  curl "${curl_options[@]}" \
     "$CLIDECK_MCP_ADMIN_URL/admin"
 )"
 

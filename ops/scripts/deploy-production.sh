@@ -216,5 +216,7 @@ fi
 
 curl --fail --silent --show-error https://mcp.clideck.com/health >/dev/null
 curl --fail --silent --show-error https://mcp.clideck.com/ready >/dev/null
+CLIDECK_MCP_ADMIN_URL=https://clideck-mcp.taild43e46.ts.net \
+  ops/scripts/admin-smoke-test.sh
 
 printf 'Production deployment verified: %s\n' "$commit_sha"

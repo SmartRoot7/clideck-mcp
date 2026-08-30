@@ -18,7 +18,7 @@ const envSchema = z.object({
   ADMIN_UI_SESSION_SECRET: z.string().min(32).optional(),
   ADMIN_UI_ACTOR_ID: z.uuid().optional(),
   ADMIN_UI_ALLOWED_ORIGINS: z.string().default(
-    'https://clideck-mcp.lan,http://127.0.0.1:5173',
+    'https://clideck-mcp.lan,https://clideck-mcp.taild43e46.ts.net,http://127.0.0.1:5173',
   ),
   ADMIN_UI_SESSION_HOURS: z.coerce.number().int().min(1).max(72).default(12),
   ADMIN_UI_ASSET_ROOT: z.string().min(1).default('./dist-admin'),

@@ -4,9 +4,7 @@
 	skip_install_trust
 }
 
-https://clideck-mcp.lan {
-	tls internal
-
+(admin_console) {
 	@trusted_lan remote_ip 127.0.0.1/32 ::1/128 100.117.119.94/32 10.77.0.0/24
 	handle @trusted_lan {
 		reverse_proxy 127.0.0.1:8790 {
@@ -32,4 +30,16 @@ https://clideck-mcp.lan {
 			}
 		}
 	}
+}
+
+https://clideck-mcp.lan {
+	tls internal
+	import admin_console
+}
+
+https://clideck-mcp.taild43e46.ts.net {
+	tls {
+		get_certificate tailscale
+	}
+	import admin_console
 }

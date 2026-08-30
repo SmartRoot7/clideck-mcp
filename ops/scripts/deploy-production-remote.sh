@@ -14,6 +14,8 @@ config_directory="${CLIDECK_MCP_CONFIG_DIRECTORY:-/etc/clideck-mcp}"
 backup_root="${CLIDECK_MCP_BACKUP_ROOT:-/var/backups/clideck-mcp}"
 release_retention_count="${CLIDECK_MCP_RELEASE_RETENTION_COUNT:-8}"
 backup_retention_count="${CLIDECK_MCP_BACKUP_RETENTION_COUNT:-14}"
+caddy_config="${CLIDECK_MCP_CADDY_CONFIG:-/etc/caddy/Caddyfile}"
+admin_tailscale_origin="${CLIDECK_MCP_ADMIN_TAILSCALE_ORIGIN:-https://clideck-mcp.taild43e46.ts.net}"
 
 if [[ ! "$commit_sha" =~ ^[0-9a-f]{40}$ ]]; then
   printf 'A full 40-character Git commit SHA is required\n' >&2
@@ -42,6 +44,7 @@ cp -a \
   "$config_directory/worker.env" \
   "$config_directory/researcher.env" \
   "$backup_directory/"
+cp -a "$caddy_config" "$backup_directory/Caddyfile"
 
 set -a
 # shellcheck disable=SC1091
@@ -53,9 +56,12 @@ BACKUP_DIRECTORY="$backup_directory" \
 tar -C /etc -czf "$backup_directory/etc-clideck-mcp.tar.gz" clideck-mcp
 
 switched=0
+config_updated=0
 pipeline_state_captured=0
 pipeline_state_json=''
 previous_active_release=''
+tailscale_operator_before=''
+tailscale_operator_updated=0
 
 restore_pipeline_state() {
   if [[ "$pipeline_state_captured" -ne 1 ]]; then
@@ -99,14 +105,22 @@ rollback_on_error() {
         "$previous_active_release"
     )
   fi
-  if [[ "$switched" -eq 1 ]]; then
-    temporary_link="${current_link}.rollback.$$"
-    ln -s "$previous_release" "$temporary_link"
-    mv -Tf "$temporary_link" "$current_link"
+  if [[ "$config_updated" -eq 1 ]]; then
     cp -a "$backup_directory/api.env" "$config_directory/api.env"
     cp -a "$backup_directory/admin-ui.env" "$config_directory/admin-ui.env"
     cp -a "$backup_directory/worker.env" "$config_directory/worker.env"
     cp -a "$backup_directory/researcher.env" "$config_directory/researcher.env"
+    cp -a "$backup_directory/Caddyfile" "$caddy_config"
+    caddy validate --adapter caddyfile --config "$caddy_config" >/dev/null 2>&1
+    systemctl reload caddy || systemctl restart caddy
+  fi
+  if [[ "$tailscale_operator_updated" -eq 1 ]]; then
+    tailscale set --operator="$tailscale_operator_before"
+  fi
+  if [[ "$switched" -eq 1 ]]; then
+    temporary_link="${current_link}.rollback.$$"
+    ln -s "$previous_release" "$temporary_link"
+    mv -Tf "$temporary_link" "$current_link"
     systemctl restart \
       clideck-mcp-researcher \
       clideck-mcp-worker \
@@ -134,6 +148,7 @@ required_release_paths=(
   dist/cli/repair-portable-risk.js \
   dist/cli/activate-release.js \
   dist-admin/index.html \
+  ops/caddy/Caddyfile \
   ops/sql/grants.sql \
   ops/scripts/smoke-test.sh
 )
@@ -168,6 +183,14 @@ if ! release_is_complete; then
   printf 'Release artifact is incomplete after installation\n' >&2
   exit 1
 fi
+
+caddy validate --adapter caddyfile \
+  --config "$release_directory/ops/caddy/Caddyfile" >/dev/null
+tailscale_operator_before="$(
+  tailscale debug prefs | jq -r '.OperatorUser // empty'
+)"
+printf '%s\n' "$tailscale_operator_before" \
+  > "$backup_directory/tailscale-operator.txt"
 
 # The build phase always creates a fresh candidate.  When this exact SHA was
 # already deployed successfully, keep the verified release and discard only
@@ -263,10 +286,44 @@ set_deployed_sha() {
   fi
 }
 
+ensure_csv_env_value() {
+  environment_file="$1"
+  key="$2"
+  required_value="$3"
+  current_value="$(sed -n "s/^$key=//p" "$environment_file" | tail -n 1)"
+  case ",$current_value," in
+    *",$required_value,"*) return ;;
+  esac
+  if [[ -n "$current_value" ]]; then
+    updated_value="$current_value,$required_value"
+  else
+    updated_value="$required_value"
+  fi
+  temporary_file="$(mktemp "$config_directory/.admin-ui.env.XXXXXX")"
+  awk -v key="$key" -v value="$updated_value" '
+    BEGIN { replaced = 0 }
+    index($0, key "=") == 1 { print key "=" value; replaced = 1; next }
+    { print }
+    END { if (!replaced) print key "=" value }
+  ' "$environment_file" > "$temporary_file"
+  chown --reference="$environment_file" "$temporary_file"
+  chmod --reference="$environment_file" "$temporary_file"
+  mv "$temporary_file" "$environment_file"
+}
+
+config_updated=1
+if [[ "$tailscale_operator_before" != 'caddy' ]]; then
+  tailscale set --operator=caddy
+  tailscale_operator_updated=1
+fi
 set_deployed_sha "$config_directory/api.env"
 set_deployed_sha "$config_directory/admin-ui.env"
 set_deployed_sha "$config_directory/worker.env"
 set_deployed_sha "$config_directory/researcher.env"
+ensure_csv_env_value "$config_directory/admin-ui.env" \
+  ADMIN_UI_ALLOWED_ORIGINS "$admin_tailscale_origin"
+install -m 0644 -o root -g root \
+  "$release_directory/ops/caddy/Caddyfile" "$caddy_config"
 
 temporary_link="${current_link}.next.$$"
 ln -s "$release_directory" "$temporary_link"
@@ -278,6 +335,7 @@ systemctl restart \
   clideck-mcp-worker \
   clideck-mcp-api \
   clideck-mcp-admin
+systemctl reload caddy
 
 for _attempt in {1..30}; do
   if curl --fail --silent http://127.0.0.1:8787/ready >/dev/null &&
@@ -292,6 +350,11 @@ systemctl is-active --quiet \
   clideck-mcp-worker \
   clideck-mcp-api \
   clideck-mcp-admin
+
+admin_tailscale_host="${admin_tailscale_origin#https://}"
+curl --fail --silent --show-error \
+  --resolve "$admin_tailscale_host:443:127.0.0.1" \
+  "$admin_tailscale_origin/admin/health" >/dev/null
 
 CLIDECK_MCP_BASE_URL=http://127.0.0.1:8787 \
   "$release_directory/ops/scripts/smoke-test.sh"

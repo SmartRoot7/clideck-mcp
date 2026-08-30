@@ -77,7 +77,7 @@ const contents = [
   `ADMIN_UI_PASSWORD_HASH=${passwordHash}`,
   `ADMIN_UI_SESSION_SECRET=${sessionSecret}`,
   `ADMIN_UI_ACTOR_ID=${actorId}`,
-  'ADMIN_UI_ALLOWED_ORIGINS=https://clideck-mcp.lan',
+  'ADMIN_UI_ALLOWED_ORIGINS=https://clideck-mcp.lan,https://clideck-mcp.taild43e46.ts.net',
   'ADMIN_UI_SESSION_HOURS=12',
   'ADMIN_UI_ASSET_ROOT=./dist-admin',
   ''

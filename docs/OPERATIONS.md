@@ -11,6 +11,9 @@ The production host is `val@100.116.82.78` over Tailscale, with internal address
 `10.77.0.10`. The former `10.11.5.83` host is retained only for rollback. SSH
 and the LAN admin are reachable through Tailscale; PostgreSQL, API, admin and
 researcher listeners remain loopback-only.
+The primary admin URL is
+`https://clideck-mcp.taild43e46.ts.net/admin`; the `.lan` hostname is retained
+only as a recovery path.
 
 ## Services
 
