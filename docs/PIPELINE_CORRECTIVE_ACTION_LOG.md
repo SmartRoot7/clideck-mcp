@@ -538,5 +538,18 @@ The Pipeline 2.0 pilot exposed four independent failure modes:
 
 ### Verification and deployment
 
-- Pending full tests, evaluation, build, production deployment, and a new clean
-  two-hour soak baseline.
+- Deployed commit `c99298451d2942824ae7d63cec59c0c4034bff67`
+  through `ops/scripts/deploy-production.sh`. The disposable PostgreSQL suite
+  passed 213/213 tests, product evaluation passed 250/250, and the build plus
+  production smoke suite passed. The launchd pool was reinstalled normally.
+- At the new clean baseline `2026-08-31T12:19:23Z`, public health/readiness and
+  all production services were healthy with zero worker/researcher restarts.
+  Overview returned eight ordered executor cards; all eight heartbeats were
+  fresh and running Luna Analyze work, settings remained `8/2`, and stale
+  running tasks were zero. Active knowledge was 120008 and Fidelity QA was
+  2944.
+- Since the new worker start, worker and researcher journals contained zero
+  level-40 events and zero matches for the tracked deadlock, query-timeout,
+  lease, permission, reservation, converter, applicability, circuit,
+  transaction, and fragment-attempt failures. The two-hour soak restarts from
+  this baseline.
