@@ -443,5 +443,17 @@ The Pipeline 2.0 pilot exposed four independent failure modes:
 
 ### Verification and deployment
 
-- Pending full check, disposable PostgreSQL suite, evaluation, build,
-  production deployment, and a new clean two-hour soak baseline.
+- Deployed commit `09be91b386f1f77a38b8a97d6b765a92ac45f679` through
+  `ops/scripts/deploy-production.sh`. The disposable PostgreSQL suite passed
+  212/212 tests, product evaluation passed 250/250, and the build plus all
+  production smoke tests passed. The launchd pool was reinstalled normally.
+- At the new clean baseline `2026-08-31T11:28:28Z`, public health/readiness and
+  the production services were healthy with zero worker/researcher restarts.
+  Overview returned exactly eight ordered executor cards; all eight heartbeat
+  and lease timestamps were fresh, settings remained `8/2`, and stale running
+  tasks were zero. Active knowledge was 119375 and Fidelity QA was 2087.
+- Since the new worker start, worker and researcher journals contained zero
+  `40P01`, zero level-40 events, and zero matches for the previously tracked
+  permission, lease, reservation, converter, applicability, circuit, timeout,
+  transaction, or fragment-attempt failures. The two-hour soak restarts from
+  this baseline; absence of recurrence remains the acceptance condition.
