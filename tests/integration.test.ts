@@ -470,6 +470,94 @@ describeIntegration('PostgreSQL integration', () => {
     }
   })
 
+  it('does not cancel a fresh task lease while terminalizing its processing run', async () => {
+    const client = await database.connect()
+    const suffix = randomUUID().replaceAll('-', '').slice(0, 12)
+    try {
+      await client.query('BEGIN')
+      const target = await client.query<{ id: string }>(
+        `SELECT id FROM coverage_targets ORDER BY created_at LIMIT 1`,
+      )
+      const source = await client.query<{ id: string }>(
+        `INSERT INTO source_candidates (
+           coverage_target_id, canonical_url, document_type, title, status,
+           discovered_by
+         ) VALUES (
+           $1, $2, 'configuration_guide', 'Live lease reconciliation fixture',
+           'analyzing', 'integration-test'
+         ) RETURNING id`,
+        [target.rows[0]!.id, `https://example.invalid/live-run-${suffix}.pdf`],
+      )
+      const run = await client.query<{ id: string }>(
+        `INSERT INTO source_processing_runs (
+           source_candidate_id, processing_version, status, started_at
+         ) VALUES ($1, $2, 'extracting', now()) RETURNING id`,
+        [source.rows[0]!.id, `pipeline-v2-live-${suffix}`],
+      )
+      await client.query(
+        `INSERT INTO pipeline_tasks (
+           task_type, stage, status, priority, source_candidate_id,
+           processing_run_id, dedupe_key, payload, attempts,
+           failure_code, failure_message, completed_at
+         ) VALUES (
+           'fragment_analysis', 'analyze', 'failed', 1, $1, $2,
+           $3, '{}'::jsonb, 5, 'FRAGMENT_ATTEMPTS_EXHAUSTED',
+           'Synthetic terminal fragment failure.', now()
+         )`,
+        [source.rows[0]!.id, run.rows[0]!.id, `live-failed-${suffix}`],
+      )
+      const liveTask = await client.query<{ id: string }>(
+        `INSERT INTO pipeline_tasks (
+           task_type, stage, status, priority, source_candidate_id,
+           processing_run_id, dedupe_key, payload, attempts, claim_owner,
+           lease_token_hash, lease_until, heartbeat_at
+         ) VALUES (
+           'candidate_verification', 'verify', 'running', 1, $1, $2,
+           $3, '{}'::jsonb, 1, 'pipeline-executor-test', $4,
+           now() + interval '5 minutes', now()
+         ) RETURNING id`,
+        [
+          source.rows[0]!.id,
+          run.rows[0]!.id,
+          `live-verify-${suffix}`,
+          sha256(`live-lease-${suffix}`)
+        ],
+      )
+      const queuedTask = await client.query<{ id: string }>(
+        `INSERT INTO pipeline_tasks (
+           task_type, stage, status, priority, source_candidate_id,
+           processing_run_id, dedupe_key, payload
+         ) VALUES (
+           'candidate_verification', 'verify', 'queued', 1, $1, $2,
+           $3, '{}'::jsonb
+         ) RETURNING id`,
+        [source.rows[0]!.id, run.rows[0]!.id, `queued-verify-${suffix}`],
+      )
+
+      await expect(reconcileTerminalProcessingRunsWithClient(
+        client,
+        [run.rows[0]!.id],
+      )).resolves.toBe(1)
+
+      const state = await client.query<{ id: string; status: string }>(
+        `SELECT id, status
+           FROM pipeline_tasks
+          WHERE id = ANY($1::uuid[])
+          ORDER BY id`,
+        [[liveTask.rows[0]!.id, queuedTask.rows[0]!.id]],
+      )
+      expect(new Map(state.rows.map((row) => [row.id, row.status]))).toEqual(
+        new Map([
+          [liveTask.rows[0]!.id, 'running'],
+          [queuedTask.rows[0]!.id, 'cancelled']
+        ]),
+      )
+    } finally {
+      await client.query('ROLLBACK')
+      client.release()
+    }
+  })
+
   it('queues reprocess chunking without consuming an AI source lane', async () => {
     const client = await database.connect()
     const suffix = randomUUID().replaceAll('-', '').slice(0, 12)
@@ -2827,6 +2915,21 @@ describeIntegration('PostgreSQL integration', () => {
     expect(reconciled.rows[0]).toEqual({
       status: 'failed',
       error_code: 'ORPHANED_AGENT_RUN'
+    })
+
+    await expect(recordAgentRunResult(database, {
+      agent_run_id: run.rows[0]!.id,
+      status: 'timed_out',
+      input_tokens: 25,
+      cached_input_tokens: 0,
+      output_tokens: 0,
+      reasoning_output_tokens: 0,
+      duration_ms: 1_200_000,
+      error_code: 'AGENT_RUN_TIMEOUT'
+    })).resolves.toMatchObject({
+      agent_run_id: run.rows[0]!.id,
+      status: 'failed',
+      already_terminal: true
     })
   })
 

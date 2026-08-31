@@ -578,7 +578,13 @@ export async function reconcileTerminalProcessingRunsWithClient(
             completed_at = coalesce(completed_at, now()),
             updated_at = now()
       WHERE processing_run_id = ANY($1::uuid[])
-        AND status IN ('queued', 'claimed', 'running')`,
+        AND (
+          status = 'queued'
+          OR (
+            status IN ('claimed', 'running')
+            AND (lease_until IS NULL OR lease_until <= now())
+          )
+        )`,
     [runIds],
   )
   await client.query(
@@ -587,7 +593,14 @@ export async function reconcileTerminalProcessingRunsWithClient(
             reservation_task_id = NULL,
             updated_at = now()
       WHERE fragment.processing_run_id = ANY($1::uuid[])
-        AND fragment.status IN ('queued', 'reserved', 'analyzing')`,
+        AND fragment.status IN ('queued', 'reserved', 'analyzing')
+        AND NOT EXISTS (
+          SELECT 1
+            FROM pipeline_tasks live
+           WHERE live.id = fragment.reservation_task_id
+             AND live.status IN ('claimed', 'running')
+             AND live.lease_until > now()
+        )`,
     [runIds],
   )
   await client.query(

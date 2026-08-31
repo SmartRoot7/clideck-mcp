@@ -553,3 +553,45 @@ The Pipeline 2.0 pilot exposed four independent failure modes:
   lease, permission, reservation, converter, applicability, circuit,
   transaction, and fragment-attempt failures. The two-hour soak restarts from
   this baseline.
+
+## 2026-08-31 — Terminal-run reconciliation raced active executors
+
+### Evidence and cause
+
+- Forty-two minutes into the `c992984` clean window, throughput remained high
+  (active knowledge +718 and Fidelity QA +774), but four researcher errors
+  appeared in two related lifecycle races.
+- A fragment exhausted its retry budget while a Verify task from the same
+  processing run still held a fresh lease. Run reconciliation correctly marked
+  the run failed, but its cleanup update also cancelled and locked every
+  claimed/running task. The active Verify submission waited behind that update,
+  exhausted the generic query timeout, and reported `Query read timeout`
+  instead of a lifecycle result.
+- Separately, a 30-minute Analyze run reported `AGENT_RUN_TIMEOUT` and returned
+  its task to the queue. Maintenance then correctly marked the detached agent
+  run `ORPHANED_AGENT_RUN`; the old coordinator's immediately following
+  `finish-run` call treated that already-terminal row as an error. Its catch
+  path redundantly called task failure and finish-run again, producing
+  `AGENT_RUN_NOT_RUNNING` and `PIPELINE_LEASE_INVALID` noise after the task had
+  already been safely reclaimed.
+
+### Minimal correction
+
+- Terminal-run cleanup now cancels queued tasks and only expired claimed/running
+  tasks. A fresh lease remains owned by its executor, so an in-flight atomic
+  submission is not blocked or invalidated by run reconciliation. Fragment
+  cleanup likewise leaves a fragment attached to a fresh task lease alone.
+- Agent-run result recording is idempotent for an agent run that maintenance
+  has already placed in a terminal state. The late coordinator receives the
+  existing terminal status with `already_terminal=true`; it does not enter the
+  reporting-error catch path or repeat task failure.
+- New integration coverage requires a fresh Verify lease to survive terminal
+  run reconciliation while queued sibling work is cancelled, and requires a
+  late timeout report for an orphan-reconciled agent run to succeed as a no-op.
+  Missing or genuinely non-running agent-run IDs still fail normally.
+
+### Verification and deployment
+
+- Local type checks and the complete non-database test suite pass. Production
+  deployment, disposable PostgreSQL integration coverage, evaluation, build,
+  smoke tests, and the new clean soak baseline are pending below.

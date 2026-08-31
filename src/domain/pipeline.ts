@@ -4784,7 +4784,32 @@ export async function recordAgentRunResult(
       input.diagnostic_fingerprint ?? null
     ],
   )
-  if (!result.rows[0]) throw new Error('AGENT_RUN_NOT_RUNNING')
+  if (!result.rows[0]) {
+    const existing = await database.query<{
+      id: string
+      status: string
+    }>(
+      `SELECT id, status
+         FROM agent_runs
+        WHERE id = $1`,
+      [input.agent_run_id],
+    )
+    const terminal = existing.rows[0]
+    if (!terminal || ![
+      'completed', 'failed', 'timed_out', 'cancelled'
+    ].includes(terminal.status)) {
+      throw new Error('AGENT_RUN_NOT_RUNNING')
+    }
+    return {
+      agent_run_id: terminal.id,
+      status: terminal.status,
+      already_terminal: true,
+      tokens:
+        input.input_tokens +
+        input.output_tokens +
+        input.reasoning_output_tokens
+    }
+  }
   const executorId = result.rows[0].executor_id
   const taskType = result.rows[0].task_type
   const reasoningEffort = result.rows[0].reasoning_effort
