@@ -351,5 +351,48 @@ The Pipeline 2.0 pilot exposed four independent failure modes:
 
 ### Verification and deployment
 
-- Pending full check, PostgreSQL integration suite, eval, build, production
-  deployment, and a new clean two-hour soak baseline.
+- Deployed commit `075d44db015fa078eb519e95f60cd91fad01d3e3` after
+  210/210 disposable PostgreSQL tests, 250/250 product evaluation cases, the
+  full build, backup, and production smoke suite. The release immediately
+  restored useful publication and QA progress, but its clean observation
+  window exposed the independent exhausted-continuation defect documented
+  below; the soak therefore restarted rather than being declared successful.
+
+## 2026-08-31 — Exhausted continuation blocked every executor claim
+
+### Evidence and cause
+
+- Immediately after `075d44d`, the public service remained healthy and the
+  deterministic worker published releases 6736–6738, but six executor
+  heartbeats became stale while their local loops repeatedly received
+  `INTERNAL_ERROR` from claim.
+- The restricted researcher journal showed the same PostgreSQL `23514` on
+  every affected claim: `source_fragments_attempts_check`. Fragment
+  `ef9ead78-3f0d-4609-ad4e-c993ab85cdfd` was still queued with
+  `continuation_required` after ten analysis attempts. Claim tried to advance
+  it to attempt eleven although the schema deliberately caps attempts at ten.
+- The failure occurred before a lease could be returned, so every free
+  executor selected the same highest-priority, permanently unclaimable task.
+  Restarting a service could not change that database invariant.
+
+### Minimal correction
+
+- Scheduler maintenance now marks a queued analysis task containing an
+  exhausted reserved fragment as `FRAGMENT_ATTEMPTS_EXHAUSTED` exactly once.
+- The fragment receives the auditable `targeted_retry`/failed disposition and
+  the existing run-scoped reconciler closes its processing run, intake item,
+  downstream tasks, reservations, and (when all items are terminal) intake
+  job. No source data is deleted.
+- Claim excludes an exhausted fragment task before taking its row lock. This
+  closes the small race in which another executor misses the non-blocking
+  scheduler lock while the maintenance owner is terminalizing the task.
+- The ten-attempt bound is unchanged; the correction converts exhaustion into
+  a finite, observable outcome instead of a constraint-error loop.
+- PostgreSQL integration coverage constructs the full source/artifact/run/job
+  relationship at attempt ten and verifies task, fragment, run, item, and job
+  terminal states.
+
+### Verification and deployment
+
+- Pending full check, disposable PostgreSQL integration suite, evaluation,
+  build, production deployment, and a new clean two-hour soak baseline.

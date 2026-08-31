@@ -6538,6 +6538,127 @@ describeIntegration('PostgreSQL integration', () => {
     })
   })
 
+  it('terminalizes an exhausted continuation before an executor can claim it', async () => {
+    const suffix = randomUUID().replaceAll('-', '').slice(0, 12)
+    await database.query(
+      `UPDATE pipeline_tasks
+          SET status = 'cancelled', completed_at = now(), updated_at = now()
+        WHERE status IN ('queued', 'claimed', 'running');
+       DELETE FROM active_source_slots;
+       UPDATE pipeline_settings
+          SET enabled = true,
+              paused_reason = NULL,
+              pause_requested_at = NULL,
+              updated_at = now(),
+              updated_by = 'fragment-exhaustion-integration-test';`,
+    )
+    const source = await database.query<{ id: string }>(
+      `INSERT INTO source_candidates (
+         canonical_url, document_type, title, status, discovered_by
+       ) VALUES ($1, 'command_reference', $2, 'analyzing', 'integration-test')
+       RETURNING id`,
+      [
+        `https://example.com/exhausted-continuation-${suffix}`,
+        `Exhausted continuation ${suffix}`
+      ],
+    )
+    const artifact = await database.query<{ id: string }>(
+      `INSERT INTO source_artifacts (
+         source_candidate_id, media_type, byte_size, content_hash,
+         storage_path, status
+       ) VALUES ($1, 'text/plain', 64, $2, '/tmp/exhausted', 'chunked')
+       RETURNING id`,
+      [source.rows[0]!.id, sha256Label(`exhausted-artifact-${suffix}`)],
+    )
+    const processingVersion = `exhausted-${suffix}`
+    const run = await database.query<{ id: string }>(
+      `INSERT INTO source_processing_runs (
+         source_candidate_id, source_artifact_id, processing_version, status
+       ) VALUES ($1, $2, $3, 'extracting')
+       RETURNING id`,
+      [source.rows[0]!.id, artifact.rows[0]!.id, processingVersion],
+    )
+    const job = await database.query<{ id: string }>(
+      `INSERT INTO intake_jobs (job_type, status, created_by)
+       VALUES ('files', 'running', 'integration-test')
+       RETURNING id`,
+    )
+    await database.query(
+      `INSERT INTO intake_job_sources (
+         intake_job_id, source_candidate_id, processing_version, status
+       ) VALUES ($1, $2, $3, 'running')`,
+      [job.rows[0]!.id, source.rows[0]!.id, processingVersion],
+    )
+    const task = await database.query<{ id: string }>(
+      `INSERT INTO pipeline_tasks (
+         task_type, stage, status, priority, source_candidate_id,
+         processing_run_id, dedupe_key, payload, requested_reasoning_effort
+       ) VALUES (
+         'fragment_analysis', 'analyze', 'queued', 80, $1, $2, $3,
+         '{}'::jsonb, 'low'
+       ) RETURNING id`,
+      [source.rows[0]!.id, run.rows[0]!.id, `exhausted-task-${suffix}`],
+    )
+    const fragment = await database.query<{ id: string }>(
+      `INSERT INTO source_fragments (
+         source_artifact_id, processing_run_id, ordinal, content,
+         content_hash, status, attempts, reservation_task_id,
+         disposition, disposition_reason
+       ) VALUES (
+         $1, $2, 0, 'show platform software status control-processor', $3,
+         'reserved', 10, $4, 'continuation_required',
+         'boundary_continuation'
+       ) RETURNING id`,
+      [
+        artifact.rows[0]!.id,
+        run.rows[0]!.id,
+        sha256Label(`exhausted-fragment-${suffix}`),
+        task.rows[0]!.id
+      ],
+    )
+
+    await ensurePipelineWork(database)
+
+    const outcome = await database.query<{
+      task_status: string
+      failure_code: string | null
+      fragment_status: string
+      run_status: string
+      item_status: string
+      job_status: string
+    }>(
+      `SELECT
+         task.status AS task_status,
+         task.failure_code,
+         fragment.status AS fragment_status,
+         run.status AS run_status,
+         item.status AS item_status,
+         job.status AS job_status
+       FROM pipeline_tasks task
+       JOIN source_fragments fragment ON fragment.id = $2
+       JOIN source_processing_runs run ON run.id = $3
+       JOIN intake_job_sources item
+         ON item.intake_job_id = $4 AND item.source_candidate_id = $5
+       JOIN intake_jobs job ON job.id = item.intake_job_id
+       WHERE task.id = $1`,
+      [
+        task.rows[0]!.id,
+        fragment.rows[0]!.id,
+        run.rows[0]!.id,
+        job.rows[0]!.id,
+        source.rows[0]!.id
+      ],
+    )
+    expect(outcome.rows[0]).toEqual({
+      task_status: 'failed',
+      failure_code: 'FRAGMENT_ATTEMPTS_EXHAUSTED',
+      fragment_status: 'failed',
+      run_status: 'failed',
+      item_status: 'failed',
+      job_status: 'completed_with_errors'
+    })
+  })
+
   it('does not reopen future active targets to fill an idle lane', async () => {
     const suffix = randomUUID().replaceAll('-', '')
     await database.query(

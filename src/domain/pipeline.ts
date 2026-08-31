@@ -1263,6 +1263,66 @@ async function insertTask(
 async function reconcileExpiredAndCompletedWork(
   client: DatabaseClient,
 ): Promise<void> {
+  // A continuation may legitimately revisit the same fragment, but the
+  // fragment retry budget is finite. Older schedulers could reserve an
+  // eleventh pass; claim then tried to increment attempts past the database
+  // constraint and every executor repeatedly hit the same unclaimable task.
+  // Terminalize that already-materialized task before any executor can lease
+  // it, then let the run-scoped reconciler close the run and intake item.
+  const exhaustedFragmentTasks = await client.query<{
+    id: string
+    source_candidate_id: string | null
+    processing_run_id: string | null
+  }>(
+    `UPDATE pipeline_tasks task
+        SET status = 'failed',
+            failure_code = 'FRAGMENT_ATTEMPTS_EXHAUSTED',
+            failure_message =
+              'A continuation fragment exhausted its analysis retry budget.',
+            completed_at = now(),
+            updated_at = now()
+      WHERE task.status = 'queued'
+        AND task.task_type = 'fragment_analysis'
+        AND EXISTS (
+          SELECT 1
+            FROM source_fragments fragment
+           WHERE fragment.reservation_task_id = task.id
+             AND fragment.attempts >= 10
+        )
+      RETURNING task.id, task.source_candidate_id, task.processing_run_id`,
+  )
+  for (const task of exhaustedFragmentTasks.rows) {
+    await client.query(
+      `UPDATE source_fragments
+          SET status = 'failed',
+              disposition = 'targeted_retry',
+              disposition_reason = 'targeted_retry',
+              disposition_detail =
+                'Analysis retry budget exhausted after repeated continuation.',
+              reservation_task_id = NULL,
+              updated_at = now()
+        WHERE reservation_task_id = $1
+          AND status IN ('reserved', 'analyzing')`,
+      [task.id],
+    )
+    await recordEvent(client, {
+      taskId: task.id,
+      sourceId: task.source_candidate_id,
+      stage: 'analyze',
+      event: 'failed',
+      message: 'Fragment analysis retry budget was exhausted.'
+    })
+  }
+  const exhaustedFragmentRunIds = exhaustedFragmentTasks.rows.flatMap(
+    (task) => task.processing_run_id ? [task.processing_run_id] : [],
+  )
+  if (exhaustedFragmentRunIds.length > 0) {
+    await reconcileTerminalProcessingRunsWithClient(
+      client,
+      [...new Set(exhaustedFragmentRunIds)],
+    )
+  }
+
   const expired = await client.query<{
     id: string
     task_type: PipelineTaskRow['task_type']
@@ -4050,6 +4110,15 @@ export async function claimPipelineTask(
        WHERE status = 'queued'
          AND available_at <= now()
          AND task_type = ANY($1::text[])
+         AND NOT (
+           pipeline_tasks.task_type = 'fragment_analysis'
+           AND EXISTS (
+             SELECT 1
+               FROM source_fragments exhausted_fragment
+              WHERE exhausted_fragment.reservation_task_id = pipeline_tasks.id
+                AND exhausted_fragment.attempts >= 10
+           )
+         )
          AND (NOT $2::boolean OR queue_class = 'baseline')
          AND (
            task_type <> 'demand_diagnosis'
