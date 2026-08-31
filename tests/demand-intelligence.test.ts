@@ -5,7 +5,9 @@ import {
   normalizeOperatingSystemIntent
 } from '../src/domain/network-intent.js'
 import {
+  answerProvidesContextualCoverage,
   answerSupportsCapability,
+  answerSupportsRequestedAction,
   demandDiagnosisSubmissionPayload,
   demandDiagnosisAgentArtifactSchema,
   diagnosticTopicIdentity,
@@ -194,6 +196,79 @@ describe('Demand Intelligence', () => {
       command: 'tftp -g -r installer.bin 192.0.2.20',
       procedure: ['Verify the downloaded image before use.']
     })).toBe(true)
+  })
+
+  it('keeps read and destructive configuration intent aligned with evidence', () => {
+    expect(answerSupportsRequestedAction(
+      'Display the active configuration',
+      {
+        title: 'Discard uncommitted configuration',
+        summary: 'Roll back candidate changes.',
+        command: 'rollback',
+        procedure: []
+      },
+    )).toBe(false)
+    expect(answerSupportsRequestedAction(
+      'Display the active configuration',
+      {
+        title: 'Display the active configuration',
+        summary: 'Show the committed configuration.',
+        command: 'show configuration',
+        procedure: []
+      },
+    )).toBe(true)
+    expect(answerSupportsRequestedAction(
+      'Erase the startup configuration and reload',
+      {
+        title: 'Reboot the system',
+        summary: 'Restarts the device.',
+        command: 'reload',
+        procedure: []
+      },
+    )).toBe(false)
+  })
+
+  it('does not call widened or versionless upgrade guidance complete', () => {
+    const context = {
+      vendor: 'Cisco',
+      vendor_resolved: true,
+      version: '16.10.1'
+    } as Parameters<typeof answerProvidesContextualCoverage>[1]
+    const base = {
+      kind: 'upgrade',
+      applicability: {
+        vendor: 'Cisco',
+        version_match: 'unbounded'
+      }
+    } as Parameters<typeof answerProvidesContextualCoverage>[2]
+    expect(answerProvidesContextualCoverage(
+      'Is this upgrade supported and available?',
+      context,
+      base,
+    )).toBe(false)
+    expect(answerProvidesContextualCoverage(
+      'Is this upgrade supported and available?',
+      context,
+      {
+        ...base,
+        applicability: {
+          ...base.applicability,
+          version_match: 'explicit_range'
+        }
+      },
+    )).toBe(true)
+    expect(answerProvidesContextualCoverage(
+      'Configure SSH access',
+      context,
+      {
+        ...base,
+        applicability: {
+          ...base.applicability,
+          vendor: 'Pica8',
+          version_match: 'same_branch_fallback'
+        }
+      },
+    )).toBe(false)
   })
 
   it('creates the same server-owned topic for equivalent diagnoses', () => {

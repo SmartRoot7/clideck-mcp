@@ -63,17 +63,9 @@ trap cleanup EXIT INT TERM
 
 printf '==> Verify remote sudo authorization\n'
 if ! ssh -o ConnectTimeout=10 "$remote_host" sudo -n true 2>/dev/null; then
-  if [[ ! -t 0 || ! -t 1 ]]; then
-    printf '%s\n' \
-      'Remote sudo needs authorization; rerun this deployment in an interactive terminal.' \
-      >&2
-    exit 1
-  fi
-  ssh -tt -o ConnectTimeout=10 "$remote_host" sudo -v
-fi
-if ! ssh -o ConnectTimeout=10 "$remote_host" sudo -n true; then
   printf '%s\n' \
-    'Remote sudo authorization is not reusable; verify timestamp_type=global.' \
+    'Remote sudo is not pre-authorized; no production changes were made.' \
+    'Authorize sudo for val on the server outside this deploy, then rerun.' \
     >&2
   exit 1
 fi

@@ -25,6 +25,14 @@ function normalizeAlias(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9._-]+/g, '')
 }
 
+function vendorLookupName(value: string): string {
+  const normalized = normalizeAlias(value)
+  if (normalized === 'aruba' || normalized === 'arubanetworks') {
+    return 'HPE Aruba'
+  }
+  return value
+}
+
 function requestedSlug(value: string | undefined): string {
   const slug = value
     ?.toLowerCase()
@@ -74,7 +82,8 @@ async function resolveVendor(
   database: Database,
   input: NetworkContextInput,
 ): Promise<ContextCandidate | undefined> {
-  const needle = input.vendor ?? input.model
+  const requestedNeedle = input.vendor ?? input.model
+  const needle = requestedNeedle ? vendorLookupName(requestedNeedle) : undefined
   if (!needle) return undefined
 
   const result = await database.query<ContextCandidate>(
@@ -311,16 +320,44 @@ export function publicNetworkContext(
 
 function unresolvedInternalNetworkContext(
   input: NetworkContextInput,
+  resolved?: {
+    vendor?: ContextCandidate
+    platform?: ContextCandidate
+  },
 ): InternalResolvedContext {
+  const context = unresolvedNetworkContext(input)
+  const vendor = resolved?.vendor
+  const platform = resolved?.platform
   return {
-    ...unresolvedNetworkContext(input),
-    vendorId: null,
-    platformId: null,
+    ...context,
+    vendorId: vendor?.id ?? null,
+    platformId: platform?.id ?? null,
     operatingSystemId: null,
     softwareFamilyId: '',
     softwareFamilyIds: [],
     softwareVersionStrategy: 'vendor',
-    architectureSlug: null
+    architectureSlug: null,
+    vendor: vendor?.display_name ?? context.vendor,
+    vendor_slug: vendor?.slug ?? context.vendor_slug,
+    model: platform?.display_name ?? context.model,
+    platform_slug: platform?.slug ?? null,
+    vendor_resolved: Boolean(vendor),
+    model_resolved: Boolean(platform),
+    resolution_confidence: vendor
+      ? Math.min(vendor.score, platform?.score ?? (input.model ? 0.6 : 0.7))
+      : 0,
+    ambiguities: [
+      ...context.ambiguities,
+      ...(vendor && !input.operating_system
+        ? ['Operating system was not supplied; vendor-only guidance may be returned']
+        : []),
+      ...(vendor && input.operating_system
+        ? [`Operating system "${input.operating_system}" was not matched for ${vendor.display_name}`]
+        : []),
+      ...(input.model && !platform
+        ? [`Model "${input.model}" was not matched to a known platform`]
+        : [])
+    ]
   }
 }
 
@@ -353,7 +390,8 @@ export async function resolveNetworkContext(
   const platform = vendor && vendor.score >= minimumVendorScore
     ? await resolvePlatform(database, vendor.id, input.model)
     : undefined
-  const vendorOperatingSystem = vendor && vendor.score >= minimumVendorScore
+  const vendorOperatingSystem = vendor && vendor.score >= minimumVendorScore &&
+    operatingSystemRequest
     ? await resolveVendorOperatingSystem(
         database,
         vendor.id,
@@ -366,7 +404,10 @@ export async function resolveNetworkContext(
       : undefined
   )
   if (!family || family.score < minimumFamilyScore) {
-    return unresolvedInternalNetworkContext(input)
+    return unresolvedInternalNetworkContext(input, {
+      ...(vendor?.score && vendor.score >= minimumVendorScore ? { vendor } : {}),
+      ...(platform ? { platform } : {})
+    })
   }
   if (
     family.portability_mode === 'vendor_specific' &&

@@ -137,8 +137,11 @@ function toPublicKnowledge(
   context: ResolvedNetworkContext,
   conflicts: ConflictRow[],
   versionMatch: PublicVersionMatch,
+  widened = false,
 ): PublicKnowledge {
-  const matchLevel = publicMatchLevel(row.scope_level)
+  const matchLevel = widened
+    ? row.vendor_name === context.vendor ? 'vendor_os' : 'os_family'
+    : publicMatchLevel(row.scope_level)
   const assuranceLevel = assuranceFor(row.scope_level, versionMatch)
   const deterministicallyReadOnly = isDeterministicallyReadOnlyPublicCommand(
     row.kind,
@@ -240,6 +243,7 @@ async function searchBroadKnowledgeRows(
   semanticTerms: readonly string[],
   limit: number,
   kind?: PublicKnowledge['kind'] | PublicKnowledge['kind'][],
+  vendorId: string | null = null,
 ): Promise<KnowledgeRow[]> {
   const terms = semanticTerms.length > 0
     ? semanticTerms
@@ -298,6 +302,7 @@ async function searchBroadKnowledgeRows(
      LEFT JOIN knowledge_public_trust trust ON trust.revision_id = revision.id
      WHERE item.domain_id = 'network' AND revision.domain_id = 'network'
        AND ($4::text[] IS NULL OR item.kind = ANY($4))
+       AND ($7::uuid IS NULL OR revision.vendor_id = $7)
        AND (
          revision.search_document @@ to_tsquery('simple', $2)
          OR revision.search_document @@ to_tsquery('simple', $3)
@@ -314,7 +319,8 @@ async function searchBroadKnowledgeRows(
       relaxedTsQuery,
       kind ? Array.isArray(kind) ? kind : [kind] : null,
       terms,
-      Math.max(limit * 4, 20)
+      Math.max(limit * 4, 20),
+      vendorId
     ],
   )
   return result.rows
@@ -529,7 +535,7 @@ export async function searchKnowledge(
         versionBranch: row.version_branch,
         versionStrategy: row.version_strategy
       })
-      return versionMatch ? [{ row, versionMatch }] : []
+      return versionMatch ? [{ row, versionMatch, widened: false }] : []
     })
     .sort((left, right) =>
       scopePriority[right.row.scope_level] -
@@ -544,25 +550,48 @@ export async function searchKnowledge(
         Buffer.from(candidate.row.portable_semantic_key).toString('hex') === key
       ) === index
     })
-  const broadRows = await searchBroadKnowledgeRows(
-    database,
-    search.normalizedQuestion,
-    search.strictTsQuery,
-    search.relaxedTsQuery,
-    semanticTerms,
-    limit,
-    kind,
-  )
+  const vendorBroadRows = context.vendorId
+    ? await searchBroadKnowledgeRows(
+        database,
+        search.normalizedQuestion,
+        search.strictTsQuery,
+        search.relaxedTsQuery,
+        semanticTerms,
+        limit,
+        kind,
+        context.vendorId,
+      )
+    : []
+  const needGlobalRows = exactRows.length + vendorBroadRows.length < limit
+  const globalBroadRows = needGlobalRows
+    ? await searchBroadKnowledgeRows(
+        database,
+        search.normalizedQuestion,
+        search.strictTsQuery,
+        search.relaxedTsQuery,
+        semanticTerms,
+        limit,
+        kind,
+      )
+    : []
+  const broadRows = [...vendorBroadRows, ...globalBroadRows]
   const seen = new Set(exactRows.map(({ row }) =>
     Buffer.from(row.portable_semantic_key).toString('hex'),
   ))
   const applicableRows = [
     ...exactRows,
     ...broadRows
-      .filter((row) => !seen.has(
-        Buffer.from(row.portable_semantic_key).toString('hex'),
-      ))
-      .map((row) => ({ row, versionMatch: 'same_branch_fallback' as const }))
+      .filter((row, index, rows) => {
+        const key = Buffer.from(row.portable_semantic_key).toString('hex')
+        return !seen.has(key) && rows.findIndex((candidate) =>
+          Buffer.from(candidate.portable_semantic_key).toString('hex') === key
+        ) === index
+      })
+      .map((row) => ({
+        row,
+        versionMatch: 'same_branch_fallback' as const,
+        widened: true
+      }))
   ].slice(0, limit)
 
   if (applicableRows.length === 0) return []
@@ -589,8 +618,8 @@ export async function searchKnowledge(
        END`,
     [revisionIds],
   )
-  return applicableRows.map(({ row, versionMatch }) =>
-    toPublicKnowledge(row, context, conflicts.rows, versionMatch),
+  return applicableRows.map(({ row, versionMatch, widened }) =>
+    toPublicKnowledge(row, context, conflicts.rows, versionMatch, widened),
   )
 }
 

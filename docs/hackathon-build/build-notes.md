@@ -34,4 +34,17 @@
   `17.08.01` was treated as older than `17.3.2a`. Automatically detected numeric
   version segments are now canonicalized (`17.8.1`) before retrieval; manual
   context remains untouched.
+- 2026-08-31: A production query matrix exposed three core retrieval defects:
+  model-only context could select an arbitrary vendor OS, global widening could
+  outrank same-vendor guidance, and widened results could be reported as a
+  complete answer. Resolution now preserves known vendor context without
+  inventing an OS; broad retrieval is vendor-first; widened, cross-vendor, and
+  versionless upgrade guidance remains available but is explicitly partial.
+  Small intent checks also prevent a reboot-only result from satisfying an
+  erase-configuration request and a rollback action from satisfying a display
+  request.
+- 2026-08-31: Production deploy no longer opens an interactive remote password
+  prompt. It requires reusable `sudo -n` authorization before starting and
+  otherwise exits before tests, uploads, service changes, or production data
+  changes.
 - GitHub push and Devpost submission remain outside the authorized release.

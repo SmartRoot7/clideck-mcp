@@ -58,6 +58,7 @@ import {
   getPublicRevision,
   searchKnowledge
 } from '../src/domain/knowledge.js'
+import { searchKnowledgeWithCoverage } from '../src/domain/demand-intelligence.js'
 import {
   queueUnknownKnowledgeDemand,
   recordMcpRequest,
@@ -3330,6 +3331,44 @@ describeIntegration('PostgreSQL integration', () => {
     expect(answers[0]?.assurance.validation_level).toBe(
       'documentation_reviewed',
     )
+  })
+
+  it('keeps vendor context without inventing an operating system', async () => {
+    const context = await resolveNetworkContext(database, {
+      vendor: 'Cisco',
+      model: 'Uncatalogued Nexus test model'
+    })
+    expect(context).toMatchObject({
+      vendor: 'Cisco',
+      vendor_resolved: true,
+      operating_system: 'Not specified',
+      operatingSystemId: null
+    })
+    expect(context.ambiguities).toContain(
+      'Operating system was not supplied; vendor-only guidance may be returned',
+    )
+
+    const answers = await searchKnowledge(
+      database,
+      'show ip interface brief',
+      context,
+      3,
+    )
+    expect(answers.length).toBeGreaterThan(0)
+    expect(answers[0]?.applicability.vendor).toBe('Cisco')
+    expect(answers[0]?.applicability).toMatchObject({
+      match_level: 'vendor_os',
+      version_match: 'same_branch_fallback',
+      assurance_level: 'best_effort'
+    })
+    const coverage = await searchKnowledgeWithCoverage({
+      database,
+      question: 'show ip interface brief',
+      context,
+      limit: 3
+    })
+    expect(coverage.answerStatus).toBe('partial')
+    expect(coverage.answers.length).toBeGreaterThan(0)
   })
 
   it('returns unknown instead of an unrelated context-only network match', async () => {

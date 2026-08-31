@@ -250,6 +250,62 @@ function evidenceText(answer: CapabilityEvidence): string {
   ].join('\n')
 }
 
+const readIntentPattern =
+  /\b(?:show|display|list|inspect|view|read|get\s+(?:the\s+)?current)\b/i
+const readEvidencePattern =
+  /(?:^|[\s`])(?:cat|dir|display|ls|more|show|view)(?:[\s`]|$)/i
+const destructiveConfigurationIntentPattern =
+  /\b(?:delete|erase|remove|reset|wipe)\b[^.]{0,80}\bconfig(?:uration)?\b/i
+const destructiveConfigurationEvidencePattern =
+  /\b(?:delete|erase|remove|reset|wipe|write\s+erase)\b[^.\n]{0,120}\bconfig(?:uration)?\b/i
+
+export function answerSupportsRequestedAction(
+  question: string,
+  answer: CapabilityEvidence,
+): boolean {
+  const text = evidenceText(answer)
+  if (destructiveConfigurationIntentPattern.test(question)) {
+    return destructiveConfigurationEvidencePattern.test(text)
+  }
+  if (readIntentPattern.test(question)) {
+    return readEvidencePattern.test(text)
+  }
+  return true
+}
+
+function canonicalVendor(value: string): string {
+  const normalized = value.toLowerCase().replace(/[^a-z0-9]+/g, '')
+  if ([
+    'aruba', 'arubanetworks', 'hpe', 'hpearuba',
+    'hewlettpackard', 'hewlettpackardenterprise'
+  ].includes(normalized)) return 'hpe-aruba'
+  return normalized
+}
+
+export function answerProvidesContextualCoverage(
+  question: string,
+  context: InternalResolvedContext,
+  answer: PublicKnowledge,
+): boolean {
+  if (answer.applicability.version_match === 'same_branch_fallback') {
+    return false
+  }
+  if (
+    context.vendor_resolved &&
+    canonicalVendor(answer.applicability.vendor) !== canonicalVendor(context.vendor)
+  ) {
+    return false
+  }
+  if (
+    context.version &&
+    /\b(?:available|compatib|support|upgrade)\w*\b/i.test(question) &&
+    answer.applicability.version_match === 'unbounded'
+  ) {
+    return false
+  }
+  return true
+}
+
 /**
  * FTS is only the candidate generator for decomposed operational questions.
  * These narrow deterministic gates prevent a shared word such as "IP" from
@@ -312,28 +368,33 @@ export async function searchKnowledgeWithCoverage(input: {
       { requireAction: partRequiresAction },
     )
     const answers = actionable.filter((answer) =>
-      answerSupportsCapability(part.capability, answer),
+      answerSupportsCapability(part.capability, answer) &&
+      answerSupportsRequestedAction(part.query, answer),
     )
-    return { part, answers }
+    const coveredAnswers = answers.filter((answer) =>
+      answerProvidesContextualCoverage(part.query, input.context, answer),
+    )
+    return { part, answers, coveredAnswers }
   }))
   const answers = uniqueAnswers([
     ...result.flatMap((entry) => entry.answers.slice(0, 1)),
     ...result.flatMap((entry) => entry.answers.slice(1))
   ], Math.min(20, Math.max(input.limit, parts.length)))
-  const covered = result.filter((entry) => entry.answers.length > 0).length
+  const covered = result.filter((entry) => entry.coveredAnswers.length > 0).length
+  const hasAnswers = result.some((entry) => entry.answers.length > 0)
   return {
     answers,
     answerStatus:
       covered === parts.length
         ? 'complete'
-        : covered > 0
+        : hasAnswers
           ? 'partial'
           : 'unknown',
-    coverage: result.map(({ part, answers: partAnswers }) => ({
+    coverage: result.map(({ part, coveredAnswers }) => ({
       capability: part.capability,
       label: part.label,
-      status: partAnswers.length > 0 ? 'covered' : 'missing',
-      answer_refs: partAnswers.map((answer) => answer.revision_ref)
+      status: coveredAnswers.length > 0 ? 'covered' : 'missing',
+      answer_refs: coveredAnswers.map((answer) => answer.revision_ref)
     }))
   }
 }
