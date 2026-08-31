@@ -493,6 +493,59 @@ describeIntegration('PostgreSQL integration', () => {
     }
   })
 
+  it('renews an AI lease while the scheduler settings row is locked', async () => {
+    const suffix = randomUUID().replaceAll('-', '').slice(0, 12)
+    const leaseToken = randomUUID().replaceAll('-', '')
+    const researcherId = `nonblocking-heartbeat-${suffix}`
+    const task = await database.query<{ id: string }>(
+      `INSERT INTO pipeline_tasks (
+         task_type, stage, status, priority, dedupe_key, payload,
+         claim_owner, lease_token_hash, lease_until, heartbeat_at, attempts
+       ) VALUES (
+         'fragment_analysis', 'analyze', 'running', 1, $1, '{}'::jsonb,
+         $2, $3, now() + interval '2 minutes', now(), 1
+       ) RETURNING id`,
+      [
+        `nonblocking-heartbeat-${suffix}`,
+        researcherId,
+        sha256(leaseToken)
+      ],
+    )
+    const settingsLocker = await database.connect()
+    try {
+      await settingsLocker.query('BEGIN')
+      await settingsLocker.query(
+        `SELECT enabled
+           FROM pipeline_settings
+          WHERE singleton
+          FOR UPDATE`,
+      )
+
+      await expect(heartbeatPipelineTask(
+        database,
+        config,
+        task.rows[0]!.id,
+        leaseToken,
+        researcherId,
+        `${researcherId}:integration`,
+      )).resolves.toMatchObject({
+        status: 'running',
+        should_stop: false
+      })
+    } finally {
+      await settingsLocker.query('ROLLBACK')
+      settingsLocker.release()
+      await database.query(
+        `DELETE FROM worker_heartbeats WHERE worker_name = $1`,
+        [researcherId],
+      )
+      await database.query(
+        `DELETE FROM pipeline_tasks WHERE id = $1`,
+        [task.rows[0]!.id],
+      )
+    }
+  })
+
   async function completeMissingKnowledgeDiagnosis(
     demandId: string,
   ): Promise<void> {

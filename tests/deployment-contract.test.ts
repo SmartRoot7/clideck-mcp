@@ -83,6 +83,28 @@ describe('production database role contract', () => {
     )
   })
 
+  it('keeps lease heartbeats and mechanical claims off the scheduler settings lock', async () => {
+    const pipeline = await readFile(
+      resolve(process.cwd(), 'src/domain/pipeline.ts'),
+      'utf8',
+    )
+    const mechanicalClaim = pipeline.slice(
+      pipeline.indexOf('export async function claimMechanicalPipelineTask'),
+      pipeline.indexOf('export async function heartbeatMechanicalPipelineTask'),
+    )
+    const aiHeartbeat = pipeline.slice(
+      pipeline.indexOf('export async function heartbeatPipelineTask'),
+      pipeline.indexOf('async function completeTask'),
+    )
+
+    expect(mechanicalClaim).not.toMatch(
+      /FROM pipeline_settings[^`]*FOR UPDATE/,
+    )
+    expect(aiHeartbeat).not.toMatch(
+      /FROM pipeline_settings[^`]*FOR UPDATE/,
+    )
+  })
+
   it('isolates invalid legacy portable-risk candidates without masking infrastructure failures', async () => {
     const repair = await readFile(
       resolve(process.cwd(), 'src/cli/repair-portable-risk.ts'),

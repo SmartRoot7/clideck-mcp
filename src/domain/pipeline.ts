@@ -4401,7 +4401,7 @@ export async function claimMechanicalPipelineTask(
   await ensurePipelineWork(database)
   return withTransaction(database, async (client) => {
     const settings = await client.query<{ enabled: boolean }>(
-      `SELECT enabled FROM pipeline_settings WHERE singleton FOR UPDATE`,
+      `SELECT enabled FROM pipeline_settings WHERE singleton`,
     )
     if (!settings.rows[0]?.enabled) return null
 
@@ -4919,8 +4919,7 @@ export async function heartbeatPipelineTask(
     const settings = await client.query<{ enabled: boolean }>(
       `SELECT enabled
        FROM pipeline_settings
-       WHERE singleton
-       FOR UPDATE`,
+       WHERE singleton`,
     )
     if (!settings.rows[0]?.enabled) {
       await client.query(

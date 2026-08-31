@@ -5,6 +5,49 @@ Read it before changing the scheduler, executor bridge, processing runs, or
 production grants. A restart may load a deployed correction, but it is never
 accepted as the correction itself.
 
+## 2026-08-31 — Scheduler settings lock must not block lease renewal
+
+### Evidence and cause
+
+During the clean soak for commit
+`566e0d49c4faf763ca6f7d74659dff80ccda6270`, production first recorded one
+`Query read timeout` at `08:11:19Z`, then a corroborating burst at `08:23:00Z`:
+five AI lease heartbeats and the deterministic worker all timed out together.
+There were no PostgreSQL deadlocks, service restarts, stale running tasks, or
+permission failures. All affected requests shared one point of contention.
+
+The non-blocking scheduler advisory lock correctly allowed other claims to skip
+an in-progress reconciliation, but the winning reconciliation also held a row
+lock on the singleton `pipeline_settings` record for its full transaction.
+Both AI heartbeat and mechanical claim transactions requested the same row lock
+just to read `enabled`. Eight simultaneous executors therefore accumulated
+behind an unrelated scheduler transaction until the 10-second client query
+timeout expired.
+
+### Minimal correction
+
+- Keep the scheduler's advisory lock and settings-row lock unchanged; they
+  still serialize the one expensive reconciliation and administrative setting
+  changes.
+- Read `pipeline_settings.enabled` without `FOR UPDATE` in AI heartbeats and
+  mechanical claims. PostgreSQL can return the committed setting without
+  waiting for the scheduler row lock.
+- Keep the task-row lease lock unchanged. Pause remains safe: either heartbeat
+  commits before pause requeues the task, or it observes the committed disabled
+  state and requeues the task itself.
+- Add a PostgreSQL integration regression that holds the settings row lock and
+  requires an AI lease heartbeat to renew immediately, plus a source contract
+  preventing both latency-sensitive paths from reacquiring that lock.
+
+### Verification and deployment
+
+- Required checks: `pnpm check`, full `pnpm test`, `pnpm eval`, `pnpm build`,
+  and the deployment script's disposable PostgreSQL migration/integration
+  preflight.
+- Deploy only the clean local commit containing this correction through
+  `ops/scripts/deploy-production.sh`; record the exact SHA and post-deploy clean
+  baseline in the next log update.
+
 ## 2026-08-31 — Known-answer demand reconciliation role contract
 
 ### Evidence and cause
