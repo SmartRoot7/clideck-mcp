@@ -54,6 +54,23 @@ describe('production database role contract', () => {
     )
   })
 
+  it('does not lock every AI circuit row in each concurrent claim', async () => {
+    const pipeline = await readFile(
+      resolve(process.cwd(), 'src/domain/pipeline.ts'),
+      'utf8',
+    )
+    const claim = pipeline.slice(pipeline.indexOf(
+      'export async function claimPipelineTask',
+    ))
+
+    expect(claim).not.toMatch(
+      /FROM pipeline_ai_circuits\s+FOR UPDATE/,
+    )
+    expect(pipeline).toContain(
+      "pg_try_advisory_xact_lock(\n       hashtext('clideck-mcp:pipeline-scheduler')",
+    )
+  })
+
   it('isolates invalid legacy portable-risk candidates without masking infrastructure failures', async () => {
     const repair = await readFile(
       resolve(process.cwd(), 'src/cli/repair-portable-risk.ts'),

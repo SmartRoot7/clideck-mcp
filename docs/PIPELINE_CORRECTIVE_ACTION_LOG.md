@@ -27,6 +27,10 @@ The Pipeline 2.0 pilot exposed four independent failure modes:
    Pipeline 2.0 intentionally allows knowledge with unknown vendor/OS and does
    not create a fake applicability row for it. Production had 119,863 network
    revisions: 119,842 indexed and exactly 21 with both vendor and OS unknown.
+6. The first post-deploy startup exposed a circuit-lock deadlock under eight
+   simultaneous claims. Each claim cleared stale probes and then locked every
+   circuit row, allowing concurrent transactions to acquire tuples in opposite
+   order. PostgreSQL rolled the claims back, but useful executor time was lost.
 
 ### Minimal correction
 
@@ -47,6 +51,12 @@ The Pipeline 2.0 pilot exposed four independent failure modes:
   have enough real context to be indexed. Unknown-context revisions remain
   published and searchable without a fabricated scope. Batch progress advances
   across omitted revisions, so an all-unknown final batch cannot stall resume.
+- Each claim can still recover an abandoned circuit probe even if it did not
+  win the non-blocking scheduler lock. Cleanup locks only stale circuit rows in
+  deterministic order, while the following circuit read no longer locks the
+  whole table for the claim lifetime. The conditional probe reservation remains
+  the single atomic write. This removes the startup deadlock without changing
+  cooldown or Luna/Terra behavior.
 
 ### Invariants preserved
 

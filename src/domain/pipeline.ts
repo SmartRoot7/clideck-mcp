@@ -3215,6 +3215,25 @@ async function ensureLegacyWorkInTransaction(
   )
   if (!scheduler.rows[0]?.acquired) return
   await reconcileExpiredAndCompletedWork(client)
+  // Only the advisory-lock owner clears abandoned probes. Running this bulk
+  // update in every concurrent claim and then locking every circuit row could
+  // make two executors acquire circuit tuples in opposite orders at startup.
+  await client.query(
+    `UPDATE pipeline_ai_circuits circuit
+        SET probe_executor_id = NULL,
+            updated_at = now()
+      WHERE circuit.probe_executor_id IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1
+          FROM pipeline_tasks task
+          WHERE task.claim_owner = circuit.probe_executor_id
+            AND task.task_type = circuit.task_type
+            AND coalesce(task.requested_reasoning_effort, 'low') =
+                circuit.reasoning_effort
+            AND task.status IN ('claimed', 'running')
+            AND task.lease_until > now()
+        )`,
+  )
   const settings = await client.query<{
     enabled: boolean
     ai_model: string
@@ -3883,33 +3902,44 @@ export async function claimPipelineTask(
       throw new Error('PIPELINE_LUNA_CONFIGURATION_REQUIRED')
     }
     // A deployment or local supervisor restart can terminate the sole circuit
-    // probe after it has reserved the circuit but before it can submit a
-    // result.  Do not let that dead reservation suppress the work class
-    // indefinitely. A reservation remains intact while its exact AI task has
-    // a live lease, so this cannot create two concurrent probes.
+    // probe after reservation but before submission. Every claim must be able
+    // to recover it even when that claim did not win the non-blocking scheduler
+    // lock. Lock only stale rows, in a stable order; do not lock the full circuit
+    // table for the rest of the claim transaction.
     await client.query(
-      `UPDATE pipeline_ai_circuits circuit
+      `WITH stale_circuits AS MATERIALIZED (
+         SELECT circuit.task_type, circuit.reasoning_effort
+         FROM pipeline_ai_circuits circuit
+         WHERE circuit.probe_executor_id IS NOT NULL
+           AND NOT EXISTS (
+             SELECT 1
+             FROM pipeline_tasks task
+             WHERE task.claim_owner = circuit.probe_executor_id
+               AND task.task_type = circuit.task_type
+               AND coalesce(task.requested_reasoning_effort, 'low') =
+                   circuit.reasoning_effort
+               AND task.status IN ('claimed', 'running')
+               AND task.lease_until > now()
+           )
+         ORDER BY circuit.task_type, circuit.reasoning_effort
+         FOR UPDATE OF circuit
+       )
+       UPDATE pipeline_ai_circuits circuit
           SET probe_executor_id = NULL,
               updated_at = now()
-        WHERE circuit.probe_executor_id IS NOT NULL
-          AND NOT EXISTS (
-            SELECT 1
-            FROM pipeline_tasks task
-            WHERE task.claim_owner = circuit.probe_executor_id
-              AND task.task_type = circuit.task_type
-              AND coalesce(task.requested_reasoning_effort, 'low') =
-                  circuit.reasoning_effort
-              AND task.status IN ('claimed', 'running')
-              AND task.lease_until > now()
-          )`,
+         FROM stale_circuits stale
+        WHERE circuit.task_type = stale.task_type
+          AND circuit.reasoning_effort = stale.reasoning_effort`,
     )
     // A Codex incident is isolated to the exact Luna work class that exposed
     // it.  Deep Medium may be paused while useful discovery, analysis and
-    // verification continue to fill and advance the knowledge pipeline.
+    // verification continue to fill and advance the knowledge pipeline. The
+    // later conditional UPDATE is the sole probe reservation; reading here
+    // does not need to lock every circuit row for the whole claim transaction.
     const circuits = await client.query<AiCircuitRow>(
       `SELECT task_type, reasoning_effort, open_until, probe_executor_id
        FROM pipeline_ai_circuits
-       FOR UPDATE`,
+       ORDER BY task_type, reasoning_effort`,
     )
     const runningAi = await client.query<{ count: number }>(
       `SELECT count(*)::int AS count
