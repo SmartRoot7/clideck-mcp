@@ -667,3 +667,35 @@ The Pipeline 2.0 pilot exposed four independent failure modes:
   claimable queued fragments remained active as intended. Journals since the
   clean start contained zero warnings and zero tracked failures. The two-hour
   soak restarts from this baseline.
+
+## 2026-08-31 — Compensating checkpoint used the fast-read timeout
+
+### Evidence and cause
+
+- During the `606a029` soak, Fidelity QA continued to advance and active
+  knowledge grew, but `submit_candidate_verification` reported `Query read
+  timeout` at 14:39:27Z and again at 14:49:03Z. Both stack traces ended at the
+  full `release_items` snapshot inside `publishCompensatingChanges`.
+- The failed releases consumed sequences 6960 and 7080, exactly the two
+  checkpoint boundaries in that interval. Ordinary publication already gave
+  this 121k-row snapshot the 60-second serialized-publication timeout, while
+  the compensating path accidentally inherited the pool's 10-second
+  interactive-read timeout. The preceding checkpoint at sequence 6840 had
+  completed successfully through the correctly bounded path.
+
+### Minimal correction
+
+- The compensating checkpoint now uses the same explicit 60-second
+  `publicationSerializationTimeoutMs` as an ordinary checkpoint. Release
+  cadence, immutable history, Fidelity decisions, deactivation semantics and
+  publication serialization are unchanged.
+- Deployment-contract coverage now inspects the compensating function itself,
+  so a timeout on some other `release_items` insert cannot satisfy the test.
+
+### Verification and deployment
+
+- Local `pnpm check`, all non-database workspace tests, the full build and the
+  250/250 product evaluation against a disposable PostgreSQL 16 database pass.
+  The production deploy preflight will run the complete migrated integration
+  suite before changing production.
+- Production deployment pending.

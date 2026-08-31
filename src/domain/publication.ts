@@ -575,11 +575,15 @@ async function publishCompensatingChanges(
   const checkpoint = !current.rows[0] || Number(release.rows[0]!.sequence) % 120 === 0
   if (checkpoint) {
     await client.query(`UPDATE releases SET release_mode = 'checkpoint' WHERE id = $1`, [releaseId])
-    await client.query(
-      `INSERT INTO release_items (release_id, knowledge_item_id, revision_id)
-       SELECT $1, knowledge_item_id, revision_id FROM active_knowledge_state`,
-      [releaseId],
-    )
+    await client.query({
+      text: `INSERT INTO release_items (
+         release_id, knowledge_item_id, revision_id
+       )
+       SELECT $1, knowledge_item_id, revision_id
+       FROM active_knowledge_state`,
+      values: [releaseId],
+      query_timeout: publicationSerializationTimeoutMs
+    })
   }
   await client.query(
     `UPDATE releases SET item_count = (

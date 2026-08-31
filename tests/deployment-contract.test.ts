@@ -119,6 +119,13 @@ describe('production database role contract', () => {
     expect(publication).toMatch(
       /INSERT INTO release_items[\s\S]*?query_timeout: publicationSerializationTimeoutMs/,
     )
+    const compensatingPublication = publication.slice(
+      publication.indexOf('async function publishCompensatingChanges'),
+      publication.indexOf('export async function deactivatePublishedCandidates'),
+    )
+    expect(compensatingPublication).toMatch(
+      /INSERT INTO release_items[\s\S]*?query_timeout: publicationSerializationTimeoutMs/,
+    )
     expect(pipeline).toMatch(
       /INSERT INTO pipeline_events[\s\S]*?query_timeout: 30_000/,
     )
