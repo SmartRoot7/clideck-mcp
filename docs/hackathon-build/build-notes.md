@@ -30,4 +30,8 @@
   coincident version number. The workbench now prefers the detected vendor when
   that vendor has results, falls back broadly only when it has none, and marks
   out-of-range guidance as nearest rather than version-matched.
+- 2026-08-31: The same walkthrough exposed an IOS XE display-format mismatch:
+  `17.08.01` was treated as older than `17.3.2a`. Automatically detected numeric
+  version segments are now canonicalized (`17.8.1`) before retrieval; manual
+  context remains untouched.
 - GitHub push and Devpost submission remain outside the authorized release.

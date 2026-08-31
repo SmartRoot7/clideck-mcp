@@ -256,6 +256,11 @@ function isFallbackAnswer(answer: KnowledgeAnswer): boolean {
     .includes(answer.applicability.version_match ?? '')
 }
 
+function normalizeDetectedVersion(value: string | null): string {
+  if (!value) return ''
+  return value.replace(/\d+/g, (segment) => String(Number(segment)))
+}
+
 function boundedInteger(
   value: unknown,
   minimum: number,
@@ -419,20 +424,28 @@ export function WebMcpApp() {
     )
     expectedVersion(version, caseVersionRef.current)
     setSnapshot(result)
+    const detectedContext = result.context
+      ? {
+          ...result.context,
+          version: result.context.version
+            ? normalizeDetectedVersion(result.context.version)
+            : null
+        }
+      : null
     const compactResult = {
-      context: result.context,
+      context: detectedContext,
       snapshot_type: result.snapshot_type,
       redactions: result.redactions,
       limitations: result.limitations
     }
-    if (!result.context) return { case_version: version, ...compactResult }
+    if (!detectedContext) return { case_version: version, ...compactResult }
 
     const nextContext = {
-      vendor: current.context.vendor || result.context.vendor,
-      model: current.context.model || result.context.model || '',
+      vendor: current.context.vendor || detectedContext.vendor,
+      model: current.context.model || detectedContext.model || '',
       operating_system:
-        current.context.operating_system || result.context.operating_system,
-      version: current.context.version || result.context.version || ''
+        current.context.operating_system || detectedContext.operating_system,
+      version: current.context.version || detectedContext.version || ''
     }
     const changed = Object.keys(nextContext).some((key) =>
       nextContext[key as keyof NetworkContext] !==

@@ -83,7 +83,7 @@ beforeEach(() => {
             vendor: 'Cisco',
             model: 'C9300-24T',
             operating_system: 'Cisco IOS XE',
-            version: '17.8.1',
+            version: '17.08.01',
             support_level: 'deep',
             confidence: 0.99,
             ambiguities: []
