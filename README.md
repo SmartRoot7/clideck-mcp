@@ -41,45 +41,46 @@ system, public MCP endpoint, version-aware network tools, change review,
 snapshot redaction, signed verification, continuous research pipeline, and
 operations console are pre-existing capabilities.
 
-The **Network Change Room** was added after August 25, 2026 specifically for
-the challenge. It makes those capabilities available as a state-aware WebMCP
-experience where a person and an agent recover a simulated Cisco Catalyst 9300
-incident together.
+The **Network Evidence Workbench** was added after August 25, 2026 specifically
+for the challenge. It gives a person and a browser agent the same live,
+revision-safe workspace for examining real device output and finding sourced
+answers in CliDeck.
 
 ### What is new
 
 - a separate public `/webmcp` experience that leaves `/admin` and `/demo`
   unchanged;
-- five browser-native WebMCP tools for inspection, guidance, staging,
-  sandbox execution, and signed verification;
-- dynamic capability registration: `run_lab_commands` does not exist in the
-  browser tool surface until the operator reviews the staged commands and
-  clicks **Reviewed — approve in sandbox**;
-- a deterministic C9300 / IOS-XE 17.12.4 simulator with an atomic command
-  allowlist and no connection to real network devices;
-- a shared activity timeline showing agent calls, the human decision, active
-  knowledge references, risk review, execution target, and verification;
-- automated lifecycle, unsafe-batch, fallback, MCP-bridge, route, and security
-  tests.
+- six stable browser-native WebMCP tools for reading the current case,
+  detecting context, searching knowledge/workflows, presenting agent analysis,
+  and tracking additional research;
+- local text and text-layer PDF extraction with visible page/line selection,
+  explicit limits, and secret redaction before any network request;
+- a monotonic `case_version` and abort propagation so a late response can never
+  overwrite a case the user has changed;
+- active-revision provenance beside official CliDeck results and a visually
+  separate browser-agent interpretation;
+- ordinary buttons for every primary action, so the product remains useful in
+  browsers without WebMCP.
 
 ### Judge walkthrough
 
 1. Open `https://mcp.clideck.com/webmcp` in ChatGPT's in-app browser, or in
    Chrome 149+ with `chrome://flags/#enable-webmcp-testing` enabled.
-2. Ask: `Inspect the simulated switch incident on this page.`
-3. Ask: `Find version-aware guidance to recover Gi1/0/24 after its
-   port-security err-disabled event.`
-4. Ask the agent to stage the exact command sequence returned by guidance.
-5. Confirm that no execution tool is available. Review the visible commands
-   and click **Reviewed — approve in sandbox**.
-6. Ask the agent to execute the approved commands. The target must be reported
-   as `deterministic_browser_simulator`.
-7. Ask the agent to verify the result. The expected final state is `up/up` with
-   signed verification result `passed`.
+2. Load the labelled Cisco Catalyst 9300 IOS XE 16.10 sample, analyze it, and
+   search for the applicable upgrade procedure.
+3. Enable **Share redacted evidence with browser agent** and ask the agent to
+   explain the current sourced result.
+4. Replace the sample with IOS XE 17.8.1. Observe the new context and
+   `case_version`, then search again for the EFSU-capable path.
+5. Upload a text-layer PDF or LOG, select the relevant page/line window, and
+   repeat the flow.
+6. Ask a genuinely unknown question and start a real tracked research task.
 
-The page never accepts a device address or credential, never opens SSH, and
-never executes an arbitrary command. CLI-derived data is marked as untrusted,
-strictly redacted by the existing MCP tool, and not stored.
+The page never connects to a device and never executes a command. Complete
+files stay in browser memory. Only the selected, locally redacted window is
+sent to CliDeck; browser-agent access requires one explicit opt-in. IP, MAC,
+hostname, and username values are intentionally preserved as diagnostic
+context and disclosed in the interface.
 
 ## Why this project exists
 

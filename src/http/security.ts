@@ -8,6 +8,8 @@ import type { AppConfig } from '../config.js'
 import { constantTimeTokenEquals, sha256 } from '../crypto.js'
 import type { Database } from '../db.js'
 
+type QueryExecutor = Pick<Database, 'query'>
+
 function ipv4ToNumber(address: string): number | null {
   const parts = address.split('.').map(Number)
   if (
@@ -118,7 +120,7 @@ export function requireStaticBearer(expectedToken: string): MiddlewareHandler {
 }
 
 export async function consumeRateLimit(
-  database: Database,
+  database: QueryExecutor,
   clientKey: string,
   routeClass: string,
   limit: number,
@@ -141,7 +143,7 @@ export async function consumeRateLimit(
 }
 
 export async function consumeDailyRateLimit(
-  database: Database,
+  database: QueryExecutor,
   clientKey: string,
   routeClass: string,
   limit: number,

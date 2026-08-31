@@ -1,31 +1,33 @@
-# Build notes
+# Hackathon build notes
 
-- 2026-08-30: Registration completed in Chrome and confirmed through the
-  official Devpost API (`already_registered: true`).
-- 2026-08-30: Existing repository, project name, design system, public MCP, and
-  canonical production deployment workflow are preserved.
-- 2026-08-30: Autonomous implementation selected from the user-approved plan;
-  no GitHub push is authorized during the build.
-- 2026-08-30: Added an in-memory simulator, stateless public-MCP bridge, five
-  phase-bound WebMCP tools, a separate responsive route, and origin-scoped
-  tools policy without changing the existing admin or demo shells.
-- 2026-08-30: Early admin and route/security tests pass. Unsafe or reordered
-  commands fail before review or state mutation; execution is unregistered
-  before the human approval click.
-- 2026-08-30: Full local verification passed: `pnpm check`, all 130 core,
-  22 domain, and 23 admin tests, a 250/250 isolated PostgreSQL evaluation,
-  and the production build.
-- 2026-08-30: Visual QA used the existing `/demo` as the reference. The new
-  surface preserves its Inter/JetBrains typography, white bordered panels,
-  blue/green/amber status language, compact radii and shadows, and responsive
-  density. Desktop (1280px) and mobile (500px effective layout viewport) were
-  inspected; the 390px screenshot limitation was the installed macOS Chrome
-  minimum headless layout width, so 500px was used for the native-size check.
-- 2026-08-30: Copy remains intentionally operational rather than promotional:
-  phase names, execution target, human gate, source references, and signed
-  verification are explicit. No imagery or new visual direction was added
-  because the approved requirement is to preserve the existing product design.
-- 2026-08-30: The first live walkthrough exposed a semantically adjacent BPDU
-  Guard result for the known port-security root cause. The WebMCP adapter now
-  excludes workflows for competing err-disable causes while retaining the
-  underlying public MCP response and quality thresholds unchanged.
+- 2026-08-30: Devpost registration was confirmed. Existing immutable knowledge,
+  public MCP, research pipeline, admin, demo, and deployment workflow predate
+  the challenge.
+- 2026-08-30: The first challenge implementation used a deterministic lab and
+  approval-gated execution. User review correctly found it artificial and not
+  useful outside the demo.
+- 2026-08-31: The lab was replaced with Network Evidence Workbench: a real
+  question/evidence/context/results workspace that remains useful without
+  WebMCP and never claims access to customer equipment.
+- 2026-08-31: Full files remain local. Only an explicit evidence window is
+  redacted and sent to CliDeck. Browser-agent access has one visible opt-in;
+  filenames and task access tokens are not exposed.
+- 2026-08-31: Case versions plus cancellation prevent parse, MCP, presentation,
+  or polling results from leaking into a changed case.
+- 2026-08-31: Added safe active-revision provenance, metadata-only snapshot
+  observability, and pre-quota expert-task idempotency.
+- 2026-08-31: `pdfjs-dist` is pinned, lazy-loaded, and served with a same-origin
+  worker. OCR, encrypted PDFs, image-only PDFs, device connections, and command
+  execution are deliberately not claimed.
+- 2026-08-31: Independent code/privacy review found five material boundary
+  defects before release: missing production grants for provenance, incomplete
+  structured-secret redaction, a full sanitized-snapshot echo to the browser
+  agent, missing unmount cancellation, and an over-wide combined result set.
+  All were corrected before deployment. Acceptance tests now cover JSON/YAML/
+  env/JWT secrets, file and page limits, PDF cancellation, execution-signal and
+  unmount cancellation, stale research status, and task-token non-disclosure.
+- 2026-08-31: Production walkthrough found a cross-vendor result caused by a
+  coincident version number. The workbench now prefers the detected vendor when
+  that vendor has results, falls back broadly only when it has none, and marks
+  out-of-range guidance as nearest rather than version-matched.
+- GitHub push and Devpost submission remain outside the authorized release.

@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { callPublicMcpTool, PublicMcpError } from './mcp-client'
+import {
+  callPublicMcpTool,
+  MAX_MCP_BODY_BYTES,
+  publicMcpBodyBytes,
+  PublicMcpError,
+  serializePublicMcpToolCall,
+} from './mcp-client'
 
 afterEach(() => vi.restoreAllMocks())
 
@@ -53,5 +59,34 @@ describe('same-origin public MCP client', () => {
         code: 'MCP_TOOL_ERROR',
         message: 'RATE_LIMITED'
       }))
+  })
+
+  it('measures the serialized UTF-8 envelope, including Unicode and escaping', () => {
+    const args = { snapshot: 'IOS XE \\ path — 密码 🔐' }
+    const serialized = serializePublicMcpToolCall('analyze_device_snapshot', args, 7)
+
+    expect(publicMcpBodyBytes('analyze_device_snapshot', args)).toBe(
+      new TextEncoder().encode(
+        serializePublicMcpToolCall('analyze_device_snapshot', args),
+      ).byteLength,
+    )
+    expect(new TextEncoder().encode(serialized).byteLength).toBeGreaterThan(
+      serialized.length,
+    )
+  })
+
+  it('rejects an oversized request before any network call', async () => {
+    const fetchMock = vi.spyOn(window, 'fetch')
+    const args = { snapshot: '密'.repeat(MAX_MCP_BODY_BYTES) }
+
+    expect(publicMcpBodyBytes('analyze_device_snapshot', args)).toBeGreaterThan(
+      MAX_MCP_BODY_BYTES,
+    )
+    await expect(callPublicMcpTool('analyze_device_snapshot', args)).rejects.toEqual(
+      expect.objectContaining<Partial<PublicMcpError>>({
+        code: 'MCP_REQUEST_TOO_LARGE',
+      }),
+    )
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })

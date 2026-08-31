@@ -6,7 +6,11 @@ import {
   sha256,
   sha256Label
 } from '../crypto.js'
-import type { Database } from '../db.js'
+import {
+  type Database,
+  type DatabaseClient,
+  withTransaction
+} from '../db.js'
 import type { PublicActor } from './auth.js'
 import { getPublicRevision } from './knowledge.js'
 import type {
@@ -81,6 +85,9 @@ export async function createExpertTask(
   context: NetworkContextInput,
   idempotencyKey?: string,
   idempotencyScope?: string,
+  options: {
+    beforeCreate?: (database: DatabaseClient) => Promise<void>
+  } = {},
 ): Promise<PublicTaskStatus & { access_token?: string }> {
   const publicId = createPublicTaskId()
   const scopeHash = idempotencyKey
@@ -100,8 +107,29 @@ export async function createExpertTask(
         : randomUrlToken(32)
       : undefined
 
-  const result = await database.query<TaskRow & { created: boolean }>(
-    `INSERT INTO expert_tasks (
+  const createdRow = await withTransaction(database, async (client) => {
+    if (idempotencyKey) {
+      await client.query(
+        'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+        [`expert:${scopeHash!.toString('hex')}:${keyHash!.toString('hex')}`],
+      )
+      const existing = await client.query<TaskRow>(
+        `SELECT
+           id, public_id, tenant_id, status, created_at, expires_at,
+           input_request, result_revision_id, failure_code, failure_message
+         FROM expert_tasks
+         WHERE idempotency_scope_hash = $1
+           AND idempotency_key_hash = $2`,
+        [scopeHash, keyHash],
+      )
+      if (existing.rows[0]) {
+        return { ...existing.rows[0], created: false }
+      }
+    }
+
+    await options.beforeCreate?.(client)
+    const result = await client.query<TaskRow & { created: boolean }>(
+      `INSERT INTO expert_tasks (
        public_id,
        access_token_hash,
        tenant_id,
@@ -129,27 +157,29 @@ export async function createExpertTask(
        id, public_id, tenant_id, status, created_at, expires_at,
        input_request, result_revision_id, failure_code, failure_message,
        (xmax = 0) AS created`,
-    [
-      publicId,
-      accessToken ? sha256(accessToken) : null,
-      actor.kind === 'tenant' ? actor.tenantId : null,
-      question,
-      JSON.stringify(context),
-      config.anonymousTaskTtlMinutes,
-      scopeHash,
-      keyHash
-    ],
-  )
+      [
+        publicId,
+        accessToken ? sha256(accessToken) : null,
+        actor.kind === 'tenant' ? actor.tenantId : null,
+        question,
+        JSON.stringify(context),
+        config.anonymousTaskTtlMinutes,
+        scopeHash,
+        keyHash
+      ],
+    )
+    return result.rows[0]!
+  })
 
-  const task = toPublicTaskStatus(result.rows[0]!)
-  if (result.rows[0]!.created) await database.query(
+  const task = toPublicTaskStatus(createdRow)
+  if (createdRow.created) await database.query(
     `INSERT INTO task_public_events (
        task_id, stage, progress_percent, public_message
      )
      VALUES ($1, 'queued', 5, 'Research task queued for deterministic review.')`,
-    [result.rows[0]!.id],
+    [createdRow.id],
   )
-  if (result.rows[0]!.created) {
+  if (createdRow.created) {
     task.milestones = [{
       stage: 'queued',
       progress_percent: 5,
@@ -160,12 +190,12 @@ export async function createExpertTask(
   } else {
     const presentation = await loadTaskPresentation(
       database,
-      result.rows[0]!,
+      createdRow,
     )
     Object.assign(
       task,
       toPublicTaskStatus(
-        result.rows[0]!,
+          createdRow,
         null,
         presentation.events,
         presentation.releaseSequence,

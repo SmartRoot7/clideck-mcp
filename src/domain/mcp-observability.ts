@@ -1,7 +1,7 @@
 import { isIP } from 'node:net'
 
 import type { Database } from '../db.js'
-import { sha256 } from '../crypto.js'
+import { sha256, sha256Label } from '../crypto.js'
 import type { PublicActor } from './auth.js'
 import { resolveNetworkContext } from './context.js'
 import { sanitizeSnapshot } from './snapshot.js'
@@ -82,6 +82,53 @@ export function sanitizeMcpLogPayload(
   maxBytes = 64 * 1_024,
 ): Record<string, unknown> | unknown[] {
   return boundedPayload(value, maxBytes)
+}
+
+function snapshotObservabilityPayload(
+  request: unknown,
+  response: unknown,
+): {
+  request: Record<string, unknown>
+  response: Record<string, unknown>
+} {
+  const requestRecord = recordOf(request) ?? {}
+  const responseRecord = recordOf(response) ?? {}
+  const rawSnapshot = typeof requestRecord['snapshot'] === 'string'
+    ? requestRecord['snapshot']
+    : ''
+  const redactedSnapshot = sanitizeSnapshot(rawSnapshot, 'secrets_only')
+  const redactions = Array.isArray(responseRecord['redactions'])
+    ? responseRecord['redactions'].flatMap((entry) => {
+        const value = recordOf(entry)
+        return typeof value?.['type'] === 'string' &&
+          typeof value['count'] === 'number'
+          ? [{ type: value['type'], count: value['count'] }]
+          : []
+      })
+    : redactedSnapshot.redactions
+  return {
+    request: {
+      evidence_digest: sha256Label(redactedSnapshot.sanitized),
+      evidence_bytes: Buffer.byteLength(redactedSnapshot.sanitized, 'utf8'),
+      requested_snapshot_type:
+        typeof requestRecord['snapshot_type'] === 'string'
+          ? requestRecord['snapshot_type']
+          : 'auto',
+      redaction_profile:
+        typeof requestRecord['redaction_profile'] === 'string'
+          ? requestRecord['redaction_profile']
+          : 'strict',
+      redaction_counts: redactions
+    },
+    response: {
+      detected_snapshot_type:
+        typeof responseRecord['snapshot_type'] === 'string'
+          ? responseRecord['snapshot_type']
+          : null,
+      redaction_counts: redactions,
+      retention: 'not_stored'
+    }
+  }
 }
 
 function stableValue(value: unknown): unknown {
@@ -465,8 +512,13 @@ export async function recordMcpRequest(
     retryable?: boolean
   },
 ): Promise<void> {
-  const requestPayload = sanitizeMcpLogPayload(input.request, 64 * 1_024)
-  const responsePayload = sanitizeMcpLogPayload(input.response, 128 * 1_024)
+  const snapshotPayload = input.toolName === 'analyze_device_snapshot'
+    ? snapshotObservabilityPayload(input.request, input.response)
+    : null
+  const requestPayload = snapshotPayload?.request ??
+    sanitizeMcpLogPayload(input.request, 64 * 1_024)
+  const responsePayload = snapshotPayload?.response ??
+    sanitizeMcpLogPayload(input.response, 128 * 1_024)
   await database.query(
     `INSERT INTO mcp_request_logs (
        request_id,

@@ -22,6 +22,8 @@ GRANT SELECT ON
   domain_packs,
   knowledge_items,
   knowledge_revisions,
+  source_documents,
+  revision_sources,
   knowledge_public_trust,
   knowledge_conflicts,
   active_release,

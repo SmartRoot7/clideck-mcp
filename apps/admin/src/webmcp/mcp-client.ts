@@ -13,6 +13,27 @@ type JsonRpcEnvelope<T> = {
 }
 
 let requestSequence = 0
+export const MAX_MCP_BODY_BYTES = 60_000
+
+export function serializePublicMcpToolCall(
+  name: string,
+  args: Record<string, unknown>,
+  id = requestSequence + 1,
+): string {
+  return JSON.stringify({
+    jsonrpc: '2.0',
+    id,
+    method: 'tools/call',
+    params: { name, arguments: args }
+  })
+}
+
+export function publicMcpBodyBytes(
+  name: string,
+  args: Record<string, unknown>,
+): number {
+  return new TextEncoder().encode(serializePublicMcpToolCall(name, args)).byteLength
+}
 
 export class PublicMcpError extends Error {
   constructor(
@@ -36,6 +57,13 @@ export async function callPublicMcpTool<T>(
   const abortFromCaller = () => controller.abort(options.signal?.reason)
   options.signal?.addEventListener('abort', abortFromCaller, { once: true })
   try {
+    const body = serializePublicMcpToolCall(name, args, ++requestSequence)
+    if (new TextEncoder().encode(body).byteLength >= MAX_MCP_BODY_BYTES) {
+      throw new PublicMcpError(
+        'MCP_REQUEST_TOO_LARGE',
+        'The selected evidence window is too large. Select fewer lines and try again.',
+      )
+    }
     const response = await fetch('/mcp', {
       method: 'POST',
       cache: 'no-store',
@@ -45,12 +73,7 @@ export async function callPublicMcpTool<T>(
         'content-type': 'application/json',
         'mcp-protocol-version': '2025-11-25'
       },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: ++requestSequence,
-        method: 'tools/call',
-        params: { name, arguments: args }
-      }),
+      body,
       signal: controller.signal
     })
     if (!response.ok) {

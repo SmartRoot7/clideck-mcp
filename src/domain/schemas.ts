@@ -166,6 +166,31 @@ export const knowledgeSearchResultSchema = z.object({
     .enum(['use_answer', 'request_expert_answer'])
 })
 
+export const knowledgeProvenanceInputSchema = z.object({
+  revision_refs: z.array(z.string().uuid()).min(1).max(5)
+})
+
+export const knowledgeProvenanceOutputSchema = z.object({
+  revisions: z.array(z.object({
+    revision_ref: z.string().uuid(),
+    sources: z.array(z.object({
+      source_ref: z.string().nullable(),
+      source_kind: z.enum([
+        'official_web',
+        'admin_web',
+        'admin_document',
+        'pasted_text',
+        'field_log'
+      ]),
+      title: z.string(),
+      url: z.string().url().startsWith('https://'),
+      document_version: z.string().nullable(),
+      document_date: z.string().nullable(),
+      verified_at: z.string()
+    }))
+  }))
+})
+
 export const requestExpertAnswerInputSchema = z.object({
   question: boundedText.min(8),
   context: networkContextInputSchema,

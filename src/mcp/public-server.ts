@@ -45,6 +45,7 @@ import {
   reconcileKnownKnowledgeDemand,
   recordMcpRequest
 } from '../domain/mcp-observability.js'
+import { getPublicKnowledgeProvenance } from '../domain/provenance.js'
 import { analyzeDeviceSnapshot } from '../domain/snapshot.js'
 import { recordPublicUsage } from '../domain/telemetry.js'
 import { analyzeNetworkPath } from '../domain/topology.js'
@@ -70,6 +71,8 @@ import {
   feedbackInputSchema,
   feedbackOutputSchema,
   getWorkflowInputSchema,
+  knowledgeProvenanceInputSchema,
+  knowledgeProvenanceOutputSchema,
   knowledgeSearchResultSchema,
   networkPathInputSchema,
   networkPathOutputSchema,
@@ -483,6 +486,29 @@ export function createPublicMcpServer(
   )
 
   server.registerTool(
+    'get_knowledge_provenance',
+    {
+      title: 'Get Knowledge Provenance',
+      description:
+        'Return safe source metadata for up to five active knowledge revisions.',
+      inputSchema: knowledgeProvenanceInputSchema,
+      outputSchema: knowledgeProvenanceOutputSchema,
+      annotations: {
+        readOnlyHint: true,
+        idempotentHint: true,
+        openWorldHint: false
+      }
+    },
+    wrapTool(dependencies, 'get_knowledge_provenance', async (input) =>
+      getPublicKnowledgeProvenance(
+        dependencies.database,
+        dependencies.config.publicBaseUrl,
+        input.revision_refs,
+      ),
+    ),
+  )
+
+  server.registerTool(
     'get_network_workflow',
     {
       title: 'Get Network Workflow',
@@ -538,9 +564,11 @@ export function createPublicMcpServer(
       openWorldHint: true
     }
   } as const
-  const enforceExpertLimit = async () => {
+  const enforceExpertLimit = async (
+    database: Pick<Database, 'query'> = dependencies.database,
+  ) => {
     const rate = await consumeDailyRateLimit(
-      dependencies.database,
+      database,
       dependencies.actor.kind === 'tenant'
         ? dependencies.actor.tenantId
         : dependencies.clientKey,
@@ -549,6 +577,20 @@ export function createPublicMcpServer(
     )
     if (!rate.allowed) throw new Error('RATE_LIMITED')
   }
+  const createRateLimitedExpert = (
+    input: typeof requestExpertAnswerInputSchema._output,
+  ) => createExpertTask(
+    dependencies.database,
+    dependencies.config,
+    dependencies.actor,
+    input.question,
+    input.context,
+    input.idempotency_key,
+    dependencies.actor.kind === 'tenant'
+      ? dependencies.actor.tenantId
+      : dependencies.clientKey,
+    { beforeCreate: enforceExpertLimit },
+  )
 
   if (dependencies.taskStore) {
     server.experimental.tasks.registerToolTask(
@@ -564,23 +606,12 @@ export function createPublicMcpServer(
         ) => {
           const startedAt = performance.now()
           try {
-            await enforceExpertLimit()
             const input = requestExpertAnswerInputSchema.parse(rawInput)
+            const expert = await createRateLimitedExpert(input)
             const task = await extra.taskStore.createTask({
               ttl: dependencies.config.anonymousTaskTtlMinutes * 60_000,
               pollInterval: 3_000
             })
-            const expert = await createExpertTask(
-              dependencies.database,
-              dependencies.config,
-              dependencies.actor,
-              input.question,
-              input.context,
-              input.idempotency_key,
-              dependencies.actor.kind === 'tenant'
-                ? dependencies.actor.tenantId
-                : dependencies.clientKey,
-            )
             const fallbackResult = textAndStructured(
               expert as Record<string, unknown>,
             )
@@ -649,21 +680,10 @@ export function createPublicMcpServer(
     server.registerTool(
       'request_expert_answer',
       expertToolConfig,
-      wrapTool(dependencies, 'request_expert_answer', async (input) =>
-        {
-          await enforceExpertLimit()
-          return createExpertTask(
-            dependencies.database,
-            dependencies.config,
-            dependencies.actor,
-            input.question,
-            input.context,
-            input.idempotency_key,
-            dependencies.actor.kind === 'tenant'
-              ? dependencies.actor.tenantId
-              : dependencies.clientKey,
-          )
-        },
+      wrapTool(
+        dependencies,
+        'request_expert_answer',
+        createRateLimitedExpert,
       ),
     )
   }

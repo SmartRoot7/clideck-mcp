@@ -1,37 +1,54 @@
-# CliDeck Network Change Room — Technical spec
+# CliDeck Network Evidence Workbench — Technical spec
 
 ## Architecture
 
-The existing React/Vite admin bundle serves a separate public `/webmcp` route.
-It owns an in-memory deterministic lab reducer and calls the existing same-origin
-`/mcp` endpoint with stateless JSON-RPC. No database schema or public MCP
-contract changes are required.
+The existing React/Vite bundle serves `/webmcp`. Raw files and complete
+extracted text remain in browser memory. A selected, locally redacted evidence
+window is sent to the existing same-origin `/mcp` JSON-RPC endpoint. The
+serialized envelope is measured in UTF-8 and must remain below 60,000 bytes.
 
-## State and tools
+`pdfjs-dist` is pinned and loaded only when a PDF is selected; its worker is a
+same-origin Vite asset. Up to five files, 10 MiB each, 25 MiB total, and 500 PDF
+pages are accepted. Encrypted and image-only PDFs return
+`PDF_TEXT_UNAVAILABLE`; OCR is explicitly out of scope.
 
-The lab advances through `ready`, `inspected`, `guided`, `staged`, `approved`,
-`executed`, and `verified`. Reset returns the initial err-disabled state.
+## Versioned case lifecycle
 
-WebMCP tools are lifecycle-bound to the page:
+`case_version` increases whenever the question, evidence, selected window, or
+context changes. Analyze, search, presentation, and research calls include an
+expected version. Reset, unmount, or a newer version aborts parsing, fetches,
+and polling. A late result returns `CASE_VERSION_CONFLICT` and is discarded.
 
-1. `inspect_lab_device` sends the simulated snapshot through
-   `analyze_device_snapshot` with strict redaction.
-2. `find_network_guidance` calls `query_network_knowledge` and
-   `get_network_workflow` for a C9300 running IOS-XE 17.12.4.
-3. `stage_network_change` validates a fixed safe recovery sequence before
-   calling `review_network_change`.
-4. `run_lab_commands` is registered only in the manually approved state and
-   applies the exact staged sequence atomically to the simulator.
-5. `verify_lab_change` calls `verify_network_change` with captured before/after
-   snapshots and the short verification handle.
+Manual context values win. Snapshot analysis fills only empty vendor, model,
+OS, and version fields. Search is enabled when at least vendor, model, or OS is
+known; version remains optional.
 
-All browser tool responses are concise structured text. Snapshot-derived output
-is marked untrusted. Read-only tools are annotated. The API sends
-`Permissions-Policy: tools=(self)`.
+## WebMCP tools
 
-## Security and compatibility
+1. `read_network_case` returns a redacted evidence window of at most 8,000
+   characters only after the sharing gate.
+2. `analyze_network_case` calls `analyze_device_snapshot` and fills empty
+   context fields.
+3. `search_network_case` calls real knowledge/workflow tools and returns a
+   compact result while the page displays the full answer.
+4. `present_network_case_analysis` accepts a bounded agent interpretation and
+   only current result revision references.
+5. `start_case_research` creates one idempotent expert task only after unknown.
+6. `get_case_research_status` uses in-memory task credentials and exposes the
+   documented lifecycle without leaking the access token.
 
-There is no arbitrary command execution, network-device address, credential,
-SSH client, or persistent lab state. Manual approval exists only as a visible
-button. The existing app shell, admin authentication, demo routes, public MCP
-schemas, and production deployment workflow remain unchanged.
+All six tools are always registered. Evidence and agent-authored text are
+marked untrusted; read operations are marked read-only. The page uses a small
+local React lifecycle wrapper so WebMCP's `AbortSignal` reaches `/mcp`.
+
+## Backend additions and privacy
+
+`get_knowledge_provenance` accepts up to five active public revision refs and
+returns only source kind/ref, title, public HTTPS URL or first-party locator,
+document version/date, and verification date.
+
+For `analyze_device_snapshot`, `mcp_request_logs` stores only the SHA-256 label
+of redacted input, byte count, snapshot types, redaction counts, outcome,
+duration, and error code. Evidence, filenames, previews, and response fragments
+are never journaled. Expert-task idempotency is checked under an advisory lock
+before the daily rate-limit charge.

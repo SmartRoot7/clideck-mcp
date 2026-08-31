@@ -860,22 +860,13 @@ export function createApiApp(dependencies: ApiDependencies) {
 
   app.post('/public/v1/playground/expert/request', async (context) => {
     const clientKey = context.req.header('x-clideck-client-key')!
-    const rate = await consumeDailyRateLimit(
-      database,
-      clientKey,
-      'playground_expert',
-      config.expertRateLimitPerDay,
-    )
-    context.header('x-ratelimit-remaining', String(rate.remaining))
-    if (!rate.allowed) {
-      return context.json({ error: 'rate_limited' }, 429)
-    }
     const parsed = requestExpertAnswerInputSchema.safeParse(
       await context.req.json<unknown>(),
     )
     if (!parsed.success) return context.json({ error: 'invalid_input' }, 400)
-    return context.json(
-      await createExpertTask(
+    let remaining: number | null = null
+    try {
+      const task = await createExpertTask(
         database,
         config,
         { kind: 'anonymous' },
@@ -883,8 +874,30 @@ export function createApiApp(dependencies: ApiDependencies) {
         parsed.data.context,
         parsed.data.idempotency_key,
         clientKey,
-      ),
-    )
+        {
+          beforeCreate: async (executor) => {
+            const rate = await consumeDailyRateLimit(
+              executor,
+              clientKey,
+              'playground_expert',
+              config.expertRateLimitPerDay,
+            )
+            remaining = rate.remaining
+            if (!rate.allowed) throw new Error('RATE_LIMITED')
+          }
+        },
+      )
+      if (remaining !== null) {
+        context.header('x-ratelimit-remaining', String(remaining))
+      }
+      return context.json(task)
+    } catch (error) {
+      if (error instanceof Error && error.message === 'RATE_LIMITED') {
+        context.header('x-ratelimit-remaining', '0')
+        return context.json({ error: 'rate_limited' }, 429)
+      }
+      throw error
+    }
   })
 
   app.post('/public/v1/playground/expert/status', async (context) => {

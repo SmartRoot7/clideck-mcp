@@ -58,7 +58,11 @@ import {
   getPublicRevision,
   searchKnowledge
 } from '../src/domain/knowledge.js'
-import { queueUnknownKnowledgeDemand } from '../src/domain/mcp-observability.js'
+import {
+  queueUnknownKnowledgeDemand,
+  recordMcpRequest,
+} from '../src/domain/mcp-observability.js'
+import { getPublicKnowledgeProvenance } from '../src/domain/provenance.js'
 import { labRevisionHash } from '../src/domain/lab.js'
 import {
   activateKnowledgeRelease,
@@ -193,6 +197,20 @@ describeIntegration('PostgreSQL integration', () => {
          ('pipeline_tasks', 'failure_code', 'UPDATE'),
          ('pipeline_tasks', 'failure_message', 'UPDATE')
        ) AS required(table_name, column_name, privilege)`,
+    )
+
+    expect(privileges.rows[0]?.allowed).toBe(true)
+  })
+
+  it('grants API read access to public provenance source tables', async () => {
+    const privileges = await database.query<{ allowed: boolean }>(
+      `SELECT bool_and(has_table_privilege(
+         'clideck_mcp_api', required.table_name, 'SELECT'
+       )) AS allowed
+       FROM (VALUES
+         ('source_documents'),
+         ('revision_sources')
+       ) AS required(table_name)`,
     )
 
     expect(privileges.rows[0]?.allowed).toBe(true)
@@ -1341,6 +1359,100 @@ describeIntegration('PostgreSQL integration', () => {
     }
   })
 
+  it('stores only bounded metadata for device snapshot observability', async () => {
+    const client = await database.connect()
+    const requestId = randomUUID()
+    const canary = `CANARY_PRIVATE_${randomUUID()}`
+    const evidence = [
+      'switch-01# show running-config',
+      `username operator password 7 ${canary}`,
+      'interface Vlan10',
+      ' ip address 10.77.0.10 255.255.255.0',
+    ].join('\n')
+    try {
+      await client.query('BEGIN')
+      await recordMcpRequest(client as unknown as Database, {
+        requestId,
+        clientAddress: '203.0.113.44',
+        actor: { kind: 'anonymous' },
+        toolName: 'analyze_device_snapshot',
+        request: {
+          snapshot: evidence,
+          snapshot_type: 'running_config',
+          redaction_profile: 'secrets_only',
+        },
+        response: {
+          snapshot_type: 'running_config',
+          sanitized_snapshot: evidence,
+          preview: evidence,
+          redactions: [{ type: 'password', count: 1 }],
+        },
+        outcome: 'success',
+        durationMs: 18,
+      })
+
+      const stored = await client.query<{
+        request_payload: Record<string, unknown>
+        response_payload: Record<string, unknown>
+        question_preview: string
+        response_preview: string
+      }>(
+        `SELECT request_payload, response_payload, question_preview, response_preview
+           FROM mcp_request_logs
+          WHERE request_id = $1`,
+        [requestId],
+      )
+      expect(stored.rows).toHaveLength(1)
+      const serialized = JSON.stringify(stored.rows[0])
+      expect(serialized).not.toContain(canary)
+      expect(serialized).not.toContain('switch-01')
+      expect(serialized).not.toContain('10.77.0.10')
+      expect(stored.rows[0]?.request_payload).toMatchObject({
+        evidence_digest: expect.stringMatching(/^sha256:/),
+        requested_snapshot_type: 'running_config',
+        redaction_profile: 'secrets_only',
+      })
+      expect(stored.rows[0]?.response_payload).toMatchObject({
+        detected_snapshot_type: 'running_config',
+        retention: 'not_stored',
+      })
+    } finally {
+      await client.query('ROLLBACK')
+      client.release()
+    }
+  })
+
+  it('returns provenance only for active public revisions', async () => {
+    const active = await database.query<{ public_ref: string }>(
+      `SELECT revision.public_ref::text AS public_ref
+         FROM active_knowledge_state state
+         JOIN knowledge_revisions revision ON revision.id = state.revision_id
+        WHERE EXISTS (
+          SELECT 1 FROM revision_sources source
+           WHERE source.revision_id = revision.id
+        )
+        ORDER BY revision.created_at DESC
+        LIMIT 1`,
+    )
+    expect(active.rows[0]?.public_ref).toEqual(expect.any(String))
+    const inactiveRef = randomUUID()
+    const provenance = await getPublicKnowledgeProvenance(
+      database,
+      config.publicBaseUrl,
+      [active.rows[0]!.public_ref, inactiveRef],
+    )
+
+    expect(provenance.revisions).toHaveLength(1)
+    expect(provenance.revisions[0]).toMatchObject({
+      revision_ref: active.rows[0]!.public_ref,
+      sources: [expect.objectContaining({
+        title: expect.any(String),
+        url: expect.stringMatching(/^https:\/\//),
+      })],
+    })
+    expect(JSON.stringify(provenance)).not.toContain(inactiveRef)
+  })
+
   it('reuses unchanged duplicate official sources for a demand only once', async () => {
     const suffix = randomUUID().replaceAll('-', '')
     const question = `How do I validate demand source reuse ${suffix}?`
@@ -2053,6 +2165,10 @@ describeIntegration('PostgreSQL integration', () => {
     ).resolves.toMatchObject({ result: 'passed' })
 
     const uniqueKey = `integration-${randomUUID()}`
+    let quotaCharges = 0
+    const chargeQuota = async () => {
+      quotaCharges += 1
+    }
     const taskOne = await createExpertTask(
       database,
       config,
@@ -2065,6 +2181,7 @@ describeIntegration('PostgreSQL integration', () => {
       },
       uniqueKey,
       'integration-client',
+      { beforeCreate: chargeQuota },
     )
     const taskTwo = await createExpertTask(
       database,
@@ -2078,9 +2195,11 @@ describeIntegration('PostgreSQL integration', () => {
       },
       uniqueKey,
       'integration-client',
+      { beforeCreate: chargeQuota },
     )
     expect(taskTwo.task_id).toBe(taskOne.task_id)
     expect(taskTwo.access_token).toBe(taskOne.access_token)
+    expect(quotaCharges).toBe(1)
 
     const refreshed = await refreshPublicStatsCache(database)
     const cacheStartedAt = performance.now()
@@ -2646,12 +2765,13 @@ describeIntegration('PostgreSQL integration', () => {
           expect.arrayContaining([
             'resolve_network_context',
             'query_network_knowledge',
+            'get_knowledge_provenance',
             'list_knowledge_domains',
             'describe_knowledge_domain',
             'query_domain_knowledge'
           ]),
         )
-        expect(tools.tools).toHaveLength(16)
+        expect(tools.tools).toHaveLength(17)
 
         const listed = await mcpClient.callTool({
           name: 'list_knowledge_domains',
