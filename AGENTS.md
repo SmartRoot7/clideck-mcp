@@ -29,6 +29,15 @@ and must not receive normal deployments.
   `ops/scripts/migrate-production-host.sh`. Do not reproduce its database,
   secret, artifact, tunnel, or certificate transfer with ad hoc commands.
 
+## Corrective production monitoring
+
+- Before changing or monitoring the knowledge pipeline, read
+  `docs/PIPELINE_CORRECTIVE_ACTION_LOG.md`.
+- A repeated soak-test failure requires a root-cause code, schema, grant, or
+  configuration fix. Do not treat a service restart as the fix.
+- Record the evidence, cause, minimal correction, deployment commit, and
+  post-deploy result in that log, then restart the read-only soak window.
+
 ## Domain Pack workflow
 
 - Put subject-specific schemas, prompts, validators, fixtures, and mappers in

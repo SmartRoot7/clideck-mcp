@@ -12,6 +12,13 @@ import type { Logger } from '../logger.js'
 import { createResearcherMcpServer } from '../mcp/researcher-server.js'
 import { requireStaticBearer } from './security.js'
 
+// The restricted bridge carries bounded structured AI artifacts. Those are
+// routinely larger than the public 64 KiB request limit because one request
+// can contain several independently extracted records. The bridge is
+// authenticated and bound to loopback in production, so give it a separate
+// fixed ceiling without weakening any public endpoint.
+export const researcherRequestBodyLimitBytes = 1024 * 1024
+
 export function createResearcherApp(dependencies: {
   config: AppConfig
   database: Database
@@ -24,7 +31,10 @@ export function createResearcherApp(dependencies: {
   app.use(
     '*',
     bodyLimit({
-      maxSize: config.maxRequestBytes,
+      maxSize: Math.max(
+        config.maxRequestBytes,
+        researcherRequestBodyLimitBytes,
+      ),
       onError: (context) =>
         context.json({ error: 'request_body_too_large' }, 413)
     }),

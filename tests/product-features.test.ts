@@ -29,6 +29,7 @@ import {
   materializeCandidateVerificationArtifact,
   normalizeCandidateAnalysisOptionalFields,
   normalizeCandidateAnalysisStableKeys,
+  materializeCandidateAnalysisArtifact,
   withLeasedKnowledgeDemand
 } from '../src/domain/pipeline.js'
 import {
@@ -974,6 +975,86 @@ describe('deterministic source processing', () => {
     expect(normalized.candidates[0]!.candidate.cli_mode).toBeUndefined()
     expect(original.candidates[0]!.candidate.cli_mode.length)
       .toBeGreaterThan(120)
+  })
+
+  it('normalizes optional capability slugs without rejecting useful records', () => {
+    const normalized = normalizeCandidateAnalysisOptionalFields({
+      candidates: [{
+        fragment_id: '00000000-0000-4000-8000-000000000001',
+        candidate: {
+          capability_slug: ' Show / Interface Status '
+        }
+      }],
+      rejected_fragments: []
+    }) as {
+      candidates: Array<{ candidate: { capability_slug?: string } }>
+    }
+
+    expect(normalized.candidates[0]!.candidate.capability_slug)
+      .toBe('show-interface-status')
+  })
+
+  it('keeps valid analysis records and retries only malformed fragments', () => {
+    const firstFragment = '00000000-0000-4000-8000-000000000001'
+    const secondFragment = '00000000-0000-4000-8000-000000000002'
+    const candidate = {
+      stable_key: 'cisco-ios-xe-show-clock-detail',
+      kind: 'command',
+      title: 'Show clock detail',
+      summary: 'Shows detailed device time information.',
+      question_patterns: ['How do I show detailed device time?'],
+      command: 'show clock detail',
+      procedure: [],
+      prerequisites: [],
+      risks: [],
+      verification: [],
+      rollback: [],
+      limitations: [],
+      dangerous: false,
+      confidence: 0.9,
+      quality_score: 0.9,
+      confidence_reason: 'The command is directly documented.',
+      last_verified_at: '2026-08-31',
+      provenance: [{
+        url: 'https://www.cisco.com/example',
+        document_type: 'command_reference',
+        title: 'Clock commands',
+        verified_at: '2026-08-31',
+        content_hash: `sha256:${'a'.repeat(64)}`,
+        evidence_fragment: 'show clock detail',
+        evidence_role: 'primary'
+      }]
+    }
+    const materialized = materializeCandidateAnalysisArtifact({
+      candidates: [{ fragment_id: firstFragment, candidate }, {
+        fragment_id: secondFragment,
+        candidate: { ...candidate, stable_key: '--' }
+      }, {
+        fragment_id: 'not-a-uuid',
+        candidate
+      }],
+      rejected_fragments: [],
+      fragment_dispositions: [{
+        fragment_id: 'not-a-uuid',
+        disposition: 'non_knowledge',
+        reason: 'other_non_operational'
+      }]
+    }, [{
+      id: firstFragment,
+      content_hash: `sha256:${'b'.repeat(64)}`
+    }, {
+      id: secondFragment,
+      content_hash: `sha256:${'c'.repeat(64)}`
+    }])
+
+    expect(materialized.candidates).toHaveLength(1)
+    expect(materialized.candidates[0]?.fragment_id).toBe(firstFragment)
+    expect(materialized.fragment_dispositions).toContainEqual(
+      expect.objectContaining({
+        fragment_id: secondFragment,
+        disposition: 'targeted_retry'
+      }),
+    )
   })
 
   it('binds provenance hashes to trusted leased fragments', () => {

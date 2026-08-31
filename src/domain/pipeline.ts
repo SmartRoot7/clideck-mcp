@@ -104,27 +104,33 @@ export const pipelineCandidatePayloadSchema = candidateRevisionSchema.omit({
   lease_token: true
 })
 
+const candidateAnalysisCandidateSchema = z.object({
+  fragment_id: z.string().uuid(),
+  candidate: pipelineCandidatePayloadSchema
+})
+const candidateAnalysisRejectionSchema = z.object({
+  fragment_id: z.string().uuid(),
+  reason: z.string().trim().min(8).max(500)
+})
+const candidateAnalysisDispositionSchema = z.object({
+  fragment_id: z.string().uuid(),
+  disposition: z.enum([
+    'non_knowledge', 'continuation_required', 'targeted_retry'
+  ]),
+  reason: z.enum([
+    'navigation_or_toc', 'legal_or_copyright', 'part_inventory',
+    'physical_installation', 'general_safety', 'other_non_operational',
+    'boundary_continuation', 'targeted_retry'
+  ]),
+  detail: z.string().trim().min(1).max(500).optional()
+})
+
 const candidateAnalysisArtifactShape = {
-  candidates: z.array(z.object({
-    fragment_id: z.string().uuid(),
-    candidate: pipelineCandidatePayloadSchema
-  })).max(200),
-  rejected_fragments: z.array(z.object({
-    fragment_id: z.string().uuid(),
-    reason: z.string().trim().min(8).max(500)
-  })).max(50).default([]),
-  fragment_dispositions: z.array(z.object({
-    fragment_id: z.string().uuid(),
-    disposition: z.enum([
-      'non_knowledge', 'continuation_required', 'targeted_retry'
-    ]),
-    reason: z.enum([
-      'navigation_or_toc', 'legal_or_copyright', 'part_inventory',
-      'physical_installation', 'general_safety', 'other_non_operational',
-      'boundary_continuation', 'targeted_retry'
-    ]),
-    detail: z.string().trim().min(1).max(500).optional()
-  })).max(50).optional()
+  candidates: z.array(candidateAnalysisCandidateSchema).max(200),
+  rejected_fragments: z.array(candidateAnalysisRejectionSchema)
+    .max(50).default([]),
+  fragment_dispositions: z.array(candidateAnalysisDispositionSchema)
+    .max(50).optional()
 }
 const requireHandledAnalysisArtifact = (
   value: z.infer<z.ZodObject<typeof candidateAnalysisArtifactShape>>,
@@ -251,14 +257,29 @@ export function normalizeCandidateAnalysisOptionalFields(
       }
       const candidateRecord = candidate as Record<string, unknown>
       const cliMode = candidateRecord['cli_mode']
-      if (typeof cliMode !== 'string') return entry
-
-      const compactCliMode = cliMode.replace(/\s+/g, ' ').trim()
       const normalizedCandidate = { ...candidateRecord }
-      if (compactCliMode.length === 0 || compactCliMode.length > 120) {
-        delete normalizedCandidate['cli_mode']
-      } else {
-        normalizedCandidate['cli_mode'] = compactCliMode
+      if (typeof cliMode === 'string') {
+        const compactCliMode = cliMode.replace(/\s+/g, ' ').trim()
+        if (compactCliMode.length === 0 || compactCliMode.length > 120) {
+          delete normalizedCandidate['cli_mode']
+        } else {
+          normalizedCandidate['cli_mode'] = compactCliMode
+        }
+      }
+      const capabilitySlug = candidateRecord['capability_slug']
+      if (typeof capabilitySlug === 'string') {
+        const normalizedCapability = capabilitySlug
+          .trim()
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-+|-+$/g, '')
+          .slice(0, 63)
+          .replace(/-+$/g, '')
+        if (/^[a-z][a-z0-9-]{1,62}$/.test(normalizedCapability)) {
+          normalizedCandidate['capability_slug'] = normalizedCapability
+        } else {
+          delete normalizedCandidate['capability_slug']
+        }
       }
       return {
         ...candidateEntry,
@@ -266,6 +287,96 @@ export function normalizeCandidateAnalysisOptionalFields(
       }
     })
   }
+}
+
+export function materializeCandidateAnalysisArtifact(
+  unparsedArtifact: unknown,
+  unparsedFragments: unknown,
+): z.infer<typeof candidateAnalysisArtifactSchema> {
+  const fragments = Array.isArray(unparsedFragments)
+    ? unparsedFragments.flatMap((fragment) => {
+      if (!fragment || typeof fragment !== 'object' || Array.isArray(fragment)) {
+        return []
+      }
+      const id = (fragment as Record<string, unknown>)['id']
+      return typeof id === 'string' && z.uuid().safeParse(id).success
+        ? [id]
+        : []
+    })
+    : []
+  const allowedFragmentIds = new Set(fragments)
+  const normalized = omitNullObjectProperties(
+    bindCandidateAnalysisProvenanceHashes(
+      normalizeCandidateAnalysisOptionalFields(
+        normalizeCandidateAnalysisStableKeys(unparsedArtifact),
+      ),
+      unparsedFragments,
+    ),
+  ) as Record<string, unknown>
+
+  const candidates = (Array.isArray(normalized['candidates'])
+    ? normalized['candidates']
+    : []).flatMap((candidate) => {
+      const parsed = candidateAnalysisCandidateSchema.safeParse(candidate)
+      return parsed.success && allowedFragmentIds.has(parsed.data.fragment_id)
+        ? [parsed.data]
+        : []
+    })
+  const candidateFragmentIds = new Set(
+    candidates.map((candidate) => candidate.fragment_id),
+  )
+  const rejectedFragments = (Array.isArray(normalized['rejected_fragments'])
+    ? normalized['rejected_fragments']
+    : []).flatMap((rejection) => {
+      const parsed = candidateAnalysisRejectionSchema.safeParse(rejection)
+      return parsed.success &&
+          allowedFragmentIds.has(parsed.data.fragment_id) &&
+          !candidateFragmentIds.has(parsed.data.fragment_id)
+        ? [parsed.data]
+        : []
+    })
+  const rejectedFragmentIds = new Set(
+    rejectedFragments.map((rejection) => rejection.fragment_id),
+  )
+  const dispositions = new Map<string, z.infer<
+    typeof candidateAnalysisDispositionSchema
+  >>()
+  for (const disposition of Array.isArray(normalized['fragment_dispositions'])
+    ? normalized['fragment_dispositions']
+    : []) {
+    const parsed = candidateAnalysisDispositionSchema.safeParse(disposition)
+    if (!parsed.success ||
+        !allowedFragmentIds.has(parsed.data.fragment_id) ||
+        rejectedFragmentIds.has(parsed.data.fragment_id) ||
+        (
+          candidateFragmentIds.has(parsed.data.fragment_id) &&
+          parsed.data.disposition === 'non_knowledge'
+        )) {
+      continue
+    }
+    dispositions.set(parsed.data.fragment_id, parsed.data)
+  }
+  const handledFragmentIds = new Set([
+    ...candidateFragmentIds,
+    ...rejectedFragmentIds,
+    ...dispositions.keys(),
+  ])
+  for (const fragmentId of allowedFragmentIds) {
+    if (handledFragmentIds.has(fragmentId)) continue
+    dispositions.set(fragmentId, {
+      fragment_id: fragmentId,
+      disposition: 'targeted_retry',
+      reason: 'targeted_retry',
+      detail:
+        'One or more AI records failed validation; retry this fragment in a smaller batch.'
+    })
+  }
+
+  return candidateAnalysisArtifactSchema.parse({
+    candidates,
+    rejected_fragments: rejectedFragments,
+    fragment_dispositions: [...dispositions.values()]
+  })
 }
 
 export function bindCandidateAnalysisProvenanceHashes(

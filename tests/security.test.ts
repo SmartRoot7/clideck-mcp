@@ -15,12 +15,16 @@ import {
 import { purgeExpiredSourceArtifacts } from '../src/domain/pipeline-worker.js'
 import { createApiApp } from '../src/http/api-app.js'
 import { isTrustedProxy } from '../src/http/security.js'
+import { researcherRequestBodyLimitBytes } from '../src/http/researcher-app.js'
 import { createLogger } from '../src/logger.js'
 import { createMetrics } from '../src/metrics.js'
 import type { Database } from '../src/db.js'
 import { createTestConfig } from './helpers.js'
 
 describe('security primitives', () => {
+  it('keeps large authenticated researcher artifacts off public body limits', () => {
+    expect(researcherRequestBodyLimitBytes).toBe(1024 * 1024)
+  })
   it('keeps continuous pipeline objects in the production grant matrix', async () => {
     const grants = await readFile(
       resolve(process.cwd(), 'ops/sql/grants.sql'),

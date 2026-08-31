@@ -12,7 +12,6 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { z } from 'zod'
 
 import {
-  bindCandidateAnalysisProvenanceHashes,
   candidateAnalysisArtifactSchema,
   candidateDeepReviewAgentArtifactSchema,
   candidateVerificationAgentArtifactSchema,
@@ -22,8 +21,7 @@ import {
   materializeCandidateVerificationArtifact,
   materializeCandidateDeepReviewArtifact,
   isRetryableCodexPlatformArtifactFailure,
-  normalizeCandidateAnalysisOptionalFields,
-  normalizeCandidateAnalysisStableKeys
+  materializeCandidateAnalysisArtifact
 } from '../domain/pipeline.js'
 import {
   demandDiagnosisSubmissionPayload,
@@ -849,15 +847,9 @@ function validateAgentArtifact(
     case 'demand_diagnosis':
       return parseDemandDiagnosisAgentArtifact(parsed)
     case 'fragment_analysis':
-      return candidateAnalysisArtifactSchema.parse(
-        omitNullObjectProperties(
-          bindCandidateAnalysisProvenanceHashes(
-            normalizeCandidateAnalysisOptionalFields(
-              normalizeCandidateAnalysisStableKeys(parsed),
-            ),
-            task.payload['fragments'],
-          ),
-        ),
+      return materializeCandidateAnalysisArtifact(
+        parsed,
+        task.payload['fragments'],
       )
     case 'candidate_verification':
       return materializeCandidateVerificationArtifact(

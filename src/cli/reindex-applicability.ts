@@ -121,9 +121,14 @@ async function ensureVendorLevelFamilies(
 async function rebuildIndexBatch(
   client: DatabaseClient,
   afterRevisionId: string | null,
-): Promise<{ processed: number; lastRevisionId: string | null }> {
+): Promise<{
+  processed: number
+  indexed: number
+  lastRevisionId: string | null
+}> {
   const result = await client.query<{
     processed: number
+    indexed: number
     last_revision_id: string | null
   }>(
     `WITH target_revisions AS MATERIALIZED (
@@ -298,12 +303,14 @@ async function rebuildIndexBatch(
      )
      SELECT
        count(*)::int AS processed,
-       max(revision_id::text) AS last_revision_id
-     FROM upserted`,
+       (SELECT count(*)::int FROM upserted) AS indexed,
+       max(id::text) AS last_revision_id
+     FROM target_revisions`,
     [classifierVersion, afterRevisionId, batchSize],
   )
   return {
     processed: Number(result.rows[0]?.processed ?? 0),
+    indexed: Number(result.rows[0]?.indexed ?? 0),
     lastRevisionId: result.rows[0]?.last_revision_id ?? null
   }
 }
@@ -311,8 +318,14 @@ async function rebuildIndexBatch(
 const { database, logger } = createCliRuntime()
 let runId: string | null = null
 try {
-  const expected = await database.query<{ count: number }>(
-    `SELECT count(*)::int AS count
+  const expected = await database.query<{
+    count: number
+    omitted_unknown_context: number
+  }>(
+    `SELECT
+       count(*) FILTER (WHERE vendor_id IS NOT NULL)::int AS count,
+       count(*) FILTER (WHERE vendor_id IS NULL)::int
+         AS omitted_unknown_context
      FROM knowledge_revisions
      WHERE domain_id = 'network'`,
   )
@@ -341,6 +354,8 @@ try {
     )
     logger.info({
       revisions_expected: expected.rows[0]?.count ?? 0,
+      revisions_omitted_unknown_context:
+        expected.rows[0]?.omitted_unknown_context ?? 0,
       breakdown: selected.rows
     }, 'Applicability reindex dry run complete')
   } else {
@@ -410,7 +425,7 @@ try {
            SET revisions_indexed = revisions_indexed + $2,
                last_revision_id = $3
            WHERE id = $1`,
-          [runId, batch.processed, lastRevisionId],
+          [runId, batch.indexed, lastRevisionId],
         )
         await batchClient.query('COMMIT')
       } catch (error) {
@@ -487,6 +502,8 @@ try {
       logger.info({
         run_id: runId,
         revisions_expected: expectedCount,
+        revisions_omitted_unknown_context:
+          expected.rows[0]?.omitted_unknown_context ?? 0,
         revisions_indexed: indexed.rows[0]?.count ?? 0,
         portable_revisions: portable,
         manifest_hash: manifestHash,
