@@ -344,6 +344,16 @@ describeIntegration('admin runtime snapshot', () => {
         state: string
         stage: string | null
       }>
+      expect(executors.map((executor) => executor.executor_id)).toEqual([
+        'pipeline-executor-01',
+        'pipeline-executor-02',
+        'pipeline-executor-03',
+        'pipeline-executor-04',
+        'pipeline-executor-05',
+        'pipeline-executor-06',
+        'pipeline-executor-07',
+        'pipeline-executor-08'
+      ])
       expect(executors.find(
         (executor) => executor.executor_id === 'pipeline-executor-01',
       )).toMatchObject({ state: 'running', stage: 'analyze' })
@@ -356,6 +366,9 @@ describeIntegration('admin runtime snapshot', () => {
       expect(executors.find(
         (executor) => executor.executor_id === 'pipeline-executor-04',
       )).toMatchObject({ state: 'standby', stage: null })
+      expect(executors.find(
+        (executor) => executor.executor_id === 'pipeline-executor-08',
+      )).toMatchObject({ state: 'stale', stage: null })
     } finally {
       await client.query('ROLLBACK')
       client.release()

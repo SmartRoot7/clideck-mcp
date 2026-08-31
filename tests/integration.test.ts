@@ -85,6 +85,9 @@ import {
 } from '../src/domain/pipeline.js'
 import { processNextPipelineTask } from '../src/domain/pipeline-worker.js'
 import {
+  reconcileTerminalProcessingRunsWithClient
+} from '../src/domain/intake.js'
+import {
   claimResearchTask,
   failResearchTask,
   requestResearchInput
@@ -164,6 +167,108 @@ describeIntegration('PostgreSQL integration', () => {
   afterAll(async () => {
     await database.end()
   }, 30_000)
+
+  it('terminalizes only the failed processing run and completes its intake job', async () => {
+    const client = await database.connect()
+    const suffix = randomUUID().replaceAll('-', '').slice(0, 12)
+    try {
+      await client.query('BEGIN')
+      const target = await client.query<{ id: string }>(
+        `SELECT id FROM coverage_targets ORDER BY created_at LIMIT 1`,
+      )
+      const source = await client.query<{ id: string }>(
+        `INSERT INTO source_candidates (
+           coverage_target_id, canonical_url, document_type, title, status,
+           discovered_by
+         ) VALUES (
+           $1, $2, 'configuration_guide', 'Run reconciliation fixture',
+           'converting', 'integration-test'
+         ) RETURNING id`,
+        [
+          target.rows[0]!.id,
+          `https://example.invalid/reconcile-${suffix}.pdf`
+        ],
+      )
+      const failedVersion = `pipeline-v2-failed-${suffix}`
+      const currentVersion = `pipeline-v2-current-${suffix}`
+      const failedRun = await client.query<{ id: string }>(
+        `INSERT INTO source_processing_runs (
+           source_candidate_id, processing_version, status, started_at
+         ) VALUES ($1, $2, 'converting', now()) RETURNING id`,
+        [source.rows[0]!.id, failedVersion],
+      )
+      const currentRun = await client.query<{ id: string }>(
+        `INSERT INTO source_processing_runs (
+           source_candidate_id, processing_version, status, started_at
+         ) VALUES ($1, $2, 'queued', now()) RETURNING id`,
+        [source.rows[0]!.id, currentVersion],
+      )
+      const job = await client.query<{ id: string }>(
+        `INSERT INTO intake_jobs (
+           job_type, status, created_by, configuration
+         ) VALUES (
+           'reprocess', 'running', $1, '{}'::jsonb
+         ) RETURNING id`,
+        [siteAdminActorId],
+      )
+      await client.query(
+        `INSERT INTO intake_job_sources (
+           intake_job_id, source_candidate_id, processing_version, status
+         ) VALUES ($1, $2, $3, 'running')`,
+        [job.rows[0]!.id, source.rows[0]!.id, failedVersion],
+      )
+      await client.query(
+        `INSERT INTO pipeline_tasks (
+           task_type, stage, status, priority, source_candidate_id,
+           processing_run_id, dedupe_key, payload, attempts,
+           failure_code, failure_message, completed_at
+         ) VALUES (
+           'source_conversion', 'convert', 'failed', 1, $1, $2,
+           $3, '{}'::jsonb, 5, 'SOURCE_CONVERTER_UNAVAILABLE',
+           'Synthetic terminal converter failure.', now()
+         )`,
+        [
+          source.rows[0]!.id,
+          failedRun.rows[0]!.id,
+          `reconcile-terminal-${suffix}`
+        ],
+      )
+
+      await expect(reconcileTerminalProcessingRunsWithClient(
+        client,
+        [failedRun.rows[0]!.id],
+      )).resolves.toBe(1)
+
+      const state = await client.query<{
+        failed_status: string
+        current_status: string
+        item_status: string
+        job_status: string
+      }>(
+        `SELECT failed.status AS failed_status,
+                current.status AS current_status,
+                item.status AS item_status,
+                job.status AS job_status
+           FROM source_processing_runs failed
+           JOIN source_processing_runs current ON current.id = $2
+           JOIN intake_job_sources item
+             ON item.source_candidate_id = failed.source_candidate_id
+            AND item.processing_version = failed.processing_version
+           JOIN intake_jobs job ON job.id = item.intake_job_id
+          WHERE failed.id = $1`,
+        [failedRun.rows[0]!.id, currentRun.rows[0]!.id],
+      )
+      expect(state.rows[0]).toEqual({
+        failed_status: 'failed',
+        current_status: 'queued',
+        item_status: 'failed',
+        job_status: 'completed_with_errors'
+      })
+    } finally {
+      await client.query('ROLLBACK')
+      client.release()
+    }
+  })
 
   async function completeMissingKnowledgeDiagnosis(
     demandId: string,
@@ -3393,7 +3498,7 @@ describeIntegration('PostgreSQL integration', () => {
     })
     expect(overviewPayload.published_revisions).toBeGreaterThanOrEqual(50)
     expect(overviewPayload.snapshot_at).toEqual(expect.any(String))
-    expect(overviewPayload.executors).toHaveLength(4)
+    expect(overviewPayload.executors).toHaveLength(8)
     expect(overviewPayload.pipeline_funnel).toHaveLength(8)
     expect(new Set(
       overviewPayload.pipeline_funnel.map((stage) => stage.stage),

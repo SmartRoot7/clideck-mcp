@@ -48,6 +48,7 @@ import {
 } from './publication.js'
 import { enforceKnowledgeRisk } from './risk.js'
 import { batchEvidenceUnits, shouldRunQualityCheck } from './pipeline-v2.js'
+import { reconcileTerminalProcessingRunsWithClient } from './intake.js'
 
 const pipelineLeaseSchema = z.object({
   pipeline_task_id: z.string().uuid(),
@@ -1157,6 +1158,7 @@ async function reconcileExpiredAndCompletedWork(
     source_candidate_id: string | null
     expert_task_id: string | null
     payload: Record<string, unknown>
+    processing_run_id: string | null
     attempts: number
     status: string
   }>(
@@ -1185,6 +1187,7 @@ async function reconcileExpiredAndCompletedWork(
         source_candidate_id,
         expert_task_id,
         payload,
+        processing_run_id,
         attempts,
         status`,
   )
@@ -1299,6 +1302,18 @@ async function reconcileExpiredAndCompletedWork(
           ? 'Pipeline lease attempts were exhausted.'
           : 'Expired pipeline lease returned to the queue.'
     })
+  }
+
+  const exhaustedRunIds = expired.rows.flatMap((task) =>
+    task.status === 'failed' && task.processing_run_id
+      ? [task.processing_run_id]
+      : [],
+  )
+  if (exhaustedRunIds.length > 0) {
+    await reconcileTerminalProcessingRunsWithClient(
+      client,
+      [...new Set(exhaustedRunIds)],
+    )
   }
 
   await client.query(
@@ -6884,6 +6899,12 @@ export async function failPipelineTask(
         : input.failure_message,
       metadata: { failure_code: input.failure_code }
     })
+    if (!retrying && task.processing_run_id) {
+      await reconcileTerminalProcessingRunsWithClient(
+        client,
+        [task.processing_run_id],
+      )
+    }
     return {
       pipeline_task_id: task.id,
       status: retrying ? 'queued' : 'failed',

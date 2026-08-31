@@ -35,7 +35,8 @@ import {
   chunkSourceText,
   deterministicCandidateInitialStatus,
   deterministicCandidateEligibleForFastPath,
-  isCandidatePublicationValidationError
+  isCandidatePublicationValidationError,
+  isMissingSourceConverterDependency
 } from '../src/domain/pipeline-worker.js'
 import { maxSourceFragmentBytes } from '../src/domain/pipeline-limits.js'
 import { CorePolicyError } from '@clideck/domain-kit'
@@ -457,6 +458,22 @@ describe('deterministic source processing', () => {
     expect(
       isCandidatePublicationValidationError(new Error('connection lost')),
     ).toBe(false)
+    expect(isCandidatePublicationValidationError({
+      code: '23514',
+      constraint: 'knowledge_applicability_index_check'
+    })).toBe(true)
+    expect(isCandidatePublicationValidationError({
+      code: '23514',
+      constraint: 'unrelated_schema_check'
+    })).toBe(false)
+  })
+
+  it('classifies missing PDF and English OCR runtimes explicitly', () => {
+    expect(isMissingSourceConverterDependency({ code: 'ENOENT' })).toBe(true)
+    expect(isMissingSourceConverterDependency({
+      stderr: 'Error opening data file /usr/share/tessdata/eng.traineddata'
+    })).toBe(true)
+    expect(isMissingSourceConverterDependency({ code: 'ETIMEDOUT' })).toBe(false)
   })
 
   it('uses the safe evidence budget for large related analysis fragments', () => {

@@ -39,6 +39,7 @@
     "knowledge:reindex-applicability": "tsx src/cli/reindex-applicability.ts",
     "knowledge:repair-portable-risk": "tsx src/cli/repair-portable-risk.ts",
     "pipeline:reconcile-074": "tsx src/cli/reconcile-074.ts",
+    "pipeline:reconcile-processing-runs": "tsx src/cli/reconcile-processing-runs.ts",
     "eval": "tsx src/cli/eval.ts",
     "legacy:export": "tsx src/cli/export-legacy.ts",
     "legacy:import": "tsx src/cli/import-legacy.ts",

@@ -192,6 +192,32 @@ if ! CI=true pnpm build >>"$build_log" 2>&1; then
 fi
 REMOTE_BUILD
 
+printf '==> Verify production PDF and OCR runtime\n'
+ssh -o ConnectTimeout=10 "$remote_host" sudo -n /bin/bash -s <<'REMOTE_CONVERTERS'
+set -Eeuo pipefail
+
+converter_runtime_ready() {
+  local command_name
+  for command_name in pdftotext pdfinfo pdftoppm tesseract; do
+    command -v "$command_name" >/dev/null 2>&1 || return 1
+  done
+  tesseract --list-langs 2>/dev/null | grep -Fxq eng
+}
+
+if ! converter_runtime_ready; then
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update
+  apt-get install -y poppler-utils tesseract-ocr tesseract-ocr-eng
+fi
+
+converter_runtime_ready
+pdftotext -v
+pdfinfo -v
+pdftoppm -v
+tesseract --version
+tesseract --list-langs 2>/dev/null | grep -Fx eng
+REMOTE_CONVERTERS
+
 printf '==> Backup, atomic switch, smoke test, rollback on failure\n'
 # Stop the local Luna pool only after every local and remote build gate has
 # passed.  The remote rollout pauses the database pipeline and waits for its

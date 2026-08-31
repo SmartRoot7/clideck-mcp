@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   assuranceFor,
   deriveVersionBranch,
+  effectiveApplicability,
   matchVersionApplicability,
   publicMatchLevel
 } from '../src/domain/applicability.js'
@@ -73,6 +74,49 @@ describe('knowledge applicability', () => {
     expect(assuranceFor('os_family', 'unbounded')).toBe('generic')
     expect(assuranceFor('model', 'same_branch_fallback')).toBe('best_effort')
     expect(assuranceFor('model', 'exact')).toBe('exact')
+  })
+
+  it('widens unresolved model and architecture scopes without changing source data', () => {
+    expect(effectiveApplicability({
+      requestedScope: 'model',
+      platformId: null,
+      architectureSlug: null,
+      requestedVersionScope: 'branch',
+      requestedVersionBranch: null,
+      versionMinimum: 'unknown',
+      versionMaximum: null,
+      versionStrategy: 'major_minor'
+    })).toEqual({
+      scope: 'vendor_os',
+      versionScope: 'unbounded',
+      versionBranch: null,
+      requiresPlatformConfirmation: true
+    })
+    expect(effectiveApplicability({
+      requestedScope: 'model',
+      platformId: 'platform-id',
+      architectureSlug: null,
+      requestedVersionScope: 'exact',
+      requestedVersionBranch: null,
+      versionMinimum: '17.12.4',
+      versionMaximum: '17.12.4',
+      versionStrategy: 'major_minor'
+    })).toMatchObject({
+      scope: 'model',
+      versionScope: 'exact',
+      versionBranch: '17.12',
+      requiresPlatformConfirmation: false
+    })
+    expect(effectiveApplicability({
+      requestedScope: 'architecture',
+      platformId: null,
+      architectureSlug: null,
+      requestedVersionScope: 'unbounded',
+      requestedVersionBranch: null,
+      versionMinimum: null,
+      versionMaximum: null,
+      versionStrategy: 'vendor'
+    }).scope).toBe('vendor_os')
   })
 
   it('does not misclassify portable inspection commands as dangerous', () => {

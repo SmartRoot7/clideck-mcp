@@ -27,7 +27,7 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y \
   ca-certificates caddy curl gnupg jq postgresql postgresql-client \
-  rsync tar ufw xz-utils
+  poppler-utils rsync tar tesseract-ocr tesseract-ocr-eng ufw xz-utils
 
 if ! command -v cloudflared >/dev/null 2>&1; then
   curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg |

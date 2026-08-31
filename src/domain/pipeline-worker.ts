@@ -231,12 +231,54 @@ export function isCandidatePublicationValidationError(
   error: unknown,
 ): boolean {
   const message = error instanceof Error ? error.message : ''
+  const databaseError = error as { code?: unknown; constraint?: unknown }
+  const applicabilityConstraints = new Set([
+    'knowledge_applicability_index_check',
+    'knowledge_applicability_index_check1',
+    'knowledge_applicability_index_check2',
+    'knowledge_applicability_index_check3',
+    'knowledge_applicability_index_capability_slug_check',
+    'knowledge_applicability_index_classifier_version_check',
+    'knowledge_applicability_index_classification_source_check',
+    'knowledge_applicability_index_scope_level_check',
+    'knowledge_applicability_index_version_scope_check'
+  ])
   return (
     error instanceof CorePolicyError ||
     error instanceof z.ZodError ||
     message.startsWith('CANDIDATE_') ||
-    message.startsWith('NETWORK_DOMAIN_CANDIDATE_INVALID')
+    message.startsWith('NETWORK_DOMAIN_CANDIDATE_INVALID') ||
+    (
+      databaseError.code === '23514' &&
+      typeof databaseError.constraint === 'string' &&
+      applicabilityConstraints.has(databaseError.constraint)
+    )
   )
+}
+
+export function isMissingSourceConverterDependency(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const candidate = error as {
+    code?: unknown
+    message?: unknown
+    stderr?: unknown
+  }
+  return candidate.code === 'ENOENT' || (
+    typeof candidate.stderr === 'string' &&
+    /failed loading language ['"]?eng|error opening data file.*eng\.traineddata/i
+      .test(candidate.stderr)
+  ) || (
+    typeof candidate.message === 'string' &&
+    /failed loading language ['"]?eng|eng\.traineddata/i.test(candidate.message)
+  )
+}
+
+function sourceConverterError(error: unknown): Error {
+  return isMissingSourceConverterDependency(error)
+    ? new Error('SOURCE_CONVERTER_UNAVAILABLE')
+    : error instanceof Error
+      ? error
+      : new Error('SOURCE_CONVERSION_FAILED')
 }
 
 async function fetchPublicDocument(
@@ -887,13 +929,16 @@ async function ocrPdfPages(
           )
           const ocr = await execFileAsync(
             'tesseract',
-            [`${prefix}.png`, 'stdout', '--dpi', '180'],
+            [`${prefix}.png`, 'stdout', '--dpi', '180', '-l', 'eng'],
             { timeout: 60_000, maxBuffer: 16 * 1024 * 1024 },
           )
           if (ocr.stdout.trim()) {
             pages.push(`\n[Page ${page}]\n${ocr.stdout.trim()}`)
           }
-        } catch {
+        } catch (error) {
+          if (isMissingSourceConverterDependency(error)) {
+            throw sourceConverterError(error)
+          }
           pages.push(`\n[Page ${page} unreadable; targeted retry required]\n`)
         }
       }
@@ -926,17 +971,26 @@ async function convertArtifact(
 
   const outputPath = `${sourcePath}.pdftotext`
   try {
-    await execFileAsync('pdftotext', ['-layout', sourcePath, outputPath], {
-      timeout: 120_000,
-      maxBuffer: 4 * 1024 * 1024
-    })
+    try {
+      await execFileAsync('pdftotext', ['-layout', sourcePath, outputPath], {
+        timeout: 120_000,
+        maxBuffer: 4 * 1024 * 1024
+      })
+    } catch (error) {
+      throw sourceConverterError(error)
+    }
     const extracted = (await readFile(outputPath, 'utf8'))
       .replace(/\u0000/g, '')
       .trim()
     const info = await execFileAsync('pdfinfo', [sourcePath], {
       timeout: 30_000,
       maxBuffer: 2 * 1024 * 1024
-    }).catch(() => null)
+    }).catch((error: unknown) => {
+      if (isMissingSourceConverterDependency(error)) {
+        throw sourceConverterError(error)
+      }
+      return null
+    })
     const pageMatch = info
       ? /^Pages:\s+(\d+)$/im.exec(info.stdout)
       : null
@@ -2138,9 +2192,12 @@ async function publishCandidateBatch(
     revision_id: string | null
     knowledge_demand_id: string | null
     processing_run_id: string | null
+    source_fragment_id: string | null
+    resolution_attempts: number
   }>(
     `SELECT candidate.id, candidate.payload, candidate.revision_id,
-            origin.knowledge_demand_id, candidate.processing_run_id
+            origin.knowledge_demand_id, candidate.processing_run_id,
+            candidate.source_fragment_id, candidate.resolution_attempts
        FROM knowledge_candidates candidate
        JOIN pipeline_tasks origin ON origin.id = candidate.pipeline_task_id
       WHERE candidate.id = ANY($1::uuid[])
@@ -2160,6 +2217,10 @@ async function publishCandidateBatch(
   const deferred: Array<{
     candidateId: string
     reason: string
+    fingerprint: string
+    processingRunId: string | null
+    sourceFragmentId: string | null
+    resolutionAttempts: number
   }> = []
   for (const candidate of candidates.rows) {
     try {
@@ -2225,6 +2286,13 @@ async function publishCandidateBatch(
         error instanceof CorePolicyError ? `${error.code}: ` : ''
       deferred.push({
         candidateId: candidate.id,
+        fingerprint: bufferHash(Buffer.from([
+          error instanceof CorePolicyError ? error.code : 'validation',
+          message
+        ].join('\0'))),
+        processingRunId: candidate.processing_run_id,
+        sourceFragmentId: candidate.source_fragment_id,
+        resolutionAttempts: candidate.resolution_attempts,
         reason:
           `Publication preflight rejected candidate: ${policyCode}${message}`
             .slice(0, 4_000)
@@ -2234,28 +2302,126 @@ async function publishCandidateBatch(
 
   const result = await withTransaction(database, async (client) => {
     let deferredLow = 0
-    let deferredMedium = 0
+    let excludedMalformed = 0
     for (const candidate of deferred) {
-      const updated = await client.query<{ resolution_attempts: number }>(
-        `UPDATE knowledge_candidates
+      if (candidate.resolutionAttempts === 0) {
+        const updated = await client.query(
+          `UPDATE knowledge_candidates
             SET status = 'deep_review',
                 publication_task_id = NULL,
                 deep_review_task_id = NULL,
                 resolution_code = 'publication_preflight',
                 resolution_reason = $3,
+                publication_failure_fingerprint = $4,
                 next_review_at = now(),
                 updated_at = now()
           WHERE id = $1
-            AND publication_task_id = $2
-          RETURNING resolution_attempts`,
-        [candidate.candidateId, claimed.task.id, candidate.reason],
+            AND publication_task_id = $2`,
+          [
+            candidate.candidateId,
+            claimed.task.id,
+            candidate.reason,
+            candidate.fingerprint
+          ],
+        )
+        deferredLow += updated.rowCount ?? 0
+        continue
+      }
+
+      const excluded = await client.query(
+        `UPDATE knowledge_candidates
+            SET status = 'rejected',
+                fidelity_status = 'excluded',
+                exclusion_status = 'malformed',
+                excluded_at = now(),
+                excluded_by = 'publication-preflight',
+                publication_task_id = NULL,
+                deep_review_task_id = NULL,
+                resolution_code = 'publication_repair_exhausted',
+                resolution_reason = $3,
+                publication_failure_fingerprint = $4,
+                next_review_at = NULL,
+                updated_at = now()
+          WHERE id = $1
+            AND publication_task_id = $2`,
+        [
+          candidate.candidateId,
+          claimed.task.id,
+          candidate.reason,
+          candidate.fingerprint
+        ],
       )
-      if ((updated.rows[0]?.resolution_attempts ?? 0) > 0) {
-        deferredMedium += 1
-      } else if (updated.rows[0]) {
-        deferredLow += 1
+      if ((excluded.rowCount ?? 0) === 0) continue
+      excludedMalformed += 1
+      if (candidate.sourceFragmentId) {
+        await client.query(
+          `UPDATE source_fragments
+              SET disposition = 'targeted_retry',
+                  disposition_reason = 'targeted_retry',
+                  disposition_detail =
+                    'Publication repair exhausted for a source-backed candidate.',
+                  updated_at = now()
+            WHERE id = $1`,
+          [candidate.sourceFragmentId],
+        )
+      }
+      if (candidate.processingRunId) {
+        await client.query(
+          `UPDATE source_processing_runs
+              SET status = 'failed',
+                  failure_code = 'repair_exhausted',
+                  failure_message =
+                    'A source-backed malformed candidate exhausted its targeted repair.',
+                  completed_at = now(),
+                  counters = counters || jsonb_build_object(
+                    'malformed_candidates_excluded',
+                    coalesce(
+                      (counters->>'malformed_candidates_excluded')::int,
+                      0
+                    ) + 1
+                  ),
+                  updated_at = now()
+            WHERE id = $1
+              AND status NOT IN (
+                'completed', 'completed_with_repairs', 'cancelled',
+                'failed', 'unavailable'
+              )`,
+          [candidate.processingRunId],
+        )
+        await client.query(
+          `UPDATE intake_job_sources item
+              SET status = 'failed',
+                  result = result || jsonb_build_object(
+                    'failure_code', 'repair_exhausted',
+                    'failure_message',
+                      'A source-backed malformed candidate exhausted repair.'
+                  ),
+                  updated_at = now()
+             FROM source_processing_runs run
+            WHERE run.id = $1
+              AND item.source_candidate_id = run.source_candidate_id
+              AND item.processing_version = run.processing_version
+              AND item.status = 'running'`,
+          [candidate.processingRunId],
+        )
       }
     }
+    await client.query(
+      `UPDATE intake_jobs job
+          SET status = 'completed_with_errors',
+              completed_at = now(),
+              updated_at = now()
+        WHERE job.status IN ('queued', 'running')
+          AND EXISTS (
+            SELECT 1 FROM intake_job_sources item
+             WHERE item.intake_job_id = job.id AND item.status = 'failed'
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM intake_job_sources item
+             WHERE item.intake_job_id = job.id
+               AND item.status IN ('queued', 'running')
+          )`,
+    )
     const release = revisions.length > 0
       ? await publishKnowledgeBatch(
           client,
@@ -2382,7 +2548,7 @@ async function publishCandidateBatch(
       scope: 'record',
       fromStage: 'ready',
       toStage: 'deep_medium',
-      count: deferredMedium,
+      count: 0,
       kind: 'retry',
       taskId: claimed.task.id
     })
@@ -2390,6 +2556,7 @@ async function publishCandidateBatch(
       records_reserved: payload.candidate_ids.length,
       records_published: revisions.length,
       records_deferred_to_deep_review: deferred.length,
+      records_excluded_malformed: excludedMalformed,
       release_id: release?.releaseId ?? null,
       release_sequence: release?.sequence ?? null
     }

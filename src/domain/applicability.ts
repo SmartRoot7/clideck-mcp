@@ -187,6 +187,58 @@ function fallbackFamilySlug(vendorSlug: string, osSlug: string): string {
   return `${readable.slice(0, 55)}-${suffix}`
 }
 
+export function effectiveApplicability(input: {
+  requestedScope: ApplicabilityScope | null | undefined
+  platformId: string | null
+  architectureSlug: string | null | undefined
+  requestedVersionScope: VersionScope | null | undefined
+  requestedVersionBranch: string | null | undefined
+  versionMinimum: string | null | undefined
+  versionMaximum: string | null | undefined
+  versionStrategy: SoftwareVersionStrategy
+}): {
+  scope: ApplicabilityScope
+  versionScope: VersionScope
+  versionBranch: string | null
+  requiresPlatformConfirmation: boolean
+} {
+  const requestedScope = input.requestedScope ?? (
+    input.platformId ? 'model' : 'vendor_os'
+  )
+  const scope: ApplicabilityScope =
+    requestedScope === 'model' && !input.platformId
+      ? 'vendor_os'
+      : requestedScope === 'architecture' && !input.architectureSlug
+        ? 'vendor_os'
+        : requestedScope
+  const requestedVersionScope = input.requestedVersionScope ?? (
+    input.versionMinimum && input.versionMaximum
+      ? input.versionMinimum === input.versionMaximum ? 'exact' : 'range'
+      : 'unbounded'
+  )
+  const derivedBranch = input.requestedVersionBranch ?? (
+    requestedVersionScope === 'exact'
+      ? deriveVersionBranch(input.versionMinimum, input.versionStrategy)
+      : requestedVersionScope === 'branch'
+        ? deriveVersionBranch(
+            input.versionMinimum ?? input.versionMaximum,
+            input.versionStrategy,
+          )
+        : null
+  )
+  const versionScope = requestedVersionScope === 'branch' && !derivedBranch
+    ? 'unbounded'
+    : requestedVersionScope
+  return {
+    scope,
+    versionScope,
+    versionBranch: versionScope === 'unbounded' ? null : derivedBranch,
+    requiresPlatformConfirmation: scope !== 'model' && (
+      requestedScope === 'model' || requestedScope === 'architecture'
+    )
+  }
+}
+
 export async function indexPublishedKnowledgeApplicability(
   client: DatabaseClient,
   input: {
@@ -234,24 +286,17 @@ export async function indexPublishedKnowledgeApplicability(
      ON CONFLICT DO NOTHING`,
     [input.operatingSystemId, familyRow.id],
   )
-  const scope = candidate.applicability_scope ?? (
-    input.platformId ? 'model' : 'vendor_os'
-  )
-  const versionScope = candidate.version_scope ?? (
-    candidate.version_min && candidate.version_max
-      ? candidate.version_min === candidate.version_max ? 'exact' : 'range'
-      : 'unbounded'
-  )
-  const versionBranch = candidate.version_branch ?? (
-    versionScope === 'exact'
-      ? deriveVersionBranch(candidate.version_min, familyRow.version_strategy)
-      : versionScope === 'branch'
-        ? deriveVersionBranch(
-            candidate.version_min ?? candidate.version_max,
-            familyRow.version_strategy,
-          )
-        : null
-  )
+  const effective = effectiveApplicability({
+    requestedScope: candidate.applicability_scope,
+    platformId: input.platformId,
+    architectureSlug: candidate.architecture_slug,
+    requestedVersionScope: candidate.version_scope,
+    requestedVersionBranch: candidate.version_branch,
+    versionMinimum: candidate.version_min,
+    versionMaximum: candidate.version_max,
+    versionStrategy: familyRow.version_strategy
+  })
+  const { scope, versionScope, versionBranch } = effective
   const hardwareSensitive = candidate.dangerous || [
     'service_disruptive',
     'data_loss',
@@ -298,7 +343,8 @@ export async function indexPublishedKnowledgeApplicability(
       versionScope,
       versionBranch,
       semanticKey(candidate),
-      scope !== 'model' && hardwareSensitive
+      effective.requiresPlatformConfirmation ||
+        (scope !== 'model' && hardwareSensitive)
     ],
   )
 }

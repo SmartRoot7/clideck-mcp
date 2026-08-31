@@ -10,6 +10,11 @@ import {
   getMcpRequestLog,
   listMcpRequestLogs
 } from './mcp-observability.js'
+import { pipelineExecutorIds } from './pipeline-runtime.js'
+
+const executorValuesSql = pipelineExecutorIds
+  .map((executorId, index) => `('${executorId}', ${index + 1})`)
+  .join(',\n           ')
 
 export type AdminRole = 'admin' | 'super_admin'
 
@@ -564,10 +569,7 @@ export async function getAdminOverview(
        ),
        executor_ids(executor_id, ordinal) AS (
          VALUES
-           ('pipeline-executor-01', 1),
-           ('pipeline-executor-02', 2),
-           ('pipeline-executor-03', 3),
-           ('pipeline-executor-04', 4)
+           ${executorValuesSql}
        ),
        executor_runtime AS (
          SELECT

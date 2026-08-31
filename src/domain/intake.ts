@@ -486,6 +486,186 @@ export async function controlIntakeJob(
   })
 }
 
+const activeProcessingRunStatuses = [
+  'queued', 'acquiring', 'converting', 'segmenting', 'extracting',
+  'auditing', 'repairing', 'reconciling', 'normalizing', 'publishing', 'paused'
+] as const
+
+/**
+ * Close run-bound work after a terminal task failure or an operator cancel.
+ * Every write is scoped by processing_run_id so a delayed task from an older
+ * processing version cannot fail the current run for the same source.
+ */
+export async function reconcileTerminalProcessingRunsWithClient(
+  client: DatabaseClient,
+  processingRunIds: string[] | null = null,
+): Promise<number> {
+  const reconciled = await client.query<{ id: string }>(
+    `WITH terminal AS (
+       SELECT run.id,
+              CASE
+                WHEN job.status = 'cancelled' THEN 'cancelled'
+                ELSE 'failed'
+              END AS terminal_status,
+              coalesce(task.failure_code,
+                CASE WHEN job.status = 'cancelled'
+                  THEN 'INTAKE_JOB_CANCELLED'
+                  ELSE 'PROCESSING_TASK_FAILED' END
+              ) AS failure_code,
+              coalesce(task.failure_message,
+                CASE WHEN job.status = 'cancelled'
+                  THEN 'The intake job was cancelled by an administrator.'
+                  ELSE 'A terminal run-bound pipeline task failed.' END
+              ) AS failure_message
+         FROM source_processing_runs run
+         LEFT JOIN LATERAL (
+           SELECT failed.id AS task_id,
+                  failed.failure_code, failed.failure_message
+             FROM pipeline_tasks failed
+            WHERE failed.processing_run_id = run.id
+              AND failed.status = 'failed'
+            ORDER BY failed.completed_at DESC NULLS LAST, failed.updated_at DESC
+            LIMIT 1
+         ) task ON true
+         LEFT JOIN intake_job_sources item
+           ON item.source_candidate_id = run.source_candidate_id
+          AND item.processing_version = run.processing_version
+         LEFT JOIN intake_jobs job ON job.id = item.intake_job_id
+        WHERE run.status = ANY($1::text[])
+          AND ($2::uuid[] IS NULL OR run.id = ANY($2::uuid[]))
+          AND (
+            task.task_id IS NOT NULL
+            OR (
+              job.status = 'cancelled'
+              AND NOT EXISTS (
+                SELECT 1 FROM pipeline_tasks live
+                 WHERE live.processing_run_id = run.id
+                   AND live.status IN ('claimed', 'running')
+                   AND live.lease_until > now()
+              )
+            )
+          )
+     ), updated AS (
+       UPDATE source_processing_runs run
+          SET status = terminal.terminal_status,
+              failure_code = terminal.failure_code,
+              failure_message = terminal.failure_message,
+              completed_at = now(),
+              updated_at = now()
+         FROM terminal
+        WHERE run.id = terminal.id
+        RETURNING run.id
+     )
+     SELECT id FROM updated`,
+    [activeProcessingRunStatuses, processingRunIds],
+  )
+  const runIds = reconciled.rows.map((row) => row.id)
+  if (runIds.length === 0) return 0
+
+  await client.query(
+    `UPDATE pipeline_tasks
+        SET status = 'cancelled',
+            claim_owner = NULL,
+            lease_token_hash = NULL,
+            lease_until = NULL,
+            heartbeat_at = NULL,
+            failure_code = coalesce(failure_code, 'PROCESSING_RUN_TERMINATED'),
+            failure_message = coalesce(
+              failure_message,
+              'Task cancelled because its processing run is terminal.'
+            ),
+            completed_at = coalesce(completed_at, now()),
+            updated_at = now()
+      WHERE processing_run_id = ANY($1::uuid[])
+        AND status IN ('queued', 'claimed', 'running')`,
+    [runIds],
+  )
+  await client.query(
+    `UPDATE source_fragments fragment
+        SET status = 'failed',
+            reservation_task_id = NULL,
+            updated_at = now()
+      WHERE fragment.processing_run_id = ANY($1::uuid[])
+        AND fragment.status IN ('queued', 'reserved', 'analyzing')`,
+    [runIds],
+  )
+  await client.query(
+    `UPDATE intake_job_sources item
+        SET status = CASE WHEN run.status = 'cancelled'
+                          THEN 'cancelled' ELSE 'failed' END,
+            result = item.result || jsonb_build_object(
+              'failure_code', run.failure_code,
+              'failure_message', run.failure_message
+            ),
+            updated_at = now()
+       FROM source_processing_runs run
+      WHERE run.id = ANY($1::uuid[])
+        AND item.source_candidate_id = run.source_candidate_id
+        AND item.processing_version = run.processing_version
+        AND item.status IN ('queued', 'running')`,
+    [runIds],
+  )
+  await client.query(
+    `UPDATE intake_jobs job
+        SET status = CASE
+              WHEN job.status = 'cancelled' THEN 'cancelled'
+              WHEN EXISTS (
+                SELECT 1 FROM intake_job_sources failed
+                 WHERE failed.intake_job_id = job.id
+                   AND failed.status IN ('failed', 'unavailable')
+              ) THEN 'completed_with_errors'
+              ELSE 'completed'
+            END,
+            completed_at = now(),
+            updated_at = now()
+      WHERE job.status IN ('queued', 'running', 'cancelled')
+        AND EXISTS (
+          SELECT 1 FROM intake_job_sources member
+           WHERE member.intake_job_id = job.id
+             AND member.source_candidate_id IN (
+               SELECT run.source_candidate_id
+                 FROM source_processing_runs run
+                WHERE run.id = ANY($1::uuid[])
+             )
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM intake_job_sources open_item
+           WHERE open_item.intake_job_id = job.id
+             AND open_item.status IN ('queued', 'running')
+        )`,
+    [runIds],
+  )
+  await client.query(
+    `DELETE FROM active_source_slots slot
+      WHERE slot.source_candidate_id IN (
+        SELECT run.source_candidate_id
+          FROM source_processing_runs run
+         WHERE run.id = ANY($1::uuid[])
+      )
+        AND NOT EXISTS (
+          SELECT 1 FROM source_processing_runs newer
+           WHERE newer.source_candidate_id = slot.source_candidate_id
+             AND newer.id <> ALL($1::uuid[])
+             AND newer.status = ANY($2::text[])
+        )`,
+    [runIds, activeProcessingRunStatuses],
+  )
+  return runIds.length
+}
+
+export async function reconcileTerminalProcessingRuns(
+  database: Database,
+  processingRunIds: string[] | null = null,
+): Promise<number> {
+  return withTransaction(
+    database,
+    (client) => reconcileTerminalProcessingRunsWithClient(
+      client,
+      processingRunIds,
+    ),
+  )
+}
+
 export async function createReprocessJob(
   database: Database,
   sourceIds: string[] | null,

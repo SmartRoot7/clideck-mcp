@@ -12,6 +12,7 @@ import {
   purgeExpiredSourceArtifacts
 } from '../domain/pipeline-worker.js'
 import { purgeExpiredMcpRequestLogs } from '../domain/mcp-observability.js'
+import { reconcileTerminalProcessingRuns } from '../domain/intake.js'
 import { refreshPublicStatsCacheIfStale } from '../domain/telemetry.js'
 import { createLogger } from '../logger.js'
 
@@ -21,6 +22,7 @@ const database = createDatabase(config, logger, config.workerDatabaseUrl)
 const instanceId = `worker-${randomUUID()}`
 const abortController = new AbortController()
 let nextRequestLogCleanupAt = 0
+let nextProcessingReconciliationAt = 0
 
 process.once('SIGTERM', () => abortController.abort())
 process.once('SIGINT', () => abortController.abort())
@@ -29,6 +31,10 @@ logger.info({ instanceId }, 'CliDeck MCP worker started')
 
 try {
   while (!abortController.signal.aborted) {
+    if (Date.now() >= nextProcessingReconciliationAt) {
+      await reconcileTerminalProcessingRuns(database)
+      nextProcessingReconciliationAt = Date.now() + 30_000
+    }
     await runWorkerMaintenance(database, instanceId)
     await refreshPublicStatsCacheIfStale(database)
     await purgeExpiredSourceArtifacts(database, logger)
