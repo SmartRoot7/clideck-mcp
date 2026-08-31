@@ -648,5 +648,22 @@ The Pipeline 2.0 pilot exposed four independent failure modes:
 
 ### Verification and deployment
 
-- Type checks, full tests, evaluation, build, production deployment and the
-  next clean soak baseline are pending.
+- Deployed commit `606a02956f208e3f3b603175434dcca76785497c`
+  through `ops/scripts/deploy-production.sh`. The first preflight correctly
+  stopped before production on an ambiguous `completed_at` reference in the
+  new `UPDATE ... FROM`; qualifying it as `run.completed_at` was the only
+  correction required.
+- The successful preflight passed 215/215 disposable PostgreSQL tests,
+  250/250 product evaluations, all workspace tests and the full build. Backup,
+  migrations, applicability verification, atomic switch, smoke tests and the
+  standard launchd reinstall completed successfully.
+- At the new clean baseline `2026-08-31T13:56:25Z`, health/readiness, Tailscale
+  admin health and all services were healthy. Overview contained eight ordered
+  Luna cards with eight fresh leases, settings `8/2`, zero stale tasks and zero
+  worker/researcher restarts. Active knowledge was 121208 and Fidelity QA was
+  4200.
+- The 59 drained historical runs closed, completed publication reservations
+  fell to zero, and the stricter orphan query returned zero. Backlog runs with
+  claimable queued fragments remained active as intended. Journals since the
+  clean start contained zero warnings and zero tracked failures. The two-hour
+  soak restarts from this baseline.
