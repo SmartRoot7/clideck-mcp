@@ -90,6 +90,35 @@ being completed elsewhere and could exceed the client query timeout.
   restart counters were zero, and no monitored error had appeared since the
   final service activation.
 
+## 2026-08-31 — Researcher terminal reconciliation intake grants
+
+### Evidence and cause
+
+The first follow-up check on `da1216b87d5f1d70422d682c722e31396500a9fa`
+showed five PostgreSQL `42501` failures between `09:11:59Z` and `09:12:01Z`.
+Removing lock waits allowed terminal reconciliation to reach its next intended
+step: updating the associated `intake_job_sources` and `intake_jobs` outcome.
+The researcher role could read both tables but had no update privilege, so the
+transaction rolled back and concurrent claims reported the same failure.
+
+### Minimal correction
+
+- Grant researcher column-level UPDATE only for
+  `intake_job_sources.status/result/updated_at` and
+  `intake_jobs.status/completed_at/updated_at`.
+- Do not grant changes to job configuration, source identity, processing
+  version, ownership, counters, timestamps unrelated to completion, or general
+  table UPDATE.
+- Extend both the source grant contract and the disposable PostgreSQL role test
+  to require the six needed columns and reject two representative unrelated
+  columns.
+
+### Verification and deployment
+
+- Run the complete disposable PostgreSQL suite and 250-case evaluation, deploy
+  only through `ops/scripts/deploy-production.sh`, reinstall the launchd pool,
+  and restart the two-hour soak from a genuinely clean snapshot.
+
 ## 2026-08-31 — Known-answer demand reconciliation role contract
 
 ### Evidence and cause

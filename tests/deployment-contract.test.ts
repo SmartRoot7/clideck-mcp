@@ -35,6 +35,12 @@ describe('production database role contract', () => {
     expect(grants).toMatch(
       /GRANT SELECT ON[\s\S]*?source_processing_runs,[\s\S]*?intake_jobs,[\s\S]*?intake_job_sources,[\s\S]*?TO clideck_mcp_researcher;/,
     )
+    expect(grants).toMatch(
+      /GRANT UPDATE \(status, result, updated_at\)\s+ON intake_job_sources TO clideck_mcp_researcher;/,
+    )
+    expect(grants).toMatch(
+      /GRANT UPDATE \(status, completed_at, updated_at\)\s+ON intake_jobs TO clideck_mcp_researcher;/,
+    )
   })
 
   it('applies production grants before role-sensitive preflight tests', async () => {

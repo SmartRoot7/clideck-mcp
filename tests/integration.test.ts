@@ -236,6 +236,40 @@ describeIntegration('PostgreSQL integration', () => {
     })
   })
 
+  it('grants researcher only the intake columns used by run reconciliation', async () => {
+    const privileges = await database.query<{
+      required: boolean
+      unrelated: boolean
+    }>(
+      `SELECT
+         bool_and(has_column_privilege(
+           'clideck_mcp_researcher', required.table_name,
+           required.column_name, 'UPDATE'
+         )) AS required,
+         bool_or(has_column_privilege(
+           'clideck_mcp_researcher', unrelated.table_name,
+           unrelated.column_name, 'UPDATE'
+         )) AS unrelated
+       FROM (VALUES
+         ('intake_job_sources', 'status'),
+         ('intake_job_sources', 'result'),
+         ('intake_job_sources', 'updated_at'),
+         ('intake_jobs', 'status'),
+         ('intake_jobs', 'completed_at'),
+         ('intake_jobs', 'updated_at')
+       ) AS required(table_name, column_name)
+       CROSS JOIN (VALUES
+         ('intake_job_sources', 'processing_version'),
+         ('intake_jobs', 'configuration')
+       ) AS unrelated(table_name, column_name)`,
+    )
+
+    expect(privileges.rows[0]).toEqual({
+      required: true,
+      unrelated: false
+    })
+  })
+
   it('terminalizes only the failed processing run and completes its intake job', async () => {
     const client = await database.connect()
     const suffix = randomUUID().replaceAll('-', '').slice(0, 12)

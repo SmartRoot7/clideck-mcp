@@ -368,6 +368,10 @@ GRANT INSERT, UPDATE ON
   knowledge_demand_topic_memberships,
   knowledge_demand_diagnostics
 TO clideck_mcp_researcher;
+GRANT UPDATE (status, result, updated_at)
+ON intake_job_sources TO clideck_mcp_researcher;
+GRANT UPDATE (status, completed_at, updated_at)
+ON intake_jobs TO clideck_mcp_researcher;
 GRANT UPDATE ON
   coverage_targets,
   source_candidates,
