@@ -1827,7 +1827,7 @@ async function queueSourceWork(
      ) run ON true
      LEFT JOIN knowledge_demands demand ON demand.id = sc.knowledge_demand_id
      WHERE sc.id = $1
-     FOR UPDATE OF sc`,
+     FOR NO KEY UPDATE OF sc`,
     [sourceId],
   )
   const source = sourceResult.rows[0]
@@ -1959,13 +1959,10 @@ async function queueSourceWork(
 
   if (
     mode === 'ai' ||
-    mode === 'verification' ||
-    mode === 'analysis'
+    mode === 'verification'
   ) {
-    // Fidelity is an asynchronous audit lane and may be scheduled whenever
-    // source work is considered; it is no longer coupled to the legacy
-    // mandatory verification lane.
-    if (mode === 'ai' || mode === 'verification' || mode === 'analysis') {
+    // Fidelity is an asynchronous audit lane. Keep it in the bounded Verify
+    // allocator; an Analyze request must always reserve extraction work.
     // The profile is shared by every Fidelity batch. Create it once, but do
     // not update (and therefore do not row-lock) it while selecting candidate
     // work. Submission aggregates its counters in one short update after the
@@ -2187,9 +2184,10 @@ async function queueSourceWork(
       )
       return true
     }
-    }
     if (mode === 'verification') return false
+  }
 
+  if (mode === 'ai' || mode === 'analysis') {
     const demandTermPatterns = source.demand_question
       ? knowledgeDemandTermPatterns(source.demand_question)
       : []
@@ -2833,7 +2831,7 @@ async function maintainPreparedSourceBuffer(
        CASE WHEN ranked.is_demand THEN 0 ELSE 1 END,
        ranked.discovered_at
      LIMIT $1
-     FOR UPDATE OF source SKIP LOCKED`,
+     FOR NO KEY UPDATE OF source SKIP LOCKED`,
     [preparationLimit],
   )
   for (const source of preparationSources.rows) {
@@ -2859,7 +2857,7 @@ async function maintainPreparedSourceBuffer(
        CASE WHEN ranked.is_demand THEN 0 ELSE 1 END,
        ranked.discovered_at
      LIMIT $1
-     FOR UPDATE OF source SKIP LOCKED`,
+     FOR NO KEY UPDATE OF source SKIP LOCKED`,
     [available],
   )
   for (const source of discovered.rows) {
@@ -3082,7 +3080,7 @@ async function reconcileSourceLanes(
          CASE source.status WHEN 'analyzing' THEN 0 ELSE 1 END,
          source.updated_at
        LIMIT 1
-       FOR UPDATE OF source SKIP LOCKED`,
+       FOR NO KEY UPDATE OF source SKIP LOCKED`,
       [restrictToBaseline],
     )
     if (!source.rows[0]) break
@@ -3555,7 +3553,7 @@ async function ensureLegacyWorkInTransaction(
          END,
          sc.discovered_at
        LIMIT 1
-       FOR UPDATE OF sc SKIP LOCKED`,
+       FOR NO KEY UPDATE OF sc SKIP LOCKED`,
     )
     const sourceId = source.rows[0]?.id
     if (!sourceId) break
@@ -5389,7 +5387,7 @@ async function reuseDuplicateSourcesForKnowledgeDemand(
        source.updated_at DESC,
        fragment.ordinal
      LIMIT 32
-     FOR UPDATE OF source, fragment SKIP LOCKED`,
+     FOR NO KEY UPDATE OF source, fragment SKIP LOCKED`,
     [knowledgeDemandId, duplicateSourceIds, termPatterns],
   )
   if (fragments.rows.length === 0) {

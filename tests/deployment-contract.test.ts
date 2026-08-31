@@ -215,6 +215,30 @@ describe('production database role contract', () => {
     )
   })
 
+  it('keeps Analyze in extraction and source locks compatible with event FKs', async () => {
+    const pipeline = await readFile(
+      resolve(process.cwd(), 'src/domain/pipeline.ts'),
+      'utf8',
+    )
+    const sourceWork = pipeline.slice(
+      pipeline.indexOf('async function queueSourceWork'),
+      pipeline.indexOf('async function queueDiscoveryWork'),
+    )
+
+    expect(sourceWork).toMatch(
+      /mode === 'ai' \|\|\s*mode === 'verification'[\s\S]*?Fidelity is an asynchronous audit lane/,
+    )
+    expect(sourceWork).toMatch(
+      /if \(mode === 'verification'\) return false\s*}\s*if \(mode === 'ai' \|\| mode === 'analysis'\)/,
+    )
+    expect(sourceWork).not.toMatch(
+      /mode === 'verification' \|\|\s*mode === 'analysis'[\s\S]*?Fidelity is an asynchronous audit lane/,
+    )
+    expect(pipeline).not.toMatch(/FOR UPDATE OF (?:sc|source)/)
+    expect(pipeline).toMatch(/FOR NO KEY UPDATE OF sc/)
+    expect(pipeline).toMatch(/FOR NO KEY UPDATE OF source/)
+  })
+
   it('isolates invalid legacy portable-risk candidates without masking infrastructure failures', async () => {
     const repair = await readFile(
       resolve(process.cwd(), 'src/cli/repair-portable-risk.ts'),

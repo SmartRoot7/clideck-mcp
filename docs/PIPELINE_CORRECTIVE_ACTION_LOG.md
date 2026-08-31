@@ -710,3 +710,39 @@ The Pipeline 2.0 pilot exposed four independent failure modes:
   zero, and worker/researcher restart and post-baseline error counts were zero.
   The next two-hour soak explicitly waits for a compensating checkpoint
   boundary to verify the corrected long-query path under the live dataset.
+
+## 2026-08-31 — Analyze bypassed the Fidelity cap and blocked task events
+
+### Evidence and cause
+
+- During the `4d9c69a` soak, Overview showed three to seven simultaneous
+  Verify executors although the combined Fidelity/repair cap was two. The
+  database confirmed six concurrent `candidate_verification` tasks at one
+  snapshot.
+- `queueSourceWork(..., 'analysis')` entered the Fidelity branch before it
+  considered queued fragments. The weighted allocator therefore counted the
+  returned task as Analyze while the function had actually created Verify,
+  allowing every extraction lane to bypass the cap.
+- At 15:13Z two researcher requests reached the HTTP timeout and a third
+  submission timed out inserting its completion event. The scheduler held an
+  unnecessarily strong `FOR UPDATE` lock on the shared source row while
+  Fidelity submissions needed a foreign-key key-share lock to record
+  `pipeline_events`. All affected tasks belonged to the same source.
+
+### Minimal correction
+
+- Analyze mode now enters only fragment extraction. Fidelity and legacy Verify
+  can be created only by the allocator's bounded Verify/AI path, so their
+  combined live count cannot be mislabeled as Analyze.
+- Scheduler and source-reuse selections now use `FOR NO KEY UPDATE` for source
+  rows. They still serialize every status/reservation change they make, while
+  remaining compatible with the key-share lock required by source-linked
+  event inserts.
+- Deployment-contract coverage fixes both invariants: mode routing is explicit
+  and no strong `FOR UPDATE OF source/sc` lock may return.
+
+### Verification and deployment
+
+- Local `pnpm check`, all non-database workspace tests, the full build and the
+  250/250 product evaluation against a disposable PostgreSQL 16 database pass.
+  Production deployment pending.
