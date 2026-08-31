@@ -163,6 +163,27 @@ describe('production database role contract', () => {
     )
   })
 
+  it('uses one fidelity lock order and retries rolled-back scheduler conflicts', async () => {
+    const pipeline = await readFile(
+      resolve(process.cwd(), 'src/domain/pipeline.ts'),
+      'utf8',
+    )
+    const sourceWork = pipeline.slice(
+      pipeline.indexOf('async function queueSourceWork'),
+      pipeline.indexOf('async function queuePublicationFromAnySource'),
+    )
+    const profileAt = sourceWork.indexOf(
+      'INSERT INTO pipeline_quality_profiles',
+    )
+    const candidateLockAt = sourceWork.indexOf('FOR UPDATE OF kc SKIP LOCKED')
+
+    expect(profileAt).toBeGreaterThan(0)
+    expect(candidateLockAt).toBeGreaterThan(profileAt)
+    expect(pipeline).toMatch(
+      /withTransientDatabaseRetry\(\s*\(\) => withTransaction\(database, ensureStreamingWorkInTransaction\),\s*3/,
+    )
+  })
+
   it('isolates invalid legacy portable-risk candidates without masking infrastructure failures', async () => {
     const repair = await readFile(
       resolve(process.cwd(), 'src/cli/repair-portable-risk.ts'),

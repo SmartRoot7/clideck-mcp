@@ -11,7 +11,7 @@ import {
   sha256Label
 } from '../crypto.js'
 import type { Database, DatabaseClient } from '../db.js'
-import { withTransaction } from '../db.js'
+import { withTransaction, withTransientDatabaseRetry } from '../db.js'
 import {
   assertSafePublicSourceUrlSyntax,
   probePublicSourceUrl
@@ -1966,6 +1966,24 @@ async function queueSourceWork(
     // source work is considered; it is no longer coupled to the legacy
     // mandatory verification lane.
     if (mode === 'ai' || mode === 'verification' || mode === 'analysis') {
+    // Fidelity submission locks this shared profile before its candidate
+    // rows. Keep scheduler lock order identical; the previous candidate ->
+    // profile order could deadlock with a concurrent submission.
+    const profile = await client.query<{
+      checked_count: number
+      material_error_count: number
+      forced_full_batches_remaining: number
+    }>(
+      `INSERT INTO pipeline_quality_profiles (
+         stage, profile_key, extractor_version, prompt_version, model
+       ) VALUES (
+         'extract_fidelity', 'pipeline-v2-default',
+         'pipeline-v2-extract-1', 'pipeline-v2-fidelity-1',
+         'gpt-5.6-luna'
+       ) ON CONFLICT (stage, profile_key) DO UPDATE SET updated_at = now()
+       RETURNING checked_count, material_error_count,
+                 forced_full_batches_remaining`,
+    )
     const fidelityCandidates = await client.query<{
       id: string
       stable_key: string
@@ -1996,21 +2014,6 @@ async function queueSourceWork(
       [source.id, source.processing_run_id],
     )
     if (fidelityCandidates.rows.length > 0) {
-      const profile = await client.query<{
-        checked_count: number
-        material_error_count: number
-        forced_full_batches_remaining: number
-      }>(
-        `INSERT INTO pipeline_quality_profiles (
-           stage, profile_key, extractor_version, prompt_version, model
-         ) VALUES (
-           'extract_fidelity', 'pipeline-v2-default',
-           'pipeline-v2-extract-1', 'pipeline-v2-fidelity-1',
-           'gpt-5.6-luna'
-         ) ON CONFLICT (stage, profile_key) DO UPDATE SET updated_at = now()
-         RETURNING checked_count, material_error_count,
-                   forced_full_batches_remaining`,
-      )
       const quality = profile.rows[0]!
       const sampled = fidelityCandidates.rows.filter((candidate) =>
         shouldRunQualityCheck({
@@ -3919,7 +3922,14 @@ async function ensureStreamingWorkInTransaction(
 export async function ensurePipelineWork(
   database: Database,
 ): Promise<void> {
-  await withTransaction(database, ensureStreamingWorkInTransaction)
+  // PostgreSQL resolves a deadlock/serialization conflict by rolling the
+  // complete scheduler transaction back. Retrying only those explicit,
+  // transient database outcomes is safe and prevents a successful artifact
+  // submission from being reported as failed by its post-commit refill.
+  await withTransientDatabaseRetry(
+    () => withTransaction(database, ensureStreamingWorkInTransaction),
+    3,
+  )
 }
 
 export async function claimPipelineTask(

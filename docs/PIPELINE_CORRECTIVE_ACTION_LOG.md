@@ -410,3 +410,38 @@ The Pipeline 2.0 pilot exposed four independent failure modes:
   zero matches for the prior permission, deadlock, lease, reservation,
   checkpoint-timeout, converter, applicability, circuit-race, or fragment
   attempts constraint failures.
+
+## 2026-08-31 — Fidelity scheduler/submission lock inversion
+
+### Evidence and cause
+
+- Eighteen minutes into the `e693110` clean window, production recorded one
+  PostgreSQL `40P01` while `submit_candidate_verification` performed its
+  post-commit scheduler refill. PostgreSQL identified the conflicting unique
+  index tuple in `pipeline_quality_profiles`.
+- The main Verify transaction locked the shared Fidelity quality profile and
+  then its candidate rows. Concurrent scheduler refill in `queueSourceWork`
+  did the reverse: it selected candidate rows `FOR UPDATE` and then upserted
+  the same quality profile. Those opposing orders form a deterministic
+  deadlock cycle under eight-way concurrency.
+- The Verify data transaction had already committed, so surfacing a later
+  refill deadlock also misleadingly reported a useful submission as failed.
+  All services stayed healthy, but one executor turn was wasted.
+
+### Minimal correction
+
+- Scheduler refill now acquires the Fidelity quality profile before selecting
+  candidate rows, matching the submission path's `profile -> candidate` order.
+- `ensurePipelineWork` retries its whole transaction up to three times only
+  through the existing transient-database classifier (`40P01`, `40001`, and
+  connection-class failures). PostgreSQL has already rolled back the complete
+  failed transaction, so no partial scheduler writes are repeated.
+- Unknown database errors are still surfaced, and no artifact, QA,
+  publication, provenance, or lease rule changes.
+- A deployment contract asserts both profile-before-candidate ordering and the
+  bounded transaction retry wrapper.
+
+### Verification and deployment
+
+- Pending full check, disposable PostgreSQL suite, evaluation, build,
+  production deployment, and a new clean two-hour soak baseline.
