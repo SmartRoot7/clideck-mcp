@@ -53,6 +53,26 @@ GRANT SELECT, INSERT, UPDATE ON public_usage_daily TO clideck_mcp_api;
 GRANT INSERT ON mcp_request_logs TO clideck_mcp_api;
 GRANT SELECT, INSERT, UPDATE, DELETE ON rate_limit_buckets TO clideck_mcp_api;
 GRANT SELECT, INSERT, UPDATE ON mcp_protocol_tasks TO clideck_mcp_api;
+GRANT UPDATE (
+  status,
+  result_revision_id,
+  result_release_id,
+  last_error_code,
+  completed_at,
+  last_seen_at
+) ON knowledge_demands TO clideck_mcp_api;
+GRANT SELECT (
+  knowledge_demand_id,
+  task_type,
+  status
+) ON pipeline_tasks TO clideck_mcp_api;
+GRANT UPDATE (
+  status,
+  completed_at,
+  updated_at,
+  failure_code,
+  failure_message
+) ON pipeline_tasks TO clideck_mcp_api;
 GRANT USAGE, SELECT ON SEQUENCE
   task_messages_id_seq,
   task_public_events_id_seq

@@ -5,6 +5,35 @@ Read it before changing the scheduler, executor bridge, processing runs, or
 production grants. A restart may load a deployed correction, but it is never
 accepted as the correction itself.
 
+## 2026-08-31 — Known-answer demand reconciliation role contract
+
+### Evidence and cause
+
+The first smoke test on corrective commit
+`501f5b24e1149e533fd35a8f05249862083ce477` completed every public MCP request,
+but API logs recorded two PostgreSQL `42501` failures on
+`knowledge_demands`. The successful-answer learning hook updates an existing
+demand and skips its now-redundant queued diagnosis. That code was added after
+the API grant matrix and its two writes were never represented in
+`ops/sql/grants.sql`.
+
+### Minimal correction
+
+- Grant the API role UPDATE only on the six `knowledge_demands` result/state
+  columns used by the reconciliation query.
+- Grant SELECT/UPDATE only on the exact `pipeline_tasks` columns needed to
+  identify and skip a queued demand diagnosis. No general pipeline table write
+  privilege is added.
+- Extend the disposable PostgreSQL role contract with column-level privilege
+  checks, so production grants are verified before a release can be switched.
+
+### Verification and deployment
+
+- Run the complete deploy preflight, including the role-sensitive integration
+  suite and 250-case product evaluation.
+- Re-run public knowledge and workflow requests after deployment and require no
+  new `42501` or `permission denied` log entries.
+
 ## 2026-08-31 — Lost AI leases must stop their model process
 
 ### Evidence and cause
@@ -41,8 +70,10 @@ lane and retrying an irrevocably stale token every five seconds.
 - Pre-deploy checks: `pnpm check`, full `pnpm test`, `pnpm eval`, `pnpm build`,
   and the deployment script's disposable PostgreSQL migration/integration
   preflight.
-- Deployment commit: the corrective commit containing this section; the exact
-  SHA and first clean production snapshot are recorded below after release.
+- Deployed commit: `501f5b24e1149e533fd35a8f05249862083ce477`.
+- At `2026-08-31T06:48:41Z`, all eight executor cards had fresh Luna leases,
+  configured capacity was `8/2`, active knowledge had advanced to `118166`,
+  and no new `PIPELINE_LEASE_INVALID` event was present after deployment.
 
 ## 2026-08-31 — Reprocess progress and executor reliability
 

@@ -168,6 +168,33 @@ describeIntegration('PostgreSQL integration', () => {
     await database.end()
   }, 30_000)
 
+  it('grants API only the columns needed to reconcile known demands', async () => {
+    const privileges = await database.query<{ allowed: boolean }>(
+      `SELECT bool_and(has_column_privilege(
+         'clideck_mcp_api', required.table_name, required.column_name,
+         required.privilege
+       )) AS allowed
+       FROM (VALUES
+         ('knowledge_demands', 'status', 'UPDATE'),
+         ('knowledge_demands', 'result_revision_id', 'UPDATE'),
+         ('knowledge_demands', 'result_release_id', 'UPDATE'),
+         ('knowledge_demands', 'last_error_code', 'UPDATE'),
+         ('knowledge_demands', 'completed_at', 'UPDATE'),
+         ('knowledge_demands', 'last_seen_at', 'UPDATE'),
+         ('pipeline_tasks', 'knowledge_demand_id', 'SELECT'),
+         ('pipeline_tasks', 'task_type', 'SELECT'),
+         ('pipeline_tasks', 'status', 'SELECT'),
+         ('pipeline_tasks', 'status', 'UPDATE'),
+         ('pipeline_tasks', 'completed_at', 'UPDATE'),
+         ('pipeline_tasks', 'updated_at', 'UPDATE'),
+         ('pipeline_tasks', 'failure_code', 'UPDATE'),
+         ('pipeline_tasks', 'failure_message', 'UPDATE')
+       ) AS required(table_name, column_name, privilege)`,
+    )
+
+    expect(privileges.rows[0]?.allowed).toBe(true)
+  })
+
   it('grants researcher the exact compensating-release privileges', async () => {
     const privileges = await database.query<{
       table_privileges: boolean
