@@ -256,9 +256,14 @@ function isFallbackAnswer(answer: KnowledgeAnswer): boolean {
     .includes(answer.applicability.version_match ?? '')
 }
 
-function normalizeDetectedVersion(value: string | null): string {
+export function normalizeDetectedVersion(value: string | null): string {
   if (!value) return ''
-  return value.replace(/\d+/g, (segment) => String(Number(segment)))
+  if (!/^\d+(?:\.\d+)+(?:[A-Za-z]|[.-][A-Za-z0-9]+)*$/.test(value)) {
+    return value
+  }
+  return value.replace(/\d+/g, (segment) =>
+    segment.replace(/^0+(?=\d)/, '')
+  )
 }
 
 function boundedInteger(
@@ -432,13 +437,14 @@ export function WebMcpApp() {
             : null
         }
       : null
-    const compactResult = {
-      context: detectedContext,
+    const compactResultBase = {
       snapshot_type: result.snapshot_type,
       redactions: result.redactions,
       limitations: result.limitations
     }
-    if (!detectedContext) return { case_version: version, ...compactResult }
+    if (!detectedContext) {
+      return { case_version: version, context: null, ...compactResultBase }
+    }
 
     const nextContext = {
       vendor: current.context.vendor || detectedContext.vendor,
@@ -446,6 +452,10 @@ export function WebMcpApp() {
       operating_system:
         current.context.operating_system || detectedContext.operating_system,
       version: current.context.version || detectedContext.version || ''
+    }
+    const compactResult = {
+      context: { ...detectedContext, ...nextContext },
+      ...compactResultBase
     }
     const changed = Object.keys(nextContext).some((key) =>
       nextContext[key as keyof NetworkContext] !==

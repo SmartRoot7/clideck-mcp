@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { WebMcpApp } from './webmcp-app'
+import { WebMcpApp, normalizeDetectedVersion } from './webmcp-app'
 
 type RegisteredTool = {
   name: string
@@ -168,6 +168,16 @@ async function runTool(
 }
 
 describe('Network Evidence Workbench', () => {
+  it('canonicalizes only leading zeroes in detected version segments', () => {
+    expect(normalizeDetectedVersion('17.08.01a')).toBe('17.8.1a')
+    expect(normalizeDetectedVersion('V200R022C10SPC500')).toBe(
+      'V200R022C10SPC500',
+    )
+    expect(normalizeDetectedVersion(
+      '17.000000000000000000000000000000000008.01',
+    )).toBe('17.8.1')
+  })
+
   it('registers six stable tools and keeps manual controls usable', async () => {
     render(<WebMcpApp />)
 
@@ -285,6 +295,36 @@ describe('Network Evidence Workbench', () => {
     expect(output.context).toMatchObject({ vendor: 'Cisco', version: '17.8.1' })
     expect(output).not.toHaveProperty('sanitized_snapshot')
     expect(JSON.stringify(output)).not.toContain('Cisco IOS XE Software')
+  })
+
+  it('returns and searches with the same manual-priority effective context', async () => {
+    let searchedVersion: unknown = null
+    const originalFetch = vi.mocked(window.fetch).getMockImplementation()!
+    vi.mocked(window.fetch).mockImplementation(async (input, init) => {
+      const call = request(init)
+      if (call.name === 'query_network_knowledge') {
+        searchedVersion = (call.arguments.context as Record<string, unknown>).version
+      }
+      return originalFetch(input, init)
+    })
+    render(<WebMcpApp />)
+    fireEvent.click(screen.getByRole('button', { name: /load cisco 17\.8\.1 sample/i }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Version' }), {
+      target: { value: '16.12.9' }
+    })
+    fireEvent.click(screen.getByRole('checkbox', {
+      name: /share redacted evidence with browser agent/i
+    }))
+
+    const analyzed = JSON.parse(await runTool('analyze_network_case', {
+      expected_case_version: 3
+    }))
+    expect(analyzed.context.version).toBe('16.12.9')
+    await runTool('search_network_case', {
+      expected_case_version: 4, mode: 'knowledge', limit: 1
+    })
+    expect(searchedVersion).toBe('16.12.9')
+    expect(screen.getByRole('textbox', { name: 'Version' })).toHaveValue('16.12.9')
   })
 
   it('keeps task credentials in page memory and rejects stale research status', async () => {
