@@ -33,6 +33,13 @@ the API grant matrix and its two writes were never represented in
   suite and 250-case product evaluation.
 - Re-run public knowledge and workflow requests after deployment and require no
   new `42501` or `permission denied` log entries.
+- Deployed commit: `566e0d49c4faf763ca6f7d74659dff80ccda6270`.
+- The disposable PostgreSQL suite passed all 202 integration/unit tests and the
+  product evaluation passed 250/250. At `2026-08-31T06:58:04Z`, the public
+  health/readiness and deployment smokes were clean, all eight executor cards
+  were fresh, six useful leases were active, stale running leases were zero,
+  QA had reached 881 checks, active knowledge was 118190, and the final-deploy
+  journal contained no new `42501`, permission, or lease-invalid error.
 
 ## 2026-08-31 — Lost AI leases must stop their model process
 
