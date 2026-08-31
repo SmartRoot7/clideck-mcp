@@ -31,6 +31,10 @@ The Pipeline 2.0 pilot exposed four independent failure modes:
    simultaneous claims. Each claim cleared stale probes and then locked every
    circuit row, allowing concurrent transactions to acquire tuples in opposite
    order. PostgreSQL rolled the claims back, but useful executor time was lost.
+7. Once Verify reached the new compensating-deactivate path, researcher lacked
+   the narrowly required release read/write grants. Submissions rolled back on
+   `knowledge_revisions` with PostgreSQL `42501`; subsequent release tables
+   would have failed for the same reason.
 
 ### Minimal correction
 
@@ -57,6 +61,12 @@ The Pipeline 2.0 pilot exposed four independent failure modes:
   whole table for the claim lifetime. The conditional probe reservation remains
   the single atomic write. This removes the startup deadlock without changing
   cooldown or Luna/Terra behavior.
+- Researcher receives only the revision/release privileges required to publish
+  a Fidelity QA compensating delta; it still has no general schema privileges.
+  The deploy preflight now applies `grants.sql` to its disposable PostgreSQL
+  database before integration tests, and a role contract checks every required
+  table and identity-sequence privilege so this class of failure is caught
+  before production.
 
 ### Invariants preserved
 

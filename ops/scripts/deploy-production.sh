@@ -115,6 +115,9 @@ DATABASE_URL="$test_database_url" \
 DATABASE_URL="$test_database_url" \
   QUARANTINE_DATABASE_URL="$test_database_url" \
   pnpm knowledge:reindex-applicability -- --resume --verify
+docker exec --interactive "$test_database_container" psql \
+  --username postgres --dbname postgres --set=ON_ERROR_STOP=1 \
+  < ops/sql/grants.sql >/dev/null
 DATABASE_URL="$test_database_url" \
   QUARANTINE_DATABASE_URL="$test_database_url" \
   pnpm test

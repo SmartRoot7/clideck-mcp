@@ -37,6 +37,18 @@ describe('production database role contract', () => {
     )
   })
 
+  it('applies production grants before role-sensitive preflight tests', async () => {
+    const deploy = await readFile(
+      resolve(process.cwd(), 'ops/scripts/deploy-production.sh'),
+      'utf8',
+    )
+    const grantsAt = deploy.indexOf('< ops/sql/grants.sql')
+    const testsAt = deploy.indexOf('pnpm test')
+
+    expect(grantsAt).toBeGreaterThan(0)
+    expect(testsAt).toBeGreaterThan(grantsAt)
+  })
+
   it('keeps unknown-context revisions outside applicability conservation', async () => {
     const reindex = await readFile(
       resolve(process.cwd(), 'src/cli/reindex-applicability.ts'),

@@ -168,6 +168,44 @@ describeIntegration('PostgreSQL integration', () => {
     await database.end()
   }, 30_000)
 
+  it('grants researcher the exact compensating-release privileges', async () => {
+    const privileges = await database.query<{
+      table_privileges: boolean
+      sequence_privileges: boolean
+    }>(
+      `SELECT
+         bool_and(has_table_privilege(
+           'clideck_mcp_researcher', required.table_name,
+           required.privilege
+         )) AS table_privileges,
+         has_sequence_privilege(
+           'clideck_mcp_researcher', 'releases_sequence_seq', 'USAGE'
+         ) AS sequence_privileges
+       FROM (VALUES
+         ('knowledge_revisions', 'SELECT'),
+         ('releases', 'SELECT'),
+         ('releases', 'INSERT'),
+         ('releases', 'UPDATE'),
+         ('active_release', 'SELECT'),
+         ('active_release', 'INSERT'),
+         ('active_release', 'UPDATE'),
+         ('active_knowledge_state', 'SELECT'),
+         ('active_knowledge_state', 'INSERT'),
+         ('active_knowledge_state', 'UPDATE'),
+         ('active_knowledge_state', 'DELETE'),
+         ('release_changes', 'SELECT'),
+         ('release_changes', 'INSERT'),
+         ('release_items', 'SELECT'),
+         ('release_items', 'INSERT')
+       ) AS required(table_name, privilege)`,
+    )
+
+    expect(privileges.rows[0]).toEqual({
+      table_privileges: true,
+      sequence_privileges: true
+    })
+  })
+
   it('terminalizes only the failed processing run and completes its intake job', async () => {
     const client = await database.connect()
     const suffix = randomUUID().replaceAll('-', '').slice(0, 12)

@@ -317,7 +317,13 @@ GRANT SELECT ON
   platforms,
   operating_systems,
   knowledge_items,
+  knowledge_revisions,
   knowledge_conflicts,
+  releases,
+  active_release,
+  release_items,
+  release_changes,
+  active_knowledge_state,
   task_artifacts,
   knowledge_demands,
   knowledge_demand_source_attempts,
@@ -357,13 +363,24 @@ GRANT UPDATE ON
 TO clideck_mcp_researcher;
 GRANT INSERT, UPDATE ON knowledge_demand_source_attempts
 TO clideck_mcp_researcher;
+GRANT INSERT, UPDATE ON
+  releases,
+  active_release,
+  active_knowledge_state
+TO clideck_mcp_researcher;
+GRANT INSERT ON
+  release_items,
+  release_changes
+TO clideck_mcp_researcher;
+GRANT DELETE ON active_knowledge_state TO clideck_mcp_researcher;
 GRANT DELETE ON active_source_slots TO clideck_mcp_researcher;
 GRANT DELETE ON pipeline_ai_circuits TO clideck_mcp_researcher;
 GRANT USAGE, SELECT ON SEQUENCE
   task_messages_id_seq,
   task_public_events_id_seq,
   pipeline_events_id_seq,
-  pipeline_transition_events_id_seq
+  pipeline_transition_events_id_seq,
+  releases_sequence_seq
 TO clideck_mcp_researcher;
 
 GRANT USAGE, SELECT ON SEQUENCE
