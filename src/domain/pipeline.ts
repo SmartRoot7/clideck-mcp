@@ -6438,6 +6438,7 @@ export async function submitCandidateVerification(
         publishedRejections,
         `Fidelity QA exclusion from task ${task.id}`,
       )
+      await completeTask(client, task, counts)
       if (checkedCount > 0) {
         await client.query(
           `UPDATE pipeline_quality_profiles
@@ -6469,7 +6470,6 @@ export async function submitCandidateVerification(
           ],
         )
       }
-      await completeTask(client, task, counts)
       return counts
     }
     for (const decision of input.decisions) {

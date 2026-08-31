@@ -193,6 +193,16 @@ describe('production database role contract', () => {
     expect(fidelitySubmission).toMatch(
       /ON CONFLICT \(stage, profile_key\) DO NOTHING/,
     )
+    const fidelityBodyStart = pipeline.indexOf(
+      "if (task.payload['audit_mode'] === 'fidelity')",
+    )
+    const fidelityBody = pipeline.slice(
+      fidelityBodyStart,
+      pipeline.indexOf('return counts', fidelityBodyStart),
+    )
+    expect(fidelityBody.indexOf('UPDATE pipeline_quality_profiles')).toBeGreaterThan(
+      fidelityBody.indexOf('await completeTask(client, task, counts)'),
+    )
     expect(pipeline).toMatch(
       /withTransientDatabaseRetry\(\s*\(\) => withTransaction\(database, ensureStreamingWorkInTransaction\),\s*3/,
     )

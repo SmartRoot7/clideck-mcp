@@ -509,3 +509,34 @@ The Pipeline 2.0 pilot exposed four independent failure modes:
   permission, deadlock, reservation, converter, applicability, circuit,
   transaction, and fragment-attempt failures. The clean two-hour soak restarts
   from this baseline.
+
+## 2026-08-31 — Final Fidelity source/profile lock order
+
+### Evidence and cause
+
+- Two minutes after the `9e232d5` baseline, one Fidelity submission reported
+  `40P01` from its completion event. PostgreSQL showed the exact cycle: the
+  submission had updated `pipeline_quality_profiles` and then needed a source
+  foreign-key lock for `pipeline_events`; the scheduler already held that
+  `source_candidates` row and was checking the profile unique index with
+  `ON CONFLICT DO NOTHING`.
+- `DO NOTHING` avoids a profile row update, but PostgreSQL's uniqueness check
+  can still wait for a transaction that changed the existing profile. The
+  previous correction shortened the hot lock but left the two paths ordered
+  `profile -> source` and `source -> profile`.
+
+### Minimal correction
+
+- Fidelity submission now completes its task and records the source event
+  before issuing the one aggregated profile-counter update. That update is the
+  final SQL operation in the transaction.
+- Scheduler and submission therefore both use `source -> profile`; the profile
+  lock is still acquired once and held only until commit. No event, QA outcome,
+  counter, candidate, provenance, or publication behavior is removed.
+- Deployment coverage asserts that `completeTask` precedes the profile update
+  inside the Fidelity branch, preventing this exact inversion from returning.
+
+### Verification and deployment
+
+- Pending full tests, evaluation, build, production deployment, and a new clean
+  two-hour soak baseline.
