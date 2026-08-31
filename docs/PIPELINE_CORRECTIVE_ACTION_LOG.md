@@ -592,6 +592,26 @@ The Pipeline 2.0 pilot exposed four independent failure modes:
 
 ### Verification and deployment
 
-- Local type checks and the complete non-database test suite pass. Production
-  deployment, disposable PostgreSQL integration coverage, evaluation, build,
-  smoke tests, and the new clean soak baseline are pending below.
+- Deployed commit `43d75f4f552121971b5c7586f21601f44c655c78` through
+  `ops/scripts/deploy-production.sh`. The first preflight correctly stopped
+  before production because the new fixture used the run-only status
+  `extracting` on a legacy source row; changing that test fixture to the valid
+  source status `analyzing` required no production-code change.
+- The successful preflight passed 214/214 disposable PostgreSQL tests,
+  250/250 product evaluations, the complete workspace suite and build. Backup,
+  migration, applicability verification, atomic switch, production smoke tests
+  and the normal launchd reinstall all completed successfully.
+- At the new clean baseline `2026-08-31T13:25:58Z`, public health/readiness,
+  Tailscale admin health and all eight systemd services were healthy with zero
+  worker/researcher restarts. Overview returned exactly eight ordered executor
+  cards; all eight heartbeats and leases were fresh on Luna Analyze work,
+  settings remained `8/2`, and stale running tasks were zero. Active knowledge
+  was 120939 and Fidelity QA was 3898.
+- Worker and researcher journals since the new start contained zero warnings
+  and zero matches for the tracked timeout, lease, permission, deadlock,
+  transaction, reservation, converter, applicability, circuit and fragment
+  failures. Seventy-two nonterminal run rows without a materialized task were
+  inspected separately: they own queued fragments outside the eight active
+  source lanes and are eligible scheduler backlog, not abandoned runs. All
+  eight active lanes had live tasks. The two-hour soak restarts from this
+  baseline.
