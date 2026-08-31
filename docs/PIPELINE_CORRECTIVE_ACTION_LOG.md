@@ -81,6 +81,14 @@ being completed elsewhere and could exceed the client query timeout.
 - Run the full disposable PostgreSQL suite and product evaluation, deploy the
   clean local correction only through `ops/scripts/deploy-production.sh`, then
   begin a new two-hour soak from the first clean post-deploy snapshot.
+- Deployed commit: `da1216b87d5f1d70422d682c722e31396500a9fa`.
+- The disposable PostgreSQL suite passed all 205 tests, including both lock
+  regressions, and product evaluation passed 250/250. At the clean baseline
+  `2026-08-31T09:11:00Z`, health/readiness and all services were healthy, all
+  eight executor cards were fresh, active knowledge was 118472, Fidelity QA
+  had 1201 checks, one lease was live, stale running tasks were zero, service
+  restart counters were zero, and no monitored error had appeared since the
+  final service activation.
 
 ## 2026-08-31 — Known-answer demand reconciliation role contract
 
