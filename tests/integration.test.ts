@@ -558,6 +558,108 @@ describeIntegration('PostgreSQL integration', () => {
     }
   })
 
+  it('releases terminal publication reservations and closes drained processing runs', async () => {
+    const client = await database.connect()
+    const suffix = randomUUID().replaceAll('-', '').slice(0, 12)
+    try {
+      await client.query('BEGIN')
+      const target = await client.query<{ id: string }>(
+        `SELECT id FROM coverage_targets ORDER BY created_at LIMIT 1`,
+      )
+      const source = await client.query<{ id: string }>(
+        `INSERT INTO source_candidates (
+           coverage_target_id, canonical_url, document_type, title, status,
+           discovered_by, completed_at
+         ) VALUES (
+           $1, $2, 'configuration_guide', 'Drained run fixture',
+           'completed_with_exceptions', 'integration-test', now()
+         ) RETURNING id`,
+        [target.rows[0]!.id, `https://example.invalid/drained-${suffix}.pdf`],
+      )
+      const run = await client.query<{ id: string }>(
+        `INSERT INTO source_processing_runs (
+           source_candidate_id, processing_version, status, started_at
+         ) VALUES ($1, $2, 'extracting', now()) RETURNING id`,
+        [source.rows[0]!.id, `pipeline-v2-drained-${suffix}`],
+      )
+      const origin = await client.query<{ id: string }>(
+        `INSERT INTO pipeline_tasks (
+           task_type, stage, status, priority, source_candidate_id,
+           processing_run_id, dedupe_key, payload, completed_at
+         ) VALUES (
+           'fragment_analysis', 'analyze', 'completed', 1, $1, $2,
+           $3, '{}'::jsonb, now()
+         ) RETURNING id`,
+        [source.rows[0]!.id, run.rows[0]!.id, `drained-origin-${suffix}`],
+      )
+      const publication = await client.query<{ id: string }>(
+        `INSERT INTO pipeline_tasks (
+           task_type, stage, status, priority, source_candidate_id,
+           processing_run_id, dedupe_key, payload, completed_at
+         ) VALUES (
+           'candidate_publication', 'publish', 'completed', 1, $1, $2,
+           $3, '{}'::jsonb, now()
+         ) RETURNING id`,
+        [source.rows[0]!.id, run.rows[0]!.id, `drained-publish-${suffix}`],
+      )
+      const candidate = await client.query<{ id: string }>(
+        `INSERT INTO knowledge_candidates (
+           pipeline_task_id, processing_run_id, stable_key, payload,
+           content_hash, status, dangerous, confidence, quality_score,
+           publication_task_id
+         ) VALUES (
+           $1, $2, $3, '{}'::jsonb, $4, 'verified', false, 0.9, 0.9, $5
+         ) RETURNING id`,
+        [
+          origin.rows[0]!.id,
+          run.rows[0]!.id,
+          `integration.drained.${suffix}`,
+          sha256Label(`drained-candidate-${suffix}`),
+          publication.rows[0]!.id
+        ],
+      )
+
+      await reconcileCompletedSources(client)
+      const released = await client.query<{
+        publication_task_id: string | null
+        run_status: string
+      }>(
+        `SELECT candidate.publication_task_id,
+                run.status AS run_status
+           FROM knowledge_candidates candidate
+           JOIN source_processing_runs run ON run.id = candidate.processing_run_id
+          WHERE candidate.id = $1`,
+        [candidate.rows[0]!.id],
+      )
+      expect(released.rows[0]).toEqual({
+        publication_task_id: null,
+        run_status: 'extracting'
+      })
+
+      await client.query(
+        `UPDATE knowledge_candidates SET status = 'published' WHERE id = $1`,
+        [candidate.rows[0]!.id],
+      )
+      await reconcileCompletedSources(client)
+      const completed = await client.query<{
+        status: string
+        completed: boolean
+      }>(
+        `SELECT status, completed_at IS NOT NULL AS completed
+           FROM source_processing_runs
+          WHERE id = $1`,
+        [run.rows[0]!.id],
+      )
+      expect(completed.rows[0]).toEqual({
+        status: 'completed',
+        completed: true
+      })
+    } finally {
+      await client.query('ROLLBACK')
+      client.release()
+    }
+  })
+
   it('queues reprocess chunking without consuming an AI source lane', async () => {
     const client = await database.connect()
     const suffix = randomUUID().replaceAll('-', '').slice(0, 12)

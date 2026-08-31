@@ -615,3 +615,38 @@ The Pipeline 2.0 pilot exposed four independent failure modes:
   source lanes and are eligible scheduler backlog, not abandoned runs. All
   eight active lanes had live tasks. The two-hour soak restarts from this
   baseline.
+
+## 2026-08-31 — Completed work retained nonterminal run state
+
+### Evidence and cause
+
+- The first post-deploy snapshot was otherwise clean: active knowledge grew by
+  73, Fidelity QA by 159, all eight executors held fresh leases, and journals
+  contained no warnings or tracked failures.
+- Run-level reconciliation found 59 historical sources already marked
+  `completed_with_exceptions` whose immutable processing runs still said
+  `extracting`, despite having no live task, claimable fragment, or unresolved
+  candidate. Source completion updated the legacy source row but had no
+  symmetric run-state finalization path.
+- Eight valid `verified` candidates from three historical runs still referenced
+  publication tasks that were already `completed`. The publication scheduler
+  correctly excludes reserved candidates, so those stale reservation IDs made
+  the records permanently ineligible for a new publication batch.
+
+### Minimal correction
+
+- Regular source reconciliation now clears `publication_task_id` only when a
+  candidate remains `verified` and its publication task is terminal. The
+  candidate payload, provenance, revision and quality state are untouched; the
+  ordinary scheduler simply gets another idempotent publication attempt.
+- A processing run is marked `completed` when its source is terminal and it has
+  no live/queued task, claimable fragment, or unresolved candidate. Backlog runs
+  with queued fragments outside the eight active source lanes remain active.
+- Integration coverage reproduces both historical states, requires the stale
+  publication reservation to clear while the verified candidate keeps the run
+  open, then requires the run to close only after that candidate is published.
+
+### Verification and deployment
+
+- Type checks, full tests, evaluation, build, production deployment and the
+  next clean soak baseline are pending.

@@ -3125,6 +3125,20 @@ async function reconcileSourceLanes(
 export async function reconcileCompletedSources(
   client: DatabaseClient,
 ): Promise<void> {
+  // A publication task is atomic for the revisions it records, but an older
+  // partial batch could complete while leaving a valid candidate reserved by
+  // that now-terminal task. Release only that stale reservation so the normal
+  // publication scheduler can build a fresh batch; candidate data is unchanged.
+  await client.query(
+    `UPDATE knowledge_candidates candidate
+        SET publication_task_id = NULL,
+            updated_at = now()
+       FROM pipeline_tasks task
+      WHERE task.id = candidate.publication_task_id
+        AND task.task_type = 'candidate_publication'
+        AND task.status IN ('completed', 'failed', 'cancelled', 'skipped')
+        AND candidate.status = 'verified'`,
+  )
   await client.query(
     `UPDATE source_candidates source
         SET status = CASE
@@ -3183,6 +3197,41 @@ export async function reconcileCompletedSources(
               'candidate_deep_review',
               'candidate_publication'
             )
+        )`,
+  )
+  // Source completion is the authoritative signal that its asynchronous work
+  // has drained. Keep the immutable run history, but close the run state once
+  // it has no claimable fragments, unresolved candidates, or live tasks.
+  await client.query(
+    `UPDATE source_processing_runs run
+        SET status = 'completed',
+            completed_at = coalesce(run.completed_at, now()),
+            updated_at = now()
+       FROM source_candidates source
+      WHERE source.id = run.source_candidate_id
+        AND source.status IN (
+          'completed', 'completed_with_exceptions', 'duplicate', 'rejected'
+        )
+        AND run.status IN (
+          'queued', 'acquiring', 'converting', 'segmenting', 'extracting',
+          'auditing', 'repairing', 'reconciling', 'normalizing', 'publishing'
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM pipeline_tasks task
+           WHERE task.processing_run_id = run.id
+             AND task.status IN ('queued', 'claimed', 'running')
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM source_fragments fragment
+           WHERE fragment.processing_run_id = run.id
+             AND fragment.status IN ('queued', 'reserved', 'analyzing')
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM knowledge_candidates candidate
+           WHERE candidate.processing_run_id = run.id
+             AND candidate.status IN (
+               'analyzed', 'verified', 'deep_review', 'quarantined'
+             )
         )`,
   )
   await client.query(
