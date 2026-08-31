@@ -539,12 +539,13 @@ export async function reconcileTerminalProcessingRunsWithClient(
               job.status = 'cancelled'
               AND NOT EXISTS (
                 SELECT 1 FROM pipeline_tasks live
-                 WHERE live.processing_run_id = run.id
+                WHERE live.processing_run_id = run.id
                    AND live.status IN ('claimed', 'running')
                    AND live.lease_until > now()
               )
             )
           )
+        FOR UPDATE OF run SKIP LOCKED
      ), updated AS (
        UPDATE source_processing_runs run
           SET status = terminal.terminal_status,

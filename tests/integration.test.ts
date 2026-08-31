@@ -86,7 +86,10 @@ import {
   submitSourceDiscovery
 } from '../src/domain/pipeline.js'
 import { processNextPipelineTask } from '../src/domain/pipeline-worker.js'
-import { reconcileTerminalProcessingRunsWithClient } from '../src/domain/intake.js'
+import {
+  reconcileTerminalProcessingRuns,
+  reconcileTerminalProcessingRunsWithClient
+} from '../src/domain/intake.js'
 import {
   claimResearchTask,
   failResearchTask,
@@ -332,6 +335,81 @@ describeIntegration('PostgreSQL integration', () => {
     } finally {
       await client.query('ROLLBACK')
       client.release()
+    }
+  })
+
+  it('skips a terminal processing run already owned by another transaction', async () => {
+    const suffix = randomUUID().replaceAll('-', '').slice(0, 12)
+    const target = await database.query<{ id: string }>(
+      `SELECT id FROM coverage_targets ORDER BY created_at LIMIT 1`,
+    )
+    const source = await database.query<{ id: string }>(
+      `INSERT INTO source_candidates (
+         coverage_target_id, canonical_url, document_type, title, status,
+         discovered_by
+       ) VALUES (
+         $1, $2, 'configuration_guide', 'Locked run fixture',
+         'converting', 'integration-test'
+       ) RETURNING id`,
+      [target.rows[0]!.id, `https://example.invalid/locked-run-${suffix}.pdf`],
+    )
+    const run = await database.query<{ id: string }>(
+      `INSERT INTO source_processing_runs (
+         source_candidate_id, processing_version, status, started_at
+       ) VALUES ($1, $2, 'converting', now()) RETURNING id`,
+      [source.rows[0]!.id, `pipeline-v2-locked-${suffix}`],
+    )
+    await database.query(
+      `INSERT INTO pipeline_tasks (
+         task_type, stage, status, priority, source_candidate_id,
+         processing_run_id, dedupe_key, payload, attempts,
+         failure_code, failure_message, completed_at
+       ) VALUES (
+         'source_conversion', 'convert', 'failed', 1, $1, $2,
+         $3, '{}'::jsonb, 5, 'SOURCE_CONVERTER_UNAVAILABLE',
+         'Synthetic locked terminal failure.', now()
+       )`,
+      [source.rows[0]!.id, run.rows[0]!.id, `locked-run-${suffix}`],
+    )
+    const runLocker = await database.connect()
+    const boundedDatabase = new Pool({
+      connectionString: integrationDatabaseUrl,
+      max: 1,
+      query_timeout: 1_000
+    })
+    try {
+      await runLocker.query('BEGIN')
+      await runLocker.query(
+        `SELECT id FROM source_processing_runs WHERE id = $1 FOR UPDATE`,
+        [run.rows[0]!.id],
+      )
+
+      await expect(reconcileTerminalProcessingRuns(
+        boundedDatabase,
+        [run.rows[0]!.id],
+      )).resolves.toBe(0)
+
+      const stillActive = await database.query<{ status: string }>(
+        `SELECT status FROM source_processing_runs WHERE id = $1`,
+        [run.rows[0]!.id],
+      )
+      expect(stillActive.rows[0]?.status).toBe('converting')
+    } finally {
+      await runLocker.query('ROLLBACK')
+      runLocker.release()
+      await boundedDatabase.end()
+      await database.query(
+        `DELETE FROM pipeline_tasks WHERE processing_run_id = $1`,
+        [run.rows[0]!.id],
+      )
+      await database.query(
+        `DELETE FROM source_processing_runs WHERE id = $1`,
+        [run.rows[0]!.id],
+      )
+      await database.query(
+        `DELETE FROM source_candidates WHERE id = $1`,
+        [source.rows[0]!.id],
+      )
     }
   })
 

@@ -48,6 +48,40 @@ timeout expired.
   `ops/scripts/deploy-production.sh`; record the exact SHA and post-deploy clean
   baseline in the next log update.
 
+## 2026-08-31 — Periodic run reconciliation must not wait on active owners
+
+### Evidence and cause
+
+Commit `29bdad5e783322725e618dcfe3be8953071d80fa` removed the settings-row
+contention and passed 204 PostgreSQL-backed tests plus 250/250 product evals.
+After the atomic production switch, heartbeat renewal remained healthy, but at
+`08:49:00Z` the periodic worker maintenance hit a new `Query read timeout` in
+`reconcileTerminalProcessingRunsWithClient`.
+
+The catch-all maintenance pass and an executor failure transaction can select
+the same terminal processing run. The failure transaction legitimately owns
+that run row until it has cancelled downstream work and recorded the outcome.
+The periodic pass had no `SKIP LOCKED`, so it waited on work that was already
+being completed elsewhere and could exceed the client query timeout.
+
+### Minimal correction
+
+- Select terminal processing runs with `FOR UPDATE OF run SKIP LOCKED` before
+  applying the idempotent terminalization update.
+- A run already owned by another transaction is not an error and is left for
+  that owner or the next 30-second maintenance pass.
+- Downstream cancellation, intake completion, audit status, retry limits, and
+  run identity checks remain unchanged.
+- Add a PostgreSQL regression that locks one terminal run from a separate
+  transaction and requires the periodic reconciler to return immediately
+  without modifying it.
+
+### Verification and deployment
+
+- Run the full disposable PostgreSQL suite and product evaluation, deploy the
+  clean local correction only through `ops/scripts/deploy-production.sh`, then
+  begin a new two-hour soak from the first clean post-deploy snapshot.
+
 ## 2026-08-31 — Known-answer demand reconciliation role contract
 
 ### Evidence and cause
