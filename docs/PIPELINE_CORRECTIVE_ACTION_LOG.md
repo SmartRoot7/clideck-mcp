@@ -394,5 +394,19 @@ The Pipeline 2.0 pilot exposed four independent failure modes:
 
 ### Verification and deployment
 
-- Pending full check, disposable PostgreSQL integration suite, evaluation,
-  build, production deployment, and a new clean two-hour soak baseline.
+- Deployed commit `e6931101a09f7432aff9c79d9d52b78ac10c55b4` through
+  `ops/scripts/deploy-production.sh`. The disposable PostgreSQL suite passed
+  211/211 tests, product evaluation passed 250/250, and the build plus all
+  production smoke tests passed. The launchd pool was reinstalled normally.
+- At the clean baseline `2026-08-31T10:49:35Z`, public health/readiness and
+  Tailscale admin were healthy, Overview returned exactly eight ordered
+  executor cards with settings `8/2`, all eight heartbeats and leases were
+  fresh, stale running tasks were zero, and service restart counters were zero.
+- The historical task was terminalized once with
+  `FRAGMENT_ATTEMPTS_EXHAUSTED`; its fragment remained at ten attempts with an
+  auditable `targeted_retry` disposition and its processing run closed failed.
+  Active knowledge was 118855 and Fidelity QA was 1609. Since the new worker
+  start, both worker and researcher journals contained zero level-40 events and
+  zero matches for the prior permission, deadlock, lease, reservation,
+  checkpoint-timeout, converter, applicability, circuit-race, or fragment
+  attempts constraint failures.
