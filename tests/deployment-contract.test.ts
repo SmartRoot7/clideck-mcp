@@ -131,6 +131,31 @@ describe('production database role contract', () => {
     )
   })
 
+  it('does not relock sources with live mechanical work', async () => {
+    const pipeline = await readFile(
+      resolve(process.cwd(), 'src/domain/pipeline.ts'),
+      'utf8',
+    )
+    const preparedBuffer = pipeline.slice(
+      pipeline.indexOf('const preparationSources ='),
+      pipeline.indexOf('if (available === 0) return'),
+    )
+    const runningReprocess = pipeline.slice(
+      pipeline.indexOf('export async function queueRunningReprocessMechanicalWork'),
+      pipeline.indexOf('async function reconcileSourceLanes'),
+    )
+
+    expect(preparedBuffer).toMatch(
+      /NOT EXISTS \([\s\S]*?FROM pipeline_tasks task[\s\S]*?task\.task_type IN \([\s\S]*?'source_chunking'[\s\S]*?task\.status IN \('queued', 'claimed', 'running'\)/,
+    )
+    expect(preparedBuffer).not.toContain(
+      'FOR NO KEY UPDATE OF source SKIP LOCKED',
+    )
+    expect(runningReprocess).toMatch(
+      /NOT EXISTS \([\s\S]*?FROM pipeline_tasks task[\s\S]*?task\.processing_run_id IS NOT DISTINCT FROM run\.id[\s\S]*?'source_chunking'[\s\S]*?task\.status IN \('queued', 'claimed', 'running'\)/,
+    )
+  })
+
   it('does not lock every AI circuit row in each concurrent claim', async () => {
     const pipeline = await readFile(
       resolve(process.cwd(), 'src/domain/pipeline.ts'),

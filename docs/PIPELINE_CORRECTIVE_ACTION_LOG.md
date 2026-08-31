@@ -764,3 +764,40 @@ The Pipeline 2.0 pilot exposed four independent failure modes:
   circuit failures. The next two-hour soak starts from this baseline and still
   waits for the next published checkpoint sequence divisible by 120 to verify
   the earlier compensating-checkpoint timeout correction on production data.
+
+## 2026-08-31 — Mechanical scheduler relocked an in-flight source
+
+### Evidence and cause
+
+- After the Fidelity-cap deployment, a 2,658-page Arista guide completed its
+  1,580-fragment insert and deterministic extraction, but the final
+  `source_candidates` status update waited until the 10-second query timeout.
+  The task safely retried and completed on its second attempt; fragments and
+  candidates were not lost or duplicated.
+- Both prepared-buffer and reprocess mechanical selectors considered a source
+  in `chunking` even when its existing `source_chunking` task was already
+  queued or running. The prepared-buffer selector also took a redundant
+  `FOR NO KEY UPDATE` lock before `queueSourceWork` performed its own serialized
+  selection. A no-op scheduler pass could therefore hold the source row for
+  the full reconciliation transaction and block the worker's final status
+  update.
+
+### Minimal correction
+
+- Both mechanical selectors now omit a source/run that already owns a queued,
+  claimed or running acquisition, conversion or chunking task. The prepared
+  selector no longer takes the redundant outer source lock; `queueSourceWork`
+  remains the single serialization point for work that genuinely needs to be
+  created.
+- Task semantics, retries, source stages, lane limits and data writes are
+  unchanged. A live mechanical task is simply no longer rediscovered as work
+  to enqueue.
+- Deployment-contract coverage requires both selectors to retain the live-task
+  exclusion and prevents the redundant prepared-source lock from returning.
+
+### Verification and deployment
+
+- Local `pnpm check`, the complete non-database workspace suite (154 core,
+  22 domain and 23 admin tests) and the production build pass. Product eval and
+  migrated PostgreSQL integration coverage run again in the mandatory deploy
+  preflight. Production deployment pending.

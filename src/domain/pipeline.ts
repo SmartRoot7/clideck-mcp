@@ -2827,11 +2827,19 @@ async function maintainPreparedSourceBuffer(
      SELECT source.id
        FROM ranked
        JOIN source_candidates source ON source.id = ranked.id
+      WHERE NOT EXISTS (
+        SELECT 1
+          FROM pipeline_tasks task
+         WHERE task.source_candidate_id = source.id
+           AND task.task_type IN (
+             'source_acquisition', 'source_conversion', 'source_chunking'
+           )
+           AND task.status IN ('queued', 'claimed', 'running')
+      )
      ORDER BY ranked.class_rank,
        CASE WHEN ranked.is_demand THEN 0 ELSE 1 END,
        ranked.discovered_at
-     LIMIT $1
-     FOR NO KEY UPDATE OF source SKIP LOCKED`,
+     LIMIT $1`,
     [preparationLimit],
   )
   for (const source of preparationSources.rows) {
@@ -2919,6 +2927,16 @@ export async function queueRunningReprocessMechanicalWork(
         AND source.status IN (
           'approved', 'acquiring', 'acquired', 'converting',
           'converted', 'chunking'
+        )
+        AND NOT EXISTS (
+          SELECT 1
+            FROM pipeline_tasks task
+           WHERE task.source_candidate_id = source.id
+             AND task.processing_run_id IS NOT DISTINCT FROM run.id
+             AND task.task_type IN (
+               'source_acquisition', 'source_conversion', 'source_chunking'
+             )
+             AND task.status IN ('queued', 'claimed', 'running')
         )
         AND NOT EXISTS (
           SELECT 1
