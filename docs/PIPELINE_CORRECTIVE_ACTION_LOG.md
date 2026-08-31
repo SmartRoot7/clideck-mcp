@@ -745,4 +745,22 @@ The Pipeline 2.0 pilot exposed four independent failure modes:
 
 - Local `pnpm check`, all non-database workspace tests, the full build and the
   250/250 product evaluation against a disposable PostgreSQL 16 database pass.
-  Production deployment pending.
+- Deployed commit `756f86be2f821cc172b6dc86ac6b2b2c6e04f7d7`
+  exclusively through `ops/scripts/deploy-production.sh`. The production
+  preflight passed 216/216 migrated PostgreSQL integration tests, the complete
+  workspace suite, 250/250 product evaluations and the production build.
+  Backup, migrations, applicability verification, atomic switch and smoke
+  tests completed, and the standard launchd pool was reinstalled.
+- At the new clean baseline `2026-08-31T15:47:46Z`, public health/readiness,
+  Tailscale admin health and all production services were healthy with zero
+  worker/researcher restarts. Overview returned exactly eight fresh Luna
+  executors with settings `8/2`; all eight were performing Analyze after the
+  pre-deploy Verify leases drained. The combined live Fidelity/repair count was
+  zero (and had remained at two while Fidelity work existed), stale tasks,
+  terminal publication reservations, true orphans and empty active lanes were
+  all zero. Active knowledge was 122462 and Fidelity QA was 6510.
+- Worker/researcher journals since the release switch contained no warnings or
+  tracked timeout, lease, transaction, permission, converter, applicability or
+  circuit failures. The next two-hour soak starts from this baseline and still
+  waits for the next published checkpoint sequence divisible by 120 to verify
+  the earlier compensating-checkpoint timeout correction on production data.
