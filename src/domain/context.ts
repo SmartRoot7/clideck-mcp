@@ -18,7 +18,10 @@ type FamilyCandidate = ContextCandidate & {
   version_strategy: SoftwareVersionStrategy
 }
 
-const minimumVendorScore = 0.5
+// Vendor names share generic suffixes such as "Networks".  A 0.5 trigram
+// match was loose enough to turn an unknown vendor into F5 Networks, which is
+// worse than preserving the caller's explicit context as unresolved.
+const minimumVendorScore = 0.6
 const minimumFamilyScore = 0.55
 
 function normalizeAlias(value: string): string {

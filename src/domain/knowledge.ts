@@ -71,6 +71,67 @@ const nonSemanticSearchTerms = new Set([
   'disable', 'enable', 'manage', 'remove', 'running', 'set', 'setup', 'show'
 ])
 
+const relevanceStopWords = new Set([
+  'a', 'an', 'and', 'do', 'for', 'how', 'i', 'in', 'is', 'it', 'of', 'on',
+  'the', 'to', 'what', 'with'
+])
+
+const genericRelevanceTerms = new Set([
+  'access', 'config', 'current', 'file', 'saved', 'show', 'startup'
+])
+
+function normalizedRelevanceToken(token: string): string {
+  if (/^config(?:ure|ured|ures|uring|uration|urations)?$/.test(token)) {
+    return 'config'
+  }
+  if (/^(?:delete|erase|remove|reset|wipe)$/.test(token)) return 'erase'
+  if (/^(?:display|inspect|list|read|show|view)$/.test(token)) return 'show'
+  if (/^files?$/.test(token)) return 'file'
+  return token
+}
+
+function relevanceTokens(value: string): Set<string> {
+  return new Set(
+    (value.toLowerCase().match(/[a-z0-9]+/g) ?? [])
+      .filter((token) => !relevanceStopWords.has(token))
+      .map(normalizedRelevanceToken),
+  )
+}
+
+type RelevanceEvidence = Pick<
+  KnowledgeRow,
+  'title' | 'summary' | 'command_text' | 'procedure_steps'
+>
+
+/**
+ * Database rank remains the candidate generator.  This small lexical pass
+ * only orders those candidates by the operation the user actually asked for,
+ * so an exact-context but unrelated "show" command does not outrank the
+ * requested SSH/configuration/file operation.
+ */
+export function questionRelevanceScore(
+  question: string,
+  evidence: RelevanceEvidence,
+): number {
+  const requested = relevanceTokens(question)
+  if (requested.size === 0) return 0
+  const primary = relevanceTokens([
+    evidence.title,
+    evidence.command_text ?? ''
+  ].join(' '))
+  const supporting = relevanceTokens([
+    evidence.summary,
+    ...evidence.procedure_steps
+  ].join(' '))
+  let score = 0
+  for (const token of requested) {
+    const distinctive = !genericRelevanceTerms.has(token)
+    if (primary.has(token)) score += distinctive ? 6 : 4
+    else if (supporting.has(token)) score += distinctive ? 2 : 1
+  }
+  return score
+}
+
 const operationalIntentPattern =
   /\b(?:add|apply|back\s+up|backup|change|configure|delete|disable|downgrade|enable|erase|migrate|recover|remove|replace|reset|restore|upgrade)\b/i
 
@@ -592,7 +653,18 @@ export async function searchKnowledge(
         versionMatch: 'same_branch_fallback' as const,
         widened: true
       }))
-  ].slice(0, limit)
+  ].sort((left, right) =>
+    questionRelevanceScore(question, right.row) -
+      questionRelevanceScore(question, left.row) ||
+    Number(right.row.vendor_name === context.vendor) -
+      Number(left.row.vendor_name === context.vendor) ||
+    Number(left.widened) - Number(right.widened) ||
+    scopePriority[right.row.scope_level] -
+      scopePriority[left.row.scope_level] ||
+    versionPriority[right.versionMatch] -
+      versionPriority[left.versionMatch] ||
+    Number(right.row.rank) - Number(left.row.rank),
+  ).slice(0, limit)
 
   if (applicableRows.length === 0) return []
   const revisionIds = applicableRows.map(({ row }) => row.revision_id)

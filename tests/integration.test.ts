@@ -3371,6 +3371,20 @@ describeIntegration('PostgreSQL integration', () => {
     expect(coverage.answers.length).toBeGreaterThan(0)
   })
 
+  it('does not resolve an unknown vendor from a shared generic suffix', async () => {
+    const context = await resolveNetworkContext(database, {
+      vendor: 'Fruit Networks',
+      operating_system: 'FruitOS',
+      version: '99.1'
+    })
+    expect(context).toMatchObject({
+      vendor: 'Fruit Networks',
+      vendor_resolved: false,
+      operating_system: 'FruitOS',
+      operatingSystemId: null
+    })
+  })
+
   it('returns unknown instead of an unrelated context-only network match', async () => {
     const context = await resolveNetworkContext(database, {
       vendor: 'Juniper',

@@ -47,4 +47,17 @@
   prompt. It requires reusable `sudo -n` authorization before starting and
   otherwise exits before tests, uploads, service changes, or production data
   changes.
+- 2026-08-31: Post-deploy query replay found three remaining retrieval defects:
+  the phrase `startup configuration` was rewritten as a boot-mode question,
+  generic exact-context commands could outrank the requested SSH/configuration
+  operation, and an unknown `Fruit Networks` context fuzzily resolved to F5
+  because both names ended in `Networks`. The boot classifier now preserves
+  startup-configuration questions, candidate retrieval receives a small
+  deterministic operation-relevance ordering pass, and low-confidence vendor
+  suffix matches remain unresolved. These changes reorder existing knowledge;
+  they do not add publication gates or suppress documented commands.
+- 2026-08-31: The first production replay of that ordering exposed a tie case:
+  equally relevant widened NX-OS records could outrank an IOS XE record because
+  their stored scope was narrower. The final tie-break now prefers a direct
+  applicability result over widened guidance before comparing stored scope.
 - GitHub push and Devpost submission remain outside the authorized release.

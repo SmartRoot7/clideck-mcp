@@ -130,7 +130,10 @@ const capabilityPatterns: ReadonlyArray<{
   {
     capability: 'boot-behavior',
     label: 'Boot behavior',
-    pattern: /\b(?:boot|booting|startup|загруз)/i,
+    // "startup configuration" is configuration state, not boot behaviour.
+    // Keep the original question so retrieval can match erase startup-config
+    // and write erase instead of rewriting it to an ONIE boot-mode query.
+    pattern: /\b(?:boot|booting|startup(?!\s+config(?:uration)?\b)|загруз)/i,
     query: 'boot mode rescue installer behavior'
   },
   {

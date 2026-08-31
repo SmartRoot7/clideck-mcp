@@ -14,6 +14,7 @@ import {
   parseDemandDiagnosisAgentArtifact
 } from '../src/domain/demand-intelligence.js'
 import { sanitizeMcpLogPayload } from '../src/domain/mcp-observability.js'
+import { questionRelevanceScore } from '../src/domain/knowledge.js'
 
 describe('Demand Intelligence', () => {
   it('omits absent context fields instead of persisting the word undefined', () => {
@@ -166,6 +167,33 @@ describe('Demand Intelligence', () => {
       'interface-counters',
       'tftp-transfer'
     ])
+  })
+
+  it('keeps startup configuration questions out of boot-mode routing', () => {
+    expect(decomposeNetworkQuestion(
+      'How do I erase the saved startup configuration?',
+    )).toEqual([{
+      capability: 'general',
+      label: 'Requested operation',
+      query: 'How do I erase the saved startup configuration?'
+    }])
+  })
+
+  it('prefers the requested operation over a generic contextual command', () => {
+    const question = 'How do I configure inbound SSH access?'
+    const ssh = questionRelevanceScore(question, {
+      title: 'Enter SSH management configuration mode',
+      summary: 'Configure the SSH server.',
+      command_text: 'management ssh',
+      procedure_steps: []
+    })
+    const switchport = questionRelevanceScore(question, {
+      title: 'Configure interface switching mode',
+      summary: 'Set a switchport access mode.',
+      command_text: 'switchport mode access',
+      procedure_steps: []
+    })
+    expect(ssh).toBeGreaterThan(switchport)
   })
 
   it('does not confuse an IP-valued syslog setting with IP configuration', () => {
