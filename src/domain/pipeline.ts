@@ -1645,6 +1645,11 @@ async function queueSourceWork(
        SELECT current_run.id
        FROM source_processing_runs current_run
        WHERE current_run.source_candidate_id = sc.id
+         AND current_run.status IN (
+           'queued', 'acquiring', 'converting', 'segmenting', 'extracting',
+           'auditing', 'repairing', 'reconciling', 'normalizing',
+           'publishing', 'paused'
+         )
        ORDER BY current_run.created_at DESC
        LIMIT 1
      ) run ON true
@@ -1713,6 +1718,9 @@ async function queueSourceWork(
     }
     ,processing_run_id: source.processing_run_id
   }
+  const sourceWorkScope = source.processing_run_id
+    ? `processing-run:${source.processing_run_id}`
+    : `source:${source.id}`
   const taskPriority = source.knowledge_demand_id ? aiPriorities.demand : null
   if (source.knowledge_demand_id) {
     await client.query(
@@ -1740,7 +1748,7 @@ async function queueSourceWork(
       type: 'source_acquisition',
       stage: 'acquire',
       priority: taskPriority ?? 80,
-      dedupeKey: `source:${source.id}:acquire`,
+      dedupeKey: `${sourceWorkScope}:acquire`,
       coverageTargetId: source.coverage_target_id,
       sourceId: source.id,
       knowledgeDemandId: source.knowledge_demand_id,
@@ -1754,7 +1762,7 @@ async function queueSourceWork(
       type: 'source_conversion',
       stage: 'convert',
       priority: taskPriority ?? 78,
-      dedupeKey: `source:${source.id}:convert`,
+      dedupeKey: `${sourceWorkScope}:convert`,
       coverageTargetId: source.coverage_target_id,
       sourceId: source.id,
       knowledgeDemandId: source.knowledge_demand_id,
@@ -1768,7 +1776,7 @@ async function queueSourceWork(
       type: 'source_chunking',
       stage: 'chunk',
       priority: taskPriority ?? 76,
-      dedupeKey: `source:${source.id}:chunk`,
+      dedupeKey: `${sourceWorkScope}:chunk`,
       coverageTargetId: source.coverage_target_id,
       sourceId: source.id,
       knowledgeDemandId: source.knowledge_demand_id,
@@ -1872,7 +1880,7 @@ async function queueSourceWork(
         type: 'candidate_verification',
         stage: 'verify',
         priority: taskPriority ?? aiPriorities.verify,
-        dedupeKey: `source:${source.id}:fidelity:${sha256Label(ids.join(','))}`,
+        dedupeKey: `${sourceWorkScope}:fidelity:${sha256Label(ids.join(','))}`,
         coverageTargetId: source.coverage_target_id,
         sourceId: source.id,
         knowledgeDemandId: source.knowledge_demand_id,
@@ -1917,15 +1925,17 @@ async function queueSourceWork(
            FROM source_fragments sf
            JOIN source_artifacts sa ON sa.id = sf.source_artifact_id
            WHERE sa.source_candidate_id = $1
+             AND sf.processing_run_id IS NOT DISTINCT FROM $2::uuid
              AND sf.status IN ('queued', 'reserved', 'analyzing')
          )
        ) AS ready
        FROM knowledge_candidates kc
        JOIN pipeline_tasks pt ON pt.id = kc.pipeline_task_id
        WHERE pt.source_candidate_id = $1
+         AND kc.processing_run_id IS NOT DISTINCT FROM $2::uuid
          AND kc.status = 'analyzed'
          AND kc.verification_task_id IS NULL`,
-      [source.id],
+      [source.id, source.processing_run_id],
     )
     const analyzedCandidates = await client.query<{
       id: string
@@ -1946,13 +1956,18 @@ async function queueSourceWork(
        WHERE status = 'analyzed'
          AND verification_task_id IS NULL
          AND $2::boolean
+         AND processing_run_id IS NOT DISTINCT FROM $3::uuid
          AND pipeline_task_id IN (
            SELECT id FROM pipeline_tasks WHERE source_candidate_id = $1
          )
        ORDER BY created_at
        LIMIT 50
        FOR UPDATE SKIP LOCKED`,
-      [source.id, verificationReadiness.rows[0]?.ready ?? false],
+      [
+        source.id,
+        verificationReadiness.rows[0]?.ready ?? false,
+        source.processing_run_id
+      ],
     )
     if (analyzedCandidates.rows.length > 0) {
       const candidateIds = analyzedCandidates.rows.map((row) => row.id)
@@ -1960,7 +1975,7 @@ async function queueSourceWork(
         type: 'candidate_verification',
         stage: 'verify',
         priority: taskPriority ?? aiPriorities.verify,
-        dedupeKey: `source:${source.id}:verify:${sha256Label(
+        dedupeKey: `${sourceWorkScope}:verify:${sha256Label(
           candidateIds.join(','),
         )}`,
         coverageTargetId: source.coverage_target_id,
@@ -2021,6 +2036,7 @@ async function queueSourceWork(
        FROM source_fragments sf
        JOIN source_artifacts sa ON sa.id = sf.source_artifact_id
        WHERE sa.source_candidate_id = $1
+         AND sf.processing_run_id IS NOT DISTINCT FROM $3::uuid
          AND sf.status = 'queued'
          AND sf.reservation_task_id IS NULL
        ORDER BY
@@ -2040,7 +2056,7 @@ async function queueSourceWork(
          sf.ordinal
        LIMIT 16
        FOR UPDATE OF sf SKIP LOCKED`,
-      [source.id, demandTermPatterns],
+      [source.id, demandTermPatterns, source.processing_run_id],
     )
     const analysisFragments = boundFragmentAnalysisBatch(
       queuedFragments.rows,
@@ -2051,7 +2067,7 @@ async function queueSourceWork(
         type: 'fragment_analysis',
         stage: 'analyze',
         priority: taskPriority ?? aiPriorities.analyze,
-        dedupeKey: `source:${source.id}:analyze:${sha256Label(
+        dedupeKey: `${sourceWorkScope}:analyze:${sha256Label(
           fragmentIds.join(','),
         )}`,
         coverageTargetId: source.coverage_target_id,
@@ -2091,11 +2107,13 @@ async function queueSourceWork(
        (SELECT count(*) FROM source_fragments sf
         JOIN source_artifacts sa ON sa.id = sf.source_artifact_id
         WHERE sa.source_candidate_id = $1
+          AND sf.processing_run_id IS NOT DISTINCT FROM $2::uuid
           AND sf.status IN ('queued', 'reserved', 'analyzing'))
        +
        (SELECT count(*) FROM knowledge_candidates kc
         JOIN pipeline_tasks pt ON pt.id = kc.pipeline_task_id
         WHERE pt.source_candidate_id = $1
+          AND kc.processing_run_id IS NOT DISTINCT FROM $2::uuid
           AND (
             kc.status IN ('analyzed', 'deep_review')
             OR kc.verification_task_id IS NOT NULL
@@ -2104,6 +2122,7 @@ async function queueSourceWork(
        +
        (SELECT count(*) FROM pipeline_tasks active
         WHERE active.source_candidate_id = $1
+          AND active.processing_run_id IS NOT DISTINCT FROM $2::uuid
           AND active.task_type IN (
             'fragment_analysis',
             'candidate_verification',
@@ -2111,14 +2130,14 @@ async function queueSourceWork(
           )
           AND active.status IN ('queued', 'claimed', 'running'))
      )::int AS count`,
-    [source.id],
+    [source.id, source.processing_run_id],
   )
   if ((outstanding.rows[0]?.count ?? 0) === 0) {
     return Boolean(await insertTask(client, {
       type: 'source_publication',
       stage: 'publish',
       priority: taskPriority ?? 74,
-      dedupeKey: `source:${source.id}:publish`,
+      dedupeKey: `${sourceWorkScope}:publish`,
       coverageTargetId: source.coverage_target_id,
       sourceId: source.id,
       knowledgeDemandId: source.knowledge_demand_id,
@@ -2698,6 +2717,50 @@ async function sourceSupplyNeedsDiscovery(
      )`,
   )
   return (supply.rows[0]?.count ?? 0) < target
+}
+
+export async function queueRunningReprocessMechanicalWork(
+  client: DatabaseClient,
+  limit: number,
+): Promise<number> {
+  const sources = await client.query<{ id: string }>(
+    `SELECT DISTINCT ON (source.id) source.id
+       FROM intake_job_sources item
+       JOIN intake_jobs job ON job.id = item.intake_job_id
+       JOIN source_candidates source ON source.id = item.source_candidate_id
+       JOIN source_processing_runs run
+         ON run.source_candidate_id = item.source_candidate_id
+        AND run.processing_version = item.processing_version
+      WHERE job.job_type = 'reprocess'
+        AND job.status IN ('queued', 'running')
+        AND item.status = 'running'
+        AND run.status IN (
+          'queued', 'acquiring', 'converting', 'segmenting'
+        )
+        AND source.status IN (
+          'approved', 'acquiring', 'acquired', 'converting',
+          'converted', 'chunking'
+        )
+        AND NOT EXISTS (
+          SELECT 1
+            FROM source_processing_runs newer
+           WHERE newer.source_candidate_id = run.source_candidate_id
+             AND newer.created_at > run.created_at
+             AND newer.status IN (
+               'queued', 'acquiring', 'converting', 'segmenting',
+               'extracting', 'auditing', 'repairing', 'reconciling',
+               'normalizing', 'publishing', 'paused'
+             )
+        )
+      ORDER BY source.id, job.created_at, item.created_at
+      LIMIT $1`,
+    [limit],
+  )
+  let queued = 0
+  for (const source of sources.rows) {
+    if (await queueSourceWork(client, source.id, 'mechanical')) queued += 1
+  }
+  return queued
 }
 
 async function reconcileSourceLanes(
@@ -3438,6 +3501,13 @@ async function ensureStreamingWorkInTransaction(
 
   await reconcileCompletedSources(client)
   await reconcileTechnicalDemandFailures(client)
+  // Reprocess Convert/Chunk work is mechanical and must not compete for an
+  // AI source lane. A lane becomes useful only after chunking has produced
+  // fragments; coupling the two stranded converted runs indefinitely.
+  await queueRunningReprocessMechanicalWork(
+    client,
+    pipeline.max_active_sources,
+  )
   await maintainPreparedSourceBuffer(
     client,
     pipeline.prepared_source_target,
@@ -4265,6 +4335,47 @@ export async function claimMechanicalPipelineTask(
     })
     return { task, leaseToken }
   })
+}
+
+export async function heartbeatMechanicalPipelineTask(
+  database: Database,
+  config: AppConfig,
+  taskId: string,
+  leaseToken: string,
+): Promise<boolean> {
+  return withTransaction(
+    database,
+    (client) => heartbeatMechanicalPipelineTaskWithClient(
+      client,
+      config,
+      taskId,
+      leaseToken,
+    ),
+  )
+}
+
+export async function heartbeatMechanicalPipelineTaskWithClient(
+  client: DatabaseClient,
+  config: AppConfig,
+  taskId: string,
+  leaseToken: string,
+): Promise<boolean> {
+  const leaseUntil = new Date(
+    Date.now() + config.taskLeaseSeconds * 1_000,
+  )
+  const renewed = await client.query<{ id: string }>(
+    `UPDATE pipeline_tasks
+        SET heartbeat_at = now(),
+            lease_until = $3,
+            updated_at = now()
+      WHERE id = $1
+        AND status = 'running'
+        AND lease_until > now()
+        AND lease_token_hash = $2
+      RETURNING id`,
+    [taskId, sha256(leaseToken), leaseUntil.toISOString()],
+  )
+  return Boolean(renewed.rows[0])
 }
 
 export async function completeMechanicalPipelineTask(

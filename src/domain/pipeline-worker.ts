@@ -42,6 +42,7 @@ import {
   claimMechanicalPipelineTask,
   completeMechanicalPipelineTask,
   failPipelineTask,
+  heartbeatMechanicalPipelineTask,
   pipelineCandidatePayloadSchema,
   type PipelineTaskRow
 } from './pipeline.js'
@@ -2617,6 +2618,41 @@ export async function processNextPipelineTask(
     return expandNextSourceCollection(database, logger)
   }
 
+  const heartbeatEveryMs = Math.max(
+    10_000,
+    Math.floor(config.taskLeaseSeconds * 1_000 / 3),
+  )
+  let heartbeatInFlight: Promise<void> = Promise.resolve()
+  const leaseHeartbeat = setInterval(() => {
+    heartbeatInFlight = heartbeatInFlight.then(async () => {
+      const renewed = await heartbeatMechanicalPipelineTask(
+        database,
+        config,
+        claimed.task.id,
+        claimed.leaseToken,
+      )
+      if (!renewed) {
+        logger.warn(
+          {
+            pipelineTaskId: claimed.task.id,
+            taskType: claimed.task.task_type
+          },
+          'Mechanical task lease could not be renewed',
+        )
+      }
+    }).catch((error: unknown) => {
+      logger.warn(
+        {
+          err: error,
+          pipelineTaskId: claimed.task.id,
+          taskType: claimed.task.task_type
+        },
+        'Mechanical task lease heartbeat failed',
+      )
+    })
+  }, heartbeatEveryMs)
+  leaseHeartbeat.unref()
+
   try {
     const result = await executeMechanicalTask(
       database,
@@ -2624,6 +2660,8 @@ export async function processNextPipelineTask(
       claimed,
       fetchDocument,
     )
+    clearInterval(leaseHeartbeat)
+    await heartbeatInFlight
     await completeMechanicalPipelineTask(
       database,
       claimed.task.id,
@@ -2671,6 +2709,9 @@ export async function processNextPipelineTask(
       },
       'Deterministic pipeline work failed',
     )
+  } finally {
+    clearInterval(leaseHeartbeat)
+    await heartbeatInFlight
   }
   return true
 }

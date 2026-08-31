@@ -89,15 +89,22 @@ export async function withTransaction<T>(
   operation: (client: DatabaseClient) => Promise<T>,
 ): Promise<T> {
   const client = await database.connect()
+  let releaseError: Error | undefined
   try {
     await client.query('BEGIN')
     const result = await operation(client)
     await client.query('COMMIT')
     return result
   } catch (error) {
-    await client.query('ROLLBACK')
+    try {
+      await client.query('ROLLBACK')
+    } catch (rollbackError) {
+      releaseError = rollbackError instanceof Error
+        ? rollbackError
+        : new Error('DATABASE_ROLLBACK_FAILED')
+    }
     throw error
   } finally {
-    client.release()
+    client.release(releaseError)
   }
 }

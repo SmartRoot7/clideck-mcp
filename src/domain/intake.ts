@@ -793,6 +793,12 @@ export async function processNextReprocessItem(
   database: Database,
 ): Promise<boolean> {
   return withTransaction(database, async (client) => {
+    const schedulerLock = await client.query<{ acquired: boolean }>(
+      `SELECT pg_try_advisory_xact_lock(
+         hashtext('clideck-mcp:pipeline-scheduler')
+       ) AS acquired`,
+    )
+    if (!schedulerLock.rows[0]?.acquired) return false
     await client.query(
       `UPDATE intake_job_sources item
           SET status = 'completed', updated_at = now()
@@ -835,18 +841,27 @@ export async function processNextReprocessItem(
                AND item.status IN ('queued', 'running')
           )`,
     )
-    const active = await client.query<{ count: number }>(
-      `SELECT count(*)::int AS count
-         FROM intake_job_sources item
-         JOIN intake_jobs job ON job.id = item.intake_job_id
-        WHERE job.job_type = 'reprocess'
-          AND job.status IN ('queued', 'running')
-          AND item.status = 'running'`,
+    const capacity = await client.query<{
+      count: number
+      max_active_sources: number
+    }>(
+      `SELECT settings.max_active_sources,
+              (
+                SELECT count(*)::int
+                  FROM intake_job_sources item
+                  JOIN intake_jobs job ON job.id = item.intake_job_id
+                 WHERE job.job_type = 'reprocess'
+                   AND job.status IN ('queued', 'running')
+                   AND item.status = 'running'
+              ) AS count
+         FROM pipeline_settings settings
+        WHERE settings.singleton`,
     )
-    // Keep reprocessing incremental: enough active source runs to feed every
-    // executor, without materialising a global reprocess into an enormous
-    // mechanical queue all at once.
-    if ((active.rows[0]?.count ?? 0) >= 8) return false
+    const maxActiveSources = capacity.rows[0]?.max_active_sources ?? 1
+
+    // Keep reprocessing incremental and aligned with the scheduler's real
+    // source capacity instead of a separate hard-coded executor count.
+    if ((capacity.rows[0]?.count ?? 0) >= maxActiveSources) return false
     const selected = await client.query<{
       job_id: string
       source_id: string

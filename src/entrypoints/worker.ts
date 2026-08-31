@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { setTimeout as delay } from 'node:timers/promises'
 
 import { getConfig } from '../config.js'
-import { createDatabase } from '../db.js'
+import { createDatabase, isTransientDatabaseError } from '../db.js'
 import {
   processNextCandidate,
   runWorkerMaintenance
@@ -31,38 +31,47 @@ logger.info({ instanceId }, 'CliDeck MCP worker started')
 
 try {
   while (!abortController.signal.aborted) {
-    if (Date.now() >= nextProcessingReconciliationAt) {
-      await reconcileTerminalProcessingRuns(database)
-      nextProcessingReconciliationAt = Date.now() + 30_000
-    }
-    await runWorkerMaintenance(database, instanceId)
-    await refreshPublicStatsCacheIfStale(database)
-    await purgeExpiredSourceArtifacts(database, logger)
-    if (Date.now() >= nextRequestLogCleanupAt) {
-      await purgeExpiredMcpRequestLogs(
-        database,
-        config.mcpRequestLogRetentionDays,
-      )
-      nextRequestLogCleanupAt = Date.now() + 60 * 60_000
-    }
-    const processedPipeline = await processNextPipelineTask(
-      database,
-      config,
-      logger,
-      instanceId,
-    )
-    const processedExpert = processedPipeline
-      ? false
-      : await processNextCandidate(database, config, logger)
-    const processed = processedPipeline || processedExpert
-    if (!processed) {
-      try {
-        await delay(config.workerPollMs, undefined, {
-          signal: abortController.signal
-        })
-      } catch {
-        // Expected when the process receives a shutdown signal.
+    try {
+      if (Date.now() >= nextProcessingReconciliationAt) {
+        await reconcileTerminalProcessingRuns(database)
+        nextProcessingReconciliationAt = Date.now() + 30_000
       }
+      await runWorkerMaintenance(database, instanceId)
+      await refreshPublicStatsCacheIfStale(database)
+      await purgeExpiredSourceArtifacts(database, logger)
+      if (Date.now() >= nextRequestLogCleanupAt) {
+        await purgeExpiredMcpRequestLogs(
+          database,
+          config.mcpRequestLogRetentionDays,
+        )
+        nextRequestLogCleanupAt = Date.now() + 60 * 60_000
+      }
+      const processedPipeline = await processNextPipelineTask(
+        database,
+        config,
+        logger,
+        instanceId,
+      )
+      const processedExpert = processedPipeline
+        ? false
+        : await processNextCandidate(database, config, logger)
+      const processed = processedPipeline || processedExpert
+      if (!processed) {
+        try {
+          await delay(config.workerPollMs, undefined, {
+            signal: abortController.signal
+          })
+        } catch {
+          // Expected when the process receives a shutdown signal.
+        }
+      }
+    } catch (error) {
+      if (!isTransientDatabaseError(error)) throw error
+      logger.warn(
+        { err: error, instanceId },
+        'Transient database failure; worker loop will retry',
+      )
+      await delay(Math.max(config.workerPollMs, 250))
     }
   }
 } catch (error) {

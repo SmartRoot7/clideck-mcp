@@ -73,8 +73,10 @@ import {
   completeMechanicalPipelineTask,
   ensurePipelineWork,
   failPipelineTask,
+  heartbeatMechanicalPipelineTaskWithClient,
   heartbeatPipelineTask,
   pausePipelineForSystemFailure,
+  queueRunningReprocessMechanicalWork,
   reconcileCompletedSources,
   recordAgentRunResult,
   submitCandidateAnalysis,
@@ -84,9 +86,7 @@ import {
   submitSourceDiscovery
 } from '../src/domain/pipeline.js'
 import { processNextPipelineTask } from '../src/domain/pipeline-worker.js'
-import {
-  reconcileTerminalProcessingRunsWithClient
-} from '../src/domain/intake.js'
+import { reconcileTerminalProcessingRunsWithClient } from '../src/domain/intake.js'
 import {
   claimResearchTask,
   failResearchTask,
@@ -264,6 +264,114 @@ describeIntegration('PostgreSQL integration', () => {
         item_status: 'failed',
         job_status: 'completed_with_errors'
       })
+    } finally {
+      await client.query('ROLLBACK')
+      client.release()
+    }
+  })
+
+  it('queues reprocess chunking without consuming an AI source lane', async () => {
+    const client = await database.connect()
+    const suffix = randomUUID().replaceAll('-', '').slice(0, 12)
+    try {
+      await client.query('BEGIN')
+      await client.query('DELETE FROM active_source_slots')
+      const target = await client.query<{ id: string }>(
+        `SELECT id FROM coverage_targets ORDER BY created_at LIMIT 1`,
+      )
+      const source = await client.query<{ id: string }>(
+        `INSERT INTO source_candidates (
+           coverage_target_id, canonical_url, document_type, title, status,
+           discovered_by
+         ) VALUES (
+           $1, $2, 'configuration_guide', 'Reprocess lane fixture',
+           'converted', 'integration-test'
+         ) RETURNING id`,
+        [
+          target.rows[0]!.id,
+          `https://example.invalid/reprocess-lane-${suffix}.pdf`
+        ],
+      )
+      const processingVersion = `pipeline-v2-lane-${suffix}`
+      const run = await client.query<{ id: string }>(
+        `INSERT INTO source_processing_runs (
+           source_candidate_id, processing_version, status, started_at
+         ) VALUES ($1, $2, 'segmenting', now())
+         RETURNING id`,
+        [source.rows[0]!.id, processingVersion],
+      )
+      const job = await client.query<{ id: string }>(
+        `INSERT INTO intake_jobs (
+           job_type, status, created_by, configuration
+         ) VALUES ('reprocess', 'running', $1, '{}'::jsonb)
+         RETURNING id`,
+        [siteAdminActorId],
+      )
+      await client.query(
+        `INSERT INTO intake_job_sources (
+           intake_job_id, source_candidate_id, processing_version, status
+         ) VALUES ($1, $2, $3, 'running')`,
+        [job.rows[0]!.id, source.rows[0]!.id, processingVersion],
+      )
+
+      await expect(
+        queueRunningReprocessMechanicalWork(client, 8),
+      ).resolves.toBe(1)
+      const task = await client.query<{
+        task_type: string
+        status: string
+        processing_run_id: string
+      }>(
+        `SELECT task_type, status, processing_run_id
+           FROM pipeline_tasks
+          WHERE source_candidate_id = $1`,
+        [source.rows[0]!.id],
+      )
+      expect(task.rows).toEqual([{
+        task_type: 'source_chunking',
+        status: 'queued',
+        processing_run_id: run.rows[0]!.id
+      }])
+      const lanes = await client.query<{ count: number }>(
+        `SELECT count(*)::int AS count FROM active_source_slots`,
+      )
+      expect(lanes.rows[0]?.count).toBe(0)
+    } finally {
+      await client.query('ROLLBACK')
+      client.release()
+    }
+  })
+
+  it('renews a long-running mechanical task before its lease expires', async () => {
+    const client = await database.connect()
+    const suffix = randomUUID().replaceAll('-', '').slice(0, 12)
+    const leaseToken = randomUUID().replaceAll('-', '')
+    try {
+      await client.query('BEGIN')
+      const task = await client.query<{ id: string }>(
+        `INSERT INTO pipeline_tasks (
+           task_type, stage, status, priority, dedupe_key, payload,
+           claim_owner, lease_token_hash, lease_until, heartbeat_at, attempts
+         ) VALUES (
+           'source_conversion', 'convert', 'running', 1, $1, '{}'::jsonb,
+           'lease-heartbeat-test', $2,
+           now() + interval '5 seconds', now(), 1
+         ) RETURNING id`,
+        [`mechanical-heartbeat-${suffix}`, sha256(leaseToken)],
+      )
+
+      await expect(heartbeatMechanicalPipelineTaskWithClient(
+        client,
+        { ...config, taskLeaseSeconds: 120 },
+        task.rows[0]!.id,
+        leaseToken,
+      )).resolves.toBe(true)
+      const renewed = await client.query<{ remaining: number }>(
+        `SELECT extract(epoch FROM lease_until - now())::int AS remaining
+           FROM pipeline_tasks WHERE id = $1`,
+        [task.rows[0]!.id],
+      )
+      expect(renewed.rows[0]!.remaining).toBeGreaterThan(110)
     } finally {
       await client.query('ROLLBACK')
       client.release()
