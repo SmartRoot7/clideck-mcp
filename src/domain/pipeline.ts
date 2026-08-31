@@ -1966,23 +1966,29 @@ async function queueSourceWork(
     // source work is considered; it is no longer coupled to the legacy
     // mandatory verification lane.
     if (mode === 'ai' || mode === 'verification' || mode === 'analysis') {
-    // Fidelity submission locks this shared profile before its candidate
-    // rows. Keep scheduler lock order identical; the previous candidate ->
-    // profile order could deadlock with a concurrent submission.
-    const profile = await client.query<{
-      checked_count: number
-      material_error_count: number
-      forced_full_batches_remaining: number
-    }>(
+    // The profile is shared by every Fidelity batch. Create it once, but do
+    // not update (and therefore do not row-lock) it while selecting candidate
+    // work. Submission aggregates its counters in one short update after the
+    // candidate work is complete.
+    await client.query(
       `INSERT INTO pipeline_quality_profiles (
          stage, profile_key, extractor_version, prompt_version, model
        ) VALUES (
          'extract_fidelity', 'pipeline-v2-default',
          'pipeline-v2-extract-1', 'pipeline-v2-fidelity-1',
          'gpt-5.6-luna'
-       ) ON CONFLICT (stage, profile_key) DO UPDATE SET updated_at = now()
-       RETURNING checked_count, material_error_count,
-                 forced_full_batches_remaining`,
+       ) ON CONFLICT (stage, profile_key) DO NOTHING`,
+    )
+    const profile = await client.query<{
+      checked_count: number
+      material_error_count: number
+      forced_full_batches_remaining: number
+    }>(
+      `SELECT checked_count, material_error_count,
+              forced_full_batches_remaining
+         FROM pipeline_quality_profiles
+        WHERE stage = 'extract_fidelity'
+          AND profile_key = 'pipeline-v2-default'`,
     )
     const fidelityCandidates = await client.query<{
       id: string
@@ -4959,6 +4965,7 @@ async function findPipelineLease(
   client: DatabaseClient,
   taskId: string,
   leaseToken: string,
+  skipLocked = false,
 ): Promise<PipelineTaskRow | null> {
   const task = await client.query<PipelineTaskRow>(
     `SELECT
@@ -4977,7 +4984,34 @@ async function findPipelineLease(
        AND status = 'running'
        AND lease_until > now()
        AND lease_token_hash = $2
-    FOR UPDATE`,
+    FOR UPDATE${skipLocked ? ' SKIP LOCKED' : ''}`,
+    [taskId, sha256(leaseToken)],
+  )
+  return task.rows[0] ?? null
+}
+
+async function findPipelineLeaseSnapshot(
+  client: DatabaseClient,
+  taskId: string,
+  leaseToken: string,
+): Promise<PipelineTaskRow | null> {
+  const task = await client.query<PipelineTaskRow>(
+    `SELECT
+       id,
+       task_type,
+       stage,
+       payload,
+       coverage_target_id,
+       source_candidate_id,
+       expert_task_id,
+       knowledge_demand_id,
+       requested_reasoning_effort,
+       attempts
+     FROM pipeline_tasks
+     WHERE id = $1
+       AND status = 'running'
+       AND lease_until > now()
+       AND lease_token_hash = $2`,
     [taskId, sha256(leaseToken)],
   )
   return task.rows[0] ?? null
@@ -4992,8 +5026,37 @@ export async function heartbeatPipelineTask(
   researcherInstanceId = researcherId,
 ): Promise<Record<string, unknown>> {
   return withTransaction(database, async (client) => {
-    const task = await findPipelineLease(client, taskId, leaseToken)
+    const task = await findPipelineLease(client, taskId, leaseToken, true)
     if (!task) {
+      // Submission and failure tools own the task row while atomically
+      // recording their result. A concurrent heartbeat must not wait behind
+      // that row and turn ordinary completion into a query-timeout failure.
+      const taskUpdateInProgress = await findPipelineLeaseSnapshot(
+        client,
+        taskId,
+        leaseToken,
+      )
+      if (taskUpdateInProgress) {
+        await recordExecutorHeartbeat(
+          client,
+          researcherId,
+          researcherInstanceId,
+          {
+            status: 'running',
+            reason: 'task_update_in_progress',
+            task_id: taskUpdateInProgress.id,
+            task_type: taskUpdateInProgress.task_type,
+            stage: taskUpdateInProgress.stage
+          },
+        )
+        return {
+          enabled: true,
+          pipeline_task_id: taskId,
+          status: 'running',
+          should_stop: false,
+          reason: 'task_update_in_progress'
+        }
+      }
       await recordExecutorHeartbeat(
         client,
         researcherId,
@@ -6245,7 +6308,7 @@ export async function submitCandidateVerification(
       requeued: 0
     }
     if (task.payload['audit_mode'] === 'fidelity') {
-      const profile = await client.query<{ id: string }>(
+      await client.query(
         `INSERT INTO pipeline_quality_profiles (
            stage, profile_key, extractor_version, prompt_version, model
          ) VALUES (
@@ -6253,11 +6316,19 @@ export async function submitCandidateVerification(
            'pipeline-v2-extract-1', 'pipeline-v2-fidelity-1',
            'gpt-5.6-luna'
          )
-         ON CONFLICT (stage, profile_key) DO UPDATE SET updated_at = now()
-         RETURNING id`,
+         ON CONFLICT (stage, profile_key) DO NOTHING`,
+      )
+      const profile = await client.query<{ id: string }>(
+        `SELECT id
+           FROM pipeline_quality_profiles
+          WHERE stage = 'extract_fidelity'
+            AND profile_key = 'pipeline-v2-default'`,
       )
       const completed = new Set<string>()
       const publishedRejections: string[] = []
+      let checkedCount = 0
+      let materialErrorCount = 0
+      let forcedFullBatchesAfterError: number | null = null
       for (const decision of input.decisions) {
         if (!allowedCandidateIds.has(decision.candidate_id)) {
           throw new Error('PIPELINE_CANDIDATE_NOT_IN_TASK')
@@ -6337,26 +6408,16 @@ export async function submitCandidateVerification(
             JSON.stringify(decision.findings)
           ],
         )
-        await client.query(
-          `UPDATE pipeline_quality_profiles
-              SET checked_count = checked_count + 1,
-                  material_error_count = material_error_count +
-                    CASE WHEN $2::boolean THEN 1 ELSE 0 END,
-                  forced_full_batches_remaining = CASE
-                    WHEN $2::boolean THEN 20
-                    ELSE greatest(0, forced_full_batches_remaining - 1)
-                  END,
-                  sample_percent = CASE
-                    WHEN checked_count + 1 >= 1000
-                     AND (material_error_count +
-                       CASE WHEN $2::boolean THEN 1 ELSE 0 END)::numeric /
-                       (checked_count + 1) < 0.01
-                     AND forced_full_batches_remaining = 0
-                    THEN 10 ELSE 100 END,
-                  updated_at = now()
-            WHERE id = $1`,
-          [profile.rows[0]!.id, !passed],
-        )
+        checkedCount += 1
+        if (!passed) {
+          materialErrorCount += 1
+          forcedFullBatchesAfterError = 20
+        } else if (forcedFullBatchesAfterError !== null) {
+          forcedFullBatchesAfterError = Math.max(
+            0,
+            forcedFullBatchesAfterError - 1,
+          )
+        }
         completed.add(decision.candidate_id)
         if (passed) counts.verified += 1
         else counts.deep_review += 1
@@ -6377,6 +6438,37 @@ export async function submitCandidateVerification(
         publishedRejections,
         `Fidelity QA exclusion from task ${task.id}`,
       )
+      if (checkedCount > 0) {
+        await client.query(
+          `UPDATE pipeline_quality_profiles
+              SET checked_count = checked_count + $2,
+                  material_error_count = material_error_count + $3,
+                  forced_full_batches_remaining = CASE
+                    WHEN $4::int IS NOT NULL THEN $4
+                    ELSE greatest(0, forced_full_batches_remaining - $2)
+                  END,
+                  sample_percent = CASE
+                    WHEN checked_count + $2 >= 1000
+                     AND (material_error_count + $3)::numeric /
+                       (checked_count + $2) < 0.01
+                     AND CASE
+                       WHEN $4::int IS NOT NULL THEN $4
+                       ELSE greatest(
+                         0,
+                         forced_full_batches_remaining - $2
+                       )
+                     END = 0
+                    THEN 10 ELSE 100 END,
+                  updated_at = now()
+            WHERE id = $1`,
+          [
+            profile.rows[0]!.id,
+            checkedCount,
+            materialErrorCount,
+            forcedFullBatchesAfterError,
+          ],
+        )
+      }
       await completeTask(client, task, counts)
       return counts
     }

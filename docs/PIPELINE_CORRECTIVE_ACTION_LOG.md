@@ -457,3 +457,42 @@ The Pipeline 2.0 pilot exposed four independent failure modes:
   permission, lease, reservation, converter, applicability, circuit, timeout,
   transaction, or fragment-attempt failures. The two-hour soak restarts from
   this baseline; absence of recurrence remains the acceptance condition.
+
+## 2026-08-31 — Fidelity profile hot row blocked submissions and heartbeats
+
+### Evidence and cause
+
+- Eighteen minutes into the `09be91b` clean window, active knowledge had grown
+  by 385 and Fidelity QA by 425, but six researcher calls failed in one burst.
+  Five were `Query read timeout` and the final cleanup call observed
+  `PIPELINE_LEASE_INVALID` after its competing transaction completed.
+- Four concurrent Fidelity executors serialized on the single
+  `pipeline_quality_profiles` row. Each submission acquired that row before
+  processing as many as eight candidates and updated it once per candidate,
+  keeping the hot lock for the entire transaction.
+- The same transaction owns its `pipeline_tasks` row until atomic completion.
+  Heartbeats used a waiting `FOR UPDATE`, so an ordinary in-progress submission
+  could exhaust the generic ten-second query budget. The heartbeat failure then
+  triggered a redundant task-failure report. This was lock contention, not a
+  lost lease or invalid artifact.
+
+### Minimal correction
+
+- Scheduler and submission create the shared quality profile with `ON CONFLICT
+  DO NOTHING` and read its committed counters without taking a row lock.
+- A Fidelity submission accumulates checked/error counters in memory and
+  performs one short atomic profile update after candidate decisions are
+  stored. Candidate transactions and audit outcomes remain unchanged.
+- AI heartbeat takes the owned task row with `FOR UPDATE SKIP LOCKED`. If an
+  atomic submit/fail transaction currently owns it, a non-locking lease
+  snapshot returns `task_update_in_progress` with `should_stop=false`; it does
+  not wait, extend an already protected row, or misreport lease loss.
+- Integration coverage holds the task row from another connection and requires
+  the heartbeat to return the structured nonblocking result within one second.
+  Deployment coverage requires the shared profile creation path to remain
+  non-updating. Unknown failures and truly absent/expired leases still surface.
+
+### Verification and deployment
+
+- Pending full tests, evaluation, build, production deployment, and a new clean
+  two-hour soak baseline.

@@ -163,7 +163,7 @@ describe('production database role contract', () => {
     )
   })
 
-  it('uses one fidelity lock order and retries rolled-back scheduler conflicts', async () => {
+  it('keeps the fidelity profile lock short and retries scheduler conflicts', async () => {
     const pipeline = await readFile(
       resolve(process.cwd(), 'src/domain/pipeline.ts'),
       'utf8',
@@ -179,6 +179,20 @@ describe('production database role contract', () => {
 
     expect(profileAt).toBeGreaterThan(0)
     expect(candidateLockAt).toBeGreaterThan(profileAt)
+    expect(sourceWork.slice(profileAt, candidateLockAt)).toMatch(
+      /ON CONFLICT \(stage, profile_key\) DO NOTHING/,
+    )
+    expect(sourceWork.slice(profileAt, candidateLockAt)).not.toMatch(
+      /DO UPDATE SET updated_at/,
+    )
+    const fidelitySubmission = pipeline.slice(
+      pipeline.indexOf("if (task.payload['audit_mode'] === 'fidelity')"),
+      pipeline.indexOf('for (const decision of input.decisions)',
+        pipeline.indexOf("if (task.payload['audit_mode'] === 'fidelity')")),
+    )
+    expect(fidelitySubmission).toMatch(
+      /ON CONFLICT \(stage, profile_key\) DO NOTHING/,
+    )
     expect(pipeline).toMatch(
       /withTransientDatabaseRetry\(\s*\(\) => withTransaction\(database, ensureStreamingWorkInTransaction\),\s*3/,
     )

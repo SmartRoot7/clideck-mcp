@@ -681,6 +681,75 @@ describeIntegration('PostgreSQL integration', () => {
     }
   })
 
+  it('keeps an AI heartbeat nonblocking while submission owns the task row', async () => {
+    const suffix = randomUUID().replaceAll('-', '').slice(0, 12)
+    const leaseToken = randomUUID().replaceAll('-', '')
+    const researcherId = `task-update-heartbeat-${suffix}`
+    const task = await database.query<{ id: string }>(
+      `INSERT INTO pipeline_tasks (
+         task_type, stage, status, priority, dedupe_key, payload,
+         claim_owner, lease_token_hash, lease_until, heartbeat_at, attempts
+       ) VALUES (
+         'candidate_verification', 'verify', 'running', 1, $1, '{}'::jsonb,
+         $2, $3, now() + interval '2 minutes', now(), 1
+       ) RETURNING id`,
+      [
+        `task-update-heartbeat-${suffix}`,
+        researcherId,
+        sha256(leaseToken)
+      ],
+    )
+    const taskLocker = await database.connect()
+    try {
+      await taskLocker.query('BEGIN')
+      await taskLocker.query(
+        `SELECT id FROM pipeline_tasks WHERE id = $1 FOR UPDATE`,
+        [task.rows[0]!.id],
+      )
+
+      await expect(Promise.race([
+        heartbeatPipelineTask(
+          database,
+          config,
+          task.rows[0]!.id,
+          leaseToken,
+          researcherId,
+          `${researcherId}:integration`,
+        ),
+        new Promise((_, reject) => setTimeout(
+          () => reject(new Error('heartbeat waited for the task row lock')),
+          1_000,
+        )),
+      ])).resolves.toMatchObject({
+        status: 'running',
+        should_stop: false,
+        reason: 'task_update_in_progress'
+      })
+      const heartbeat = await database.query<{
+        metadata: Record<string, unknown>
+      }>(
+        `SELECT metadata FROM worker_heartbeats WHERE worker_name = $1`,
+        [researcherId],
+      )
+      expect(heartbeat.rows[0]?.metadata).toMatchObject({
+        status: 'running',
+        reason: 'task_update_in_progress',
+        task_id: task.rows[0]!.id
+      })
+    } finally {
+      await taskLocker.query('ROLLBACK')
+      taskLocker.release()
+      await database.query(
+        `DELETE FROM worker_heartbeats WHERE worker_name = $1`,
+        [researcherId],
+      )
+      await database.query(
+        `DELETE FROM pipeline_tasks WHERE id = $1`,
+        [task.rows[0]!.id],
+      )
+    }
+  })
+
   async function completeMissingKnowledgeDiagnosis(
     demandId: string,
   ): Promise<void> {
