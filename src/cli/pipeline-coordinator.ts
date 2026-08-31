@@ -43,6 +43,7 @@ import {
 } from './pipeline-runtime.js'
 import {
   containsWebSearchEvent,
+  pipelineControlStop,
   retryBridgeArtifactSubmission
 } from './pipeline-coordinator-utils.js'
 import {
@@ -633,6 +634,7 @@ async function runCodex(
   timedOut: boolean
   paused: boolean
   cancelled: boolean
+  leaseLost: boolean
   durationMs: number
   usage: Usage
   webSearchUsed: boolean
@@ -681,6 +683,7 @@ async function runCodex(
     let timedOut = false
     let paused = false
     let cancelled = false
+    let leaseLost = false
     let webSearchUsed = false
     let heartbeatRunning = false
     let forceKillTimer: NodeJS.Timeout | undefined
@@ -723,8 +726,10 @@ async function runCodex(
       heartbeatRunning = true
       void runClient('heartbeat')
         .then((control) => {
-          if (control['should_stop'] === true) {
-            paused = true
+          const stop = pipelineControlStop(control)
+          if (stop) {
+            if (stop === 'paused') paused = true
+            else leaseLost = true
             terminateChild()
           }
         })
@@ -754,6 +759,7 @@ async function runCodex(
         timedOut,
         paused,
         cancelled,
+        leaseLost,
         durationMs: Date.now() - startedAt,
         usage,
         webSearchUsed,
@@ -1055,41 +1061,48 @@ async function main(): Promise<void> {
       ])
       const run = await runCodex(task)
       runOutcome = run
-      let stoppedWithoutArtifact = run.paused || run.cancelled
+      let leaseLost = run.leaseLost
+      let stoppedWithoutArtifact = run.paused || run.cancelled || leaseLost
       if (
         !stoppedWithoutArtifact &&
         run.exitCode === 0 &&
         !run.timedOut
       ) {
         const control = await runClient('heartbeat')
-        stoppedWithoutArtifact = control['should_stop'] === true
+        const stop = pipelineControlStop(control)
+        leaseLost ||= stop === 'lease_lost'
+        stoppedWithoutArtifact = stop !== null
       }
       if (stoppedWithoutArtifact) {
-        if (!run.paused) {
+        if (!run.paused && !leaseLost) {
           await runClient(
             'fail',
             'EXECUTOR_STOPPED',
             'The Luna executor stopped before its artifact was accepted.',
           ).catch(() => undefined)
         }
-        await finishRun(
-          'cancelled',
-          run.durationMs,
-          run.usage,
-          run.paused ? 'PIPELINE_PAUSED' : 'EXECUTOR_STOPPED',
-          {
-            exitCode: run.exitCode,
-            ...(run.diagnosticCode
-              ? { diagnosticCode: run.diagnosticCode }
-              : {}),
-            ...(run.diagnosticFingerprint
-              ? {
-                  diagnosticFingerprint:
-                    run.diagnosticFingerprint
-                }
-              : {})
-          },
-        )
+        if (!leaseLost) {
+          await finishRun(
+            'cancelled',
+            run.durationMs,
+            run.usage,
+            run.paused ? 'PIPELINE_PAUSED' : 'EXECUTOR_STOPPED',
+            {
+              exitCode: run.exitCode,
+              ...(run.diagnosticCode
+                ? { diagnosticCode: run.diagnosticCode }
+                : {}),
+              ...(run.diagnosticFingerprint
+                ? {
+                    diagnosticFingerprint:
+                      run.diagnosticFingerprint
+                  }
+                : {})
+            },
+          )
+        } else {
+          await runClient('cleanup')
+        }
         await Promise.all([
           unlink(agentOutputPath).catch(() => undefined),
           unlink(agentOutputSchemaPath).catch(() => undefined),

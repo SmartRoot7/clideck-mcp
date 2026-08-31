@@ -4854,6 +4854,16 @@ async function assertPipelineLease(
   taskId: string,
   leaseToken: string,
 ): Promise<PipelineTaskRow> {
+  const task = await findPipelineLease(client, taskId, leaseToken)
+  if (!task) throw new Error('PIPELINE_LEASE_INVALID')
+  return task
+}
+
+async function findPipelineLease(
+  client: DatabaseClient,
+  taskId: string,
+  leaseToken: string,
+): Promise<PipelineTaskRow | null> {
   const task = await client.query<PipelineTaskRow>(
     `SELECT
        id,
@@ -4871,11 +4881,10 @@ async function assertPipelineLease(
        AND status = 'running'
        AND lease_until > now()
        AND lease_token_hash = $2
-     FOR UPDATE`,
+    FOR UPDATE`,
     [taskId, sha256(leaseToken)],
   )
-  if (!task.rows[0]) throw new Error('PIPELINE_LEASE_INVALID')
-  return task.rows[0]
+  return task.rows[0] ?? null
 }
 
 export async function heartbeatPipelineTask(
@@ -4887,7 +4896,26 @@ export async function heartbeatPipelineTask(
   researcherInstanceId = researcherId,
 ): Promise<Record<string, unknown>> {
   return withTransaction(database, async (client) => {
-    const task = await assertPipelineLease(client, taskId, leaseToken)
+    const task = await findPipelineLease(client, taskId, leaseToken)
+    if (!task) {
+      await recordExecutorHeartbeat(
+        client,
+        researcherId,
+        researcherInstanceId,
+        {
+          status: 'standby',
+          reason: 'lease_lost',
+          previous_task_id: taskId
+        },
+      )
+      return {
+        enabled: true,
+        pipeline_task_id: taskId,
+        status: 'lease_lost',
+        should_stop: true,
+        reason: 'lease_invalid'
+      }
+    }
     const settings = await client.query<{ enabled: boolean }>(
       `SELECT enabled
        FROM pipeline_settings

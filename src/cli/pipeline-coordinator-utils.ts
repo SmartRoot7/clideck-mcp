@@ -7,6 +7,13 @@ export function containsWebSearchEvent(value: unknown): boolean {
   return Object.values(value).some(containsWebSearchEvent)
 }
 
+export function pipelineControlStop(
+  control: Record<string, unknown>,
+): 'paused' | 'lease_lost' | null {
+  if (control['should_stop'] !== true) return null
+  return control['reason'] === 'lease_invalid' ? 'lease_lost' : 'paused'
+}
+
 export async function retryBridgeArtifactSubmission(callbacks: {
   submit: () => Promise<void>
   isRecorded: () => Promise<boolean>

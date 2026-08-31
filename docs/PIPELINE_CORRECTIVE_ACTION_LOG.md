@@ -5,6 +5,45 @@ Read it before changing the scheduler, executor bridge, processing runs, or
 production grants. A restart may load a deployed correction, but it is never
 accepted as the correction itself.
 
+## 2026-08-31 — Lost AI leases must stop their model process
+
+### Evidence and cause
+
+The clean soak beginning at `2026-08-31T06:12:25Z` exposed a control-plane
+failure rather than a model failure. Production recorded hundreds of
+`PIPELINE_LEASE_INVALID` heartbeat exceptions from all eight executors. One
+local Codex child remained alive for more than 25 minutes after its database
+task had already been marked `LEASE_ATTEMPTS_EXHAUSTED`; other executor cards
+became stale and useful concurrency fell to one lane.
+
+Losing a lease is a legitimate race during deployment, expiry reconciliation,
+or task completion. The bug was that the heartbeat endpoint represented that
+state as an exception while the coordinator deliberately discarded every
+periodic heartbeat exception. The model process therefore kept consuming its
+lane and retrying an irrevocably stale token every five seconds.
+
+### Minimal correction
+
+- A heartbeat with a stale task/token pair now returns the structured control
+  result `should_stop=true`, `reason=lease_invalid` and records the executor as
+  `standby/lease_lost`; it no longer emits an exception for this expected
+  control outcome.
+- The coordinator distinguishes an administrative pause from a lost lease.
+  Either stops the child immediately, but a lost lease is not reported back
+  through the stale token and does not terminate the long-lived executor loop.
+- Strict lease assertions remain unchanged for artifact submissions and every
+  other state-changing operation.
+- Unit coverage checks the stop classification. PostgreSQL integration
+  coverage checks the structured stale-lease response and executor heartbeat.
+
+### Verification and deployment
+
+- Pre-deploy checks: `pnpm check`, full `pnpm test`, `pnpm eval`, `pnpm build`,
+  and the deployment script's disposable PostgreSQL migration/integration
+  preflight.
+- Deployment commit: the corrective commit containing this section; the exact
+  SHA and first clean production snapshot are recorded below after release.
+
 ## 2026-08-31 — Reprocess progress and executor reliability
 
 ### Why this work was required

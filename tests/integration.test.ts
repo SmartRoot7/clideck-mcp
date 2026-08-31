@@ -416,6 +416,56 @@ describeIntegration('PostgreSQL integration', () => {
     }
   })
 
+  it('stops an executor cleanly when its pipeline lease is already lost', async () => {
+    const suffix = randomUUID().replaceAll('-', '').slice(0, 12)
+    const leaseToken = randomUUID().replaceAll('-', '')
+    const researcherId = `lease-lost-${suffix}`
+    const task = await database.query<{ id: string }>(
+      `INSERT INTO pipeline_tasks (
+         task_type, stage, status, priority, dedupe_key, payload,
+         claim_owner, lease_token_hash, lease_until, heartbeat_at, attempts
+       ) VALUES (
+         'source_discovery', 'discover', 'running', 1, $1, '{}'::jsonb,
+         $2, $3, now() - interval '1 second', now(), 1
+       ) RETURNING id`,
+      [`lost-ai-lease-${suffix}`, researcherId, sha256(leaseToken)],
+    )
+    try {
+      await expect(heartbeatPipelineTask(
+        database,
+        config,
+        task.rows[0]!.id,
+        leaseToken,
+        researcherId,
+        `${researcherId}:integration`,
+      )).resolves.toMatchObject({
+        status: 'lease_lost',
+        should_stop: true,
+        reason: 'lease_invalid'
+      })
+      const heartbeat = await database.query<{
+        metadata: Record<string, unknown>
+      }>(
+        `SELECT metadata FROM worker_heartbeats WHERE worker_name = $1`,
+        [researcherId],
+      )
+      expect(heartbeat.rows[0]?.metadata).toMatchObject({
+        status: 'standby',
+        reason: 'lease_lost',
+        previous_task_id: task.rows[0]!.id
+      })
+    } finally {
+      await database.query(
+        `DELETE FROM worker_heartbeats WHERE worker_name = $1`,
+        [researcherId],
+      )
+      await database.query(
+        `DELETE FROM pipeline_tasks WHERE id = $1`,
+        [task.rows[0]!.id],
+      )
+    }
+  })
+
   async function completeMissingKnowledgeDiagnosis(
     demandId: string,
   ): Promise<void> {

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import {
   containsWebSearchEvent,
+  pipelineControlStop,
   retryBridgeArtifactSubmission
 } from '../src/cli/pipeline-coordinator-utils.js'
 
@@ -11,6 +12,18 @@ describe('pipeline coordinator reliability helpers', () => {
       .toBe(true)
     expect(containsWebSearchEvent({ message: 'I searched the web' }))
       .toBe(false)
+  })
+
+  it('distinguishes a lost lease from an administrative pause', () => {
+    expect(pipelineControlStop({ should_stop: false })).toBeNull()
+    expect(pipelineControlStop({
+      should_stop: true,
+      reason: 'pipeline_paused'
+    })).toBe('paused')
+    expect(pipelineControlStop({
+      should_stop: true,
+      reason: 'lease_invalid'
+    })).toBe('lease_lost')
   })
 
   it('retries only bridge delivery with bounded backoff', async () => {
