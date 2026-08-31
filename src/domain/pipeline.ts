@@ -1153,8 +1153,8 @@ async function recordEvent(
     metadata?: Record<string, unknown>
   },
 ): Promise<void> {
-  await client.query(
-    `INSERT INTO pipeline_events (
+  await client.query({
+    text: `INSERT INTO pipeline_events (
        pipeline_task_id,
        source_candidate_id,
        stage,
@@ -1163,7 +1163,7 @@ async function recordEvent(
        metadata
      )
      VALUES ($1, $2, $3, $4, $5, $6::jsonb)`,
-    [
+    values: [
       input.taskId ?? null,
       input.sourceId ?? null,
       input.stage,
@@ -1171,7 +1171,8 @@ async function recordEvent(
       input.message,
       JSON.stringify(input.metadata ?? {})
     ],
-  )
+    query_timeout: 30_000
+  })
 }
 
 async function recordExecutorHeartbeat(
@@ -4176,17 +4177,33 @@ export async function claimPipelineTask(
           RETURNING task_type`,
         [task.task_type, taskReasoning, researcherId],
       )
-      if (!probe.rows[0]) throw new Error('AI_CIRCUIT_PROBE_NOT_AVAILABLE')
+      if (!probe.rows[0]) {
+        await recordExecutorHeartbeat(
+          client,
+          researcherId,
+          researcherInstanceId,
+          {
+            status: 'standby',
+            reason: 'circuit_cooldown',
+            circuit_task_type: task.task_type,
+            circuit_reasoning_effort: taskReasoning,
+            retry_at: expiredCircuit.open_until
+          },
+        )
+        return {
+          enabled: true,
+          pipeline_state: 'scoped_ai_circuit_open'
+        }
+      }
     }
-    const requestedModel = matchingCircuit && !expiredCircuit
+    const terraFallbackAllowed = supportsTerraFallback(
+      task.task_type,
+      taskReasoning,
+    )
+    const requestedModel = matchingCircuit && !expiredCircuit &&
+        terraFallbackAllowed
       ? fallbackPipelineModel
       : requiredPipelineModel
-    if (
-      requestedModel === fallbackPipelineModel &&
-      !supportsTerraFallback(task.task_type, taskReasoning)
-    ) {
-      throw new Error('PIPELINE_TERRA_FALLBACK_NOT_ALLOWED')
-    }
     const usingTerraFallback = requestedModel === fallbackPipelineModel
 
     const leaseToken = randomUrlToken()
@@ -5611,9 +5628,11 @@ export async function submitDemandDiagnosis(
     }
 
     let replay: Awaited<ReturnType<typeof replayDemandCoverage>>
+    await client.query('SAVEPOINT demand_coverage_replay')
     try {
       replay = await replayDemandCoverage(client, demand, diagnosis)
     } catch {
+      await client.query('ROLLBACK TO SAVEPOINT demand_coverage_replay')
       replay = {
         answers: [],
         answerStatus: 'unknown',
@@ -5626,6 +5645,7 @@ export async function submitDemandDiagnosis(
         context: {} as Awaited<ReturnType<typeof replayDemandCoverage>>['context']
       }
     }
+    await client.query('RELEASE SAVEPOINT demand_coverage_replay')
     const firstRevisionRef = replay.answers[0]?.revision_ref ?? null
     const acceptedExisting =
       replay.answerStatus === 'complete' && firstRevisionRef !== null
@@ -5754,8 +5774,7 @@ export async function submitCandidateAnalysis(
       `SELECT id, content_hash, processing_run_id
        FROM source_fragments
        WHERE id = ANY($1::uuid[])
-         AND reservation_task_id = $2
-         AND status = 'analyzing'`,
+         AND reservation_task_id = $2`,
       [[...allowedFragmentIds], task.id],
     )
     if (

@@ -2062,7 +2062,11 @@ async function publishSource(
             WHERE kc.source_fragment_id = sf.id
               AND kc.status = 'published'
               AND pt.source_candidate_id = ANY($1::uuid[])
-          )`,
+          )
+            AND NOT (
+              sf.status = 'analyzing'
+              AND sf.reservation_task_id IS NOT NULL
+            )`,
         [sourceIds],
       )
       await client.query(
@@ -2460,7 +2464,11 @@ async function publishCandidateBatch(
             WHERE candidate.source_fragment_id = fragment.id
               AND candidate.id = ANY($1::uuid[])
               AND candidate.status = 'published'
-          )`,
+          )
+            AND NOT (
+              fragment.status = 'analyzing'
+              AND fragment.reservation_task_id IS NOT NULL
+            )`,
         [revisions.map((revision) => revision.candidateId)],
       )
       await client.query(

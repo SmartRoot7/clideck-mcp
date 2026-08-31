@@ -275,3 +275,81 @@ The Pipeline 2.0 pilot exposed four independent failure modes:
   that adds this log entry. Its exact deployed SHA and post-deploy measurements
   belong in the deployment/soak report so this source file does not require a
   second documentation-only production release.
+
+## 2026-08-31 — Demand replay transaction and fragment reservation race
+
+### Evidence
+
+- The first observation after deploying `a7cf4a0` confirmed that the new
+  terminal-run grants were exact and that no new `42501` for
+  `intake_job_sources` occurred.
+- Diagnosis submissions then repeatedly failed with PostgreSQL `25P02`
+  (`current transaction is aborted`). The deterministic replay reads eleven
+  context/applicability tables for which `clideck_mcp_researcher` had no
+  `SELECT` privilege. The intended catch converted the replay result to
+  `unknown`, but PostgreSQL kept the surrounding transaction aborted.
+- Analyze submissions also reported `PIPELINE_FRAGMENT_RESERVATION_INVALID`.
+  A live task still owned both affected fragment reservations, but an earlier
+  candidate publication had changed their summary status from `analyzing` to
+  `published`. The lease and reservation were valid; the redundant status
+  predicate rejected them.
+- The first clean-start observation then recorded two simultaneous
+  `AI_CIRCUIT_PROBE_NOT_AVAILABLE` tool errors. Both executors had selected
+  work from the same expired circuit snapshot; one won the conditional probe
+  update and the other correctly had no probe to run, but that ordinary race
+  was still surfaced as an exception.
+- After that loser path was corrected, a Low task hit
+  `PIPELINE_TERRA_FALLBACK_NOT_ALLOWED`: another executor had closed its
+  circuit after the claim transaction read the circuit snapshot but before it
+  selected the now-eligible task. The stale in-memory row incorrectly selected
+  Terra even though the current database state allowed normal Luna work.
+- Nine minutes after the next deploy, release sequence 6720 reached the
+  required 120-release checkpoint. Copying the full 118k active state into
+  `release_items` exceeded the generic 10-second fast-read timeout. A
+  concurrent Verify completion also exceeded that limit while inserting its
+  audit event. The publication retry succeeded as a delta, demonstrating that
+  the failure was bounded database serialization rather than invalid data.
+
+### Cause
+
+- Demand replay was added inside the Diagnosis write transaction without a
+  savepoint and without extending the restricted researcher's read contract.
+- Publication treated `source_fragments.status` as an unconditional aggregate
+  output even while another valid extraction task owned the fragment. Analysis
+  then treated that mutable summary status as a second lease check.
+- The conditional circuit update was already the correct single-winner
+  primitive, but the losing branch was classified as an internal error rather
+  than an expected standby outcome.
+- Fallback model selection also trusted the earlier circuit snapshot without
+  first constraining the task class to the explicit Medium fallback allowlist.
+- The generic 10-second client timeout was applied equally to latency-sensitive
+  scheduler reads and intentionally serialized release checkpoints. Checkpoint
+  work grows with active knowledge and cannot safely share the fast-read budget.
+
+### Minimal correction
+
+- Grant the researcher read-only access to exactly the context,
+  applicability, trust, and active-knowledge relations used by deterministic
+  replay. Wrap optional replay in a PostgreSQL savepoint so a future replay
+  failure can safely fall back to `unknown` without poisoning Diagnosis.
+- Treat `reservation_task_id` plus the already validated task lease as the
+  authority for Analyze submission. Publication no longer changes a fragment
+  that is actively reserved in `analyzing` state.
+- A circuit probe loser leaves its selected task queued, records
+  `standby/circuit_cooldown`, and returns `scoped_ai_circuit_open`; no failed
+  researcher tool call is emitted.
+- Terra is now constructed only when `supportsTerraFallback` is true. A stale
+  Low-circuit snapshot therefore continues on Luna instead of throwing; the
+  existing query still prevents work behind a currently open Low circuit.
+- Keep the 10-second pool default. Only the release advisory lock and full
+  checkpoint copy receive a 60-second query budget; pipeline audit insertion
+  receives 30 seconds so it can wait for its parent-row transaction. Immutable
+  checkpoint frequency and release serialization are unchanged.
+- Coverage verifies the read contract and a valid reservation whose summary
+  status was concurrently advanced. No provenance, publication, or lease-token
+  invariant is weakened.
+
+### Verification and deployment
+
+- Pending full check, PostgreSQL integration suite, eval, build, production
+  deployment, and a new clean two-hour soak baseline.

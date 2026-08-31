@@ -13,6 +13,8 @@ import { getNetworkDomainPack } from './domain-packs.js'
 import { enforceKnowledgeRisk } from './risk.js'
 import { indexPublishedKnowledgeApplicability } from './applicability.js'
 
+const publicationSerializationTimeoutMs = 60_000
+
 const storedCandidateSchema = candidateRevisionSchema.omit({
   lease_token: true
 })
@@ -382,11 +384,12 @@ export async function publishKnowledgeBatch(
       items.map((item) => [item.itemId, item]),
     ).values()
   ]
-  await client.query(
-    `SELECT pg_advisory_xact_lock(
+  await client.query({
+    text: `SELECT pg_advisory_xact_lock(
        hashtext('clideck-mcp-release-publication')
      )`,
-  )
+    query_timeout: publicationSerializationTimeoutMs
+  })
   const current = await client.query<{ release_id: string }>(
     'SELECT release_id FROM active_release WHERE singleton FOR UPDATE',
   )
@@ -462,16 +465,17 @@ export async function publishKnowledgeBatch(
        WHERE id = $1`,
       [releaseId],
     )
-    await client.query(
-      `INSERT INTO release_items (
+    await client.query({
+      text: `INSERT INTO release_items (
          release_id,
          knowledge_item_id,
          revision_id
        )
        SELECT $1, knowledge_item_id, revision_id
        FROM active_knowledge_state`,
-      [releaseId],
-    )
+      values: [releaseId],
+      query_timeout: publicationSerializationTimeoutMs
+    })
   }
   await client.query(
     `UPDATE releases
@@ -513,9 +517,11 @@ async function publishCompensatingChanges(
   createdBy: string,
 ): Promise<{ releaseId: string; sequence: number }> {
   if (changes.length === 0) throw new Error('RELEASE_REQUIRES_ITEMS')
-  await client.query(
-    `SELECT pg_advisory_xact_lock(hashtext('clideck-mcp-release-publication'))`,
-  )
+  await client.query({
+    text:
+      `SELECT pg_advisory_xact_lock(hashtext('clideck-mcp-release-publication'))`,
+    query_timeout: publicationSerializationTimeoutMs
+  })
   const current = await client.query<{ release_id: string }>(
     'SELECT release_id FROM active_release WHERE singleton FOR UPDATE',
   )
