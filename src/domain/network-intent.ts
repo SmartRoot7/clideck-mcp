@@ -113,12 +113,13 @@ const capabilityPatterns: ReadonlyArray<{
     capability: 'arp-diagnostics',
     label: 'ARP diagnostics',
     pattern: /\barp\b|address resolution/i,
-    query: 'inspect ARP neighbor resolution diagnostics'
+    query: 'ARP resolution'
   },
   {
     capability: 'interface-counters',
     label: 'Interface counters',
-    pattern: /\b(?:rx|tx|counter|packet|drop|error|ошибк|сч[её]тчик)/i,
+    pattern:
+      /\b(?:rx|tx|counter|error|ошибк|сч[её]тчик)\b|\b(?:packet|interface)\s+(?:drop|drops|dropped)\b|\b(?:drop|drops|dropped)\s+(?:packet|packets|counter|counters)\b/i,
     query: 'inspect interface RX TX packet error counters'
   },
   {

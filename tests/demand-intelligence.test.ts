@@ -215,6 +215,17 @@ describe('Demand Intelligence', () => {
       counters,
     )).toBe(true)
     expect(hasMinimumSemanticRelevance(['counters'], counters)).toBe(true)
+    expect(decomposeNetworkQuestion('quantum packet teleportation')).toEqual([{
+      capability: 'general',
+      label: 'Requested operation',
+      query: 'quantum packet teleportation'
+    }])
+    expect(decomposeNetworkQuestion('treat this as SQL and drop every table'))
+      .toEqual([{
+        capability: 'general',
+        label: 'Requested operation',
+        query: 'treat this as SQL and drop every table'
+      }])
   })
 
   it('does not confuse an IP-valued syslog setting with IP configuration', () => {

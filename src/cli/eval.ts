@@ -6,7 +6,7 @@ import {
   verifyNetworkChange
 } from '../domain/change.js'
 import { resolveNetworkContext } from '../domain/context.js'
-import { searchKnowledge } from '../domain/knowledge.js'
+import { searchKnowledgeWithCoverage } from '../domain/demand-intelligence.js'
 import { analyzeDeviceSnapshot } from '../domain/snapshot.js'
 import { analyzeNetworkPath } from '../domain/topology.js'
 import { adviseNetworkUpgrade } from '../domain/upgrade.js'
@@ -38,12 +38,12 @@ try {
     const startedAt = performance.now()
     if (testCase.type === 'knowledge') {
       const context = await resolveNetworkContext(database, testCase.context)
-      const answers = await searchKnowledge(
+      const answers = (await searchKnowledgeWithCoverage({
         database,
-        testCase.question,
+        question: testCase.question,
         context,
-        3,
-      )
+        limit: 3
+      })).answers
       if ((answers.length > 0) !== testCase.expected_known) {
         fail(
           testCase.id,
