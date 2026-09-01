@@ -945,4 +945,22 @@ The Pipeline 2.0 pilot exposed four independent failure modes:
 
 ### Verification and deployment
 
-- Pending full tests, canonical deployment and live backlog-drain evidence.
+- The first canonical preflight correctly stopped before production because the
+  new fixture used a disposition reason outside the real database constraint.
+  After correcting the fixture, the repeated preflight passed 228/228 tests,
+  250/250 product evaluations, type checking, the build, backup, migrations,
+  grants, applicability checks, atomic switch and smoke tests.
+- Deployed commit `0fcd81d0aa0d7dc73c64ab128c5a3ea2fd04e56a`
+  exclusively through `ops/scripts/deploy-production.sh`. No GitHub write was
+  performed.
+- Before the correction, 7,636 fragments waited while no Analyze task existed.
+  After deployment, terminal-run fragments were immediately reserved and all
+  eight executors reached concurrent `fragment_analysis`. Across consecutive
+  observations, eight Analyze batches completed with no failed agent runs;
+  the open fragment total fell from 7,636 to 7,599 despite continuation
+  requeues, Fidelity checks increased from 7,227 to 7,238, and active knowledge
+  resumed growth.
+- `/health`, `/ready`, and Overview returned `200`; the deployed SHA and eight
+  executor cards were correct, all eight heartbeats remained fresh, circuit
+  count stayed zero, and no new application error appeared in the production
+  journals.
