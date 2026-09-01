@@ -1816,12 +1816,27 @@ async function queueSourceWork(
        SELECT current_run.id
        FROM source_processing_runs current_run
        WHERE current_run.source_candidate_id = sc.id
-         AND current_run.status IN (
+         AND (
+           current_run.status IN (
+             'queued', 'acquiring', 'converting', 'segmenting', 'extracting',
+             'auditing', 'repairing', 'reconciling', 'normalizing',
+             'publishing', 'paused'
+           )
+           OR EXISTS (
+             SELECT 1
+             FROM source_fragments remaining_fragment
+             WHERE remaining_fragment.processing_run_id = current_run.id
+               AND remaining_fragment.status = 'queued'
+               AND remaining_fragment.reservation_task_id IS NULL
+           )
+         )
+       ORDER BY
+         CASE WHEN current_run.status IN (
            'queued', 'acquiring', 'converting', 'segmenting', 'extracting',
            'auditing', 'repairing', 'reconciling', 'normalizing',
            'publishing', 'paused'
-         )
-       ORDER BY current_run.created_at DESC
+         ) THEN 0 ELSE 1 END,
+         current_run.created_at DESC
        LIMIT 1
      ) run ON true
      LEFT JOIN knowledge_demands demand ON demand.id = sc.knowledge_demand_id

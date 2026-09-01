@@ -913,3 +913,36 @@ The Pipeline 2.0 pilot exposed four independent failure modes:
   restarts. Overview returned exactly eight executor cards, all eight
   heartbeats were fresh, settings remained `8/2`, and no executor reported
   `circuit_cooldown`.
+
+## 2026-09-01 — Terminal processing-run mismatch stranded Analyze backlog
+
+### Evidence and cause
+
+- The circuit correction restored successful Discovery execution, but the
+  Overview still showed all executors predominantly standby while 7,636
+  fragments waited for Analyze. This disproved the earlier recovery verdict:
+  removal of the circuit did not prove end-to-end pipeline movement.
+- All eight active source lanes contained unreserved queued fragments. Seven
+  lanes referenced failed processing runs and one referenced a completed run.
+  The source scheduler correctly returned those sources to `analyzing`, but
+  `queueSourceWork` selected only a nonterminal processing run. It therefore
+  resolved `processing_run_id` to `NULL`, which could not match the queued
+  fragments' real run IDs, and created no `fragment_analysis` task.
+- The empty task queue was consequently not an idle healthy state. It was a
+  scheduler mismatch between source recovery and run-scoped fragment
+  selection. The eight occupied but unproductive lanes also prevented the
+  large prepared sources behind them from entering the active set.
+
+### Minimal correction
+
+- Prefer the newest nonterminal processing run exactly as before. If none
+  exists, select the newest terminal run that still owns an unreserved queued
+  fragment. The analysis task remains scoped to that exact run; fragments from
+  different runs are never mixed.
+- Add an integration regression that starts with a failed processing run and
+  a queued `targeted_retry` fragment, then proves that scheduling creates a
+  run-scoped Analyze task and reserves the fragment.
+
+### Verification and deployment
+
+- Pending full tests, canonical deployment and live backlog-drain evidence.

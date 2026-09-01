@@ -6985,6 +6985,98 @@ describeIntegration('PostgreSQL integration', () => {
     })
   })
 
+  it('continues queued fragments that remain in a terminal processing run', async () => {
+    const suffix = randomUUID().replaceAll('-', '')
+    await database.query(
+      `UPDATE pipeline_tasks
+          SET status = 'cancelled',
+              completed_at = now(),
+              updated_at = now()
+        WHERE status IN ('queued', 'claimed', 'running');
+       DELETE FROM active_source_slots;
+       DELETE FROM pipeline_ai_circuits;
+       UPDATE pipeline_settings
+          SET enabled = true,
+              max_concurrent_ai_runs = 4,
+              max_active_sources = 4,
+              paused_reason = NULL,
+              pause_requested_at = NULL,
+              updated_at = now(),
+              updated_by = 'terminal-run-fragment-recovery-test';`,
+    )
+    const source = await database.query<{ id: string }>(
+      `INSERT INTO source_candidates (
+         coverage_target_id, canonical_url, document_type, title, status,
+         discovered_by, content_hash
+       ) VALUES (
+         (SELECT id FROM coverage_targets ORDER BY priority DESC LIMIT 1),
+         $1, 'command_reference', 'Terminal run fragment recovery fixture',
+         'failed', 'integration-test', $2
+       ) RETURNING id`,
+      [
+        `https://www.cisco.com/c/en/us/support/terminal-run-${suffix}.html`,
+        sha256Label(`terminal-run-source-${suffix}`)
+      ],
+    )
+    const artifact = await database.query<{ id: string }>(
+      `INSERT INTO source_artifacts (
+         source_candidate_id, media_type, byte_size, content_hash,
+         storage_path, status
+       ) VALUES ($1, 'text/plain', 64, $2, '/tmp/terminal-run', 'chunked')
+       RETURNING id`,
+      [source.rows[0]!.id, sha256Label(`terminal-run-artifact-${suffix}`)],
+    )
+    const run = await database.query<{ id: string }>(
+      `INSERT INTO source_processing_runs (
+         source_candidate_id, source_artifact_id, processing_version,
+         status, completed_at
+       ) VALUES ($1, $2, $3, 'failed', now())
+       RETURNING id`,
+      [source.rows[0]!.id, artifact.rows[0]!.id, `terminal-${suffix}`],
+    )
+    await database.query(
+      `INSERT INTO source_fragments (
+         source_artifact_id, processing_run_id, ordinal, content,
+         content_hash, status, disposition, disposition_reason
+       ) VALUES (
+         $1, $2, 0, 'show interfaces counters errors', $3, 'queued',
+         'targeted_retry', 'targeted_retry'
+       )`,
+      [
+        artifact.rows[0]!.id,
+        run.rows[0]!.id,
+        sha256Label(`terminal-run-fragment-${suffix}`)
+      ],
+    )
+
+    await ensurePipelineWork(database)
+
+    const recovered = await database.query<{
+      source_status: string
+      task_status: string
+      processing_run_id: string
+      fragment_status: string
+    }>(
+      `SELECT source.status AS source_status,
+              task.status AS task_status,
+              task.processing_run_id,
+              fragment.status AS fragment_status
+         FROM source_candidates source
+         JOIN source_artifacts artifact ON artifact.source_candidate_id = source.id
+         JOIN source_fragments fragment ON fragment.source_artifact_id = artifact.id
+         JOIN pipeline_tasks task ON task.id = fragment.reservation_task_id
+        WHERE source.id = $1
+          AND task.task_type = 'fragment_analysis'`,
+      [source.rows[0]!.id],
+    )
+    expect(recovered.rows[0]).toEqual({
+      source_status: 'analyzing',
+      task_status: 'queued',
+      processing_run_id: run.rows[0]!.id,
+      fragment_status: 'reserved'
+    })
+  })
+
   it('terminalizes an exhausted continuation before an executor can claim it', async () => {
     const suffix = randomUUID().replaceAll('-', '').slice(0, 12)
     await database.query(
