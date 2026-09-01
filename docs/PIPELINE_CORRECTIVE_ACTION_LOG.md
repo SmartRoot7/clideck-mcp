@@ -37,8 +37,22 @@ accepted as the correction itself.
 
 ### Verification and deployment
 
-- Pending local/full release gates, clean-main deployment, automatic recovery
-  of both Arista sources, and a new read-only soak baseline.
+- Local gates passed with 159 unit tests plus all package and admin suites. The
+  full clean-main release gate then passed 230/230 PostgreSQL-backed tests and
+  250/250 product evaluations before deploying commit
+  `bea935bf9387a20093a3f37fda27c2aad12b915a` through the production script.
+- Migration 040 retried exactly the two failed Arista sources. Each new
+  acquisition completed on its first attempt with
+  `duplicate_reason=content_hash`, both sources became `duplicate`, both point
+  to the existing owner `e8b6fcd3-88e9-4f75-8e4c-5e64b28f64c2`, and neither
+  created a source artifact. No content-hash constraint failure occurred after
+  deployment.
+- Health, readiness, release smokes and all production services were healthy;
+  the application services had zero restarts and warning-or-higher journals
+  were empty. All eight executor heartbeats were fresh with fixed `8/8/8`
+  capacity and no open circuit. A read-only sample showed seven live useful
+  tasks while the remaining lane briefly reported
+  `deterministic_work_in_progress`; no queued task was left waiting.
 
 ## 2026-09-01 — Acquisition run ID used one parameter as UUID and text
 
