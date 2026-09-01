@@ -894,5 +894,22 @@ The Pipeline 2.0 pilot exposed four independent failure modes:
 
 ### Verification and deployment
 
-- Full local and production verification, the deployment commit, circuit
-  recovery and post-deploy observations are recorded below after completion.
+- Local verification passed 227/227 integration and workspace tests, 70/70
+  focused regression tests, type checking and the production build. The
+  canonical production deployment repeated 227/227 tests, 250/250 product
+  evaluations, the build, backup, migrations, grants, atomic switch and smoke
+  checks.
+- Deployed commit `37e4f779681b040bfd5e8a2dc09810c34a186ae7`
+  exclusively through `ops/scripts/deploy-production.sh`. No GitHub write was
+  performed.
+- The first successful Discovery probe removed the circuit row. Across two
+  subsequent live observations, completed post-deploy Discovery runs increased
+  from 30 to 35 with zero failed runs, zero occurrences of
+  `WEB_SEARCH_NOT_OBSERVED` or its fingerprint, and one current Discovery run
+  continuing normally.
+- Production remained healthy: `/health`, `/ready`, and the public Overview
+  returned `200`; PostgreSQL, API, admin, worker, researcher, Caddy,
+  cloudflared and the backup timer were active with zero application-service
+  restarts. Overview returned exactly eight executor cards, all eight
+  heartbeats were fresh, settings remained `8/2`, and no executor reported
+  `circuit_cooldown`.
