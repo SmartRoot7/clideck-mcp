@@ -1259,6 +1259,34 @@ async function acquireSource(
           content_hash: contentHash
         }
       }
+      // Content identity is also globally unique. Serialize only acquisitions
+      // of the same bytes so two different URLs discovered concurrently cannot
+      // race through the absence check and both hit the unique index later.
+      await client.query(
+        'SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))',
+        [contentHash],
+      )
+      const contentDuplicate = await client.query<{ id: string }>(
+        `SELECT id
+         FROM source_candidates
+         WHERE content_hash = $1::text
+           AND id <> $2::uuid
+         LIMIT 1
+         FOR UPDATE`,
+        [contentHash, payload.source_id],
+      )
+      if (contentDuplicate.rows[0]) {
+        await markSourceCandidateDuplicate(
+          client,
+          payload.source_id,
+        )
+        return {
+          duplicate: true,
+          duplicate_of: contentDuplicate.rows[0].id,
+          duplicate_reason: 'content_hash',
+          content_hash: contentHash
+        }
+      }
       const artifact = await client.query<{ id: string }>(
         `INSERT INTO source_artifacts (
          source_candidate_id,

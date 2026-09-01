@@ -5,6 +5,41 @@ Read it before changing the scheduler, executor bridge, processing runs, or
 production grants. A restart may load a deployed correction, but it is never
 accepted as the correction itself.
 
+## 2026-09-01 — Identical source bytes exhausted acquisition retries
+
+### Evidence and cause
+
+- The next hourly soak showed that the acquisition UUID correction worked:
+  both recovered sources completed acquisition, conversion and chunking; one
+  source completed end to end and the Linux source was actively producing new
+  reviewed knowledge. Published revisions increased by 1,235 and the public
+  sample contained coherent Linux kernel parameters with 0.90–0.94 quality.
+- Two unrelated Arista acquisition tasks nevertheless exhausted five attempts
+  on `source_candidates_content_hash_idx`. Their URLs were different, but the
+  downloaded manuals were byte-identical to an existing source. Acquisition
+  handled a canonical-URL redirect as a normal duplicate but attempted to
+  write duplicate content identity as an error.
+- This is an expected discovery outcome, not invalid source data. Retrying the
+  same unique-index violation cannot succeed and wastes deterministic worker
+  turns; removing the content-identity constraint would instead corrupt
+  deduplication.
+
+### Minimal correction
+
+- Serialize only acquisitions with the same content hash using a transaction
+  advisory lock, then classify an already-owned hash as `duplicate` through
+  the existing duplicate cleanup path. Different content remains fully
+  parallel and the global identity constraint stays unchanged.
+- Extend PostgreSQL integration coverage to require both canonical-URL and
+  content-hash duplicates to complete without artifacts or failed tasks.
+- Add an exact migration that retries only sources failed on the named content
+  hash constraint. Their previous terminal tasks remain audit history.
+
+### Verification and deployment
+
+- Pending local/full release gates, clean-main deployment, automatic recovery
+  of both Arista sources, and a new read-only soak baseline.
+
 ## 2026-09-01 — Acquisition run ID used one parameter as UUID and text
 
 ### Evidence and cause

@@ -7518,7 +7518,7 @@ describeIntegration('PostgreSQL integration', () => {
     }
   })
 
-  it('treats a redirect to an existing canonical document as a duplicate', async () => {
+  it('classifies canonical redirects and identical content as duplicates', async () => {
     const suffix = randomUUID().replaceAll('-', '')
     const scratch = await mkdtemp(join(tmpdir(), 'clideck-redirect-test-'))
     const sourceIds: string[] = []
@@ -7627,6 +7627,89 @@ describeIntegration('PostgreSQL integration', () => {
         [redirectSourceId],
       )
       expect(artifacts.rows[0]?.count).toBe(0)
+
+      const contentBody = `show content-dedupe-${suffix}`
+      await database.query(
+        `UPDATE source_candidates
+            SET status = 'completed',
+                content_hash = $2,
+                completed_at = now(),
+                updated_at = now()
+          WHERE id = $1`,
+        [sources.rows[0]!.id, sha256Label(contentBody)],
+      )
+      const contentUrl = `https://example.com/content-${suffix}.txt`
+      const contentSource = await database.query<{ id: string }>(
+        `INSERT INTO source_candidates (
+           coverage_target_id, canonical_url, document_type, title, status,
+           discovered_by
+         ) VALUES (
+           $1, $2, 'command_reference', 'Identical content document',
+           'approved', 'integration-test'
+         ) RETURNING id`,
+        [targetId, contentUrl],
+      )
+      const contentSourceId = contentSource.rows[0]!.id
+      sourceIds.push(contentSourceId)
+      const contentTask = await database.query<{ id: string }>(
+        `INSERT INTO pipeline_tasks (
+           task_type, stage, status, priority, dedupe_key,
+           source_candidate_id, coverage_target_id, payload
+         ) VALUES (
+           'source_acquisition', 'acquire', 'queued', 126, $1,
+           $2::uuid, $3::uuid,
+           jsonb_build_object(
+             'source_id', ($2::uuid)::text,
+             'canonical_url', $4::text,
+             'document_type', 'command_reference',
+             'title', 'Identical content document',
+             'document_version', null,
+             'document_date', null
+           )
+         ) RETURNING id`,
+        [
+          `content-dedupe-task:${suffix}`,
+          contentSourceId,
+          targetId,
+          contentUrl,
+        ],
+      )
+
+      await expect(processNextPipelineTask(
+        database,
+        { ...config, sourceStorageDir: scratch },
+        logger,
+        'content-dedupe-worker',
+        async () => ({
+          body: Buffer.from(contentBody, 'utf8'),
+          mediaType: 'text/plain',
+          finalUrl: contentUrl,
+        }),
+      )).resolves.toBe(true)
+
+      const contentOutcome = await database.query<{
+        source_status: string
+        task_status: string
+        duplicate_reason: string | null
+        artifacts: number
+      }>(
+        `SELECT
+           source.status AS source_status,
+           task.status AS task_status,
+           task.result->>'duplicate_reason' AS duplicate_reason,
+           (SELECT count(*)::int FROM source_artifacts artifact
+             WHERE artifact.source_candidate_id = source.id) AS artifacts
+         FROM source_candidates source
+         JOIN pipeline_tasks task ON task.source_candidate_id = source.id
+         WHERE source.id = $1 AND task.id = $2`,
+        [contentSourceId, contentTask.rows[0]!.id],
+      )
+      expect(contentOutcome.rows[0]).toEqual({
+        source_status: 'duplicate',
+        task_status: 'completed',
+        duplicate_reason: 'content_hash',
+        artifacts: 0,
+      })
     } finally {
       if (sourceIds.length > 0) {
         await database.query(
