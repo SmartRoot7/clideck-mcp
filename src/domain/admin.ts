@@ -59,7 +59,171 @@ export async function getAdminOverview(
     mcpRequests
   ] = await Promise.all([
     database.query(
-      `SELECT
+      `WITH
+       source_stats AS (
+         SELECT
+           count(*)::int AS sources_total,
+           count(*) FILTER (WHERE status = 'prepared')::int
+             AS prepared_sources,
+           count(*) FILTER (
+             WHERE status IN ('completed', 'completed_with_exceptions')
+           )::int AS sources_completed
+         FROM source_candidates
+       ),
+       fragment_stats AS (
+         SELECT count(*)::int AS fragments_total
+         FROM source_fragments
+       ),
+       knowledge_stats AS (
+         SELECT
+           count(*)::int AS candidates_total,
+           count(*) FILTER (
+             WHERE status = 'published'
+               AND updated_at >= now() - interval '1 hour'
+           )::int * 24 AS projected_publications_per_day,
+           count(*) FILTER (
+             WHERE status IN (
+               'verified', 'published', 'rejected', 'conflict',
+               'quarantined'
+             )
+           )::int AS automatically_resolved,
+           count(*) FILTER (
+             WHERE status IN (
+               'verified', 'published', 'rejected', 'conflict',
+               'quarantined', 'manual_exception'
+             )
+           )::int AS resolution_total,
+           count(*) FILTER (
+             WHERE status = 'manual_exception'
+               AND updated_at >= now() - interval '24 hours'
+           )::int AS manual_exceptions_24h,
+           count(*) FILTER (
+             WHERE technical_retry_count > 0
+               AND updated_at >= now() - interval '24 hours'
+           )::int AS technical_retries_24h,
+           count(*) FILTER (
+             WHERE status = 'rejected'
+               AND updated_at >= now() - interval '24 hours'
+           )::int AS automatic_rejections_24h,
+           count(*) FILTER (
+             WHERE created_at >= now() - interval '24 hours'
+           )::int AS candidates_created_24h,
+           count(*) FILTER (
+             WHERE status = 'conflict'
+               AND updated_at >= now() - interval '24 hours'
+           )::int AS conflicts_24h,
+           count(*) FILTER (
+             WHERE status = 'quarantined'
+               AND updated_at >= now() - interval '24 hours'
+           )::int AS quarantined_24h
+         FROM knowledge_candidates
+       ),
+       task_stats AS (
+         SELECT
+           count(*) FILTER (
+             WHERE status = 'failed'
+               AND completed_at >= now() - interval '24 hours'
+           )::int AS failures_24h,
+           count(*) FILTER (
+             WHERE status = 'completed'
+               AND completed_at >= now() - interval '24 hours'
+           )::int AS completed_stages_24h,
+           count(*) FILTER (
+             WHERE status IN ('claimed', 'running')
+               AND task_type IN (
+                 'expert_research', 'source_discovery',
+                 'fragment_analysis', 'candidate_verification',
+                 'candidate_deep_review', 'source_refresh'
+               )
+           )::int AS active_luna_executors,
+           count(*) FILTER (
+             WHERE status = 'queued' AND task_type = 'expert_research'
+           )::int AS queued_expert,
+           count(*) FILTER (
+             WHERE status = 'queued'
+               AND task_type = 'candidate_verification'
+           )::int AS queued_verify,
+           count(*) FILTER (
+             WHERE status = 'queued'
+               AND task_type = 'candidate_deep_review'
+           )::int AS queued_deep_review,
+           count(*) FILTER (
+             WHERE status = 'queued' AND task_type = 'fragment_analysis'
+           )::int AS queued_analyze,
+           count(*) FILTER (
+             WHERE status = 'queued'
+               AND task_type IN ('source_discovery', 'source_refresh')
+           )::int AS queued_discover,
+           coalesce(avg(jsonb_array_length(payload->'fragments')) FILTER (
+             WHERE task_type = 'fragment_analysis'
+               AND created_at >= now() - interval '24 hours'
+           ), 0)::numeric(8,2) AS average_analysis_batch,
+           coalesce(avg(jsonb_array_length(payload->'candidates')) FILTER (
+             WHERE task_type = 'candidate_verification'
+               AND created_at >= now() - interval '24 hours'
+           ), 0)::numeric(8,2) AS average_verification_batch,
+           coalesce(sum((result->>'inserted_sources')::int) FILTER (
+             WHERE task_type IN ('source_discovery', 'source_refresh')
+               AND status = 'completed'
+               AND completed_at >= now() - interval '24 hours'
+           ), 0)::int AS discovery_unique_yield,
+           coalesce(sum((result->>'duplicate_sources')::int) FILTER (
+             WHERE task_type IN ('source_discovery', 'source_refresh')
+               AND status = 'completed'
+               AND completed_at >= now() - interval '24 hours'
+           ), 0)::int AS discovery_duplicates_avoided,
+           count(*) FILTER (
+             WHERE task_type = 'source_publication'
+               AND status = 'failed'
+               AND completed_at >= now() - interval '24 hours'
+           )::int AS publication_failures_24h
+         FROM pipeline_tasks
+       ),
+       agent_stats AS (
+         SELECT
+           coalesce(sum(
+             input_tokens + output_tokens + reasoning_output_tokens
+           ), 0)::bigint AS tokens_total,
+           coalesce(sum(
+             input_tokens + output_tokens + reasoning_output_tokens
+           ) FILTER (
+             WHERE started_at >= date_trunc('day', now())
+           ), 0)::bigint AS tokens_today,
+           count(*) FILTER (WHERE status = 'running')::int
+             AS active_agent_runs,
+           coalesce(sum(published_revisions), 0)::bigint
+             AS published_revisions_total,
+           coalesce(sum(duration_ms) FILTER (
+             WHERE started_at >= now() - interval '24 hours'
+           ), 0)::bigint AS recent_duration_ms,
+           min(started_at) FILTER (
+             WHERE started_at >= now() - interval '24 hours'
+           ) AS recent_min_started_at,
+           max(started_at) FILTER (
+             WHERE started_at >= now() - interval '24 hours'
+           ) AS recent_max_started_at
+         FROM agent_runs
+       ),
+       verification_stats AS (
+         SELECT
+           count(*) FILTER (
+             WHERE decision = 'verified'
+           )::int AS candidates_verified_24h,
+           count(*) FILTER (
+             WHERE review_type IN ('deep_low', 'deep_medium')
+               AND decision IN ('verified', 'rejected', 'conflict')
+           )::int AS candidates_deep_resolved_24h
+         FROM candidate_verifications
+         WHERE created_at >= now() - interval '24 hours'
+       ),
+       collection_stats AS (
+         SELECT
+           coalesce(sum(unique_yield), 0)::int AS unique_yield,
+           coalesce(sum(duplicates_avoided), 0)::int
+             AS duplicates_avoided
+         FROM source_collections
+       )
+       SELECT
          ar.release_id::text AS active_release,
          r.sequence::int AS active_release_sequence,
          r.created_at AS active_release_created_at,
@@ -72,8 +236,7 @@ export async function getAdminOverview(
          ps.max_active_sources,
          ps.max_deep_review_runs,
          ps.prepared_source_target,
-         (SELECT count(*)::int FROM source_candidates
-          WHERE status = 'prepared') AS prepared_sources,
+         source_stats.prepared_sources,
          ps.control_generation,
          ps.pause_requested_at,
          ps.paused_reason,
@@ -92,191 +255,68 @@ export async function getAdminOverview(
            AS open_conflicts,
          (SELECT count(*)::int FROM feedback
           WHERE created_at >= now() - interval '24 hours') AS feedback_24h,
-         (SELECT count(*)::int FROM source_candidates) AS sources_total,
-         (SELECT count(*)::int FROM source_candidates
-          WHERE status IN ('completed', 'completed_with_exceptions'))
-           AS sources_completed,
-         (SELECT count(*)::int FROM source_fragments) AS fragments_total,
-         (SELECT count(*)::int FROM knowledge_candidates) AS candidates_total,
-         (SELECT count(*)::int FROM pipeline_tasks
-          WHERE status = 'failed'
-            AND completed_at >= now() - interval '24 hours') AS failures_24h,
-         (SELECT count(*)::int FROM pipeline_tasks
-          WHERE status = 'completed'
-            AND completed_at >= now() - interval '24 hours')
-           AS completed_stages_24h,
-         (SELECT coalesce(sum(
-            input_tokens + output_tokens + reasoning_output_tokens
-          ), 0)::bigint FROM agent_runs) AS tokens_total,
-         (SELECT coalesce(sum(
-            input_tokens + output_tokens + reasoning_output_tokens
-          ), 0)::bigint FROM agent_runs
-          WHERE started_at >= date_trunc('day', now())) AS tokens_today,
-         (SELECT count(*)::int FROM agent_runs
-          WHERE status = 'running') AS active_agent_runs,
-         (SELECT count(*)::int FROM pipeline_tasks
-          WHERE status IN ('claimed', 'running')
-            AND task_type IN (
-              'expert_research',
-              'source_discovery',
-              'fragment_analysis',
-              'candidate_verification',
-              'candidate_deep_review',
-              'source_refresh'
-            )) AS active_luna_executors,
-         (SELECT count(*)::int FROM pipeline_tasks
-          WHERE status = 'queued'
-            AND task_type = 'expert_research') AS queued_expert,
-         (SELECT count(*)::int FROM pipeline_tasks
-          WHERE status = 'queued'
-            AND task_type = 'candidate_verification') AS queued_verify,
-         (SELECT count(*)::int FROM pipeline_tasks
-          WHERE status = 'queued'
-            AND task_type = 'candidate_deep_review')
-           AS queued_deep_review,
-         (SELECT count(*)::int FROM pipeline_tasks
-          WHERE status = 'queued'
-            AND task_type = 'fragment_analysis') AS queued_analyze,
-         (SELECT count(*)::int FROM pipeline_tasks
-          WHERE status = 'queued'
-            AND task_type IN ('source_discovery', 'source_refresh'))
-           AS queued_discover,
-         (SELECT coalesce(
-            sum(input_tokens + output_tokens + reasoning_output_tokens)
-            / nullif(sum(published_revisions), 0),
-            0
-          )::numeric(14,2) FROM agent_runs) AS tokens_per_revision
-         ,
-         (SELECT count(*)::int * 24
-          FROM knowledge_candidates
-          WHERE status = 'published'
-            AND updated_at >= now() - interval '1 hour')
-           AS projected_publications_per_day,
-         (SELECT coalesce(
-            100.0 * count(*) FILTER (
-              WHERE status IN (
-                'verified', 'published', 'rejected', 'conflict',
-                'quarantined'
-              )
-            ) / nullif(count(*) FILTER (
-              WHERE status IN (
-                'verified', 'published', 'rejected', 'conflict',
-                'quarantined', 'manual_exception'
-              )
-            ), 0),
-            100
-          )::numeric(6,3)
-          FROM knowledge_candidates)
-           AS automatic_resolution_rate,
-         (SELECT count(*)::int
-          FROM knowledge_candidates
-          WHERE status = 'manual_exception'
-            AND updated_at >= now() - interval '24 hours')
-           AS manual_exceptions_24h,
-         (SELECT count(*)::int
-          FROM knowledge_candidates
-          WHERE technical_retry_count > 0
-            AND updated_at >= now() - interval '24 hours')
-           AS technical_retries_24h,
-         (SELECT count(*)::int
-          FROM knowledge_candidates
-          WHERE status = 'rejected'
-            AND updated_at >= now() - interval '24 hours')
-           AS automatic_rejections_24h,
-         (SELECT coalesce(avg(
-            jsonb_array_length(payload->'fragments')
-          ), 0)::numeric(8,2)
-          FROM pipeline_tasks
-          WHERE task_type = 'fragment_analysis'
-            AND created_at >= now() - interval '24 hours')
-           AS average_analysis_batch,
-         (SELECT coalesce(avg(
-            jsonb_array_length(payload->'candidates')
-          ), 0)::numeric(8,2)
-          FROM pipeline_tasks
-          WHERE task_type = 'candidate_verification'
-            AND created_at >= now() - interval '24 hours')
-           AS average_verification_batch,
-         (SELECT coalesce(
-            least(
-              100,
-              100.0 * sum(coalesce(duration_ms, 0))
-                / nullif(
-                  extract(epoch FROM (
-                    greatest(now(), max(started_at)) -
-                    least(
-                      now() - interval '24 hours',
-                      min(started_at)
-                    )
-                  )) * 1000 * ps.max_concurrent_ai_runs,
-                  0
-                )
-            ),
-            0
-          )::numeric(6,2)
-          FROM agent_runs
-          WHERE started_at >= now() - interval '24 hours')
-           AS executor_utilization,
-         (SELECT coalesce(sum(
-            (result->>'inserted_sources')::int
-          ), 0)::int + coalesce((
-            SELECT sum(unique_yield)::int
-            FROM source_collections
-          ), 0)
-          FROM pipeline_tasks
-          WHERE task_type IN ('source_discovery', 'source_refresh')
-            AND status = 'completed'
-            AND completed_at >= now() - interval '24 hours')
+         source_stats.sources_total,
+         source_stats.sources_completed,
+         fragment_stats.fragments_total,
+         knowledge_stats.candidates_total,
+         task_stats.failures_24h,
+         task_stats.completed_stages_24h,
+         agent_stats.tokens_total,
+         agent_stats.tokens_today,
+         agent_stats.active_agent_runs,
+         task_stats.active_luna_executors,
+         task_stats.queued_expert,
+         task_stats.queued_verify,
+         task_stats.queued_deep_review,
+         task_stats.queued_analyze,
+         task_stats.queued_discover,
+         coalesce(
+           agent_stats.tokens_total
+             / nullif(agent_stats.published_revisions_total, 0),
+           0
+         )::numeric(14,2) AS tokens_per_revision,
+         knowledge_stats.projected_publications_per_day,
+         coalesce(
+           100.0 * knowledge_stats.automatically_resolved
+             / nullif(knowledge_stats.resolution_total, 0),
+           100
+         )::numeric(6,3) AS automatic_resolution_rate,
+         knowledge_stats.manual_exceptions_24h,
+         knowledge_stats.technical_retries_24h,
+         knowledge_stats.automatic_rejections_24h,
+         task_stats.average_analysis_batch,
+         task_stats.average_verification_batch,
+         coalesce(
+           least(
+             100,
+             100.0 * agent_stats.recent_duration_ms
+               / nullif(
+                 extract(epoch FROM (
+                   greatest(now(), agent_stats.recent_max_started_at) -
+                   least(
+                     now() - interval '24 hours',
+                     agent_stats.recent_min_started_at
+                   )
+                 )) * 1000 * ps.max_concurrent_ai_runs,
+                 0
+               )
+           ),
+           0
+         )::numeric(6,2) AS executor_utilization,
+         task_stats.discovery_unique_yield + collection_stats.unique_yield
            AS discovery_unique_yield,
-         (SELECT coalesce(sum(
-            (result->>'duplicate_sources')::int
-          ), 0)::int + coalesce((
-            SELECT sum(duplicates_avoided)::int
-            FROM source_collections
-          ), 0)
-          FROM pipeline_tasks
-          WHERE task_type IN ('source_discovery', 'source_refresh')
-            AND status = 'completed'
-            AND completed_at >= now() - interval '24 hours')
+         task_stats.discovery_duplicates_avoided +
+           collection_stats.duplicates_avoided
            AS discovery_duplicates_avoided,
-         (SELECT count(*)::int
-          FROM pipeline_tasks
-          WHERE task_type = 'source_publication'
-            AND status = 'failed'
-            AND completed_at >= now() - interval '24 hours')
-           AS publication_failures_24h,
-         (SELECT count(*)::int
-          FROM knowledge_candidates
-          WHERE created_at >= now() - interval '24 hours')
-           AS candidates_created_24h,
-         (SELECT count(*)::int
-          FROM candidate_verifications
-          WHERE decision = 'verified'
-            AND created_at >= now() - interval '24 hours')
-           AS candidates_verified_24h,
-         (SELECT count(*)::int
-          FROM candidate_verifications
-          WHERE review_type IN ('deep_low', 'deep_medium')
-            AND decision IN ('verified', 'rejected', 'conflict')
-            AND created_at >= now() - interval '24 hours')
-           AS candidates_deep_resolved_24h,
+         task_stats.publication_failures_24h,
+         knowledge_stats.candidates_created_24h,
+         verification_stats.candidates_verified_24h,
+         verification_stats.candidates_deep_resolved_24h,
          jsonb_build_object(
-           'rejected',
-             (SELECT count(*)::int FROM knowledge_candidates
-              WHERE status = 'rejected'
-                AND updated_at >= now() - interval '24 hours'),
-           'conflict',
-             (SELECT count(*)::int FROM knowledge_candidates
-              WHERE status = 'conflict'
-                AND updated_at >= now() - interval '24 hours'),
-           'quarantine',
-             (SELECT count(*)::int FROM knowledge_candidates
-              WHERE status = 'quarantined'
-                AND updated_at >= now() - interval '24 hours'),
-           'exception',
-             (SELECT count(*)::int FROM knowledge_candidates
-              WHERE status = 'manual_exception'
-                AND updated_at >= now() - interval '24 hours')
+           'rejected', knowledge_stats.automatic_rejections_24h,
+           'conflict', knowledge_stats.conflicts_24h,
+           'quarantine', knowledge_stats.quarantined_24h,
+           'exception', knowledge_stats.manual_exceptions_24h
          ) AS record_outcomes_24h
        FROM active_release ar
        JOIN releases r ON r.id = ar.release_id
@@ -300,6 +340,13 @@ export async function getAdminOverview(
          )
        )
        LEFT JOIN coverage_targets ct ON ct.id = sc.coverage_target_id
+       CROSS JOIN source_stats
+       CROSS JOIN fragment_stats
+       CROSS JOIN knowledge_stats
+       CROSS JOIN task_stats
+       CROSS JOIN agent_stats
+       CROSS JOIN verification_stats
+       CROSS JOIN collection_stats
        WHERE ar.singleton AND ps.singleton`,
     ),
     database.query(

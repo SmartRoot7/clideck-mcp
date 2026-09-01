@@ -4,6 +4,26 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 describe('production database role contract', () => {
+  it('aggregates admin summary metrics once per large table', async () => {
+    const admin = await readFile(
+      resolve(process.cwd(), 'src/domain/admin.ts'),
+      'utf8',
+    )
+    const summary = admin.slice(
+      admin.indexOf('source_stats AS ('),
+      admin.indexOf('snapshot AS ('),
+    )
+
+    expect(summary).toContain('knowledge_stats AS (')
+    expect(summary).toContain('task_stats AS (')
+    expect(summary).toContain('agent_stats AS (')
+    expect(summary.match(/FROM knowledge_candidates/g)).toHaveLength(1)
+    expect(summary.match(/FROM agent_runs/g)).toHaveLength(1)
+    expect(summary).not.toMatch(
+      /\(SELECT count\(\*\)[\s\S]*?FROM knowledge_candidates/,
+    )
+  })
+
   it('lets the admin and demo overview read scoped AI circuit telemetry', async () => {
     const grants = await readFile(
       resolve(process.cwd(), 'ops/sql/grants.sql'),

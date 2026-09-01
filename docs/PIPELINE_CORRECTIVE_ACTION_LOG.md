@@ -818,3 +818,37 @@ The Pipeline 2.0 pilot exposed four independent failure modes:
   two-hour soak restarts from this baseline; it explicitly watches subsequent
   large mechanical tasks for a repeated source-lock timeout and continues the
   pending checkpoint-boundary verification.
+
+## 2026-08-31 — Local admin Overview exceeded the database read timeout
+
+### Evidence and cause
+
+- The authenticated Tailscale admin page completed its session request, but
+  `/admin/api/v1/overview` repeatedly returned `502` after about ten seconds.
+  The internal API request failed with `Query read timeout`; the admin and API
+  services themselves remained active with zero restarts.
+- The summary query calculated related counters with many independent scalar
+  subqueries. At the current production size this repeatedly scanned
+  `knowledge_candidates` (about 232,000 rows / 919 MiB), `pipeline_tasks`
+  (about 205,000 rows / 894 MiB), and `agent_runs` for individual metrics.
+  Correct individual aggregates completed normally, but the accumulated
+  repeated reads exceeded the standard ten-second query budget.
+- The previous smoke verification checked service and public endpoint health,
+  but did not wait for the authenticated Overview payload. It therefore missed
+  a real user-facing regression.
+
+### Minimal correction
+
+- The Overview summary now groups related metrics into one aggregate scan per
+  large table and reuses those results in the final row. Response fields,
+  definitions, authorization and the ten-second database timeout are unchanged.
+- A read-only production `EXPLAIN ANALYZE` of the corrected summary against the
+  live dataset completed in about 2.2 seconds with cold reads, below the
+  existing timeout without increasing or bypassing it.
+
+### Verification and deployment
+
+- TypeScript and admin contract checks pass. Focused Overview snapshot and
+  local-admin proxy tests pass; full tests, evaluation, build, production
+  deployment and an authenticated Chrome verification are recorded after the
+  release below.
