@@ -1306,11 +1306,11 @@ async function acquireSource(
       )
       await client.query(
         `UPDATE pipeline_tasks
-            SET processing_run_id = $2,
+            SET processing_run_id = $2::uuid,
                 payload = jsonb_set(
                   payload,
                   '{processing_run_id}',
-                  to_jsonb($2::text),
+                  to_jsonb(($2::uuid)::text),
                   true
                 ),
                 updated_at = now()

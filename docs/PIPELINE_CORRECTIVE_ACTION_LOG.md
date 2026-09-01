@@ -5,6 +5,41 @@ Read it before changing the scheduler, executor bridge, processing runs, or
 production grants. A restart may load a deployed correction, but it is never
 accepted as the correction itself.
 
+## 2026-09-01 — Acquisition run ID used one parameter as UUID and text
+
+### Evidence and cause
+
+- The first hourly observation after the eight-lane correction found two new
+  official sources, but both acquisition tasks exhausted five attempts with
+  PostgreSQL `42P08`: `inconsistent types deduced for parameter $2`, detail
+  `text versus uuid`. The affected sources were the Linux kernel parameter
+  reference and a Vistance Networks technical-content collection.
+- Download and local artifact persistence had succeeded. The following task
+  update reused `$2` directly for the UUID `processing_run_id` column and as
+  `$2::text` inside JSON. PostgreSQL could not assign two incompatible types to
+  one extended-query parameter, so the transaction rolled back and the bounded
+  retry policy correctly left both sources failed rather than looping forever.
+- Production services, eight-lane refill, published knowledge and public
+  quality remained healthy. This was a deterministic ingestion defect for
+  every genuinely new non-redirecting source, not a reason to restart any
+  process or weaken source validation.
+
+### Minimal correction
+
+- Give the parameter one explicit UUID type everywhere and convert that UUID
+  to text only after the cast when adding it to the JSON task payload.
+- Add a PostgreSQL integration regression that executes a successful real
+  acquisition and requires the task column and JSON payload to contain the
+  same processing-run ID.
+- Add an exact data migration that returns only sources failed by this specific
+  `42P08` message to `approved`. Their terminal tasks remain immutable audit
+  history; ordinary scheduling creates a new bounded acquisition attempt.
+
+### Verification and deployment
+
+- Pending local/full release gates, clean-main production deployment, recovery
+  of the two sources, and a fresh read-only soak baseline.
+
 ## 2026-09-01 — Calendar and stage caps idled all eight executors
 
 ### Evidence and cause

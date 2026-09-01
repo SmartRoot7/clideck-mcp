@@ -7391,6 +7391,133 @@ describeIntegration('PostgreSQL integration', () => {
     })
   })
 
+  it('persists the processing run after a successful source acquisition', async () => {
+    const suffix = randomUUID().replaceAll('-', '')
+    const scratch = await mkdtemp(join(tmpdir(), 'clideck-acquire-test-'))
+    let targetId: string | null = null
+    let sourceId: string | null = null
+    try {
+      const target = await database.query<{ id: string }>(
+        `INSERT INTO coverage_targets (
+           vendor_slug, product_family, model, operating_system_slug,
+           version_branch, document_role, priority, status, next_check_at
+         ) VALUES (
+           'linux', $1, NULL, 'linux', NULL,
+           'commands', 100, 'active', now()
+         ) RETURNING id`,
+        [`acquire-${suffix}`],
+      )
+      targetId = target.rows[0]!.id
+      const sourceUrl = `https://example.com/acquire-${suffix}.txt`
+      const source = await database.query<{ id: string }>(
+        `INSERT INTO source_candidates (
+           coverage_target_id, canonical_url, document_type, title, status,
+           discovered_by
+         ) VALUES (
+           $1, $2, 'command_reference', 'Successful acquisition fixture',
+           'approved', 'integration-test'
+         ) RETURNING id`,
+        [targetId, sourceUrl],
+      )
+      sourceId = source.rows[0]!.id
+      const task = await database.query<{ id: string }>(
+        `INSERT INTO pipeline_tasks (
+           task_type, stage, status, priority, dedupe_key,
+           source_candidate_id, coverage_target_id, payload
+         ) VALUES (
+           'source_acquisition', 'acquire', 'queued', 126, $1,
+           $2::uuid, $3::uuid,
+           jsonb_build_object(
+             'source_id', ($2::uuid)::text,
+             'canonical_url', $4::text,
+             'document_type', 'command_reference',
+             'title', 'Successful acquisition fixture',
+             'document_version', null,
+             'document_date', null
+           )
+         ) RETURNING id`,
+        [
+          `successful-acquisition:${suffix}`,
+          sourceId,
+          targetId,
+          sourceUrl,
+        ],
+      )
+
+      await expect(processNextPipelineTask(
+        database,
+        { ...config, sourceStorageDir: scratch },
+        logger,
+        'successful-acquisition-worker',
+        async () => ({
+          body: Buffer.from('show successful-acquisition', 'utf8'),
+          mediaType: 'text/plain',
+          finalUrl: sourceUrl,
+        }),
+      )).resolves.toBe(true)
+
+      const acquired = await database.query<{
+        source_status: string
+        task_status: string
+        processing_run_id: string | null
+        payload_run_id: string | null
+      }>(
+        `SELECT
+           source.status AS source_status,
+           task.status AS task_status,
+           task.processing_run_id,
+           task.payload->>'processing_run_id' AS payload_run_id
+         FROM source_candidates source
+         JOIN pipeline_tasks task ON task.source_candidate_id = source.id
+         WHERE source.id = $1 AND task.id = $2`,
+        [sourceId, task.rows[0]!.id],
+      )
+      expect(acquired.rows[0]).toMatchObject({
+        source_status: 'acquired',
+        task_status: 'completed',
+        processing_run_id: expect.any(String),
+        payload_run_id: expect.any(String),
+      })
+      expect(acquired.rows[0]!.payload_run_id).toBe(
+        acquired.rows[0]!.processing_run_id,
+      )
+    } finally {
+      if (sourceId) {
+        await database.query(
+          'DELETE FROM active_source_slots WHERE source_candidate_id = $1',
+          [sourceId],
+        )
+        await database.query(
+          'DELETE FROM pipeline_tasks WHERE source_candidate_id = $1',
+          [sourceId],
+        )
+        await database.query(
+          'DELETE FROM source_processing_runs WHERE source_candidate_id = $1',
+          [sourceId],
+        )
+        await database.query(
+          'DELETE FROM source_artifacts WHERE source_candidate_id = $1',
+          [sourceId],
+        )
+        await database.query(
+          'DELETE FROM source_candidates WHERE id = $1',
+          [sourceId],
+        )
+      }
+      if (targetId) {
+        await database.query(
+          'DELETE FROM pipeline_tasks WHERE coverage_target_id = $1',
+          [targetId],
+        )
+        await database.query(
+          'DELETE FROM coverage_targets WHERE id = $1',
+          [targetId],
+        )
+      }
+      await rm(scratch, { recursive: true, force: true })
+    }
+  })
+
   it('treats a redirect to an existing canonical document as a duplicate', async () => {
     const suffix = randomUUID().replaceAll('-', '')
     const scratch = await mkdtemp(join(tmpdir(), 'clideck-redirect-test-'))
