@@ -76,7 +76,7 @@ describe('parallel Luna runtime', () => {
     })
   })
 
-  it('allows web search only for bounded research tasks', () => {
+  it('enables the web-search host only for bounded research tasks', () => {
     const common = {
       model: pipelineModel,
       reasoning: pipelineReasoning,
@@ -94,7 +94,15 @@ describe('parallel Luna runtime', () => {
     })
     expect(discovery[discovery.indexOf('standalone_web_search') - 1])
       .toBe('--enable')
+    expect(discovery[discovery.indexOf('code_mode') - 1])
+      .toBe('--enable')
+    expect(discovery[discovery.indexOf('code_mode_host') - 1])
+      .toBe('--enable')
     expect(analysis[analysis.indexOf('standalone_web_search') - 1])
+      .toBe('--disable')
+    expect(analysis[analysis.indexOf('code_mode') - 1])
+      .toBe('--disable')
+    expect(analysis[analysis.indexOf('code_mode_host') - 1])
       .toBe('--disable')
   })
 

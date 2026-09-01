@@ -5,6 +5,41 @@ Read it before changing the scheduler, executor bridge, processing runs, or
 production grants. A restart may load a deployed correction, but it is never
 accepted as the correction itself.
 
+## 2026-09-01 — Discovery web search was routed through a disabled host
+
+### Evidence and cause
+
+- The hourly soak found all eight executors fresh and running Discovery, but
+  2,206 completed searches across all 320 active coverage targets produced no
+  new source and no published knowledge. The runs consumed 60.6 million input
+  tokens, and many artifacts explicitly reported that the required web-search
+  tool was unavailable.
+- The executor enabled `standalone_web_search` while unconditionally disabling
+  both `code_mode` and `code_mode_host`. The installed Codex runtime routes the
+  standalone search tool through that host. An exact local reproduction emitted
+  `Code Mode is unavailable because code-mode host is disabled` and returned no
+  URL; the same invocation with those two features enabled emitted a real
+  `web_search` event and returned an official HTTPS result.
+- Service health, fixed `8/8/8` capacity, leases and circuits were healthy. The
+  defect made apparently busy work semantically empty; it was not a scheduler
+  capacity or standby problem.
+
+### Minimal correction
+
+- Enable `code_mode`, `code_mode_host` and `standalone_web_search` together only
+  for the existing bounded web-research task types. Continue disabling all
+  three for analysis, verification, deep review and demand diagnosis; the shell,
+  browser automation, MCP servers, plugins and inherited secrets remain
+  unavailable to every executor.
+- Extend the executor-policy regression to require the host and search feature
+  to be enabled and disabled as one unit.
+
+### Verification and deployment
+
+- Pending local/full release gates, clean-main deployment and a production
+  discovery sample that demonstrates real web search rather than the prior
+  unavailable-tool rejection.
+
 ## 2026-09-01 — Identical source bytes exhausted acquisition retries
 
 ### Evidence and cause

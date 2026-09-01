@@ -8,8 +8,6 @@ const disabledCodexFeatures = [
   'browser_use',
   'browser_use_external',
   'browser_use_full_cdp_access',
-  'code_mode',
-  'code_mode_host',
   'computer_use',
   'enable_mcp_apps',
   'goals',
@@ -87,8 +85,16 @@ export function codexExecutorArguments(input: {
       feature
     ]),
     ...(webResearchTasks.has(input.taskType)
-      ? ['--enable', 'standalone_web_search']
-      : ['--disable', 'standalone_web_search']),
+      ? [
+          '--enable', 'code_mode',
+          '--enable', 'code_mode_host',
+          '--enable', 'standalone_web_search'
+        ]
+      : [
+          '--disable', 'code_mode',
+          '--disable', 'code_mode_host',
+          '--disable', 'standalone_web_search'
+        ]),
     '-m',
     input.model,
     '-c',
