@@ -747,19 +747,6 @@ export function createAdminUiApp(dependencies: AdminUiDependencies) {
       'pipeline',
     )
   })
-  app.post('/admin/api/v1/pipeline/concurrency', async (context) => {
-    const parsed = z.object({
-      max_concurrent_ai_runs: z.number().int().min(1).max(8)
-    }).strict().safeParse(await context.req.json<unknown>())
-    if (!parsed.success) return context.json({ error: 'invalid_input' }, 400)
-    return mutationEndpoint(
-      context,
-      '/admin/v1/pipeline/concurrency',
-      parsed.data,
-      `Luna concurrency changed to ${parsed.data.max_concurrent_ai_runs}.`,
-      'pipeline',
-    )
-  })
   app.post('/admin/api/v1/coverage/:targetId/priority', async (context) => {
     const targetId = context.req.param('targetId')
     const parsed = z.object({

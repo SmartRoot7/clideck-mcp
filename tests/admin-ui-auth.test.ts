@@ -248,25 +248,6 @@ describe('local admin HTTP boundary', () => {
       }]
     })
 
-    const concurrency = await app.request(
-      '/admin/api/v1/pipeline/concurrency',
-      {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          origin,
-          host,
-          cookie: cookie.split(';')[0]!,
-          'sec-fetch-site': 'same-origin'
-        },
-        body: JSON.stringify({ max_concurrent_ai_runs: 3 })
-      },
-    )
-    expect(concurrency.status).toBe(200)
-    expect(await concurrency.json()).toMatchObject({
-      ok: true,
-      audit_target: 'pipeline'
-    })
   })
 
   it('rejects cross-origin login and invalid host headers', async () => {
@@ -315,9 +296,9 @@ function overviewFixture() {
     pipeline_enabled: true,
     ai_model: 'gpt-5.6-luna',
     reasoning_effort: 'low',
-    max_concurrent_ai_runs: 3,
+    max_concurrent_ai_runs: 8,
     max_active_sources: 4,
-    max_deep_review_runs: 1,
+    max_deep_review_runs: 8,
     prepared_source_target: 8,
     prepared_sources: 8,
     control_generation: 4,

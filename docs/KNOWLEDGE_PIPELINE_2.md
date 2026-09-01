@@ -113,10 +113,11 @@ it. Unrelated later items are untouched.
 
 ## Capacity and compatibility
 
-The local pool contains `pipeline-executor-01` through `08`; configured global
-concurrency is 1–8. Discovery is serialized, at least one lane is preserved for
-Extract when it has backlog, and Fidelity plus all repair work share the fixed
-two-lane cap. Idle restricted stages do not reserve unused capacity.
+The local pool contains `pipeline-executor-01` through `08`; enabled production
+capacity is fixed at all eight physical lanes. Discovery, extraction analysis,
+verification, Deep Review, repair, and demand work have no smaller stage cap.
+Priorities decide which task runs first, and discovery/refresh fills every lane
+left free by higher-priority useful work.
 
 Existing public MCP contracts, `/admin`, `/demo` and `/webmcp` remain backward
 compatible. First-party source locators expose safe metadata only and never the

@@ -4506,37 +4506,6 @@ describeIntegration('PostgreSQL integration', () => {
     })
     expect(resume.status).toBe(200)
 
-    const concurrencyPath = '/admin/v1/pipeline/concurrency'
-    const concurrencyBody = JSON.stringify({
-      max_concurrent_ai_runs: 3
-    })
-    const adminConcurrency = await app.request(concurrencyPath, {
-      method: 'POST',
-      headers: signedAdminHeaders(config, {
-        method: 'POST',
-        path: concurrencyPath,
-        body: concurrencyBody,
-        role: 'admin'
-      }),
-      body: concurrencyBody
-    })
-    expect(adminConcurrency.status).toBe(403)
-    const superAdminConcurrency = await app.request(concurrencyPath, {
-      method: 'POST',
-      headers: signedAdminHeaders(config, {
-        method: 'POST',
-        path: concurrencyPath,
-        body: concurrencyBody
-      }),
-      body: concurrencyBody
-    })
-    expect(superAdminConcurrency.status).toBe(200)
-    expect(await superAdminConcurrency.json()).toMatchObject({
-      max_concurrent_ai_runs: 3,
-      ai_model: 'gpt-5.6-luna',
-      reasoning_effort: 'low'
-    })
-
     const revisionResult = await database.query<{ id: string }>(
       `SELECT id::text
        FROM knowledge_revisions

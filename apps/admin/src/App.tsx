@@ -173,16 +173,6 @@ function OperationsApp() {
   const runtime = useOperationsRuntime()
   const [section, setSection] = useState<SectionId>(sectionFromLocation)
   const [toast, setToast] = useState<string | null>(null)
-  const concurrencyMutation = useMutation({
-    mutationFn: (value: number) => runtime.executeMutation(
-      '/admin/api/v1/pipeline/concurrency',
-      { max_concurrent_ai_runs: value },
-    ),
-    onSuccess: async (result) => {
-      setToast(result.message)
-      await queryClient.invalidateQueries()
-    }
-  })
   const pipelineStateMutation = useMutation({
     mutationFn: (enabled: boolean) => runtime.executeMutation(
       '/admin/api/v1/pipeline/state',
@@ -231,7 +221,6 @@ function OperationsApp() {
         onRefresh={() => void queryClient.invalidateQueries()}
         onPause={() =>
           pipelineStateMutation.mutate(!overview.pipeline_enabled)}
-        onConcurrency={(value) => concurrencyMutation.mutate(value)}
         role={runtime.role}
         {...(runtime.role === 'super_admin'
           ? {
@@ -247,7 +236,6 @@ function OperationsApp() {
         </Suspense>
       </AppShell>
       {toast && <Toast tone="success" onClose={() => setToast(null)}>{toast}</Toast>}
-      {concurrencyMutation.isError && <Toast tone="error" onClose={() => concurrencyMutation.reset()}>Could not change Luna concurrency.</Toast>}
       {pipelineStateMutation.isError && <Toast tone="error" onClose={() => pipelineStateMutation.reset()}>Could not change the pipeline state.</Toast>}
     </>
   )

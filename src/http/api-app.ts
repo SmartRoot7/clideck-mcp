@@ -68,7 +68,6 @@ import {
   listReviewExceptions,
   listSources,
   recordAdminAudit,
-  setPipelineConcurrency,
   setPipelineEnabled,
   updateCoveragePriority
 } from '../domain/admin.js'
@@ -1142,24 +1141,6 @@ export function createApiApp(dependencies: ApiDependencies) {
       parsed.data.enabled,
       actor,
       parsed.data.reason ?? null,
-    ))
-  })
-
-  app.post('/admin/v1/pipeline/concurrency', async (context) => {
-    const actor = context.get('adminActor')
-    if (actor.role !== 'super_admin') {
-      return context.json({ error: 'forbidden' }, 403)
-    }
-    const parsed = z.object({
-      max_concurrent_ai_runs: z.number().int().min(1).max(8)
-    }).safeParse(await context.req.json<unknown>())
-    if (!parsed.success) {
-      return context.json({ error: 'invalid_pipeline_concurrency' }, 400)
-    }
-    return context.json(await setPipelineConcurrency(
-      adminDatabase,
-      parsed.data.max_concurrent_ai_runs,
-      actor,
     ))
   })
 

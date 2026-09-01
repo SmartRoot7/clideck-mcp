@@ -2,8 +2,9 @@
 
 The macOS `launchd` service runs one local pool supervisor and eight isolated
 executor lanes. PostgreSQL is the source of truth for the configured
-concurrency may be set from one through eight. Fidelity and Deep Repair remain
-bounded to two shared lanes so extraction cannot be starved.
+capacity, which is fixed at the eight physical executors. No stage has a
+smaller shared-lane cap. Priorities choose work order without reserving idle
+capacity.
 Standby lanes poll the restricted researcher bridge but never start Codex until
 they atomically lease useful work.
 
@@ -81,13 +82,6 @@ pnpm pipeline:pool-start
 The tunnel stays available. An emergency stop creates no AI token usage; any
 unreported lease is recovered by the normal lease expiry policy.
 
-Concurrency is changed by a super admin:
-
-```http
-POST /admin/v1/pipeline/concurrency
-{"max_concurrent_ai_runs":3}
-```
-
-Scaling down is graceful: existing runs finish and no replacement run starts
-until the active count is within the new limit. Scaling up fills newly available
-slots on the next poll.
+Executor capacity is not an operator setting. An enabled production pipeline
+uses all eight physical lanes whenever useful work exists. The only operator
+control is explicit Pause/Resume for maintenance or an actual incident.

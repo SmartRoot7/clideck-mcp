@@ -43,7 +43,6 @@ describe('shared operations runtime', () => {
           onNavigate={() => undefined}
           onRefresh={() => undefined}
           onPause={() => undefined}
-          onConcurrency={() => undefined}
           role="public_demo"
         >
           <div>Shared page content</div>
@@ -69,7 +68,6 @@ describe('shared operations runtime', () => {
           onNavigate={() => undefined}
           onRefresh={() => undefined}
           onPause={() => undefined}
-          onConcurrency={() => undefined}
           onLogout={() => undefined}
           role="super_admin"
         >
@@ -88,8 +86,8 @@ describe('shared operations runtime', () => {
       screen.getByRole('button', { name: 'Resume pipeline' }),
     ).toBeInTheDocument()
     expect(
-      screen.getByRole('combobox', { name: 'Configured Luna executors' }),
-    ).toBeInTheDocument()
+      screen.queryByRole('combobox', { name: 'Configured Luna executors' }),
+    ).not.toBeInTheDocument()
     expect(screen.getByText('Shared page content')).toBeInTheDocument()
   })
 

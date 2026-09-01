@@ -210,9 +210,7 @@ BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;
 SET TRANSACTION SNAPSHOT :'database_snapshot';
 SELECT json_build_object(
     'enabled', enabled,
-    'paused_reason', paused_reason,
-    'max_concurrent_ai_runs', max_concurrent_ai_runs,
-    'max_deep_review_runs', max_deep_review_runs
+    'paused_reason', paused_reason
   )::text FROM pipeline_settings WHERE singleton;
 COMMIT;
 SQL
@@ -381,10 +379,6 @@ UPDATE pipeline_settings
 SET enabled = (:'migration_pipeline_state'::jsonb ->> 'enabled')::boolean,
     paused_reason = nullif(:'migration_pipeline_state'::jsonb ->> 'paused_reason', ''),
     pause_requested_at = NULL,
-    max_concurrent_ai_runs =
-      (:'migration_pipeline_state'::jsonb ->> 'max_concurrent_ai_runs')::smallint,
-    max_deep_review_runs =
-      (:'migration_pipeline_state'::jsonb ->> 'max_deep_review_runs')::smallint,
     control_generation = control_generation + 1,
     updated_at = now(),
     updated_by = 'migrate-production-host-rollback'
@@ -476,9 +470,7 @@ set +a
 psql "$DATABASE_URL" -At --set=ON_ERROR_STOP=1 -c \
   "SELECT json_build_object(
     'enabled', enabled,
-    'paused_reason', paused_reason,
-    'max_concurrent_ai_runs', max_concurrent_ai_runs,
-    'max_deep_review_runs', max_deep_review_runs
+    'paused_reason', paused_reason
   )::text FROM pipeline_settings WHERE singleton"
 REMOTE
   remote "$old_remote" sudo -n bash -s <<'REMOTE'
@@ -676,10 +668,6 @@ SET enabled = (:'migration_pipeline_state'::jsonb ->> 'enabled')::boolean,
       ''
     ),
     pause_requested_at = NULL,
-    max_concurrent_ai_runs =
-      (:'migration_pipeline_state'::jsonb ->> 'max_concurrent_ai_runs')::smallint,
-    max_deep_review_runs =
-      (:'migration_pipeline_state'::jsonb ->> 'max_deep_review_runs')::smallint,
     control_generation = control_generation + 1,
     updated_at = now(),
     updated_by = 'migrate-production-host'

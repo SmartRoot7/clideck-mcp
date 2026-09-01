@@ -6,9 +6,7 @@ import {
   Beaker,
   BookOpen,
   Bot,
-  Boxes,
   BrainCircuit,
-  ChevronDown,
   CircleGauge,
   Database,
   FileCheck2,
@@ -121,7 +119,6 @@ export function AppShell({
   onNavigate,
   onRefresh,
   onPause,
-  onConcurrency,
   onLogout,
   role
 }: {
@@ -132,7 +129,6 @@ export function AppShell({
   onNavigate: (section: SectionId) => void
   onRefresh: () => void
   onPause?: () => void
-  onConcurrency?: (value: number) => void
   onLogout?: () => void
   role: OperationsRole
 }) {
@@ -208,20 +204,6 @@ export function AppShell({
               {enabled ? <Pause size={16} /> : <Play size={16} />}
               <span>{enabled ? 'Pause all Luna' : 'Resume pipeline'}</span>
             </Button>
-            <label className="executor-select">
-              <Boxes size={17} />
-              <select
-                aria-label="Configured Luna executors"
-                value={Number(overview?.max_concurrent_ai_runs ?? 1)}
-                onChange={(event) =>
-                  onConcurrency?.(Number(event.target.value))}
-              >
-                {[1, 2, 3, 4, 5, 6, 7, 8].map((value) => (
-                  <option value={value} key={value}>{value} executors</option>
-                ))}
-              </select>
-              <ChevronDown size={15} />
-            </label>
             <Button variant="quiet" aria-label="Refresh live data" onClick={onRefresh} disabled={refreshing}>
               <RefreshCw size={17} className={refreshing ? 'spin' : ''} />
             </Button>

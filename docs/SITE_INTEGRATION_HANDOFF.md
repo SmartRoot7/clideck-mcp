@@ -57,11 +57,10 @@ Do not create a generic proxy.
 Add a prominent pipeline control group:
 
 - `Pause all Luna` / `Resume pipeline`;
-- concurrency selector with the exact values 1, 2, 3, and 4;
-- configured concurrency, active Luna count, queued expert/verify/analyze/
+- fixed eight-executor capacity, active Luna count, queued expert/verify/analyze/
   discover counts, and pause progress;
 - one status card per `pipeline-executor-01` through
-  `pipeline-executor-04`, using the `processes` heartbeat records returned by
+  `pipeline-executor-08`, using the `processes` heartbeat records returned by
   overview;
 - explanatory text: pausing stops Luna within ten seconds, discards partial
   output, and may allow the currently running deterministic worker step to
@@ -73,13 +72,9 @@ Add only these server-side mutations:
 POST /api/admin/mcp/pipeline/state
   -> POST /admin/v1/pipeline/state
   body: { enabled: boolean, reason?: string }
-
-POST /api/admin/mcp/pipeline/concurrency
-  -> POST /admin/v1/pipeline/concurrency
-  body: { max_concurrent_ai_runs: 1 | 2 | 3 | 4 }
 ```
 
-Both mutations are `super_admin` only. Preserve the existing signed actor HMAC,
+The state mutation is `super_admin` only. Preserve the existing signed actor HMAC,
 RBAC, response allowlist, timeout, `cache: no-store`, and audit behavior. An
 ordinary `admin` sees the state read-only and receives no controls.
 

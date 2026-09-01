@@ -16,12 +16,14 @@ runs first, never whether a physical executor is intentionally left idle.
 | One active Demand Diagnosis | Independent unanswered requests were serialized. | Each demand is deduplicated independently and diagnoses can run in parallel. |
 | Demand work limited to half the pool | Queue-class fairness was implemented as a capacity ceiling. | Priority ordering provides fairness without idle lanes. |
 | Legacy two-lane Analyze allocation | An inactive scheduler retained the old capacity policy. | Its allocation is work-conserving too. |
+| Deploy and host-move scripts restored old capacity values | A successful migration was silently overwritten with a prior two-lane value. | Lifecycle scripts restore Pause/Resume state only; capacity remains the physical eight. |
+| Admin executor-count selector | An operator could accidentally reduce the healthy production pool and recreate standby lanes. | Capacity is fixed at all eight physical executors; only explicit Pause/Resume remains. |
 
 ## Necessary controls retained
 
 | Control | Why it is necessary |
 | --- | --- |
-| Eight-running-task ceiling | There are eight isolated executor processes. More leases would oversubscribe nonexistent workers; fewer are not intentionally reserved. |
+| Eight-running-task ceiling | There are eight isolated executor processes. More leases would oversubscribe nonexistent workers; enabled capacity is fixed at all eight. |
 | One live task per durable work item | Prevents duplicate publication, duplicate demand work, and two executors mutating the same target. It does not prevent different targets from running together. |
 | Transactional leases, heartbeats, and row locks | Prevent concurrent ownership and recover work after a crashed executor. |
 | Explicit operator pause and scoped circuit isolation | Protect production during a confirmed system/model failure. A healthy work class continues running and discovery remains the fallback. |

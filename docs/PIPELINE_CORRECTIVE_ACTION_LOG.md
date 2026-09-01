@@ -20,6 +20,10 @@ accepted as the correction itself.
   shared Review/Fidelity lanes, one Demand Diagnosis, half-pool demand fairness,
   and source-buffer suppression of background discovery. Any of them could
   leave healthy executors idle despite useful independent work.
+- The first successful deployment exposed one lifecycle override: after
+  migration `037` set both stored capacity fields to eight, the deploy script
+  restored the previous values and explicitly clamped Deep Review back to two.
+  The admin console could also reduce healthy executor capacity to one.
 
 ### Minimal correction
 
@@ -32,11 +36,19 @@ accepted as the correction itself.
   context bounds, official-source rules and all publication safety controls.
 - Record the durable classification in `docs/PIPELINE_CAPACITY_AUDIT.md` and
   prohibit reintroducing artificial throughput blockers in `AGENTS.md`.
+- Treat eight executors as fixed physical capacity: remove the admin throttle,
+  stop deployment and host-move restoration from copying capacity values, and
+  keep only explicit Pause/Resume for maintenance or a real incident.
 
 ### Verification and deployment
 
-- Pending the full disposable PostgreSQL gate, product evaluation, clean-main
-  production deployment, and direct observation of eight running executors.
+- Commit `0d4638cdab95e8af3785d852807cc97fb4c3a2ce` passed 229/229
+  PostgreSQL-backed tests, all domain and admin tests, 250/250 product eval
+  cases, the production build and every smoke test. At
+  `2026-09-01T06:09:55Z`, production directly reported all eight executors
+  `running` on eight independent discovery tasks with no open AI circuit.
+- Pending the final clean-main deployment of the lifecycle/configuration
+  correction and repeated observation that all eight lanes refill themselves.
 
 ## 2026-09-01 — Vendor-neutral knowledge broke the demo list contract
 

@@ -82,12 +82,6 @@ SET enabled =
         THEN NULL
       ELSE pause_requested_at
     END,
-    max_concurrent_ai_runs =
-      (:'deployment_pipeline_state'::jsonb ->> 'max_concurrent_ai_runs')::smallint,
-    max_deep_review_runs = least(
-      2,
-      (:'deployment_pipeline_state'::jsonb ->> 'max_deep_review_runs')::smallint
-    ),
     control_generation = control_generation + 1,
     updated_at = now(),
     updated_by = 'deploy-production'
@@ -211,9 +205,7 @@ pipeline_state_json="$(
   psql "$DATABASE_URL" --tuples-only --no-align --set=ON_ERROR_STOP=1 \
     --command="SELECT json_build_object(
       'enabled', enabled,
-      'paused_reason', paused_reason,
-      'max_concurrent_ai_runs', max_concurrent_ai_runs,
-      'max_deep_review_runs', max_deep_review_runs
+      'paused_reason', paused_reason
     )::text FROM pipeline_settings WHERE singleton"
 )"
 previous_active_release="$(

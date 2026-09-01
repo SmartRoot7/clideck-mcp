@@ -2387,42 +2387,6 @@ export async function setPipelineEnabled(
   return result
 }
 
-export async function setPipelineConcurrency(
-  database: Database,
-  maxConcurrentAiRuns: number,
-  actor: { id: string; role: AdminRole },
-) {
-  const result = await withTransaction(database, async (client) => {
-    const updated = await client.query(
-      `UPDATE pipeline_settings
-          SET max_concurrent_ai_runs = $1,
-              control_generation = control_generation + 1,
-              updated_at = now(),
-              updated_by = $2
-        WHERE singleton
-        RETURNING *`,
-      [maxConcurrentAiRuns, actor.id],
-    )
-    await client.query(
-      `INSERT INTO admin_audit_events (
-         actor_id, actor_role, action, target_type, target_id, metadata
-       )
-       VALUES (
-         $1,
-         $2,
-         'pipeline.concurrency',
-         'pipeline',
-         NULL,
-         jsonb_build_object('max_concurrent_ai_runs', $3::int)
-       )`,
-      [actor.id, actor.role, maxConcurrentAiRuns],
-    )
-    return updated.rows[0]
-  })
-  await ensurePipelineWork(database)
-  return result
-}
-
 export async function updateCoveragePriority(
   database: Database,
   targetId: string,
