@@ -848,7 +848,16 @@ The Pipeline 2.0 pilot exposed four independent failure modes:
 
 ### Verification and deployment
 
-- TypeScript and admin contract checks pass. Focused Overview snapshot and
-  local-admin proxy tests pass; full tests, evaluation, build, production
-  deployment and an authenticated Chrome verification are recorded after the
-  release below.
+- Deployed commit `69c2f6318ea54f907f8d28a0429869a87ceb364b`
+  exclusively through `ops/scripts/deploy-production.sh`. Its clean PostgreSQL
+  16 preflight passed 227/227 integration and workspace tests, 250/250 product
+  evaluations, the complete build, backup, migrations, applicability checks,
+  atomic switch and smoke tests. The standard local Luna pool was restored.
+- After the release switch the production Overview code returned `200` in
+  2.18 seconds with eight executor cards and the deployed commit. Both API and
+  admin services were active with zero restarts, and no new `Query read
+  timeout` or unhandled API error appeared.
+- Chrome now reaches the normal local-admin login screen instead of the
+  unavailable-backend state. Deployment intentionally invalidates in-memory
+  admin sessions; the operating-system sudo password is not the separate web
+  admin credential and was not used to alter that credential.
