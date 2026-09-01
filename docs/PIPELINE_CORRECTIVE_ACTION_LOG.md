@@ -37,8 +37,19 @@ accepted as the correction itself.
 
 ### Verification and deployment
 
-- Pending local/full release gates, clean-main deployment and a production soak
-  showing eight active lanes distributed across the coverage catalog.
+- Local type checks and all workspace suites passed. The canonical clean-main
+  deployment gate passed 231/231 PostgreSQL-backed tests and 250/250 product
+  evaluations before deploying commit
+  `d5a27589bb0c16554c69b0cdd5c09fca4bceed57` through the production script.
+- The first production soak completed 77 Discovery runs for 77 distinct
+  coverage targets: every target was selected exactly once. Those searches
+  inserted 19 new official/upstream sources, recognized 35 existing URLs and
+  reported zero unavailable web-search tools. Acquisition and conversion
+  queues immediately began processing the new documents.
+- Health, readiness and release smokes passed. All services stayed active with
+  zero application restarts and empty warning-or-higher journals; all eight
+  executor heartbeats were fresh and running with no open circuit or new
+  pipeline failure.
 
 ## 2026-09-01 — Discovery web search was routed through a disabled host
 
