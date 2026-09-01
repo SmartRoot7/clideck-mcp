@@ -81,6 +81,18 @@ type KnowledgeAnswer = {
     }
     assurance_level?: string
     version_match?: string
+    context_relation?:
+      | 'same_model'
+      | 'same_software_family'
+      | 'portable'
+      | 'same_vendor'
+      | 'cross_platform'
+    documented_version_relation?:
+      | 'older'
+      | 'newer'
+      | 'different'
+      | 'not_comparable'
+      | 'unspecified'
   }
   cli_mode: string | null
   command: string | null
@@ -232,28 +244,11 @@ function hasSearchContext(context: NetworkContext): boolean {
   )
 }
 
-function vendorFamily(value: string): string {
-  const normalized = value.toLowerCase().replace(/[^a-z0-9]+/g, '')
-  if (['hewlettpackard', 'hewlettpackardenterprise', 'hpe', 'hp', 'aruba', 'arubanetworks']
-    .includes(normalized)) return 'hpe-aruba'
-  return normalized
-}
-
-function preferCurrentVendor(
-  answers: KnowledgeAnswer[],
-  vendor: string,
-): KnowledgeAnswer[] {
-  const requestedFamily = vendorFamily(vendor)
-  if (!requestedFamily) return answers
-  const matching = answers.filter((answer) =>
-    vendorFamily(answer.applicability.vendor) === requestedFamily
-  )
-  return matching.length > 0 ? matching : answers
-}
-
 function isFallbackAnswer(answer: KnowledgeAnswer): boolean {
-  return ['same_branch_fallback', 'nearest_patch', 'unknown']
-    .includes(answer.applicability.version_match ?? '')
+  return answer.applicability.assurance_level === 'best_effort' ||
+    answer.applicability.version_match === 'same_branch_fallback' ||
+    ['same_vendor', 'cross_platform']
+      .includes(answer.applicability.context_relation ?? '')
 }
 
 export function normalizeDetectedVersion(value: string | null): string {
@@ -509,10 +504,7 @@ export function WebMcpApp() {
       results.flatMap((result) => result.answers)
         .map((answer) => [answer.revision_ref, answer]),
     ).values()]
-    const answers = preferCurrentVendor(
-      deduplicatedAnswers,
-      current.context.vendor,
-    ).slice(0, limit)
+    const answers = deduplicatedAnswers.slice(0, limit)
     const refs = answers.map((answer) => answer.revision_ref).slice(0, 5)
     const provenanceResult = refs.length
       ? await callPublicMcpTool<{
@@ -1233,6 +1225,8 @@ function KnowledgeResultCard({
   const documentedRange = minimum || maximum
     ? `${minimum ?? 'any'}–${maximum ?? 'latest'}`
     : 'not specified'
+  const contextRelation = answer.applicability.context_relation
+    ?.replaceAll('_', ' ') ?? 'related platform'
   return (
     <article className="webmcp-answer">
       <header>
@@ -1247,12 +1241,20 @@ function KnowledgeResultCard({
           </small>
           <Status tone={fallback ? 'warning' : 'good'}>
             {fallback
-              ? `Nearest guidance · documented ${documentedRange}`
+              ? `Reference guidance · ${contextRelation} · documented ${documentedRange}`
               : `Version matched · documented ${documentedRange}`}
           </Status>
         </div>
       </header>
       <p>{answer.summary}</p>
+      {fallback && (
+        <div className="webmcp-reference-warning" role="note">
+          Exact applicability is not confirmed. This command is documented for
+          {' '}{answer.applicability.vendor}{' '}
+          {answer.applicability.operating_system}, version {documentedRange}.
+          Verify its syntax and availability on the requested device before use.
+        </div>
+      )}
       {answer.command && <pre><code>{answer.command}</code></pre>}
       <ResultList title="Procedure" values={answer.procedure} code />
       <ResultList title="Prerequisites" values={answer.prerequisites} />

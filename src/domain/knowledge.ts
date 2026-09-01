@@ -5,7 +5,10 @@ import type {
 } from './schemas.js'
 import type { InternalResolvedContext } from './context.js'
 import { buildSearchQueries } from './search-query.js'
-import { normalizeVendorVersion } from '../version.js'
+import {
+  compareNormalizedVersions,
+  normalizeVendorVersion
+} from '../version.js'
 import {
   assuranceFor,
   matchVersionApplicability,
@@ -21,6 +24,11 @@ type KnowledgeRow = {
   revision_id: string
   public_ref: string
   kind: PublicKnowledge['kind']
+  revision_vendor_id: string | null
+  revision_platform_id: string | null
+  software_family_id: string | null
+  portability_mode: 'portable' | 'vendor_specific' | null
+  applicability_architecture_slug: string | null
   vendor_name: string
   platform_name: string | null
   operating_system_name: string
@@ -103,6 +111,16 @@ type RelevanceEvidence = Pick<
   'title' | 'summary' | 'command_text' | 'procedure_steps'
 >
 
+type ContextRelation = NonNullable<
+  PublicKnowledge['applicability']['context_relation']
+>
+
+type DocumentedVersionRelation = NonNullable<
+  PublicKnowledge['applicability']['documented_version_relation']
+>
+
+type CapabilityMatcher = (evidence: RelevanceEvidence) => boolean
+
 /**
  * Database rank remains the candidate generator.  This small lexical pass
  * only orders those candidates by the operation the user actually asked for,
@@ -130,6 +148,33 @@ export function questionRelevanceScore(
     else if (supporting.has(token)) score += distinctive ? 2 : 1
   }
   return score
+}
+
+/**
+ * Candidate retrieval is deliberately broad. This is the single absolute
+ * relevance floor: a one-term request needs that term, while a longer request
+ * needs two content terms. Context words are removed before this function is
+ * called, so a vendor, model, or version cannot make an unrelated answer pass.
+ */
+export function hasMinimumSemanticRelevance(
+  semanticTerms: readonly string[],
+  evidence: RelevanceEvidence,
+): boolean {
+  const requested = new Set(
+    semanticTerms.map((term) => normalizedRelevanceToken(term.toLowerCase())),
+  )
+  if (requested.size === 0) return false
+  const available = relevanceTokens([
+    evidence.title,
+    evidence.summary,
+    evidence.command_text ?? '',
+    ...evidence.procedure_steps
+  ].join(' '))
+  let matches = 0
+  for (const term of requested) {
+    if (available.has(term)) matches += 1
+  }
+  return matches >= (requested.size === 1 ? 1 : 2)
 }
 
 const operationalIntentPattern =
@@ -197,13 +242,18 @@ function toPublicKnowledge(
   row: KnowledgeRow,
   context: ResolvedNetworkContext,
   conflicts: ConflictRow[],
-  versionMatch: PublicVersionMatch,
+  versionMatch: PublicVersionMatch | undefined,
+  contextRelation: ContextRelation,
+  documentedVersionRelation: DocumentedVersionRelation,
   widened = false,
 ): PublicKnowledge {
-  const matchLevel = widened
-    ? row.vendor_name === context.vendor ? 'vendor_os' : 'os_family'
-    : publicMatchLevel(row.scope_level)
-  const assuranceLevel = assuranceFor(row.scope_level, versionMatch)
+  const matchLevel = publicMatchLevel(row.scope_level)
+  const reference = contextRelation === 'same_vendor' ||
+    contextRelation === 'cross_platform' ||
+    versionMatch === undefined
+  const assuranceLevel = reference
+    ? 'best_effort'
+    : assuranceFor(row.scope_level, versionMatch)
   const deterministicallyReadOnly = isDeterministicallyReadOnlyPublicCommand(
     row.kind,
     row.command_text,
@@ -213,14 +263,20 @@ function toPublicKnowledge(
     !deterministicallyReadOnly && (
       row.requires_platform_confirmation ||
       (row.scope_level !== 'model' && dangerous) ||
-      (versionMatch === 'same_branch_fallback' && dangerous)
+      (reference && dangerous)
     )
+  const documentedRange = row.version_min || row.version_max
+    ? `${row.version_min ?? 'any'}–${row.version_max ?? 'latest'}`
+    : 'not specified'
   const additionalLimitations = [
     requiresPlatformConfirmation
       ? 'Stop unless the exact platform and hardware-specific prerequisites are confirmed before applying this operation.'
       : null,
     versionMatch === 'same_branch_fallback'
       ? 'This is the nearest documented patch in the same software branch; confirm release-specific differences before applying it.'
+      : null,
+    reference
+      ? `Exact applicability was not confirmed. This guidance is documented for ${row.vendor_name} ${row.operating_system_name}, version ${documentedRange}; verify command syntax and availability on the requested device before use.`
       : null
   ].filter((value): value is string => Boolean(value))
   return {
@@ -229,13 +285,13 @@ function toPublicKnowledge(
     title: row.title,
     summary: row.summary,
     applicability: {
-      vendor: row.scope_level === 'os_family'
+      vendor: !widened && row.scope_level === 'os_family'
         ? context.vendor
         : row.vendor_name,
-      model: row.scope_level === 'os_family'
+      model: !widened && row.scope_level === 'os_family'
         ? context.model
         : row.platform_name,
-      operating_system: row.scope_level === 'os_family'
+      operating_system: !widened && row.scope_level === 'os_family'
         ? context.operating_system
         : row.operating_system_name,
       versions: {
@@ -244,7 +300,9 @@ function toPublicKnowledge(
         requested: context.version
       },
       match_level: matchLevel,
-      version_match: versionMatch,
+      context_relation: contextRelation,
+      ...(versionMatch ? { version_match: versionMatch } : {}),
+      documented_version_relation: documentedVersionRelation,
       assurance_level: assuranceLevel,
       requires_platform_confirmation: requiresPlatformConfirmation
     },
@@ -296,6 +354,88 @@ const scopePriority: Record<ApplicabilityScope, number> = {
   os_family: 1
 }
 
+const contextPriority: Record<ContextRelation, number> = {
+  same_model: 5,
+  same_software_family: 4,
+  portable: 3,
+  same_vendor: 2,
+  cross_platform: 1
+}
+
+function candidateContextRelation(
+  row: KnowledgeRow,
+  context: InternalResolvedContext,
+): ContextRelation {
+  const sameFamily = row.software_family_id !== null &&
+    context.softwareFamilyIds.includes(row.software_family_id)
+  if (
+    sameFamily &&
+    row.scope_level === 'model' &&
+    row.revision_platform_id !== null &&
+    row.revision_platform_id === context.platformId
+  ) {
+    return 'same_model'
+  }
+  if (
+    sameFamily &&
+    row.scope_level === 'vendor_os' &&
+    row.revision_vendor_id === context.vendorId
+  ) {
+    return 'same_software_family'
+  }
+  if (
+    sameFamily &&
+    row.scope_level === 'architecture' &&
+    row.applicability_architecture_slug === context.architectureSlug
+  ) {
+    return 'same_software_family'
+  }
+  if (sameFamily && row.scope_level === 'os_family') {
+    return row.portability_mode === 'portable'
+      ? 'portable'
+      : 'same_software_family'
+  }
+  if (
+    row.revision_vendor_id !== null &&
+    row.revision_vendor_id === context.vendorId
+  ) {
+    return 'same_vendor'
+  }
+  return 'cross_platform'
+}
+
+function documentedVersionRelation(
+  row: KnowledgeRow,
+  requestedVersion: string | null,
+  relation: ContextRelation,
+  versionMatch: PublicVersionMatch | undefined,
+): DocumentedVersionRelation {
+  if (!requestedVersion) return 'unspecified'
+  if (versionMatch) return versionMatch === 'same_branch_fallback'
+    ? 'different'
+    : 'unspecified'
+  if (!['same_model', 'same_software_family', 'portable'].includes(relation)) {
+    return 'not_comparable'
+  }
+  const requested = normalizeVendorVersion(requestedVersion)
+  if (
+    row.version_normalized_max &&
+    compareNormalizedVersions(row.version_normalized_max, requested) < 0
+  ) {
+    return 'older'
+  }
+  if (
+    row.version_normalized_min &&
+    compareNormalizedVersions(row.version_normalized_min, requested) > 0
+  ) {
+    return 'newer'
+  }
+  if (row.version_normalized_min || row.version_normalized_max) {
+    return 'different'
+  }
+  return 'unspecified'
+}
+
 async function searchBroadKnowledgeRows(
   database: Database,
   normalizedQuestion: string,
@@ -304,6 +444,7 @@ async function searchBroadKnowledgeRows(
   semanticTerms: readonly string[],
   limit: number,
   kind?: PublicKnowledge['kind'] | PublicKnowledge['kind'][],
+  context?: InternalResolvedContext,
   vendorId: string | null = null,
 ): Promise<KnowledgeRow[]> {
   const terms = semanticTerms.length > 0
@@ -311,10 +452,15 @@ async function searchBroadKnowledgeRows(
     : normalizedQuestion.toLowerCase().match(/[a-z0-9]+/g) ?? []
   if (terms.length === 0) return []
   const result = await database.query<KnowledgeRow>(
-    `SELECT
+     `SELECT
        revision.id AS revision_id,
        revision.public_ref,
        item.kind,
+       revision.vendor_id AS revision_vendor_id,
+       revision.platform_id AS revision_platform_id,
+       applicability.family_id AS software_family_id,
+       family.portability_mode,
+       applicability.architecture_slug AS applicability_architecture_slug,
        coalesce(vendor.display_name, 'Not specified') AS vendor_name,
        platform.display_name AS platform_name,
        coalesce(os.display_name, 'Not specified') AS operating_system_name,
@@ -364,6 +510,27 @@ async function searchBroadKnowledgeRows(
      WHERE item.domain_id = 'network' AND revision.domain_id = 'network'
        AND ($4::text[] IS NULL OR item.kind = ANY($4))
        AND ($7::uuid IS NULL OR revision.vendor_id = $7)
+       AND NOT EXISTS (
+         SELECT 1
+         FROM knowledge_applicability_exclusions exclusion
+         WHERE exclusion.revision_id = revision.id
+           AND (exclusion.vendor_id IS NULL OR exclusion.vendor_id = $8)
+           AND (exclusion.platform_id IS NULL OR exclusion.platform_id = $9)
+           AND (
+             (exclusion.version_min IS NULL AND exclusion.version_max IS NULL)
+             OR (
+               $10::integer[] IS NOT NULL
+               AND (
+                 exclusion.version_normalized_min IS NULL
+                 OR $10::integer[] >= exclusion.version_normalized_min
+               )
+               AND (
+                 exclusion.version_normalized_max IS NULL
+                 OR $10::integer[] <= exclusion.version_normalized_max
+               )
+             )
+           )
+       )
        AND (
          revision.search_document @@ to_tsquery('simple', $2)
          OR revision.search_document @@ to_tsquery('simple', $3)
@@ -381,7 +548,10 @@ async function searchBroadKnowledgeRows(
       kind ? Array.isArray(kind) ? kind : [kind] : null,
       terms,
       Math.max(limit * 4, 20),
-      vendorId
+      vendorId,
+      context?.vendorId ?? null,
+      context?.platformId ?? null,
+      context?.version ? normalizeVendorVersion(context.version) : null
     ],
   )
   return result.rows
@@ -393,6 +563,7 @@ export async function searchKnowledge(
   context: InternalResolvedContext,
   limit: number,
   kind?: PublicKnowledge['kind'] | PublicKnowledge['kind'][],
+  capabilityMatcher?: CapabilityMatcher,
 ): Promise<PublicKnowledge[]> {
   const searchQuestion =
     /\berrors?\b/i.test(question) &&
@@ -408,7 +579,10 @@ export async function searchKnowledge(
     ports: 'interface'
   })
   const semanticTerms = semanticSearchTerms(search.tokens, context)
-  const minimumSemanticMatches = Math.min(2, semanticTerms.length)
+  const minimumSemanticMatches = semanticTerms.length > 0 ? 1 : 0
+  const isRelevant = (row: KnowledgeRow) =>
+    hasMinimumSemanticRelevance(semanticTerms, row) ||
+    Boolean(capabilityMatcher?.(row))
   const result = minimumSemanticMatches === 0
     ? { rows: [] as KnowledgeRow[] }
     : await database.query<KnowledgeRow>(
@@ -506,6 +680,11 @@ export async function searchKnowledge(
        rr.revision_id,
        kr.public_ref,
        ki.kind,
+       kr.vendor_id AS revision_vendor_id,
+       kr.platform_id AS revision_platform_id,
+       applicability.family_id AS software_family_id,
+       software_family.portability_mode,
+       applicability.architecture_slug AS applicability_architecture_slug,
        v.display_name AS vendor_name,
        p.display_name AS platform_name,
        coalesce(os.display_name, 'Not specified') AS operating_system_name,
@@ -588,6 +767,7 @@ export async function searchKnowledge(
 
   const exactRows = result.rows
     .flatMap((row) => {
+      if (!isRelevant(row)) return []
       const versionMatch = matchVersionApplicability({
         requested: context.version,
         minimum: row.version_normalized_min,
@@ -596,13 +776,28 @@ export async function searchKnowledge(
         versionBranch: row.version_branch,
         versionStrategy: row.version_strategy
       })
-      return versionMatch ? [{ row, versionMatch, widened: false }] : []
+      if (!versionMatch) return []
+      const contextRelation = candidateContextRelation(row, context)
+      return [{
+        row,
+        versionMatch,
+        contextRelation,
+        documentedVersionRelation: documentedVersionRelation(
+          row,
+          context.version,
+          contextRelation,
+          versionMatch,
+        ),
+        widened: false
+      }]
     })
     .sort((left, right) =>
-      scopePriority[right.row.scope_level] -
-        scopePriority[left.row.scope_level] ||
+      contextPriority[right.contextRelation] -
+        contextPriority[left.contextRelation] ||
       versionPriority[right.versionMatch] -
         versionPriority[left.versionMatch] ||
+      scopePriority[right.row.scope_level] -
+        scopePriority[left.row.scope_level] ||
       Number(right.row.rank) - Number(left.row.rank),
     )
     .filter((entry, index, entries) => {
@@ -620,10 +815,12 @@ export async function searchKnowledge(
         semanticTerms,
         limit,
         kind,
+        context,
         context.vendorId,
       )
     : []
-  const needGlobalRows = exactRows.length + vendorBroadRows.length < limit
+  const relevantVendorBroadRows = vendorBroadRows.filter(isRelevant)
+  const needGlobalRows = exactRows.length + relevantVendorBroadRows.length < limit
   const globalBroadRows = needGlobalRows
     ? await searchBroadKnowledgeRows(
         database,
@@ -633,9 +830,13 @@ export async function searchKnowledge(
         semanticTerms,
         limit,
         kind,
+        context,
       )
     : []
-  const broadRows = [...vendorBroadRows, ...globalBroadRows]
+  const broadRows = [
+    ...relevantVendorBroadRows,
+    ...globalBroadRows.filter(isRelevant)
+  ]
   const seen = new Set(exactRows.map(({ row }) =>
     Buffer.from(row.portable_semantic_key).toString('hex'),
   ))
@@ -648,21 +849,42 @@ export async function searchKnowledge(
           Buffer.from(candidate.portable_semantic_key).toString('hex') === key
         ) === index
       })
-      .map((row) => ({
-        row,
-        versionMatch: 'same_branch_fallback' as const,
-        widened: true
-      }))
+      .map((row) => {
+        const contextRelation = candidateContextRelation(row, context)
+        const comparable = [
+          'same_model', 'same_software_family', 'portable'
+        ].includes(contextRelation)
+        const versionMatch = comparable
+          ? matchVersionApplicability({
+              requested: context.version,
+              minimum: row.version_normalized_min,
+              maximum: row.version_normalized_max,
+              versionScope: row.version_scope,
+              versionBranch: row.version_branch,
+              versionStrategy: row.version_strategy
+            }) ?? undefined
+          : undefined
+        return {
+          row,
+          versionMatch,
+          contextRelation,
+          documentedVersionRelation: documentedVersionRelation(
+            row,
+            context.version,
+            contextRelation,
+            versionMatch,
+          ),
+          widened: true
+        }
+      })
   ].sort((left, right) =>
     questionRelevanceScore(question, right.row) -
       questionRelevanceScore(question, left.row) ||
-    Number(right.row.vendor_name === context.vendor) -
-      Number(left.row.vendor_name === context.vendor) ||
-    Number(left.widened) - Number(right.widened) ||
-    scopePriority[right.row.scope_level] -
-      scopePriority[left.row.scope_level] ||
-    versionPriority[right.versionMatch] -
-      versionPriority[left.versionMatch] ||
+    contextPriority[right.contextRelation] -
+      contextPriority[left.contextRelation] ||
+    (right.versionMatch ? versionPriority[right.versionMatch] : 0) -
+      (left.versionMatch ? versionPriority[left.versionMatch] : 0) ||
+    scopePriority[right.row.scope_level] - scopePriority[left.row.scope_level] ||
     Number(right.row.rank) - Number(left.row.rank),
   ).slice(0, limit)
 
@@ -690,8 +912,22 @@ export async function searchKnowledge(
        END`,
     [revisionIds],
   )
-  return applicableRows.map(({ row, versionMatch, widened }) =>
-    toPublicKnowledge(row, context, conflicts.rows, versionMatch, widened),
+  return applicableRows.map(({
+    row,
+    versionMatch,
+    contextRelation,
+    documentedVersionRelation,
+    widened
+  }) =>
+    toPublicKnowledge(
+      row,
+      context,
+      conflicts.rows,
+      versionMatch,
+      contextRelation,
+      documentedVersionRelation,
+      widened,
+    ),
   )
 }
 
@@ -701,9 +937,14 @@ export async function getPublicRevision(
   requestedVersion: string | null = null,
 ): Promise<PublicKnowledge | null> {
   const result = await database.query<KnowledgeRow>(
-    `SELECT
+     `SELECT
        pak.*,
        kr.public_ref,
+       kr.vendor_id AS revision_vendor_id,
+       kr.platform_id AS revision_platform_id,
+       applicability.family_id AS software_family_id,
+       software_family.portability_mode,
+       applicability.architecture_slug AS applicability_architecture_slug,
        coalesce(applicability.scope_level, 'os_family') AS scope_level,
        coalesce(applicability.version_scope, 'unbounded') AS version_scope,
        applicability.version_branch,
@@ -732,7 +973,12 @@ export async function getPublicRevision(
     versionScope: row.version_scope,
     versionBranch: row.version_branch,
     versionStrategy: row.version_strategy
-  }) ?? 'same_branch_fallback'
+  }) ?? undefined
+  const contextRelation: ContextRelation = row.portability_mode === 'portable'
+    ? 'portable'
+    : row.revision_platform_id
+      ? 'same_model'
+      : 'same_software_family'
   return toPublicKnowledge(
     row,
     {
@@ -754,5 +1000,12 @@ export async function getPublicRevision(
     },
     [],
     versionMatch,
+    contextRelation,
+    documentedVersionRelation(
+      row,
+      requestedVersion,
+      contextRelation,
+      versionMatch,
+    ),
   )
 }

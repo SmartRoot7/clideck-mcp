@@ -98,12 +98,26 @@ export const publicKnowledgeSchema = z.object({
       'architecture_os',
       'os_family'
     ]).optional(),
+    context_relation: z.enum([
+      'same_model',
+      'same_software_family',
+      'portable',
+      'same_vendor',
+      'cross_platform'
+    ]).optional(),
     version_match: z.enum([
       'exact',
       'explicit_range',
       'branch',
       'unbounded',
       'same_branch_fallback'
+    ]).optional(),
+    documented_version_relation: z.enum([
+      'older',
+      'newer',
+      'different',
+      'not_comparable',
+      'unspecified'
     ]).optional(),
     assurance_level: z.enum([
       'exact',

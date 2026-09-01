@@ -826,6 +826,16 @@ code { font-size: .78rem; color: #344054; }
 .webmcp-answer h3 { margin: 0; color: #102a56; font-size: .72rem; line-height: 1.35; }
 .webmcp-answer header small { display: block; margin-top: 4px; color: #667085; font-size: .56rem; }
 .webmcp-answer > p { margin: 0; padding: 0 13px 10px; color: #475467; font-size: .62rem; line-height: 1.55; }
+.webmcp-reference-warning {
+  margin: 0 13px 10px;
+  padding: 8px 10px;
+  border: 1px solid #f6c98c;
+  border-radius: 6px;
+  color: #854a20;
+  background: #fff7ed;
+  font-size: .58rem;
+  line-height: 1.5;
+}
 .webmcp-answer > pre { margin: 0 13px 10px; padding: 9px 10px; overflow: auto; border-radius: 6px; color: #dce6fb; background: #172033; font-size: .59rem; }
 .webmcp-result-list { padding: 8px 13px; border-top: 1px solid #eaecf0; }
 .webmcp-result-list > strong { color: #344054; font-size: .59rem; }

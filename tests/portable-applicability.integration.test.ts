@@ -197,6 +197,7 @@ describeIntegration('portable software applicability', () => {
       expect(portableAnswers[0]!.command).toBe('onie-sysinfo')
       expect(portableAnswers[0]!.applicability).toMatchObject({
         match_level: 'os_family',
+        context_relation: 'portable',
         assurance_level: 'generic',
         requires_platform_confirmation: false
       })
@@ -245,7 +246,16 @@ describeIntegration('portable software applicability', () => {
         5,
       )
       expect(widened.length).toBeGreaterThan(0)
-      expect(widened[0]?.applicability.assurance_level).toBe('best_effort')
+      expect(widened.every((answer) =>
+        answer.applicability.assurance_level === 'best_effort'
+      )).toBe(true)
+      expect(widened[0]?.applicability).toMatchObject({
+        vendor: `Dell ${suffix}`,
+        operating_system: 'ONIE',
+        context_relation: 'cross_platform',
+        documented_version_relation: 'not_comparable',
+        assurance_level: 'best_effort'
+      })
       await client.query('ROLLBACK')
     } catch (error) {
       await client.query('ROLLBACK')

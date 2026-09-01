@@ -14,7 +14,10 @@ import {
   parseDemandDiagnosisAgentArtifact
 } from '../src/domain/demand-intelligence.js'
 import { sanitizeMcpLogPayload } from '../src/domain/mcp-observability.js'
-import { questionRelevanceScore } from '../src/domain/knowledge.js'
+import {
+  hasMinimumSemanticRelevance,
+  questionRelevanceScore
+} from '../src/domain/knowledge.js'
 
 describe('Demand Intelligence', () => {
   it('omits absent context fields instead of persisting the word undefined', () => {
@@ -196,6 +199,24 @@ describe('Demand Intelligence', () => {
     expect(ssh).toBeGreaterThan(switchport)
   })
 
+  it('rejects a shared incidental word but keeps substantive query matches', () => {
+    const counters = {
+      title: 'Display interface packet counters',
+      summary: 'Inspect packet and error counters on an interface.',
+      command_text: 'show interfaces counters errors',
+      procedure_steps: []
+    }
+    expect(hasMinimumSemanticRelevance(
+      ['quantum', 'packet', 'teleportation'],
+      counters,
+    )).toBe(false)
+    expect(hasMinimumSemanticRelevance(
+      ['interface', 'error', 'counters'],
+      counters,
+    )).toBe(true)
+    expect(hasMinimumSemanticRelevance(['counters'], counters)).toBe(true)
+  })
+
   it('does not confuse an IP-valued syslog setting with IP configuration', () => {
     expect(answerSupportsCapability('ip-configuration', {
       title: 'Configure remote syslog server',
@@ -294,6 +315,20 @@ describe('Demand Intelligence', () => {
           ...base.applicability,
           vendor: 'Pica8',
           version_match: 'same_branch_fallback'
+        }
+      },
+    )).toBe(false)
+    expect(answerProvidesContextualCoverage(
+      'Configure switch access',
+      { ...context, vendor: 'HPE Aruba' },
+      {
+        ...base,
+        applicability: {
+          ...base.applicability,
+          vendor: 'Hewlett Packard Enterprise',
+          operating_system: 'Comware',
+          assurance_level: 'best_effort',
+          context_relation: 'cross_platform'
         }
       },
     )).toBe(false)

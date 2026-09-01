@@ -273,26 +273,20 @@ export function answerSupportsRequestedAction(
   return true
 }
 
-function canonicalVendor(value: string): string {
-  const normalized = value.toLowerCase().replace(/[^a-z0-9]+/g, '')
-  if ([
-    'aruba', 'arubanetworks', 'hpe', 'hpearuba',
-    'hewlettpackard', 'hewlettpackardenterprise'
-  ].includes(normalized)) return 'hpe-aruba'
-  return normalized
-}
-
 export function answerProvidesContextualCoverage(
   question: string,
   context: InternalResolvedContext,
   answer: PublicKnowledge,
 ): boolean {
-  if (answer.applicability.version_match === 'same_branch_fallback') {
+  if (
+    answer.applicability.assurance_level === 'best_effort' ||
+    answer.applicability.version_match === 'same_branch_fallback'
+  ) {
     return false
   }
   if (
-    context.vendor_resolved &&
-    canonicalVendor(answer.applicability.vendor) !== canonicalVendor(context.vendor)
+    answer.applicability.context_relation === 'same_vendor' ||
+    answer.applicability.context_relation === 'cross_platform'
   ) {
     return false
   }
@@ -357,6 +351,14 @@ export async function searchKnowledgeWithCoverage(input: {
       input.context,
       input.limit,
       input.kind,
+      part.capability === 'general'
+        ? undefined
+        : (evidence) => answerSupportsCapability(part.capability, {
+            title: evidence.title,
+            summary: evidence.summary,
+            command: evidence.command_text,
+            procedure: evidence.procedure_steps
+          }),
     )
     const partRequiresAction = input.requireAction === true && ![
       'arp-diagnostics',

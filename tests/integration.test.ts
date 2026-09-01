@@ -3430,10 +3430,12 @@ describeIntegration('PostgreSQL integration', () => {
     expect(answers.length).toBeGreaterThan(0)
     expect(answers[0]?.applicability.vendor).toBe('Cisco')
     expect(answers[0]?.applicability).toMatchObject({
-      match_level: 'vendor_os',
-      version_match: 'same_branch_fallback',
+      match_level: 'exact_model',
+      context_relation: 'same_vendor',
+      documented_version_relation: 'unspecified',
       assurance_level: 'best_effort'
     })
+    expect(answers[0]?.applicability.version_match).toBeUndefined()
     const coverage = await searchKnowledgeWithCoverage({
       database,
       question: 'show ip interface brief',
@@ -3456,6 +3458,38 @@ describeIntegration('PostgreSQL integration', () => {
       operating_system: 'FruitOS',
       operatingSystemId: null
     })
+  })
+
+  it('returns dangerous cross-platform guidance with its safety context intact', async () => {
+    const context = await resolveNetworkContext(database, {
+      vendor: 'Juniper',
+      model: 'EX4400',
+      operating_system: 'Junos',
+      version: '23.4R1'
+    })
+    const answers = await searchKnowledge(
+      database,
+      'Validate Catalyst 9300 upgrade readiness',
+      context,
+      3,
+    )
+    const reference = answers.find((answer) => answer.dangerous)
+    expect(reference).toBeDefined()
+    expect(reference?.applicability).toMatchObject({
+      vendor: 'Cisco',
+      operating_system: 'Cisco IOS XE',
+      context_relation: 'cross_platform',
+      documented_version_relation: 'not_comparable',
+      assurance_level: 'best_effort',
+      requires_platform_confirmation: true
+    })
+    expect(reference?.risks.length).toBeGreaterThan(0)
+    expect(reference?.prerequisites.length).toBeGreaterThan(0)
+    expect(reference?.verification.length).toBeGreaterThan(0)
+    expect(reference?.rollback.length).toBeGreaterThan(0)
+    expect(reference?.limitations.join(' ')).toContain(
+      'Exact applicability was not confirmed',
+    )
   })
 
   it('returns unknown instead of an unrelated context-only network match', async () => {

@@ -234,7 +234,7 @@ describe('Network Evidence Workbench', () => {
     expect(screen.getByText(/Case v3/i)).toBeInTheDocument()
   })
 
-  it('does not mix another vendor when current-vendor guidance exists', async () => {
+  it('keeps cross-platform guidance visible with an explicit warning', async () => {
     const hpeAnswer = {
       ...answer,
       revision_ref: '33333333-3333-4333-8333-333333333333',
@@ -243,7 +243,9 @@ describe('Network Evidence Workbench', () => {
         ...answer.applicability,
         vendor: 'Hpe',
         operating_system: 'ArubaOS Switch',
-        version_match: 'same_branch_fallback'
+        version_match: 'same_branch_fallback',
+        assurance_level: 'best_effort',
+        context_relation: 'cross_platform'
       }
     }
     vi.mocked(window.fetch).mockImplementation(async (_input, init) => {
@@ -277,7 +279,11 @@ describe('Network Evidence Workbench', () => {
     fireEvent.click(screen.getByRole('button', { name: /search knowledge/i }))
 
     await screen.findByText('Upgrade Catalyst 9300 in install mode')
-    expect(screen.queryByText('HPE fast software upgrade')).not.toBeInTheDocument()
+    expect(screen.getByText('HPE fast software upgrade')).toBeInTheDocument()
+    expect(screen.getByText(/Reference guidance · cross platform/i))
+      .toBeInTheDocument()
+    expect(screen.getByText(/Exact applicability is not confirmed/i))
+      .toBeInTheDocument()
   })
 
   it('returns compact analysis metadata without echoing sanitized evidence', async () => {

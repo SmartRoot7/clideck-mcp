@@ -60,4 +60,10 @@
   equally relevant widened NX-OS records could outrank an IOS XE record because
   their stored scope was narrower. The final tie-break now prefers a direct
   applicability result over widened guidance before comparing stored scope.
+- 2026-09-01: Broad retrieval now rejects only candidates without a substantive
+  question match, then returns useful other-version and cross-platform records
+  as explicit best-effort references. Responses expose the factual context and
+  documented version relation instead of calling every broad result a same-branch
+  match. WebMCP keeps those references visible with a warning; exact, portable,
+  provenance, exclusions, risk, and publication-integrity controls are unchanged.
 - GitHub push and Devpost submission remain outside the authorized release.

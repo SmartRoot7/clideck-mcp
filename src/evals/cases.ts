@@ -88,7 +88,7 @@ const additionalKnowledgeCases: EvalCase[] = IOS_XE_SEED_KNOWLEDGE.flatMap(
         version: fact.kind === 'upgrade' ? '17.12.4' : '17.9.4'
       }
     })),
-).slice(0, 150 - primaryKnowledgeCases.length)
+).slice(0, 148 - primaryKnowledgeCases.length)
 
 const knowledgeCases: EvalCase[] = [
   ...primaryKnowledgeCases,
@@ -100,7 +100,9 @@ const unknownQuestions = [
   'recover a device from ROMMON after flash corruption',
   'configure segment routing traffic engineering policies',
   'debug LISP control-plane registration failures',
-  'configure MPLS L3VPN route targets'
+  'configure MPLS L3VPN route targets',
+  'quantum packet teleportation',
+  'flarble snorgle wibble'
 ]
 
 const promptInjectionQuestions = [
