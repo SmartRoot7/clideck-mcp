@@ -366,8 +366,15 @@ function candidateContextRelation(
   row: KnowledgeRow,
   context: InternalResolvedContext,
 ): ContextRelation {
-  const sameFamily = row.software_family_id !== null &&
+  const sameVendor = row.revision_vendor_id !== null &&
+    row.revision_vendor_id === context.vendorId
+  const sameOperatingSystem = sameVendor &&
+    row.operating_system_name.toLowerCase().replace(/[^a-z0-9]+/g, '') ===
+      context.operating_system.toLowerCase().replace(/[^a-z0-9]+/g, '')
+  const sameFamily = sameOperatingSystem || (
+    row.software_family_id !== null &&
     context.softwareFamilyIds.includes(row.software_family_id)
+  )
   if (
     sameFamily &&
     row.scope_level === 'model' &&
@@ -397,7 +404,7 @@ function candidateContextRelation(
   }
   if (
     row.revision_vendor_id !== null &&
-    row.revision_vendor_id === context.vendorId
+    sameVendor
   ) {
     return 'same_vendor'
   }
