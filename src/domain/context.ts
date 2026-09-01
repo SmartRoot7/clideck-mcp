@@ -243,6 +243,7 @@ async function resolveVendorOperatingSystem(
 async function familyForOperatingSystem(
   database: Database,
   operatingSystemId: string,
+  preferredFamilySlug: string,
 ): Promise<FamilyCandidate | undefined> {
   const result = await database.query<FamilyCandidate>(
     `SELECT
@@ -256,10 +257,14 @@ async function familyForOperatingSystem(
      JOIN software_families family ON family.id = membership.family_id
      WHERE membership.operating_system_id = $1
      ORDER BY
-       CASE family.portability_mode WHEN 'portable' THEN 0 ELSE 1 END,
+       CASE
+         WHEN family.slug = $2 THEN 0
+         WHEN family.portability_mode = 'portable' THEN 1
+         ELSE 2
+       END,
        family.slug
      LIMIT 1`,
-    [operatingSystemId],
+    [operatingSystemId, preferredFamilySlug],
   )
   return result.rows[0]
 }
@@ -406,7 +411,11 @@ export async function resolveNetworkContext(
     ? await resolvePlatform(database, vendor.id, input.model)
     : undefined
   const vendorFamily = vendorOperatingSystem
-    ? await familyForOperatingSystem(database, vendorOperatingSystem.id)
+    ? await familyForOperatingSystem(
+        database,
+        vendorOperatingSystem.id,
+        `${vendor!.slug}-${vendorOperatingSystem.slug}`,
+      )
     : undefined
   const family = vendorFamily ?? explicitFamily
   if (!family || family.score < minimumFamilyScore) {
