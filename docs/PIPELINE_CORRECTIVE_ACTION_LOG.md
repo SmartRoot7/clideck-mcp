@@ -27,10 +27,20 @@ accepted as the correction itself.
 
 ### Verification and deployment
 
-- The focused contract regression and `pnpm check` passed. Run the complete
-  deployment preflight, deploy the clean commit only through
-  `ops/scripts/deploy-production.sh`, and verify that the public knowledge list
-  returns parsed vendor-neutral records instead of HTTP 500.
+- The focused contract regression and `pnpm check` passed. The complete
+  deployment preflight passed 230/230 PostgreSQL-backed tests, all domain and
+  admin tests, the 250/250 product evaluation with zero dangerous false-safe
+  results, and the production build.
+- Deployed commit `969342d29f70e526e9746d660b79aa50b3c4c209` exclusively
+  through `ops/scripts/deploy-production.sh`; every deployment smoke test
+  passed.
+- At `2026-09-01T05:34:33Z`, the knowledge list returned HTTP 200 with 139,037
+  records and included the formerly failing vendor-neutral record as
+  `vendor_slug: null`, `vendor_name: "Not specified"`, with its title, summary,
+  confidence, quality score and validation level intact. Health/readiness
+  passed, all four services were active with zero restarts, no warning-or-higher
+  journal entry had appeared since activation, and the launchd pool was
+  running. Coverage remained at zero discovering and zero overdue targets.
 
 ## 2026-09-01 — Terminal discovery leases stranded coverage targets
 
