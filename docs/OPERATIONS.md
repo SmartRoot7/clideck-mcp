@@ -61,7 +61,7 @@ The default local credentials file is
 `CLIDECK_MCP_DEPLOY_SECRETS_FILE` when necessary. The previous immutable
 release and deployment backup are retained for rollback.
 
-`val` uses a three-hour global sudo timestamp on the production VM. Run
+`val` uses a seven-day global sudo timestamp on the production VM. Run
 `sudo -v` interactively before deployment; the deploy script never reads or
 stores the password. Use `sudo -K` to invalidate the ticket immediately.
 
