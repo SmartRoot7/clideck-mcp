@@ -377,10 +377,22 @@ export async function resolveNetworkContext(
   })
   const operatingSystemRequest = operatingSystemIntent.familyRequest
   const vendor = await resolveVendor(database, input)
+  const vendorOperatingSystem = vendor && vendor.score >= minimumVendorScore &&
+    operatingSystemRequest
+    ? await resolveVendorOperatingSystem(
+        database,
+        vendor.id,
+        operatingSystemRequest,
+      )
+    : undefined
   const explicitFamily = operatingSystemRequest
     ? await resolveFamily(database, operatingSystemRequest)
     : undefined
-  if (explicitFamily && explicitFamily.score < minimumFamilyScore) {
+  if (
+    !vendorOperatingSystem &&
+    explicitFamily &&
+    explicitFamily.score < minimumFamilyScore
+  ) {
     return unresolvedInternalNetworkContext(input)
   }
   if (
@@ -393,19 +405,10 @@ export async function resolveNetworkContext(
   const platform = vendor && vendor.score >= minimumVendorScore
     ? await resolvePlatform(database, vendor.id, input.model)
     : undefined
-  const vendorOperatingSystem = vendor && vendor.score >= minimumVendorScore &&
-    operatingSystemRequest
-    ? await resolveVendorOperatingSystem(
-        database,
-        vendor.id,
-        operatingSystemRequest,
-      )
+  const vendorFamily = vendorOperatingSystem
+    ? await familyForOperatingSystem(database, vendorOperatingSystem.id)
     : undefined
-  const family = explicitFamily ?? (
-    vendorOperatingSystem
-      ? await familyForOperatingSystem(database, vendorOperatingSystem.id)
-      : undefined
-  )
+  const family = vendorFamily ?? explicitFamily
   if (!family || family.score < minimumFamilyScore) {
     return unresolvedInternalNetworkContext(input, {
       ...(vendor?.score && vendor.score >= minimumVendorScore ? { vendor } : {}),

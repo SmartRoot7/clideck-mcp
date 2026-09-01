@@ -3406,6 +3406,22 @@ describeIntegration('PostgreSQL integration', () => {
     )
   })
 
+  it('resolves the analyzer display name through the vendor OS family', async () => {
+    const context = await resolveNetworkContext(database, {
+      vendor: 'Cisco',
+      model: 'C9300-24T',
+      operating_system: 'Cisco IOS XE',
+      version: '16.10.1'
+    })
+    expect(context).toMatchObject({
+      vendor_resolved: true,
+      model_resolved: true,
+      platform_slug: 'catalyst-9000',
+      operating_system_slug: 'ios-xe',
+      software_family_slug: 'cisco-ios-xe'
+    })
+  })
+
   it('keeps vendor context without inventing an operating system', async () => {
     const context = await resolveNetworkContext(database, {
       vendor: 'Cisco',
