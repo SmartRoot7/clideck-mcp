@@ -37,7 +37,7 @@ async function allocate(
 }
 
 describe('weighted Luna scheduling', () => {
-  it('bounds repair while preserving and filling extraction lanes', async () => {
+  it('fills every lane while preserving an extraction lane', async () => {
     const result = await allocate({
       deep_low: 10,
       verify: 10,
@@ -46,13 +46,13 @@ describe('weighted Luna scheduling', () => {
 
     expect(result.activeByStage).toEqual({
       deep_medium: 0,
-      deep_low: 2,
+      deep_low: 3,
       verify: 0,
-      analyze: 2
+      analyze: 1
     })
   })
 
-  it('gives Deep Medium the bounded repair share and preserves Extract', async () => {
+  it('lets Deep Medium use every lane not needed to start extraction', async () => {
     const result = await allocate({
       deep_medium: 10,
       deep_low: 10,
@@ -61,32 +61,32 @@ describe('weighted Luna scheduling', () => {
     })
 
     expect(result.activeByStage).toEqual({
-      deep_medium: 2,
+      deep_medium: 3,
       deep_low: 0,
       verify: 0,
-      analyze: 2
+      analyze: 1
     })
   })
 
-  it('does not exceed the combined Fidelity and repair cap', async () => {
+  it('uses full capacity when only review work exists', async () => {
     const result = await allocate({
       deep_medium: 10,
       deep_low: 10
     })
 
     expect(result.activeByStage).toEqual({
-      deep_medium: 2,
+      deep_medium: 4,
       deep_low: 0,
       verify: 0,
       analyze: 0
     })
   })
 
-  it('leaves capacity free when only bounded repair has work', async () => {
+  it('does not leave capacity idle when only repair has work', async () => {
     const result = await allocate({ deep_low: 10 })
 
-    expect(result.activeByStage.deep_low).toBe(2)
-    expect(result.occupied).toBe(2)
+    expect(result.activeByStage.deep_low).toBe(4)
+    expect(result.occupied).toBe(4)
   })
 
   it('converges from an old Analyze-heavy allocation without preemption', async () => {

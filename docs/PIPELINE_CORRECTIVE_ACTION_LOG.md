@@ -5,6 +5,39 @@ Read it before changing the scheduler, executor bridge, processing runs, or
 production grants. A restart may load a deployed correction, but it is never
 accepted as the correction itself.
 
+## 2026-09-01 — Calendar and stage caps idled all eight executors
+
+### Evidence and cause
+
+- At `2026-09-01T05:40:58Z`, the pipeline was enabled at eight lanes, every
+  heartbeat was fresh, no circuit was open and every executor reported
+  `standby/scheduler_refill`. There were zero queued tasks, active sources, or
+  prepared sources.
+- All 325 targets were `active` or `covered`. The scheduler treated their
+  future `next_check_at` values as an eligibility prohibition, then separately
+  limited background discovery to one queued/running task and one claim.
+- The broader capacity audit found additional nonessential ceilings: two
+  shared Review/Fidelity lanes, one Demand Diagnosis, half-pool demand fairness,
+  and source-buffer suppression of background discovery. Any of them could
+  leave healthy executors idle despite useful independent work.
+
+### Minimal correction
+
+- Make coverage refresh continuous and fair: all non-paused targets are
+  eligible, while `next_check_at` remains the oldest-first ordering key.
+- Fill every free physical lane with independent discovery after higher
+  priority analysis, verification, review, expert and demand work is exhausted.
+- Remove stage, queue-class and single-task concurrency ceilings. Preserve the
+  physical eight-run ceiling, per-work-item deduplication, transactional leases,
+  context bounds, official-source rules and all publication safety controls.
+- Record the durable classification in `docs/PIPELINE_CAPACITY_AUDIT.md` and
+  prohibit reintroducing artificial throughput blockers in `AGENTS.md`.
+
+### Verification and deployment
+
+- Pending the full disposable PostgreSQL gate, product evaluation, clean-main
+  production deployment, and direct observation of eight running executors.
+
 ## 2026-09-01 — Vendor-neutral knowledge broke the demo list contract
 
 ### Evidence and cause

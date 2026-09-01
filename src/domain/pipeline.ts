@@ -912,16 +912,6 @@ export function demandFailureDisposition(input: {
 async function queueDemandDiagnosisWork(
   client: DatabaseClient,
 ): Promise<boolean> {
-  const active = await client.query<{ active: boolean }>(
-    `SELECT EXISTS (
-       SELECT 1
-       FROM pipeline_tasks
-       WHERE task_type = 'demand_diagnosis'
-         AND status IN ('queued', 'claimed', 'running')
-     ) AS active`,
-  )
-  if (active.rows[0]?.active) return false
-
   const demand = await client.query<{
     id: string
     question: string
@@ -1001,15 +991,6 @@ function supportsTerraFallback(
     'candidate_deep_review',
     'demand_diagnosis'
   ].includes(taskType)
-}
-
-export function demandCapacityAtLimit(input: {
-  baselineAvailable: boolean
-  activeDemand: number
-  concurrency: number
-}): boolean {
-  return input.baselineAvailable &&
-    input.activeDemand >= Math.ceil(Math.max(1, input.concurrency) / 2)
 }
 
 export function boundFragmentAnalysisBatch<
@@ -2362,101 +2343,64 @@ async function queueSourceWork(
 }
 
 async function queueDiscoveryWork(client: DatabaseClient): Promise<boolean> {
-  const activeDiscovery = await client.query<{ exists: boolean }>(
-    `SELECT EXISTS (
-       SELECT 1
-       FROM pipeline_tasks
-       WHERE task_type IN ('source_discovery', 'source_refresh')
-         AND status IN ('queued', 'claimed', 'running')
-     ) AS exists`,
+  const targetResult = await client.query<{
+    id: string
+    vendor_slug: string
+    product_family: string | null
+    model: string | null
+    operating_system_slug: string
+    version_branch: string | null
+    document_role: string
+    priority: number
+  }>(
+    `SELECT
+       id,
+       vendor_slug,
+       product_family,
+       model,
+       operating_system_slug,
+       version_branch,
+       document_role,
+       priority
+     FROM coverage_targets
+     WHERE status IN ('queued', 'failed', 'active', 'covered')
+     ORDER BY
+       CASE WHEN status IN ('queued', 'failed') THEN 0 ELSE 1 END,
+       next_check_at,
+       updated_at,
+       priority DESC
+     LIMIT 1
+     FOR UPDATE SKIP LOCKED`,
   )
-  if (activeDiscovery.rows[0]?.exists) return false
-
-  // A covered target is eligible only when its durable refresh time is due.
-  // Reopening a future target here created an unbounded discovery loop while
-  // the source buffer was low.
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    const targetResult = await client.query<{
-      id: string
-      vendor_slug: string
-      product_family: string | null
-      model: string | null
-      operating_system_slug: string
-      version_branch: string | null
-      document_role: string
-      priority: number
-    }>(
-      `SELECT
-         id,
-         vendor_slug,
-         product_family,
-         model,
-         operating_system_slug,
-         version_branch,
-         document_role,
-         priority
-       FROM coverage_targets
-       WHERE status <> 'paused'
-         AND (
-           status IN ('queued', 'failed')
-           OR (
-             status IN ('active', 'covered')
-             AND next_check_at <= now()
-           )
-         )
-       ORDER BY priority DESC, next_check_at, updated_at
-       LIMIT 1
-       FOR UPDATE SKIP LOCKED`,
-    )
-    const target = targetResult.rows[0]
-    if (target) {
-      await client.query(
-        `UPDATE coverage_targets
-            SET status = 'discovering',
-                last_discovered_at = now(),
-                updated_at = now()
-          WHERE id = $1`,
-        [target.id],
-      )
-      return Boolean(await insertTask(client, {
-        type: 'source_discovery',
-        stage: 'discover',
-        priority: Math.min(
-          aiPriorities.discover,
-          Math.max(1, target.priority),
-        ),
-        dedupeKey: `coverage:${target.id}:discover`,
-        coverageTargetId: target.id,
-        payload: {
-          coverage_target: target,
-          requirements: {
-            public_https_only: true,
-            official_vendor_sources_only: true,
-            no_authenticated_sources: true,
-            source_urls_are_internal: true
-          }
-        }
-      }))
+  const target = targetResult.rows[0]
+  if (!target) return false
+  await client.query(
+    `UPDATE coverage_targets
+        SET status = 'discovering',
+            last_discovered_at = now(),
+            updated_at = now()
+      WHERE id = $1`,
+    [target.id],
+  )
+  return Boolean(await insertTask(client, {
+    type: 'source_discovery',
+    stage: 'discover',
+    priority: Math.min(
+      aiPriorities.discover,
+      Math.max(1, target.priority),
+    ),
+    dedupeKey: `coverage:${target.id}:discover`,
+    coverageTargetId: target.id,
+    payload: {
+      coverage_target: target,
+      requirements: {
+        public_https_only: true,
+        official_vendor_sources_only: true,
+        no_authenticated_sources: true,
+        source_urls_are_internal: true
+      }
     }
-
-    const requeued = await client.query<{ id: string }>(
-      `UPDATE coverage_targets
-          SET status = 'queued',
-              next_check_at = now(),
-              updated_at = now()
-        WHERE id = (
-          SELECT id
-          FROM coverage_targets
-          WHERE status IN ('active', 'covered')
-            AND next_check_at <= now()
-          ORDER BY next_check_at NULLS FIRST, updated_at, priority DESC
-          LIMIT 1
-        )
-        RETURNING id`,
-    )
-    if (!requeued.rows[0]) return false
-  }
-  return false
+  }))
 }
 
 /**
@@ -3073,43 +3017,21 @@ async function reconcileSourceLanes(
   const occupied = await client.query<{
     slot_number: number
     source_candidate_id: string
-    is_demand: boolean
   }>(
-    `SELECT slot.slot_number, slot.source_candidate_id,
-            (source.knowledge_demand_id IS NOT NULL) AS is_demand
+    `SELECT slot.slot_number, slot.source_candidate_id
      FROM active_source_slots slot
-     JOIN source_candidates source ON source.id = slot.source_candidate_id
      WHERE slot_number <= $1
      ORDER BY slot_number
      FOR UPDATE OF slot`,
     [maxActiveSources],
   )
   const used = new Set(occupied.rows.map((row) => row.slot_number))
-  let demandSlots = occupied.rows.filter((row) => row.is_demand).length
   for (let slot = 1; slot <= maxActiveSources; slot += 1) {
     if (used.has(slot)) continue
-    const baselineAvailable = await client.query<{ available: boolean }>(
-      `SELECT EXISTS (
-         SELECT 1 FROM source_candidates source
-          WHERE source.status IN ('prepared', 'analyzing')
-            AND source.knowledge_demand_id IS NULL
-            AND NOT EXISTS (
-              SELECT 1 FROM active_source_slots active
-               WHERE active.source_candidate_id = source.id
-            )
-       ) AS available`,
-    )
-    const restrictToBaseline = demandCapacityAtLimit({
-      baselineAvailable: baselineAvailable.rows[0]?.available === true,
-      activeDemand: demandSlots,
-      concurrency: maxActiveSources
-    })
-    const source = await client.query<{ id: string; is_demand: boolean }>(
+    const source = await client.query<{ id: string }>(
       `SELECT source.id
-              ,(source.knowledge_demand_id IS NOT NULL) AS is_demand
        FROM source_candidates source
        WHERE source.status IN ('prepared', 'analyzing')
-         AND (NOT $1::boolean OR source.knowledge_demand_id IS NULL)
          AND NOT EXISTS (
            SELECT 1
            FROM active_source_slots active
@@ -3133,7 +3055,6 @@ async function reconcileSourceLanes(
          source.updated_at
        LIMIT 1
        FOR NO KEY UPDATE OF source SKIP LOCKED`,
-      [restrictToBaseline],
     )
     if (!source.rows[0]) break
     await client.query(
@@ -3144,7 +3065,6 @@ async function reconcileSourceLanes(
        VALUES ($1, $2)`,
       [slot, source.rows[0].id],
     )
-    if (source.rows[0].is_demand) demandSlots += 1
     await client.query(
       `UPDATE source_candidates
           SET status = 'analyzing',
@@ -3408,18 +3328,14 @@ async function ensureLegacyWorkInTransaction(
     ai_model: string
     reasoning_effort: string
     max_concurrent_ai_runs: number
-    max_deep_review_runs: number
     max_active_sources: number
-    source_buffer_target: number
   }>(
     `SELECT
        enabled,
        ai_model,
        reasoning_effort,
        max_concurrent_ai_runs,
-       max_deep_review_runs,
-       max_active_sources,
-       source_buffer_target
+       max_active_sources
      FROM pipeline_settings
      WHERE singleton
      FOR UPDATE`,
@@ -3658,16 +3574,8 @@ async function ensureLegacyWorkInTransaction(
     [aiTaskTypes],
   )
   let occupiedSlots = activeAi.rows[0]?.count ?? 0
-  const activeDeep = await client.query<{ count: number }>(
-    `SELECT count(*)::int AS count
-     FROM pipeline_tasks
-     WHERE status IN ('queued', 'claimed', 'running')
-       AND task_type = 'candidate_deep_review'`,
-  )
   if (
     occupiedSlots < pipeline.max_concurrent_ai_runs &&
-    (activeDeep.rows[0]?.count ?? 0) <
-      pipeline.max_deep_review_runs &&
     await queueDeepReviewWork(client, 'low')
   ) {
     occupiedSlots += 1
@@ -3680,10 +3588,7 @@ async function ensureLegacyWorkInTransaction(
        AND task_type = 'fragment_analysis'`,
   )
   let analysisSlots = activeAnalysis.rows[0]?.count ?? 0
-  const desiredAnalysisSlots = Math.min(
-    2,
-    pipeline.max_concurrent_ai_runs,
-  )
+  const desiredAnalysisSlots = pipeline.max_concurrent_ai_runs
   let madeAnalysisProgress = true
   while (
     occupiedSlots < pipeline.max_concurrent_ai_runs &&
@@ -3736,16 +3641,7 @@ async function ensureLegacyWorkInTransaction(
   while (occupiedSlots < pipeline.max_concurrent_ai_runs) {
     let queued = await queueExpertWork(client)
     if (!queued) {
-      const sourceBuffer = await client.query<{ count: number }>(
-        `SELECT count(*)::int AS count
-         FROM source_candidates
-         WHERE status IN ('discovered', 'approved')`,
-      )
-      queued =
-        (sourceBuffer.rows[0]?.count ?? 0) <
-          pipeline.source_buffer_target
-          ? await queueDiscoveryWork(client)
-          : false
+      queued = await queueDiscoveryWork(client)
     }
     if (!queued) break
     occupiedSlots += 1
@@ -3771,9 +3667,7 @@ async function ensureStreamingWorkInTransaction(
     ai_model: string
     reasoning_effort: string
     max_concurrent_ai_runs: number
-    max_deep_review_runs: number
     max_active_sources: number
-    source_buffer_target: number
     prepared_source_target: number
   }>(
     `SELECT
@@ -3781,9 +3675,7 @@ async function ensureStreamingWorkInTransaction(
        ai_model,
        reasoning_effort,
        max_concurrent_ai_runs,
-       max_deep_review_runs,
        max_active_sources,
-       source_buffer_target,
        prepared_source_target
      FROM pipeline_settings
      WHERE singleton
@@ -4001,26 +3893,16 @@ async function ensureStreamingWorkInTransaction(
     concurrency: pipeline.max_concurrent_ai_runs,
     occupied,
     activeByStage: activeCounts,
-    fidelityAndRepairCap: pipeline.max_deep_review_runs,
     queueStage: (stage) => queueByStage[stage]()
   })
   occupied = allocation.occupied
 
-  // Discovery is intentionally last and limited to one lane. Mechanical
-  // collection expansion keeps the source buffer useful without displacing
-  // records that are already closer to publication.
-  if (occupied < pipeline.max_concurrent_ai_runs) {
-    const sourceBuffer = await client.query<{ count: number }>(
-      `SELECT count(*)::int AS count
-       FROM source_candidates
-       WHERE status IN ('discovered', 'approved')`,
-    )
-    if (
-      (sourceBuffer.rows[0]?.count ?? 0) <
-      pipeline.source_buffer_target
-    ) {
-      await queueDiscoveryWork(client)
-    }
+  // Discovery is the work-conserving fallback. Keep filling every physical
+  // executor lane after higher-priority work is exhausted; next_check_at only
+  // orders refreshes and never leaves available capacity idle.
+  while (occupied < pipeline.max_concurrent_ai_runs) {
+    if (!(await queueDiscoveryWork(client))) break
+    occupied += 1
   }
 }
 
@@ -4050,14 +3932,12 @@ export async function claimPipelineTask(
       ai_model: string
       reasoning_effort: string
       max_concurrent_ai_runs: number
-      max_deep_review_runs: number
     }>(
       `SELECT
          enabled,
          ai_model,
          reasoning_effort,
-         max_concurrent_ai_runs,
-         max_deep_review_runs
+         max_concurrent_ai_runs
        FROM pipeline_settings
        WHERE singleton`,
     )
@@ -4145,70 +4025,6 @@ export async function claimPipelineTask(
       }
     }
 
-    const demandCapacity = await client.query<{
-      active_demand: number
-      active_diagnosis: number
-      baseline_available: boolean
-    }>(
-      `SELECT
-         count(*) FILTER (
-           WHERE status IN ('claimed', 'running') AND queue_class = 'demand'
-         )::int AS active_demand,
-         count(*) FILTER (
-           WHERE status IN ('claimed', 'running')
-             AND task_type = 'demand_diagnosis'
-         )::int AS active_diagnosis,
-         EXISTS (
-           SELECT 1 FROM pipeline_tasks baseline
-            WHERE baseline.status = 'queued'
-              AND baseline.available_at <= now()
-              AND baseline.queue_class = 'baseline'
-              AND baseline.task_type = ANY($1::text[])
-              AND NOT EXISTS (
-                SELECT 1 FROM pipeline_ai_circuits circuit
-                 WHERE circuit.task_type = baseline.task_type
-                   AND circuit.reasoning_effort = coalesce(
-                     baseline.requested_reasoning_effort,
-                     'low'
-                   )
-                   AND (
-                     circuit.open_until > now()
-                     OR circuit.probe_executor_id IS NOT NULL
-                   )
-                   AND NOT (
-                     baseline.requested_reasoning_effort = 'medium'
-                     AND baseline.task_type IN (
-                       'candidate_deep_review',
-                       'demand_diagnosis'
-                     )
-                     AND baseline.payload->>'terra_fallback_attempted'
-                       IS DISTINCT FROM 'true'
-                   )
-              )
-              AND (
-                baseline.task_type NOT IN (
-                  'source_discovery', 'source_refresh'
-                )
-                OR NOT EXISTS (
-                  SELECT 1 FROM pipeline_tasks active_discovery
-                   WHERE active_discovery.status IN ('claimed', 'running')
-                     AND active_discovery.task_type IN (
-                       'source_discovery', 'source_refresh'
-                     )
-                )
-              )
-         ) AS baseline_available
-       FROM pipeline_tasks
-      WHERE task_type = ANY($1::text[])`,
-      [aiTaskTypes],
-    )
-    const capacity = demandCapacity.rows[0]!
-    const demandAtCapacity = demandCapacityAtLimit({
-      baselineAvailable: capacity.baseline_available,
-      activeDemand: capacity.active_demand,
-      concurrency: pipeline.max_concurrent_ai_runs
-    })
-
     const selected = await client.query<PipelineTaskRow>(
       `SELECT
          id,
@@ -4234,11 +4050,6 @@ export async function claimPipelineTask(
                 AND exhausted_fragment.attempts >= 10
            )
          )
-         AND (NOT $2::boolean OR queue_class = 'baseline')
-         AND (
-           task_type <> 'demand_diagnosis'
-           OR NOT $3::boolean
-         )
          AND NOT EXISTS (
            SELECT 1
            FROM pipeline_ai_circuits circuit
@@ -4261,22 +4072,10 @@ export async function claimPipelineTask(
                  IS DISTINCT FROM 'true'
              )
          )
-         AND (
-           task_type NOT IN ('source_discovery', 'source_refresh')
-           OR NOT EXISTS (
-             SELECT 1
-             FROM pipeline_tasks active_discovery
-             WHERE active_discovery.status IN ('claimed', 'running')
-               AND active_discovery.task_type IN (
-                 'source_discovery',
-                 'source_refresh'
-               )
-           )
-         )
        ORDER BY priority DESC, created_at
        FOR UPDATE SKIP LOCKED
        LIMIT 1`,
-      [aiTaskTypes, demandAtCapacity, capacity.active_diagnosis > 0],
+      [aiTaskTypes],
     )
     const task = selected.rows[0]
     if (!task) {

@@ -14,7 +14,6 @@ import {
   codexExecutorEnvironment,
   sensitiveEnvironmentValues
 } from '../src/cli/pipeline-codex-policy.js'
-import { demandCapacityAtLimit } from '../src/domain/pipeline.js'
 
 describe('parallel Luna runtime', () => {
   it('uses eight isolated executor lanes with the economical model', () => {
@@ -178,24 +177,6 @@ describe('parallel Luna runtime', () => {
 })
 
 describe('pipeline task reasoning', () => {
-  it('caps demand at half the lanes only while baseline work exists', () => {
-    expect(demandCapacityAtLimit({
-      baselineAvailable: true,
-      activeDemand: 2,
-      concurrency: 4
-    })).toBe(true)
-    expect(demandCapacityAtLimit({
-      baselineAvailable: true,
-      activeDemand: 1,
-      concurrency: 4
-    })).toBe(false)
-    expect(demandCapacityAtLimit({
-      baselineAvailable: false,
-      activeDemand: 4,
-      concurrency: 4
-    })).toBe(false)
-  })
-
   it('preserves medium review and fails unknown values closed to low', () => {
     expect(normalizeTaskReasoning('medium')).toBe('medium')
     expect(normalizeTaskReasoning('low')).toBe('low')

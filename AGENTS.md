@@ -38,6 +38,22 @@ and must not receive normal deployments.
 - Record the evidence, cause, minimal correction, deployment commit, and
   post-deploy result in that log, then restart the read-only soak window.
 
+## Pipeline capacity policy
+
+- The enabled production pipeline is work-conserving: when useful work exists,
+  fill all eight physical Luna executor lanes.
+- Do not add a global single-task or single-stage lane cap. Discovery, demand
+  diagnosis, analysis, verification, and deep review may use every otherwise
+  free executor lane.
+- `next_check_at` orders coverage refreshes; it must not make an idle executor
+  wait for a future calendar date.
+- Do not add throughput cooldowns, daily quotas, cost throttles, or artificial
+  queue blockers without the user's explicit approval.
+- Preserve controls required for data integrity and safety: one live task per
+  durable work item, transactional leases, bounded model context, official
+  source policy, immutable revisions, provenance, publication thresholds,
+  risk handling, circuit isolation, audit, and explicit operator pause.
+
 ## Domain Pack workflow
 
 - Put subject-specific schemas, prompts, validators, fixtures, and mappers in

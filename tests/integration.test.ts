@@ -5035,12 +5035,13 @@ describeIntegration('PostgreSQL integration', () => {
       task_type: 'source_discovery',
       stage: 'discover',
       status: 'queued',
-      count: 1
+      count: 3
     })
 
     const initiallyQueued = await database.query<{ id: string }>(
       `SELECT id FROM pipeline_tasks
        WHERE task_type = 'source_discovery' AND status = 'queued'
+       ORDER BY priority DESC, created_at
        LIMIT 1`,
     )
     await database.query(
@@ -7198,7 +7199,7 @@ describeIntegration('PostgreSQL integration', () => {
     })
   })
 
-  it('does not reopen future active targets to fill an idle lane', async () => {
+  it('uses future refresh times as ordering instead of an idle-lane gate', async () => {
     const suffix = randomUUID().replaceAll('-', '')
     await database.query(
       `UPDATE pipeline_tasks
@@ -7265,7 +7266,7 @@ describeIntegration('PostgreSQL integration', () => {
          AND task.status IN ('queued', 'claimed', 'running')
          AND task.knowledge_demand_id IS NULL`,
     )
-    expect(reservedDiscovery.rows[0]?.matching_count).toBe(0)
+    expect(reservedDiscovery.rows[0]?.matching_count).toBe(1)
     expect(deepTasks.rows).toHaveLength(3)
 
     await database.query(
