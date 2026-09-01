@@ -37,8 +37,22 @@ accepted as the correction itself.
 
 ### Verification and deployment
 
-- Pending local/full release gates, clean-main production deployment, recovery
-  of the two sources, and a fresh read-only soak baseline.
+- Local type checking and all workspace tests passed. The canonical deployment
+  preflight passed 230/230 migrated PostgreSQL tests including the new real
+  acquisition regression, all domain and admin tests, 250/250 product eval
+  cases with zero dangerous false-safe results, and the production build.
+- Deployed commit `74e5f65942c5d29acafe8acd0b20977373969694`
+  exclusively through `ops/scripts/deploy-production.sh`; backup, migration,
+  grants, applicability verification, atomic switch and every smoke test
+  completed successfully.
+- Both affected sources were automatically retried and acquired on their first
+  new attempt. Each new acquisition task completed with identical non-null
+  processing-run IDs in its UUID column and JSON payload, and each source
+  advanced to queued conversion. No post-deploy `42P08` recurred.
+- At the fresh `2026-09-01T07:44:26Z` baseline, health/readiness passed, all
+  four application services were active with zero restarts, journals contained
+  no warning-or-higher entry after activation, circuits were empty, capacity
+  remained `8/8`, and all eight executors were running useful Discovery work.
 
 ## 2026-09-01 — Calendar and stage caps idled all eight executors
 
