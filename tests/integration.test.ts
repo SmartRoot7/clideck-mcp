@@ -1070,7 +1070,7 @@ describeIntegration('PostgreSQL integration', () => {
     }
   })
 
-  it('does not reopen a covered discovery target before next_check_at', async () => {
+  it('uses next_check_at to order rather than block covered discovery targets', async () => {
     const client = await database.connect()
     try {
       await client.query('BEGIN')
@@ -1094,10 +1094,17 @@ describeIntegration('PostgreSQL integration', () => {
       )
       const transactionDatabase = {
         connect: async () => ({
-          query: (sql: string, parameters?: unknown[]) =>
-            /^(BEGIN|COMMIT|ROLLBACK)$/.test(sql.trim())
+          query: (
+            sql: string | { text: string; values?: unknown[] },
+            parameters?: unknown[],
+          ) => {
+            const text = typeof sql === 'string' ? sql : sql.text
+            return /^(BEGIN|COMMIT|ROLLBACK)$/.test(text.trim())
               ? Promise.resolve({ rows: [] })
-              : client.query(sql, parameters),
+              : typeof sql === 'string'
+                ? client.query(sql, parameters)
+                : client.query(sql)
+          },
           release: () => undefined
         })
       } as unknown as Database
@@ -1109,7 +1116,7 @@ describeIntegration('PostgreSQL integration', () => {
             AND status IN ('queued', 'claimed', 'running')`,
         [target.rows[0]!.id],
       )
-      expect(queued.rows[0]?.count).toBe(0)
+      expect(queued.rows[0]?.count).toBe(1)
     } finally {
       await client.query('ROLLBACK')
       client.release()

@@ -2861,29 +2861,6 @@ async function maintainPreparedSourceBuffer(
   }
 }
 
-async function sourceSupplyNeedsDiscovery(
-  client: DatabaseClient,
-  target: number,
-): Promise<boolean> {
-  if (target <= 0) return false
-  const supply = await client.query<{ count: number }>(
-    `SELECT count(*)::int AS count
-     FROM source_candidates
-     WHERE status IN (
-       'discovered',
-       'approved',
-       'acquiring',
-       'acquired',
-       'converting',
-       'converted',
-       'chunking',
-       'prepared',
-       'analyzing'
-     )`,
-  )
-  return (supply.rows[0]?.count ?? 0) < target
-}
-
 export async function queueRunningReprocessMechanicalWork(
   client: DatabaseClient,
   limit: number,
@@ -3720,16 +3697,6 @@ async function ensureStreamingWorkInTransaction(
   await queueDemandDiagnosisWork(client)
   await queueDemandDiscoveryWork(client)
 
-  // Keep one future Luna claim available for intake whenever the prepared
-  // supply falls below its target. Without this reservation an endless Deep
-  // Review backlog can consume every lane and leave no documents ready when
-  // it finally drains. Existing runs are never interrupted.
-  if (await sourceSupplyNeedsDiscovery(
-    client,
-    pipeline.prepared_source_target,
-  )) {
-    await queueDiscoveryWork(client)
-  }
   await queueExpertWork(client)
   // Older releases could queue a Luna-low fallback after repeated Medium
   // platform failures. Preserve its candidate reservation and evidence, but
@@ -3858,6 +3825,10 @@ async function ensureStreamingWorkInTransaction(
          )
        )
        AND task_type = ANY($1::text[])
+       AND NOT (
+         status = 'queued'
+         AND task_type IN ('source_discovery', 'source_refresh')
+       )
      GROUP BY scheduler_stage`,
     [aiTaskTypes],
   )
@@ -3867,6 +3838,13 @@ async function ensureStreamingWorkInTransaction(
     verify: 0,
     analyze: 0
   }
+  const queuedDiscovery = await client.query<{ count: number }>(
+    `SELECT count(*)::int AS count
+       FROM pipeline_tasks
+      WHERE status = 'queued'
+        AND available_at <= now()
+        AND task_type IN ('source_discovery', 'source_refresh')`,
+  )
   let occupied = 0
   for (const row of activeAi.rows) {
     occupied += row.count
@@ -3900,9 +3878,13 @@ async function ensureStreamingWorkInTransaction(
   // Discovery is the work-conserving fallback. Keep filling every physical
   // executor lane after higher-priority work is exhausted; next_check_at only
   // orders refreshes and never leaves available capacity idle.
-  while (occupied < pipeline.max_concurrent_ai_runs) {
+  let reserved = occupied + (queuedDiscovery.rows[0]?.count ?? 0)
+  while (
+    reserved < pipeline.max_concurrent_ai_runs &&
+    !isCircuitBlocked('source_discovery', 'low')
+  ) {
     if (!(await queueDiscoveryWork(client))) break
-    occupied += 1
+    reserved += 1
   }
 }
 
