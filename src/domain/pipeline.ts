@@ -1262,6 +1262,26 @@ async function insertTask(
 async function reconcileExpiredAndCompletedWork(
   client: DatabaseClient,
 ): Promise<void> {
+  // A discovery lease can exhaust without reaching either submission or the
+  // normal failure handler. The task is then terminal, but older releases left
+  // its coverage target in `discovering` forever, outside the scheduler's
+  // eligible statuses. Return only genuinely orphaned targets to the queue;
+  // an active discovery task remains the authoritative owner.
+  await client.query(
+    `UPDATE coverage_targets target
+        SET status = 'queued',
+            next_check_at = now(),
+            updated_at = now()
+      WHERE target.status = 'discovering'
+        AND NOT EXISTS (
+          SELECT 1
+          FROM pipeline_tasks task
+          WHERE task.coverage_target_id = target.id
+            AND task.task_type IN ('source_discovery', 'source_refresh')
+            AND task.status IN ('queued', 'claimed', 'running')
+        )`,
+  )
+
   // A continuation may legitimately revisit the same fragment, but the
   // fragment retry budget is finite. Older schedulers could reserve an
   // eleventh pass; claim then tried to increment attempts past the database

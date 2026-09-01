@@ -7278,6 +7278,80 @@ describeIntegration('PostgreSQL integration', () => {
     )
   })
 
+  it('requeues a discovering target whose discovery task is terminal', async () => {
+    const suffix = randomUUID().replaceAll('-', '')
+    await database.query(
+      `UPDATE pipeline_tasks
+          SET status = 'cancelled', completed_at = now(), updated_at = now()
+        WHERE status IN ('queued', 'claimed', 'running');
+       UPDATE coverage_targets
+          SET status = 'active',
+              next_check_at = now() + interval '1 day',
+              updated_at = now()`,
+    )
+    const target = await database.query<{ id: string }>(
+      `INSERT INTO coverage_targets (
+         vendor_slug, product_family, model, operating_system_slug,
+         version_branch, document_role, priority, status, next_check_at
+       )
+       VALUES (
+         'cisco', $1, 'C9300', 'ios-xe', '17.15',
+         'commands', 100, 'discovering', now() - interval '1 hour'
+       )
+       RETURNING id`,
+      [`orphan-discovery-${suffix}`],
+    )
+    const targetId = target.rows[0]!.id
+    await database.query(
+      `INSERT INTO pipeline_tasks (
+         task_type, stage, status, priority, dedupe_key,
+         coverage_target_id, payload, attempts, failure_code,
+         failure_message, completed_at
+       )
+       VALUES (
+         'source_discovery', 'discover', 'failed', 50, $1,
+         $2, '{}'::jsonb, 5, 'LEASE_ATTEMPTS_EXHAUSTED',
+         'Synthetic exhausted discovery lease.', now()
+       )`,
+      [`orphan-discovery-task:${suffix}`, targetId],
+    )
+
+    try {
+      await ensurePipelineWork(database)
+
+      const recovered = await database.query<{
+        target_status: string
+        live_tasks: number
+      }>(
+        `SELECT
+           target.status AS target_status,
+           count(task.id) FILTER (
+             WHERE task.status IN ('queued', 'claimed', 'running')
+           )::int AS live_tasks
+         FROM coverage_targets target
+         LEFT JOIN pipeline_tasks task
+           ON task.coverage_target_id = target.id
+          AND task.task_type IN ('source_discovery', 'source_refresh')
+         WHERE target.id = $1
+         GROUP BY target.status`,
+        [targetId],
+      )
+      expect(recovered.rows[0]).toEqual({
+        target_status: 'discovering',
+        live_tasks: 1,
+      })
+    } finally {
+      await database.query(
+        'DELETE FROM pipeline_tasks WHERE coverage_target_id = $1',
+        [targetId],
+      )
+      await database.query(
+        'DELETE FROM coverage_targets WHERE id = $1',
+        [targetId],
+      )
+    }
+  })
+
   it('does not retry permanently missing source URLs', async () => {
     const leaseToken = randomUUID()
     const task = await database.query<{ id: string }>(

@@ -5,6 +5,51 @@ Read it before changing the scheduler, executor bridge, processing runs, or
 production grants. A restart may load a deployed correction, but it is never
 accepted as the correction itself.
 
+## 2026-09-01 — Terminal discovery leases stranded coverage targets
+
+### Evidence and cause
+
+- At `2026-09-01T05:00:02Z`, production health/readiness and every service were
+  healthy, all eight executor heartbeats were fresh, the pipeline was enabled
+  at `8/2`, and no AI circuit was open. Nevertheless every executor reported
+  `standby/scheduler_refill`, with zero queued tasks, zero active sources and
+  zero prepared sources.
+- This was not a lack of useful coverage work. Of 325 coverage targets, three
+  remained `discovering` with `next_check_at` between August 27 and August 31,
+  no queued/claimed/running discovery task, and no eligible scheduler path.
+- An expired AI lease is reconciled directly from `pipeline_tasks`. When its
+  fifth attempt becomes terminal, that path did not perform the coverage-target
+  reset that the normal artifact failure handler performs. The target therefore
+  remained permanently outside the scheduler's eligible `queued`, `failed`,
+  due `active`, and due `covered` states.
+- Recent throughput was otherwise real: active knowledge reached 139,053,
+  release sequence 7,884, and 22,186 records published in the rolling 24 hours.
+  The idle snapshot followed a burst of completed discovery runs and was not a
+  service-process failure. Future refresh windows remain intentional; reopening
+  them early would recreate an unbounded duplicate-discovery loop.
+
+### Minimal correction
+
+- Scheduler reconciliation returns a `discovering` coverage target to `queued`
+  only when no queued, claimed or running Discovery/Refresh task still owns it.
+- Set `next_check_at` to the current time so the normal discovery scheduler can
+  immediately create a new bounded attempt. Do not change refresh cadence,
+  source policy, task retry limits, lane caps, provenance or publication rules.
+- Add a PostgreSQL regression with a terminal fifth-attempt discovery task. It
+  requires exactly one new live discovery task for the orphaned target while
+  the existing regression continues to prohibit reopening future active
+  targets merely to fill an idle lane.
+
+### Verification and deployment
+
+- Local type checking and all 16 deployment-contract tests passed. The full
+  migrated PostgreSQL 16 release gate passed 229/229 integration and workspace
+  tests, the 250/250 product evaluation with zero dangerous false-safe results,
+  and the production build.
+- Deploy the clean commit exclusively through
+  `ops/scripts/deploy-production.sh`, then record the deployed SHA and
+  post-deploy recovery of the three targets in this entry.
+
 ## 2026-08-31 — Scheduler settings lock must not block lease renewal
 
 ### Evidence and cause
