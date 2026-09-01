@@ -36,9 +36,18 @@ accepted as the correction itself.
 
 ### Verification and deployment
 
-- Pending local/full release gates, clean-main deployment and a production
-  discovery sample that demonstrates real web search rather than the prior
-  unavailable-tool rejection.
+- Local type checks and all workspace suites passed. The canonical clean-main
+  deployment gate passed 230/230 PostgreSQL-backed tests and 250/250 product
+  evaluations before deploying commit
+  `80bd108e157e19b6838b88d21b478122d515a05a` through the production script.
+- In the first production sample, 75 completed Discovery runs inserted four
+  sources and recognized eight existing URLs; none reported an unavailable
+  web-search tool. The new official Palo Alto Prisma SD-WAN CLI page completed
+  acquisition, conversion and chunking and entered analysis. Three Linux manual
+  pages were correctly collapsed onto existing content identities.
+- Health, readiness and release smokes passed. All production services stayed
+  active with zero application restarts and empty warning-or-higher journals;
+  all eight executor heartbeats were fresh and running with no open circuit.
 
 ## 2026-09-01 — Identical source bytes exhausted acquisition retries
 
