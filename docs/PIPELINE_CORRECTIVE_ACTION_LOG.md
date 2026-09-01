@@ -47,8 +47,23 @@ accepted as the correction itself.
   cases, the production build and every smoke test. At
   `2026-09-01T06:09:55Z`, production directly reported all eight executors
   `running` on eight independent discovery tasks with no open AI circuit.
-- Pending the final clean-main deployment of the lifecycle/configuration
-  correction and repeated observation that all eight lanes refill themselves.
+- The lifecycle/configuration correction deployed as
+  `cdde88c0d42c4437da43219e6bf1654d98165ca2` exclusively through the full
+  production script. Its clean preflight again passed 229/229 PostgreSQL-backed
+  tests, all domain and admin tests, 250/250 product eval cases with zero
+  dangerous false-safe results, the production build and every smoke test.
+- Post-deploy production reported both capacity values as eight and no open AI
+  circuit. Repeated snapshots at `2026-09-01T06:23Z`–`06:26Z` observed two
+  independent `8 running / 0 standby` states and changing task IDs across all
+  lanes. Short one- or two-lane transitions between task completion and the
+  next claim refilled on subsequent snapshots; there was no sustained standby.
+- All API, admin, worker and researcher services were active with zero
+  restarts, health/readiness passed, and no warning-or-higher journal entry was
+  recorded after activation. The live quality signals showed 22,007 published
+  records in 24 hours, zero publication failures, zero open conflicts, and a
+  99.997% automatic resolution rate. A public knowledge sample returned
+  coherent high-confidence records, including the intentional vendor-neutral
+  contract case.
 
 ## 2026-09-01 — Vendor-neutral knowledge broke the demo list contract
 
