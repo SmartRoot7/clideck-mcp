@@ -1123,6 +1123,72 @@ describeIntegration('PostgreSQL integration', () => {
     }
   })
 
+  it('rotates future coverage before repeating a recently searched target', async () => {
+    const client = await database.connect()
+    try {
+      await client.query('BEGIN')
+      await client.query(
+        `UPDATE pipeline_tasks
+            SET status = 'cancelled', completed_at = now(), updated_at = now()
+          WHERE status IN ('queued', 'claimed', 'running');
+         UPDATE coverage_targets SET status = 'paused', updated_at = now();
+         UPDATE pipeline_settings
+            SET enabled = true, max_concurrent_ai_runs = 1,
+                source_buffer_target = 100, updated_at = now();`,
+      )
+      const targets = await client.query<{
+        id: string
+        vendor_slug: string
+      }>(
+        `INSERT INTO coverage_targets (
+           vendor_slug, operating_system_slug, document_role,
+           status, priority, next_check_at, last_discovered_at
+         ) VALUES
+           ($1, $2, 'commands', 'covered', 100,
+            now() + interval '1 day', now()),
+           ($3, $4, 'commands', 'covered', 1,
+            now() + interval '7 days', now() - interval '1 day')
+         RETURNING id, vendor_slug`,
+        [
+          `recent-${randomUUID()}`,
+          `recent-os-${randomUUID()}`,
+          `stale-${randomUUID()}`,
+          `stale-os-${randomUUID()}`,
+        ],
+      )
+      const transactionDatabase = {
+        connect: async () => ({
+          query: (
+            sql: string | { text: string; values?: unknown[] },
+            parameters?: unknown[],
+          ) => {
+            const text = typeof sql === 'string' ? sql : sql.text
+            return /^(BEGIN|COMMIT|ROLLBACK)$/.test(text.trim())
+              ? Promise.resolve({ rows: [] })
+              : typeof sql === 'string'
+                ? client.query(sql, parameters)
+                : client.query(sql)
+          },
+          release: () => undefined
+        })
+      } as unknown as Database
+      await ensurePipelineWork(transactionDatabase)
+      const queued = await client.query<{ vendor_slug: string }>(
+        `SELECT target.vendor_slug
+           FROM pipeline_tasks task
+           JOIN coverage_targets target ON target.id = task.coverage_target_id
+          WHERE task.task_type = 'source_discovery'
+            AND task.status = 'queued'`,
+      )
+      expect(queued.rows).toEqual([
+        { vendor_slug: targets.rows[1]!.vendor_slug },
+      ])
+    } finally {
+      await client.query('ROLLBACK')
+      client.release()
+    }
+  })
+
   it('journals an unanswered MCP request and queues one priority demand', async () => {
     const client = await database.connect()
     const question =

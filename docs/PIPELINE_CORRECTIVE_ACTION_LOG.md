@@ -5,6 +5,41 @@ Read it before changing the scheduler, executor bridge, processing runs, or
 production grants. A restart may load a deployed correction, but it is never
 accepted as the correction itself.
 
+## 2026-09-01 — Future refresh fallback repeated only eight targets
+
+### Evidence and cause
+
+- Web search remained available and every executor was healthy, but the next
+  hourly soak completed 933 Discovery runs with no new source. All results came
+  from only eight of 325 coverage targets; each of those eight was searched an
+  average of 117 times and one was searched 138 times. All 1,741 proposed URLs
+  in the sampled interval were rejected by the existing HTTP 403 preflight.
+- Work-conserving Discovery correctly allowed future-dated coverage when no due
+  work existed, but ordered every fallback solely by `next_check_at`. A failed
+  preflight moved those eight targets only 30 minutes forward, still earlier
+  than the remaining targets scheduled from the following day onward. Each
+  completion therefore selected the same target again and pushed its timestamp
+  forward without ever rotating through the rest of the catalog.
+- This was not an executor, web-search or circuit failure. It was unfair fallback
+  ordering that made eight busy lanes repeat identical low-yield work and starve
+  317 equally valid coverage targets.
+
+### Minimal correction
+
+- Preserve `next_check_at` ordering for queued, failed and actually due work.
+  When work-conserving fallback reaches only future targets, choose the least
+  recently searched target first, using `next_check_at` as the tie-breaker. The
+  pipeline still fills every free lane immediately; no cooldown, quota, cap or
+  calendar blocker is added.
+- Add PostgreSQL integration coverage proving that a never-due fallback selects
+  a stale target before immediately repeating a recently searched target, even
+  when the stale target has a later calendar date and lower priority.
+
+### Verification and deployment
+
+- Pending local/full release gates, clean-main deployment and a production soak
+  showing eight active lanes distributed across the coverage catalog.
+
 ## 2026-09-01 — Discovery web search was routed through a disabled host
 
 ### Evidence and cause

@@ -2365,7 +2365,17 @@ async function queueDiscoveryWork(client: DatabaseClient): Promise<boolean> {
      FROM coverage_targets
      WHERE status IN ('queued', 'failed', 'active', 'covered')
      ORDER BY
-       CASE WHEN status IN ('queued', 'failed') THEN 0 ELSE 1 END,
+       CASE
+         WHEN status IN ('queued', 'failed') THEN 0
+         WHEN next_check_at <= now() THEN 1
+         ELSE 2
+       END,
+       CASE
+         WHEN status IN ('active', 'covered')
+           AND next_check_at > now()
+         THEN last_discovered_at
+         ELSE NULL
+       END NULLS FIRST,
        next_check_at,
        updated_at,
        priority DESC
