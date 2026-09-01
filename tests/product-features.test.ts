@@ -334,6 +334,9 @@ describe('deterministic source processing', () => {
     expect(isRetryableCodexPlatformArtifactFailure(
       'The artifact has an invalid candidate index.',
     )).toBe(false)
+    expect(isRetryableCodexPlatformArtifactFailure(
+      'WEB_SEARCH_NOT_OBSERVED: discovery did not emit a search event.',
+    )).toBe(false)
     expect(shouldReduceDeepReviewBatchOnFailure(
       'AGENT_ARTIFACT_REJECTED',
       'The generated artifact failed validation or submission: INTERNAL_ERROR: The request could not be completed. Retry later with the same safe inputs.',

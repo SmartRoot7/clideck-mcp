@@ -1,12 +1,3 @@
-export function containsWebSearchEvent(value: unknown): boolean {
-  if (typeof value === 'string') {
-    return ['web_search', 'web_search_call', 'standalone_web_search']
-      .includes(value.toLowerCase())
-  }
-  if (!value || typeof value !== 'object') return false
-  return Object.values(value).some(containsWebSearchEvent)
-}
-
 export function pipelineControlStop(
   control: Record<string, unknown>,
 ): 'paused' | 'lease_lost' | null {

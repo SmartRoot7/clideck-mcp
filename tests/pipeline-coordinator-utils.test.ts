@@ -1,19 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import {
-  containsWebSearchEvent,
   pipelineControlStop,
   retryBridgeArtifactSubmission
 } from '../src/cli/pipeline-coordinator-utils.js'
 
 describe('pipeline coordinator reliability helpers', () => {
-  it('requires an actual nested web-search runtime event', () => {
-    expect(containsWebSearchEvent({ item: { type: 'web_search_call' } }))
-      .toBe(true)
-    expect(containsWebSearchEvent({ message: 'I searched the web' }))
-      .toBe(false)
-  })
-
   it('distinguishes a lost lease from an administrative pause', () => {
     expect(pipelineControlStop({ should_stop: false })).toBeNull()
     expect(pipelineControlStop({

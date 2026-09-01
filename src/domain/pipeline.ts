@@ -1092,8 +1092,7 @@ export function isRetryableCodexPlatformArtifactFailure(
 ): boolean {
   return (
     /\bINTERNAL_ERROR\b[\s\S]{0,240}\b(?:request could not be completed|retry later)\b/i
-      .test(failureMessage) ||
-    /\bWEB_SEARCH_NOT_OBSERVED\b/i.test(failureMessage)
+      .test(failureMessage)
   )
 }
 

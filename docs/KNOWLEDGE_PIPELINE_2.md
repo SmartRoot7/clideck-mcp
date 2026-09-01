@@ -14,6 +14,27 @@ general safety boilerplate and marketing can be classified as
 `non_knowledge`. Technical logs, sample configurations, troubleshooting,
 commands and multi-command examples are always potential knowledge.
 
+## Reliability rule: useful work must keep moving
+
+CliDeck is fail-open for optional quality and telemetry signals. A valid,
+processable result must continue to the next stage even when an optional
+runtime event, confidence hint, exact context field, QA response or other
+observability signal is missing. Such absence is recorded and shown to the
+operator; it does not become a rejection, retry loop, global circuit or
+publication stop.
+
+A hard stop is allowed only when the next operation is technically impossible
+or would corrupt state: invalid structure that cannot be parsed, unavailable
+required bytes, failed persistence, broken provenance identity or loss of the
+task lease. New blocking conditions require evidence that continuing cannot
+work, a narrowly scoped failure, and a regression test. Telemetry must never be
+used as proof that the underlying work did not happen.
+
+When uncertain, preserve the result, continue processing and let downstream
+Acquire, conversion, schema validation, deduplication and asynchronous QA
+provide evidence. The product must prefer degraded but useful operation over a
+fully idle pipeline.
+
 ## Versioned source processing
 
 Sources have stable `source_kind`, `source_ref` and `display_locator` identity.

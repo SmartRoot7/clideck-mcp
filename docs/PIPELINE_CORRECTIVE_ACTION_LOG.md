@@ -861,3 +861,38 @@ The Pipeline 2.0 pilot exposed four independent failure modes:
   unavailable-backend state. Deployment intentionally invalidates in-memory
   admin sessions; the operating-system sudo password is not the separate web
   admin credential and was not used to alter that credential.
+
+## 2026-09-01 — Discovery telemetry gate opened a false AI circuit
+
+### Evidence and cause
+
+- After the admin Overview correction, all eight healthy executor cards showed
+  `Circuit cooldown`. There were no live tasks, while two `source_discovery`
+  tasks remained queued and all eight heartbeats were fresh.
+- Recent Discovery runs exited successfully (`process_exit_code = 0`) and
+  produced the same diagnostic fingerprint. The fingerprint exactly matched
+  the locally generated `WEB_SEARCH_NOT_OBSERVED` error, not a model, rate-limit
+  or Codex platform failure.
+- The coordinator required a particular `web_search` JSONL telemetry event
+  before it would submit an otherwise valid Discovery artifact. The current
+  Codex runtime did not emit that event shape. The coordinator then
+  misclassified its own rejection as retryable platform failure, repeatedly
+  opened the shared `source_discovery/low` circuit, and idled every executor
+  because Discovery was the only queued AI work.
+
+### Minimal correction
+
+- Remove the JSONL telemetry gate and its unused event-scanning helper. A
+  schema-valid Discovery artifact is submitted regardless of optional CLI
+  event telemetry.
+- URL safety, canonicalization, official-source policy, download and content
+  validation remain in the real Acquire pipeline. No publication or provenance
+  rule is weakened.
+- `WEB_SEARCH_NOT_OBSERVED` is no longer classified as a Codex platform
+  incident. Regression coverage prevents the coordinator from restoring this
+  gate or its `webSearchUsed` state.
+
+### Verification and deployment
+
+- Full local and production verification, the deployment commit, circuit
+  recovery and post-deploy observations are recorded below after completion.

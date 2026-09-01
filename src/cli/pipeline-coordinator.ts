@@ -42,7 +42,6 @@ import {
   normalizeTaskReasoning
 } from './pipeline-runtime.js'
 import {
-  containsWebSearchEvent,
   pipelineControlStop,
   retryBridgeArtifactSubmission
 } from './pipeline-coordinator-utils.js'
@@ -637,7 +636,6 @@ async function runCodex(
   leaseLost: boolean
   durationMs: number
   usage: Usage
-  webSearchUsed: boolean
   diagnosticCode?: string
   diagnosticFingerprint?: string
 }> {
@@ -684,7 +682,6 @@ async function runCodex(
     let paused = false
     let cancelled = false
     let leaseLost = false
-    let webSearchUsed = false
     let heartbeatRunning = false
     let forceKillTimer: NodeJS.Timeout | undefined
     const terminateChild = () => {
@@ -710,7 +707,6 @@ async function runCodex(
         try {
           const event: unknown = JSON.parse(line)
           updateUsage(usage, event)
-          webSearchUsed ||= containsWebSearchEvent(event)
         } catch {
           // Codex JSONL may include a partial/non-JSON diagnostic; never persist it.
         }
@@ -762,7 +758,6 @@ async function runCodex(
         leaseLost,
         durationMs: Date.now() - startedAt,
         usage,
-        webSearchUsed,
         ...((code ?? 1) !== 0
           ? {
               diagnosticCode: classifyCodexDiagnostic(stderr),
@@ -1112,14 +1107,6 @@ async function main(): Promise<void> {
         continue
       }
       if (run.exitCode === 0 && !run.timedOut) {
-        if (
-          ['source_discovery', 'source_refresh'].includes(task.task_type) &&
-          !run.webSearchUsed
-        ) {
-          throw new Error(
-            'WEB_SEARCH_NOT_OBSERVED: discovery must use the configured web-search tool.',
-          )
-        }
         await submitAgentArtifact(task)
         artifactSubmitted = true
       }

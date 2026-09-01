@@ -24,6 +24,16 @@ describe('production database role contract', () => {
     )
   })
 
+  it('does not reject valid discovery output based on CLI event telemetry', async () => {
+    const coordinator = await readFile(
+      resolve(process.cwd(), 'src/cli/pipeline-coordinator.ts'),
+      'utf8',
+    )
+
+    expect(coordinator).not.toContain('WEB_SEARCH_NOT_OBSERVED')
+    expect(coordinator).not.toContain('webSearchUsed')
+  })
+
   it('lets the admin and demo overview read scoped AI circuit telemetry', async () => {
     const grants = await readFile(
       resolve(process.cwd(), 'ops/sql/grants.sql'),
