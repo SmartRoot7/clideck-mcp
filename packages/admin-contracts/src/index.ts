@@ -563,7 +563,7 @@ export const knowledgeRevisionSchema = z.object({
   kind: z.string(),
   origin: z.string(),
   risk_level: z.string(),
-  vendor_slug: z.string(),
+  vendor_slug: nullableStringSchema,
   vendor_name: z.string(),
   platform_name: nullableStringSchema,
   operating_system_slug: nullableStringSchema,

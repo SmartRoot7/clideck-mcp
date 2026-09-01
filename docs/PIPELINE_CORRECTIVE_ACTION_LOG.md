@@ -5,6 +5,33 @@ Read it before changing the scheduler, executor bridge, processing runs, or
 production grants. A restart may load a deployed correction, but it is never
 accepted as the correction itself.
 
+## 2026-09-01 — Vendor-neutral knowledge broke the demo list contract
+
+### Evidence and cause
+
+- The post-deploy quality inspection found that
+  `/public/v1/demo/knowledge?limit=3` consistently returned HTTP 500 while the
+  public MCP smoke tests and the quality dashboard remained healthy.
+- API logs identified a `ZodError` at `items[1].vendor_slug`: the active network
+  view returned `null`, but `knowledgeRevisionSchema` required a string.
+- Vendor-neutral network revisions are intentional. The database view uses a
+  left join to vendors and the publication path explicitly supports a missing
+  vendor; the response contract had drifted from that established data model.
+
+### Minimal correction
+
+- Make only `knowledgeRevisionSchema.vendor_slug` nullable, matching the view
+  and the existing nullable operating-system and applicability fields.
+- Keep coverage targets vendor-scoped and do not coerce vendor-neutral records
+  to a made-up vendor. Add a focused contract regression for the null value.
+
+### Verification and deployment
+
+- The focused contract regression and `pnpm check` passed. Run the complete
+  deployment preflight, deploy the clean commit only through
+  `ops/scripts/deploy-production.sh`, and verify that the public knowledge list
+  returns parsed vendor-neutral records instead of HTTP 500.
+
 ## 2026-09-01 — Terminal discovery leases stranded coverage targets
 
 ### Evidence and cause
@@ -46,9 +73,16 @@ accepted as the correction itself.
   migrated PostgreSQL 16 release gate passed 229/229 integration and workspace
   tests, the 250/250 product evaluation with zero dangerous false-safe results,
   and the production build.
-- Deploy the clean commit exclusively through
-  `ops/scripts/deploy-production.sh`, then record the deployed SHA and
-  post-deploy recovery of the three targets in this entry.
+- Deployed commit `0928c6233343671a12521ef4b8b94c691793915d` exclusively
+  through `ops/scripts/deploy-production.sh`. The canonical preflight repeated
+  the same 229/229 PostgreSQL and 250/250 evaluation results, and every smoke
+  test passed.
+- At `2026-09-01T05:20:40Z`, all three orphaned targets had completed bounded
+  discovery and received future refresh times. Across all 325 targets there
+  were zero `discovering` and zero overdue targets: 20 were `active` and 305
+  were `covered`. All four production services were active with zero restarts,
+  public health/readiness passed, all eight executor heartbeats were fresh, and
+  the local launchd pool was running.
 
 ## 2026-08-31 — Scheduler settings lock must not block lease renewal
 
