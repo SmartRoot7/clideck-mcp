@@ -5830,22 +5830,37 @@ describeIntegration('PostgreSQL integration', () => {
          )`,
         [`integration:parallel-discovery:${unique}`],
       )
-      const blockedParallelDiscovery = await claimPipelineTask(
+      const parallelDiscovery = await claimPipelineTask(
         database,
         config,
         'integration-parallel-discovery-coordinator',
       )
-      expect(blockedParallelDiscovery).toMatchObject({
-        pipeline_state: 'pipeline_work_in_progress',
-        active_task_type: 'source_discovery',
-        active_stage: 'discover'
+      expect(parallelDiscovery).toMatchObject({
+        task_type: 'source_discovery',
+        stage: 'discover',
+        requested_model: 'gpt-5.6-luna',
+        requested_reasoning_effort: 'low'
       })
-      expect(blockedParallelDiscovery).not.toHaveProperty(
-        'pipeline_task_id',
+      expect(parallelDiscovery['pipeline_task_id']).not.toBe(
+        duplicateDiscovery['pipeline_task_id'],
       )
+      await recordAgentRunResult(database, {
+        agent_run_id: String(parallelDiscovery['agent_run_id']),
+        status: 'cancelled',
+        input_tokens: 0,
+        cached_input_tokens: 0,
+        output_tokens: 0,
+        reasoning_output_tokens: 0,
+        duration_ms: 1,
+        error_code: 'INTEGRATION_CLEANUP'
+      })
       await database.query(
-        `DELETE FROM pipeline_tasks WHERE dedupe_key = $1`,
-        [`integration:parallel-discovery:${unique}`],
+        `UPDATE pipeline_tasks
+            SET status = 'cancelled',
+                completed_at = now(),
+                updated_at = now()
+          WHERE id = $1`,
+        [String(parallelDiscovery['pipeline_task_id'])],
       )
       const duplicateResult = await submitSourceDiscovery(
         database,
