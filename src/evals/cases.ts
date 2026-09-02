@@ -17,6 +17,7 @@ export type EvalCase =
       type: 'knowledge'
       question: string
       expected_known: boolean
+      expected_cross_platform_examples?: boolean
       context: NetworkContextInput
     })
   | (BaseEvalCase & {
@@ -132,7 +133,8 @@ const negativeKnowledgeCases: EvalCase[] = [
     id: `unsupported-version-${index + 1}`,
     type: 'knowledge' as const,
     question: fact.questionPatterns[0]!,
-    expected_known: true,
+    expected_known: false,
+    expected_cross_platform_examples: true,
     context: { ...ciscoContext, version: '16.3.1' }
   })),
   ...IOS_XE_SEED_KNOWLEDGE.slice(0, 5).map((fact, index) => ({
@@ -151,7 +153,8 @@ const negativeKnowledgeCases: EvalCase[] = [
     id: `eos-scope-${index + 1}`,
     type: 'knowledge' as const,
     question: fact.questionPatterns[0]!,
-    expected_known: true,
+    expected_known: false,
+    expected_cross_platform_examples: true,
     context: {
       vendor: 'Arista',
       model: 'DCS-7050SX3',

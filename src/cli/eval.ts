@@ -38,19 +38,34 @@ try {
     const startedAt = performance.now()
     if (testCase.type === 'knowledge') {
       const context = await resolveNetworkContext(database, testCase.context)
-      const answers = (await searchKnowledgeWithCoverage({
+      const result = await searchKnowledgeWithCoverage({
         database,
         question: testCase.question,
         context,
         limit: 3
-      })).answers
+      })
+      const answers = result.answers
       if ((answers.length > 0) !== testCase.expected_known) {
         fail(
           testCase.id,
           `expectedKnown=${testCase.expected_known}, answers=${answers.length}`,
         )
       }
-      const serialized = JSON.stringify(answers).toLowerCase()
+      if (
+        (result.crossPlatformExamples.length > 0) !==
+          (testCase.expected_cross_platform_examples ?? false)
+      ) {
+        fail(
+          testCase.id,
+          `expectedCrossPlatformExamples=${
+            testCase.expected_cross_platform_examples ?? false
+          }, examples=${result.crossPlatformExamples.length}`,
+        )
+      }
+      const serialized = JSON.stringify([
+        ...answers,
+        ...result.crossPlatformExamples
+      ]).toLowerCase()
       const leakedKey = forbiddenPublicKeys.find((key) =>
         new RegExp(`"${key}"\\s*:`).test(serialized),
       )
