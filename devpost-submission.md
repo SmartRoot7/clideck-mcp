@@ -150,8 +150,9 @@ Production knowledge and third-party manuals are intentionally not bundled.
 
 ## Demo Video
 
-TODO: add the public YouTube URL after recording the under-three-minute demo
-with audio.
+https://youtu.be/O5nXMNo9o20
+
+Public YouTube demo with audio, under three minutes.
 
 Production sequence (target 0:59):
 
@@ -189,10 +190,11 @@ delivered voice track without brittle synchronization.
 - Final WebMCP-enabled Chrome walkthrough: ready; production reported
   `WebMCP connected · 6/6 tools` and the version-matched IOS XE 17.8.1 flow
   completed successfully.
-- Devpost project fields: saved, except for the intentionally empty video URL.
+- Devpost project fields: saved, including the public video URL.
 - Devpost thumbnail: uploaded and processed from the verified production app.
-- Public demo video URL: pending recording and upload.
-- Final Devpost submit action: pending the required explicit confirmation.
+- Public demo video URL: ready and published.
+- Final Devpost submission: published and verified at
+  https://devpost.com/software/clideck-mcp-network-evidence-workbench.
 
 ## Known Limitations
 
@@ -230,4 +232,4 @@ delivered voice track without brittle synchronization.
   production knowledge-growth pipeline.
 - **Level of learning:** Significant
 - **AI value useful in career:** Yes
-- **Video URL:** TODO — public YouTube URL required before final submission.
+- **Video URL:** https://youtu.be/O5nXMNo9o20
