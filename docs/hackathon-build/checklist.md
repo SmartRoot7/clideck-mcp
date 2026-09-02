@@ -18,9 +18,9 @@
   remove the temporary idea-research file.
 - [x] Complete full check/test/eval/build, independent code/privacy review, and
   fix all material findings.
-- [ ] Create one clean local `main` commit without pushing GitHub.
-- [ ] Deploy only with `ops/scripts/deploy-production.sh` and verify health,
+- [x] Create a clean `main` commit and push it to the public GitHub repository.
+- [x] Deploy only with `ops/scripts/deploy-production.sh` and verify health,
   public routes, manual flow, six-tool discovery, samples, PDF, reset, and
   research lifecycle.
-- [ ] Prepare the public repository state and Devpost submission only after
-  separate authorization.
+- [x] Prepare the public repository state and create the authorized Devpost
+  draft. The video and final submission remain intentionally pending.

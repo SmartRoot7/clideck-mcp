@@ -66,4 +66,15 @@
   documented version relation instead of calling every broad result a same-branch
   match. WebMCP keeps those references visible with a warning; exact, portable,
   provenance, exclusions, risk, and publication-integrity controls are unchanged.
-- GitHub push and Devpost submission remain outside the authorized release.
+- 2026-09-02: The challenge submission copy was aligned with the shipped
+  six-tool Network Evidence Workbench, committed and pushed to `main` as
+  `6eee9db`, and deployed through `ops/scripts/deploy-production.sh`. The full
+  preflight, production build, database backup and migration flow, smoke tests,
+  public routes, MCP discovery, and production WebMCP manual-mode walkthrough
+  passed. Production reports the deployed commit and all eight Luna executor
+  lanes active.
+- 2026-09-02: An authorized Devpost draft was created with the title, tagline,
+  description, technology list, live application URL, public MCP endpoint, and
+  public GitHub repository. The required additional-information fields await
+  the submitter's country and action-time browser confirmation; the public
+  video and final submission remain intentionally pending.
