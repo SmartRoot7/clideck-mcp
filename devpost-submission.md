@@ -153,15 +153,22 @@ Production knowledge and third-party manuals are intentionally not bundled.
 TODO: add the public YouTube URL after recording the under-three-minute demo
 with audio.
 
-Planned sequence (target 2:40):
+Production sequence (target 0:59):
 
-1. Show the working app in the first 15 seconds.
-2. Load the IOS XE 16.10 sample, analyze it, and show nearest-version guidance.
-3. Share the redacted evidence with the browser agent and show its separate
-   interpretation.
-4. Switch to IOS XE 17.8.1 and show the revision-safe, version-matched result.
-5. Demonstrate a text-layer PDF or LOG evidence window.
-6. Close with a real unknown question and tracked research lifecycle.
+1. Open with the risk: a plausible answer for the wrong software version is
+   still the wrong answer.
+2. Establish the live product and its six connected WebMCP tools.
+3. Load and analyze the IOS XE 16.10 sample, including local redaction and the
+   explicit evidence window.
+4. Show active provenance and clearly labelled nearest-version guidance.
+5. Visualize the browser agent's typed WebMCP exchange, explicit evidence
+   consent, and separately presented interpretation.
+6. Switch to IOS XE 17.8.1 and show the revision-safe, version-matched result.
+7. Close on selected evidence, current-case isolation, and verified sources.
+
+The narration is a continuous product explanation with no references to
+individual clicks or exact on-screen moments. This lets the final edit fit the
+delivered voice track without brittle synchronization.
 
 ## Screenshot Shot List
 
