@@ -63,8 +63,6 @@ BEGIN
 
   UPDATE knowledge_applicability_index applicability
   SET family_id = canonical_family_id,
-      classifier_version = 'canonical-os-v1',
-      classification_source = 'canonical_os_migration',
       classified_at = now()
   FROM knowledge_revisions revision
   JOIN operating_systems operating_system
