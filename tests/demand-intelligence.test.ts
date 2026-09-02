@@ -11,7 +11,8 @@ import {
   demandDiagnosisSubmissionPayload,
   demandDiagnosisAgentArtifactSchema,
   diagnosticTopicIdentity,
-  parseDemandDiagnosisAgentArtifact
+  parseDemandDiagnosisAgentArtifact,
+  partitionContextualExamples
 } from '../src/domain/demand-intelligence.js'
 import { sanitizeMcpLogPayload } from '../src/domain/mcp-observability.js'
 import {
@@ -20,6 +21,30 @@ import {
 } from '../src/domain/knowledge.js'
 
 describe('Demand Intelligence', () => {
+  it('separates other-platform references from applicable answers', () => {
+    const sameFamily = {
+      applicability: { context_relation: 'same_software_family' as const }
+    }
+    const sameVendorDifferentOs = {
+      applicability: { context_relation: 'same_vendor' as const }
+    }
+    const otherVendor = {
+      applicability: { context_relation: 'cross_platform' as const }
+    }
+
+    expect(partitionContextualExamples(
+      [sameFamily, sameVendorDifferentOs, otherVendor],
+      true,
+    )).toEqual({
+      answers: [sameFamily],
+      crossPlatformExamples: [sameVendorDifferentOs, otherVendor]
+    })
+    expect(partitionContextualExamples(
+      [sameVendorDifferentOs],
+      false,
+    ).answers).toEqual([sameVendorDifferentOs])
+  })
+
   it('omits absent context fields instead of persisting the word undefined', () => {
     expect(sanitizeMcpLogPayload({
       vendor: undefined,

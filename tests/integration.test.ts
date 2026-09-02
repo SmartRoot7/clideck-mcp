@@ -3422,6 +3422,85 @@ describeIntegration('PostgreSQL integration', () => {
     })
   })
 
+  it('treats Cisco IOS XE spelling variants as one operating system', async () => {
+    const client = await database.connect()
+    try {
+      await client.query('BEGIN')
+      const vendor = await client.query<{ id: string }>(
+        "SELECT id FROM vendors WHERE slug = 'cisco'",
+      )
+      const vendorId = vendor.rows[0]!.id
+      const duplicateOperatingSystem = await client.query<{ id: string }>(
+        `INSERT INTO operating_systems (
+           vendor_id, slug, display_name, version_scheme
+         ) VALUES ($1, 'cisco-ios-xe', 'Cisco IOS-XE', 'vendor')
+         ON CONFLICT (vendor_id, slug) DO UPDATE
+           SET display_name = excluded.display_name
+         RETURNING id`,
+        [vendorId],
+      )
+      const duplicateFamily = await client.query<{ id: string }>(
+        `INSERT INTO software_families (
+           slug, display_name, portability_mode, version_strategy
+         ) VALUES (
+           'cisco-cisco-ios-xe', 'Cisco Cisco IOS-XE',
+           'vendor_specific', 'major_minor'
+         )
+         ON CONFLICT (slug) DO UPDATE SET updated_at = now()
+         RETURNING id`,
+      )
+      await client.query(
+        `INSERT INTO operating_system_family_memberships (
+           operating_system_id, family_id, membership_kind
+         ) VALUES ($1, $2, 'native')
+         ON CONFLICT DO NOTHING`,
+        [duplicateOperatingSystem.rows[0]!.id, duplicateFamily.rows[0]!.id],
+      )
+
+      const withSpaces = await resolveNetworkContext(
+        client as unknown as Parameters<typeof resolveNetworkContext>[0],
+        { vendor: 'Cisco', operating_system: 'Cisco IOS XE' },
+      )
+      const withHyphen = await resolveNetworkContext(
+        client as unknown as Parameters<typeof resolveNetworkContext>[0],
+        { vendor: 'Cisco', operating_system: 'Cisco IOS-XE' },
+      )
+
+      expect(new Set(withSpaces.softwareFamilyIds)).toEqual(
+        new Set(withHyphen.softwareFamilyIds),
+      )
+      expect(withSpaces.softwareFamilyIds).toContain(
+        duplicateFamily.rows[0]!.id,
+      )
+
+      const before = await client.query<{ count: number }>(
+        `SELECT count(*)::int AS count
+         FROM operating_systems operating_system
+         JOIN vendors vendor ON vendor.id = operating_system.vendor_id
+         WHERE vendor.id = $1
+           AND canonical_network_os_key(vendor.slug, operating_system.slug) =
+             canonical_network_os_key(vendor.slug, 'ios-xe')`,
+        [vendorId],
+      )
+      await client.query(
+        "SELECT ensure_deterministic_coverage_context('cisco', 'cisco-ios-xe')",
+      )
+      const after = await client.query<{ count: number }>(
+        `SELECT count(*)::int AS count
+         FROM operating_systems operating_system
+         JOIN vendors vendor ON vendor.id = operating_system.vendor_id
+         WHERE vendor.id = $1
+           AND canonical_network_os_key(vendor.slug, operating_system.slug) =
+             canonical_network_os_key(vendor.slug, 'ios-xe')`,
+        [vendorId],
+      )
+      expect(after.rows[0]!.count).toBe(before.rows[0]!.count)
+    } finally {
+      await client.query('ROLLBACK')
+      client.release()
+    }
+  })
+
   it('keeps vendor context without inventing an operating system', async () => {
     const context = await resolveNetworkContext(database, {
       vendor: 'Cisco',
@@ -3506,6 +3585,14 @@ describeIntegration('PostgreSQL integration', () => {
     expect(reference?.limitations.join(' ')).toContain(
       'Exact applicability was not confirmed',
     )
+    const coverage = await searchKnowledgeWithCoverage({
+      database,
+      question: 'Validate Catalyst 9300 upgrade readiness',
+      context,
+      limit: 3
+    })
+    expect(coverage.crossPlatformExamples).toContainEqual(reference)
+    expect(coverage.answers).not.toContainEqual(reference)
   })
 
   it('returns unknown instead of an unrelated context-only network match', async () => {

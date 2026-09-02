@@ -885,10 +885,10 @@ export async function searchKnowledge(
         }
       })
   ].sort((left, right) =>
-    questionRelevanceScore(question, right.row) -
-      questionRelevanceScore(question, left.row) ||
     contextPriority[right.contextRelation] -
       contextPriority[left.contextRelation] ||
+    questionRelevanceScore(question, right.row) -
+      questionRelevanceScore(question, left.row) ||
     (right.versionMatch ? versionPriority[right.versionMatch] : 0) -
       (left.versionMatch ? versionPriority[left.versionMatch] : 0) ||
     scopePriority[right.row.scope_level] - scopePriority[left.row.scope_level] ||

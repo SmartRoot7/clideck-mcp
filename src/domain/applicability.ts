@@ -62,17 +62,33 @@ function normalizedFamilySlug(value: string): string {
     .slice(0, 63)
 }
 
+function vendorRelativeOperatingSystemSlug(
+  vendorSlug: string,
+  operatingSystemSlug: string,
+): string {
+  const vendorPrefix = `${vendorSlug}-`
+  return operatingSystemSlug.startsWith(vendorPrefix)
+    ? operatingSystemSlug.slice(vendorPrefix.length)
+    : operatingSystemSlug
+}
+
 export function knownSoftwareFamilySlug(
   vendorSlug: string,
   operatingSystemSlug: string,
 ): string | null {
-  const portable = portableFamilyByOperatingSystem[operatingSystemSlug]
+  const canonicalOperatingSystemSlug = vendorRelativeOperatingSystemSlug(
+    vendorSlug,
+    operatingSystemSlug,
+  )
+  const portable = portableFamilyByOperatingSystem[canonicalOperatingSystemSlug]
   if (portable) return portable
-  if (operatingSystemSlug.includes('cumulus-linux')) return 'cumulus-linux'
-  if (vendorSlug === 'cisco' && operatingSystemSlug === 'nx-os') {
+  if (canonicalOperatingSystemSlug.includes('cumulus-linux')) {
+    return 'cumulus-linux'
+  }
+  if (vendorSlug === 'cisco' && canonicalOperatingSystemSlug === 'nx-os') {
     return 'cisco-nx-os'
   }
-  if (vendorSlug === 'cisco' && operatingSystemSlug === 'ios-xe') {
+  if (vendorSlug === 'cisco' && canonicalOperatingSystemSlug === 'ios-xe') {
     return 'cisco-ios-xe'
   }
   return null
@@ -253,11 +269,19 @@ export async function indexPublishedKnowledgeApplicability(
   if (!candidate.vendor_slug || !candidate.operating_system_slug) return
   const vendorSlug = candidate.vendor_slug
   const operatingSystemSlug = candidate.operating_system_slug
-  const desiredFamily = candidate.software_family_slug ??
-    knownSoftwareFamilySlug(
-      vendorSlug,
-      operatingSystemSlug,
-    ) ??
+  const canonicalOperatingSystemSlug = vendorRelativeOperatingSystemSlug(
+    vendorSlug,
+    operatingSystemSlug,
+  )
+  const knownFamily = knownSoftwareFamilySlug(vendorSlug, operatingSystemSlug)
+  const portableFamily = portableFamilyByOperatingSystem[
+    canonicalOperatingSystemSlug
+  ] ?? (
+    canonicalOperatingSystemSlug.includes('cumulus-linux')
+      ? 'cumulus-linux'
+      : null
+  )
+  const desiredFamily = knownFamily ?? candidate.software_family_slug ??
     fallbackFamilySlug(vendorSlug, operatingSystemSlug)
   const family = await client.query<{ id: string; version_strategy: SoftwareVersionStrategy }>(
     `INSERT INTO software_families (
@@ -269,11 +293,8 @@ export async function indexPublishedKnowledgeApplicability(
     [
       desiredFamily,
       desiredFamily.replace(/-/g, ' '),
-      knownSoftwareFamilySlug(
-        vendorSlug,
-        operatingSystemSlug,
-      ) ? 'portable' : 'vendor_specific',
-      ['nx-os', 'ios-xe'].includes(operatingSystemSlug)
+      portableFamily === desiredFamily ? 'portable' : 'vendor_specific',
+      ['nx-os', 'ios-xe'].includes(canonicalOperatingSystemSlug)
         ? 'major_minor'
         : 'vendor'
     ],

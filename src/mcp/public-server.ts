@@ -388,11 +388,17 @@ export function createPublicMcpServer(
               context: resolution.context,
               limit: Math.min(20, Math.max(1, input.limit))
             })
-          : { answers: [], answerStatus: 'unknown' as const, coverage: [] }
+          : {
+              answers: [],
+              crossPlatformExamples: [],
+              answerStatus: 'unknown' as const,
+              coverage: []
+            }
         return {
           domain_id: 'network',
           context: resolution.publicContext,
           answers: result.answers,
+          cross_platform_examples: result.crossPlatformExamples,
           unknown: result.answerStatus === 'unknown',
           answer_status: result.answerStatus,
           coverage: result.coverage,
@@ -411,6 +417,7 @@ export function createPublicMcpServer(
         domain_id: result.domain_id,
         context: result.context,
         answers: result.records,
+        cross_platform_examples: [],
         unknown: result.records.length === 0,
         answer_status: result.records.length === 0
           ? 'unknown' as const
@@ -470,10 +477,16 @@ export function createPublicMcpServer(
             context: resolution.context,
             limit: Math.min(5, Math.max(1, input.limit))
           })
-        : { answers: [], answerStatus: 'unknown' as const, coverage: [] }
+        : {
+            answers: [],
+            crossPlatformExamples: [],
+            answerStatus: 'unknown' as const,
+            coverage: []
+          }
       return {
         context: resolution.publicContext,
         answers: result.answers,
+        cross_platform_examples: result.crossPlatformExamples,
         unknown: result.answerStatus === 'unknown',
         answer_status: result.answerStatus,
         coverage: result.coverage,
@@ -536,10 +549,16 @@ export function createPublicMcpServer(
             kind: ['workflow', 'change', 'diagnostic'],
             requireAction: true
           })
-        : { answers: [], answerStatus: 'unknown' as const, coverage: [] }
+        : {
+            answers: [],
+            crossPlatformExamples: [],
+            answerStatus: 'unknown' as const,
+            coverage: []
+          }
       return {
         context: resolution.publicContext,
         answers: result.answers,
+        cross_platform_examples: result.crossPlatformExamples,
         unknown: result.answerStatus === 'unknown',
         answer_status: result.answerStatus,
         coverage: result.coverage,

@@ -224,16 +224,21 @@ async function resolveVendorOperatingSystem(
          coalesce(max(similarity(ca.normalized_alias, $3)), 0.0)
        )::float8 AS score
      FROM operating_systems os
+     JOIN vendors vendor ON vendor.id = os.vendor_id
      LEFT JOIN context_aliases ca ON ca.operating_system_id = os.id
      WHERE os.vendor_id = $1
        AND (
          $2 IS NULL
          OR lower(os.slug) = lower($2)
          OR lower(os.display_name) = lower($2)
+         OR canonical_network_os_key(vendor.slug, os.slug) =
+           canonical_network_os_key(vendor.slug, $2)
+         OR canonical_network_os_key(vendor.slug, os.display_name) =
+           canonical_network_os_key(vendor.slug, $2)
          OR ca.normalized_alias % $3
        )
      GROUP BY os.id
-     ORDER BY score DESC, os.slug
+     ORDER BY score DESC, length(os.slug), os.slug
      LIMIT 1`,
     [vendorId, operatingSystem ?? null, normalizeAlias(operatingSystem ?? '')],
   )
@@ -272,17 +277,35 @@ async function familyForOperatingSystem(
 async function familyIdsWithInheritance(
   database: Database,
   familyId: string,
+  operatingSystemId: string | null,
 ): Promise<string[]> {
   const result = await database.query<{ id: string }>(
-    `WITH RECURSIVE families(id) AS (
+    `WITH RECURSIVE target_operating_system AS (
+       SELECT operating_system.vendor_id, operating_system.slug,
+              vendor.slug AS vendor_slug
+       FROM operating_systems operating_system
+       JOIN vendors vendor ON vendor.id = operating_system.vendor_id
+       WHERE operating_system.id = $2::uuid
+     ), equivalent_families(id) AS (
        SELECT $1::uuid
+       UNION
+       SELECT membership.family_id
+       FROM target_operating_system target
+       JOIN operating_systems equivalent
+         ON equivalent.vendor_id = target.vendor_id
+        AND canonical_network_os_key(target.vendor_slug, equivalent.slug) =
+          canonical_network_os_key(target.vendor_slug, target.slug)
+       JOIN operating_system_family_memberships membership
+         ON membership.operating_system_id = equivalent.id
+     ), families(id) AS (
+       SELECT id FROM equivalent_families
        UNION
        SELECT inheritance.parent_family_id
        FROM software_family_inheritance inheritance
        JOIN families ON families.id = inheritance.child_family_id
      )
      SELECT id FROM families`,
-    [familyId],
+    [familyId, operatingSystemId],
   )
   return result.rows.map((row) => row.id)
 }
@@ -455,7 +478,11 @@ export async function resolveNetworkContext(
       `Runtime mode ${operatingSystemIntent.runtimeMode} was separated from the software family for applicability matching`,
     )
   }
-  const inheritedFamilyIds = await familyIdsWithInheritance(database, family.id)
+  const inheritedFamilyIds = await familyIdsWithInheritance(
+    database,
+    family.id,
+    vendorOperatingSystem?.id ?? null,
+  )
   const vendorLevelFamily = vendor?.score &&
     vendor.score >= minimumVendorScore
     ? await vendorLevelFamilyId(database, vendor.id)

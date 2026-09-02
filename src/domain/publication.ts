@@ -116,9 +116,20 @@ async function resolveCandidateContext(
   }
 
   const operatingSystem = await client.query<{ id: string }>(
-    `SELECT id
-     FROM operating_systems
-     WHERE vendor_id = $1 AND slug = $2`,
+    `SELECT operating_system.id
+     FROM operating_systems operating_system
+     JOIN vendors vendor ON vendor.id = operating_system.vendor_id
+     WHERE operating_system.vendor_id = $1
+       AND (
+         operating_system.slug = $2
+         OR canonical_network_os_key(vendor.slug, operating_system.slug) =
+           canonical_network_os_key(vendor.slug, $2)
+       )
+     ORDER BY
+       CASE WHEN operating_system.slug = $2 THEN 0 ELSE 1 END,
+       length(operating_system.slug),
+       operating_system.slug
+     LIMIT 1`,
     [vendor.rows[0].id, candidate.operating_system_slug],
   )
   if (!operatingSystem.rows[0]) {

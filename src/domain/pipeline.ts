@@ -5692,6 +5692,7 @@ export async function submitDemandDiagnosis(
       await client.query('ROLLBACK TO SAVEPOINT demand_coverage_replay')
       replay = {
         answers: [],
+        crossPlatformExamples: [],
         answerStatus: 'unknown',
         coverage: fallbackParts.map((part) => ({
           capability: part.capability,

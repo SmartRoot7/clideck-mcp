@@ -4,6 +4,7 @@ import {
   assuranceFor,
   deriveVersionBranch,
   effectiveApplicability,
+  knownSoftwareFamilySlug,
   matchVersionApplicability,
   publicMatchLevel
 } from '../src/domain/applicability.js'
@@ -12,6 +13,16 @@ import { isDeterministicallyReadOnlyPublicCommand } from '../src/domain/knowledg
 import { classifyKnowledgeRisk } from '../src/domain/risk.js'
 
 describe('knowledge applicability', () => {
+  it('maps equivalent Cisco IOS XE slugs to one software family', () => {
+    expect(knownSoftwareFamilySlug('cisco', 'ios-xe')).toBe('cisco-ios-xe')
+    expect(knownSoftwareFamilySlug('cisco', 'cisco-ios-xe')).toBe(
+      'cisco-ios-xe',
+    )
+    expect(knownSoftwareFamilySlug('cisco', 'cisco-nx-os')).toBe(
+      'cisco-nx-os',
+    )
+  })
+
   it('reuses an exact NX-OS revision only inside the same major.minor branch', () => {
     const branch = deriveVersionBranch('9.3.8', 'major_minor')
     expect(branch).toBe('9.3')

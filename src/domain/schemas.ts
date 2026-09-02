@@ -162,6 +162,7 @@ export type PublicKnowledge = z.infer<typeof publicKnowledgeSchema>
 export const knowledgeSearchResultSchema = z.object({
   context: resolvedNetworkContextSchema,
   answers: z.array(publicKnowledgeSchema),
+  cross_platform_examples: z.array(publicKnowledgeSchema),
   unknown: z.boolean(),
   answer_status: z.enum(['complete', 'partial', 'unknown']).optional(),
   coverage: z.array(z.object({

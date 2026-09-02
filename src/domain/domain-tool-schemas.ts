@@ -34,6 +34,7 @@ export const queryDomainKnowledgeOutputSchema = z.strictObject({
   domain_id: domainIdSchema,
   context: jsonObjectSchema,
   answers: z.array(jsonObjectSchema),
+  cross_platform_examples: z.array(jsonObjectSchema),
   unknown: z.boolean(),
   answer_status: z.enum(['complete', 'partial', 'unknown']).optional(),
   coverage: z.array(z.strictObject({

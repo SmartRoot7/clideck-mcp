@@ -222,6 +222,7 @@ export function demandDiagnosisSubmissionPayload(
 
 export type KnowledgeCoverage = {
   answers: PublicKnowledge[]
+  crossPlatformExamples: PublicKnowledge[]
   answerStatus: z.infer<typeof answerStatusSchema>
   coverage: Array<{
     capability: string
@@ -234,6 +235,26 @@ export type KnowledgeCoverage = {
 function uniqueAnswers(answers: PublicKnowledge[], limit: number): PublicKnowledge[] {
   return [...new Map(answers.map((answer) => [answer.revision_ref, answer])).values()]
     .slice(0, limit)
+}
+
+export function partitionContextualExamples<T extends {
+  applicability: {
+    context_relation?: PublicKnowledge['applicability']['context_relation']
+  }
+}>(
+  answers: readonly T[],
+  hasResolvedOperatingSystem: boolean,
+): { answers: T[]; crossPlatformExamples: T[] } {
+  const isExample = (answer: T) =>
+    answer.applicability.context_relation === 'cross_platform' ||
+    (
+      hasResolvedOperatingSystem &&
+      answer.applicability.context_relation === 'same_vendor'
+    )
+  return {
+    answers: answers.filter((answer) => !isExample(answer)),
+    crossPlatformExamples: answers.filter(isExample)
+  }
 }
 
 type CapabilityEvidence = Pick<
@@ -369,14 +390,18 @@ export async function searchKnowledgeWithCoverage(input: {
       raw,
       { requireAction: partRequiresAction },
     )
-    const answers = actionable.filter((answer) =>
+    const eligibleAnswers = actionable.filter((answer) =>
       answerSupportsCapability(part.capability, answer) &&
       answerSupportsRequestedAction(part.query, answer),
+    )
+    const { answers, crossPlatformExamples } = partitionContextualExamples(
+      eligibleAnswers,
+      input.context.operatingSystemId !== null,
     )
     const coveredAnswers = answers.filter((answer) =>
       answerProvidesContextualCoverage(part.query, input.context, answer),
     )
-    return { part, answers, coveredAnswers }
+    return { part, answers, crossPlatformExamples, coveredAnswers }
   }))
   const answers = uniqueAnswers([
     ...result.flatMap((entry) => entry.answers.slice(0, 1)),
@@ -384,8 +409,13 @@ export async function searchKnowledgeWithCoverage(input: {
   ], Math.min(20, Math.max(input.limit, parts.length)))
   const covered = result.filter((entry) => entry.coveredAnswers.length > 0).length
   const hasAnswers = result.some((entry) => entry.answers.length > 0)
+  const crossPlatformExamples = uniqueAnswers(
+    result.flatMap((entry) => entry.crossPlatformExamples),
+    Math.min(20, Math.max(input.limit, parts.length)),
+  )
   return {
     answers,
+    crossPlatformExamples,
     answerStatus:
       covered === parts.length
         ? 'complete'
