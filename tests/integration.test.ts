@@ -3420,6 +3420,25 @@ describeIntegration('PostgreSQL integration', () => {
       operating_system_slug: 'ios-xe',
       software_family_slug: 'cisco-ios-xe'
     })
+
+    const activeFamilies = await database.query<{ slug: string }>(
+      `SELECT DISTINCT family.slug
+       FROM public_active_knowledge knowledge
+       JOIN knowledge_applicability_index applicability
+         ON applicability.revision_id = knowledge.revision_id
+       JOIN software_families family ON family.id = applicability.family_id
+       JOIN knowledge_revisions revision
+         ON revision.id = knowledge.revision_id
+       JOIN operating_systems operating_system
+         ON operating_system.id = revision.operating_system_id
+       JOIN vendors vendor ON vendor.id = operating_system.vendor_id
+       WHERE vendor.slug = 'cisco'
+         AND canonical_network_os_key(vendor.slug, operating_system.slug) =
+           'iosxe'`,
+    )
+    expect(activeFamilies.rows.map((row) => row.slug)).toEqual([
+      'cisco-ios-xe'
+    ])
   })
 
   it('treats Cisco IOS XE spelling variants as one operating system', async () => {

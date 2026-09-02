@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto'
 import type { DatabaseClient } from '../db.js'
 import { createCliRuntime } from './runtime.js'
 
-const classifierVersion = 'portable-v2'
+const classifierVersion = 'canonical-os-v3'
 const dryRun = process.argv.includes('--dry-run')
 const verify = process.argv.includes('--verify')
 const resume = process.argv.includes('--resume')
@@ -251,6 +251,13 @@ async function rebuildIndexBatch(
              AND mapping.vendor_id = vendor.id
          ) candidates
          ORDER BY
+           CASE
+             WHEN vendor.slug = 'cisco'
+               AND canonical_network_os_key(vendor.slug, os.slug) = 'iosxe'
+               AND candidates.slug = 'cisco-ios-xe'
+               THEN 0
+             ELSE 1
+           END,
            CASE candidates.portability_mode
              WHEN 'portable' THEN 0 ELSE 1
            END,
