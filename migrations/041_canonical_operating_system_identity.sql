@@ -24,8 +24,8 @@ AS $$
 $$;
 
 -- Repair the known IOS XE split. Keep the old catalog rows as aliases for
--- historical references, but move published knowledge and applicability to
--- the canonical Cisco IOS XE identity.
+-- historical references, but move the mutable applicability index to the
+-- canonical Cisco IOS XE identity. Published revisions remain immutable.
 DO $$
 DECLARE
   cisco_vendor_id uuid;
@@ -61,23 +61,18 @@ BEGIN
     updated_at = now()
   RETURNING id INTO canonical_family_id;
 
-  UPDATE knowledge_revisions revision
-  SET operating_system_id = canonical_os_id
-  FROM operating_systems operating_system
-  WHERE revision.vendor_id = cisco_vendor_id
-    AND revision.operating_system_id = operating_system.id
-    AND operating_system.vendor_id = cisco_vendor_id
-    AND canonical_network_os_key('cisco', operating_system.slug) = 'iosxe';
-
   UPDATE knowledge_applicability_index applicability
   SET family_id = canonical_family_id,
       classifier_version = 'canonical-os-v1',
       classification_source = 'canonical_os_migration',
       classified_at = now()
   FROM knowledge_revisions revision
+  JOIN operating_systems operating_system
+    ON operating_system.id = revision.operating_system_id
   WHERE applicability.revision_id = revision.id
     AND revision.vendor_id = cisco_vendor_id
-    AND revision.operating_system_id = canonical_os_id
+    AND operating_system.vendor_id = cisco_vendor_id
+    AND canonical_network_os_key('cisco', operating_system.slug) = 'iosxe'
     AND applicability.family_id IN (
       SELECT id
       FROM software_families
