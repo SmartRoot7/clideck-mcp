@@ -179,8 +179,11 @@ Planned sequence (target 2:40):
 - Apache-2.0 license: ready and visible on GitHub.
 - Product description and judge walkthrough: ready.
 - WebMCP/manual automated coverage: ready.
-- Final WebMCP-enabled browser walkthrough: pending this release verification.
-- Devpost project fields and screenshot assets: pending sync.
+- Final WebMCP-enabled Chrome walkthrough: ready; production reported
+  `WebMCP connected · 6/6 tools` and the version-matched IOS XE 17.8.1 flow
+  completed successfully.
+- Devpost project fields: saved, except for the intentionally empty video URL.
+- Devpost thumbnail: uploaded and processed from the verified production app.
 - Public demo video URL: pending recording and upload.
 - Final Devpost submit action: pending the required explicit confirmation.
 
@@ -199,8 +202,7 @@ Planned sequence (target 2:40):
 ## TODO Official Form Fields
 
 - **Submitter Type:** Individual
-- **Country of residence:** TODO — participant must confirm the exact country
-  before this personal information is sent to Devpost.
+- **Country of residence:** United States (participant resides in Illinois).
 - **Organization name:** Not applicable.
 - **App Status:** Existing
 - **What was updated during the submission period:** CliDeck's production
@@ -213,8 +215,9 @@ Planned sequence (target 2:40):
 - **Testing instructions / credentials:** Use the Testing Instructions above;
   no credentials are required.
 - **Public code repository:** https://github.com/SmartRoot7/clideck-mcp
-- **Agents or clients tested:** TODO — record the final verified clients after
-  the WebMCP-enabled browser walkthrough.
+- **Agents or clients tested:** Google Chrome with WebMCP testing enabled
+  (`6/6` registered tools verified); the complete manual fallback was also
+  tested in standard Chrome.
 - **AI tools leveraged:** Codex, GPT-5.6, and GPT-5.6 Luna. Codex was the primary
   engineering environment; GPT-5.6 Luna powers bounded semantic stages in the
   production knowledge-growth pipeline.

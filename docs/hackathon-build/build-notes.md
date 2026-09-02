@@ -75,6 +75,11 @@
   lanes active.
 - 2026-09-02: An authorized Devpost draft was created with the title, tagline,
   description, technology list, live application URL, public MCP endpoint, and
-  public GitHub repository. The required additional-information fields await
-  the submitter's country and action-time browser confirmation; the public
-  video and final submission remain intentionally pending.
+  public GitHub repository.
+- 2026-09-02: After the participant confirmed United States residence and
+  enabled Chrome's WebMCP testing support, production reported
+  `WebMCP connected · 6/6 tools`. The IOS XE 17.8.1 analysis and
+  version-matched search flow passed, all Devpost additional-information fields
+  were saved, and a production screenshot was uploaded and processed as the
+  project thumbnail. The public video and final submission remain intentionally
+  pending.
