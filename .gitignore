@@ -1,4 +1,6 @@
 .secrets/
+.secrets/PROMOTION_AND_DIRECTORY_SUBMISSION_GUIDE.md
+.secrets/promotion-submission-log.md
 lab/results/*
 !lab/results/.gitkeep
 .env
