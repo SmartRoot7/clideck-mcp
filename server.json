@@ -1,0 +1,18 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "com.clideck/network-knowledge",
+  "title": "CliDeck MCP — Network Knowledge",
+  "description": "Free verified network knowledge for AI agents: deterministic answers, honest unknowns.",
+  "version": "0.8.5",
+  "websiteUrl": "https://clideck.com/software/mcp",
+  "repository": {
+    "url": "https://github.com/SmartRoot7/clideck-mcp",
+    "source": "github"
+  },
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://mcp.clideck.com/mcp"
+    }
+  ]
+}

@@ -144,12 +144,12 @@ describe('local admin password and session security', () => {
 })
 
 describe('local admin HTTP boundary', () => {
-  it('serves one byte-identical frontend artifact to admin and demo', async () => {
+  it('serves one frontend artifact with public surface metadata', async () => {
     const assetRoot = await mkdtemp(join(tmpdir(), 'clideck-shared-ui-'))
     await mkdir(join(assetRoot, 'assets'))
     await writeFile(
       join(assetRoot, 'index.html'),
-      '<!doctype html><script src="/_clideck-mcp-ui/assets/shared.js"></script>',
+      '<!doctype html><html><head><title>CliDeck MCP — Knowledge Operations</title></head><body><script src="/_clideck-mcp-ui/assets/shared.js"></script></body></html>',
     )
     await writeFile(
       join(assetRoot, 'assets', 'shared.js'),
@@ -180,20 +180,38 @@ describe('local admin HTTP boundary', () => {
         logger: createLogger(config),
         metrics: createMetrics()
       })
-      const [adminIndex, demoIndex, adminAsset, demoAsset] =
+      const [adminIndex, demoIndex, webMcpIndex, adminAsset, demoAsset] =
         await Promise.all([
           admin.request('/admin'),
           publicApi.request('/demo'),
+          publicApi.request('/webmcp'),
           admin.request('/_clideck-mcp-ui/assets/shared.js'),
           publicApi.request('/_clideck-mcp-ui/assets/shared.js')
         ])
       expect([
         adminIndex.status,
         demoIndex.status,
+        webMcpIndex.status,
         adminAsset.status,
         demoAsset.status
-      ]).toEqual([200, 200, 200, 200])
-      expect(await adminIndex.text()).toBe(await demoIndex.text())
+      ]).toEqual([200, 200, 200, 200, 200])
+      expect(await adminIndex.text()).toContain(
+        '<title>CliDeck MCP — Knowledge Operations</title>',
+      )
+      const demoHtml = await demoIndex.text()
+      expect(demoHtml).toContain(
+        '<title>CliDeck MCP — Live Network Knowledge Demo</title>',
+      )
+      expect(demoHtml).toContain(
+        '<link rel="canonical" href="https://mcp.clideck.com/demo" />',
+      )
+      const webMcpHtml = await webMcpIndex.text()
+      expect(webMcpHtml).toContain(
+        '<title>CliDeck WebMCP — Network Evidence Workbench</title>',
+      )
+      expect(webMcpHtml).toContain(
+        '<link rel="canonical" href="https://mcp.clideck.com/webmcp" />',
+      )
       expect(await adminAsset.text()).toBe(await demoAsset.text())
       expect(adminAsset.headers.get('cache-control')).toContain('immutable')
       expect(demoAsset.headers.get('cache-control')).toContain('immutable')

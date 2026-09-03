@@ -137,6 +137,40 @@ import {
   requireStaticBearer
 } from './security.js'
 
+const PUBLIC_UI_METADATA = {
+  webmcp: {
+    title: 'CliDeck WebMCP — Network Evidence Workbench',
+    description:
+      'Analyze network evidence with verified, version-aware knowledge through a browser-native WebMCP workbench.',
+    canonicalUrl: 'https://mcp.clideck.com/webmcp'
+  },
+  demo: {
+    title: 'CliDeck MCP — Live Network Knowledge Demo',
+    description:
+      'Explore the live read-only CliDeck MCP knowledge operations demo for AI agents and network engineers.',
+    canonicalUrl: 'https://mcp.clideck.com/demo'
+  }
+} as const
+
+function withPublicUiMetadata(
+  html: string,
+  surface: keyof typeof PUBLIC_UI_METADATA,
+) {
+  const metadata = PUBLIC_UI_METADATA[surface]
+  const title = `<title>${metadata.title}</title>`
+  const tags = [
+    `<meta name="description" content="${metadata.description}" />`,
+    `<link rel="canonical" href="${metadata.canonicalUrl}" />`,
+    '<meta property="og:type" content="website" />',
+    `<meta property="og:title" content="${metadata.title}" />`,
+    `<meta property="og:description" content="${metadata.description}" />`,
+    `<meta property="og:url" content="${metadata.canonicalUrl}" />`,
+    '<meta name="twitter:card" content="summary" />'
+  ].join('\n    ')
+  const titledHtml = html.replace(/<title>[^<]*<\/title>/i, title)
+  return titledHtml.replace('</head>', `    ${tags}\n  </head>`)
+}
+
 export type ApiDependencies = {
   config: AppConfig
   database: Database
@@ -1465,20 +1499,23 @@ export function createApiApp(dependencies: ApiDependencies) {
       }),
     )
   }
-  const servePublicUiIndex = async (context: Context<ApiBindings>) => {
-    context.header('cache-control', 'no-cache')
-    try {
-      const html = await readFile(publicUiIndexPath, 'utf8')
-      return context.html(html)
-    } catch {
-      return context.json({ error: 'public_ui_not_built' }, 503)
+  const servePublicUiIndex =
+    (surface: keyof typeof PUBLIC_UI_METADATA) =>
+    async (context: Context<ApiBindings>) => {
+      context.header('cache-control', 'no-cache')
+      try {
+        const html = await readFile(publicUiIndexPath, 'utf8')
+        return context.html(withPublicUiMetadata(html, surface))
+      } catch {
+        return context.json({ error: 'public_ui_not_built' }, 503)
+      }
     }
-  }
-  app.get('/webmcp', servePublicUiIndex)
-  app.get('/webmcp/*', servePublicUiIndex)
+  const serveWebMcpIndex = servePublicUiIndex('webmcp')
+  app.get('/webmcp', serveWebMcpIndex)
+  app.get('/webmcp/*', serveWebMcpIndex)
 
   if (config.enablePublicDemo) {
-    const serveDemoIndex = servePublicUiIndex
+    const serveDemoIndex = servePublicUiIndex('demo')
     app.get('/demo', serveDemoIndex)
     app.get('/demo/*', serveDemoIndex)
   }
