@@ -45,10 +45,10 @@ export function CoveragePage() {
   const columns: Array<TableColumn<CoverageTarget>> = [
     { key: 'target', label: 'Coverage target', render: (row) => <div className="primary-cell"><strong>{row.vendor_slug} · {row.operating_system_slug ?? 'Vendor-level'}</strong><span>{row.model ?? row.product_family ?? titleCase(row.document_role)} · {row.version_branch ?? 'all versions'}</span></div> },
     { key: 'role', label: 'Document', render: (row) => titleCase(row.document_role) },
-    { key: 'coverage', label: 'Coverage', render: (row) => <div className="table-progress"><ProgressBar value={numberOf(row.coverage_percent)} tone={numberOf(row.coverage_percent) >= 75 ? 'good' : numberOf(row.coverage_percent) >= 40 ? 'warning' : 'danger'} /><strong>{formatNumber(row.coverage_percent, 0)}%</strong></div> },
+    { key: 'coverage', label: 'Evidence stage', render: (row) => <div className="table-progress"><ProgressBar value={numberOf(row.coverage_percent)} tone={numberOf(row.coverage_percent) >= 75 ? 'good' : numberOf(row.coverage_percent) >= 40 ? 'warning' : 'danger'} /><strong>{formatNumber(row.coverage_percent, 0)}%</strong></div> },
     { key: 'priority', label: 'Priority', render: (row) => formatNumber(row.priority, 0) },
     { key: 'sources', label: 'Sources', render: (row) => `${row.completed_sources} / ${row.source_count}` },
-    { key: 'status', label: 'Status', render: (row) => <Status>{titleCase(row.status)}</Status> },
+    { key: 'status', label: 'Status', render: (row) => <Status>{row.status === 'covered' ? 'Pass complete' : titleCase(row.status)}</Status> },
     { key: 'next', label: 'Next check', render: (row) => formatDate(row.next_check_at) },
     { key: 'id', label: 'ID', render: (row) => <code title={row.id}>{shortId(row.id)}</code> }
   ]
@@ -57,17 +57,17 @@ export function CoveragePage() {
       {action.dialog}{action.toast}
       <section className="metric-grid metric-grid--four">
         <Metric label="Coverage targets" value={coverage.length} icon={Compass} help="Managed vendor, model, OS, version and document coverage goals." />
-        <Metric label="Average coverage" value={`${Math.round(average)}%`} icon={Activity} help="Mean completeness across the targets visible under the current filter." />
+        <Metric label="Average evidence stage" value={`${Math.round(average)}%`} icon={Activity} help="A pipeline milestone, not the percentage of every possible manual: 5% means a source was found; 25% means it produced knowledge." />
         <Metric label="Due for refresh" value={due} icon={CalendarClock} help="Targets whose next discovery or freshness check is due now." tone={due ? 'warning' : 'good'} />
         <Metric label="Vendors planned" value={vendors.length} icon={Flag} help="Distinct vendors currently represented in the planner." />
       </section>
-      <Panel title="Coverage heatmap" icon={Activity} help="Completeness by vendor and operating system. Low bars identify the next useful research opportunities.">
+      <Panel title="Coverage heatmap" icon={Activity} help="Average evidence stage for the 20 largest vendor and operating-system groups. This avoids a chart made only from isolated zero-value targets.">
         <Chart option={chart} height={Math.max(260, Math.min(560, rows.length * 24))} />
       </Panel>
       <Panel
         title="Coverage planner"
         icon={Compass}
-        help="Priorities control what the discovery scheduler researches next. Completed areas automatically return for freshness checks."
+        help="Priorities control what the discovery scheduler researches next. “Pass complete” means the latest discovery pass ended; it never means fully learned, and the scheduler revisits the target."
         action={
           <div className="panel-actions">
             <label className="compact-filter">Vendor
@@ -78,9 +78,7 @@ export function CoveragePage() {
             </label>
             <Button variant="primary" onClick={() => action.open({
               title: 'Run source discovery',
-              summary: vendor ? `Queue discovery for the highest-priority ${vendor} coverage gap.` : 'Queue discovery for the highest-priority coverage gap.',
               path: '/admin/api/v1/pipeline/discover',
-              confirmText: 'DISCOVER',
               buildBody: () => ({ coverage_target_id: null })
             })}><Search size={16} />Run discovery</Button>
           </div>
@@ -95,16 +93,12 @@ export function CoveragePage() {
             <div className="row-actions">
               <Button variant="quiet" onClick={() => action.open({
                 title: 'Increase coverage priority',
-                summary: `Raise ${row.vendor_slug} ${row.operating_system_slug ?? ''} ${row.document_role} to the front of its peer group.`,
                 path: `/admin/api/v1/coverage/${row.id}/priority`,
-                confirmText: 'PRIORITIZE',
                 buildBody: () => ({ priority: Math.min(100, numberOf(row.priority) + 10) })
               })}>Prioritize</Button>
               <Button variant="quiet" onClick={() => action.open({
                 title: 'Discover this target',
-                summary: `Create a discovery task specifically for ${row.vendor_slug} ${row.operating_system_slug ?? ''}.`,
                 path: '/admin/api/v1/pipeline/discover',
-                confirmText: 'DISCOVER',
                 buildBody: () => ({ coverage_target_id: row.id })
               })}>Discover</Button>
             </div>
@@ -115,8 +109,38 @@ export function CoveragePage() {
   )
 }
 
-function coverageChart(rows: CoverageTarget[]) {
-  const sorted = [...rows].sort((left, right) => numberOf(left.coverage_percent) - numberOf(right.coverage_percent)).slice(0, 20)
+export function coverageChart(rows: CoverageTarget[]) {
+  const groups = new Map<string, {
+    label: string
+    coverageTotal: number
+    sourceCount: number
+    targetCount: number
+  }>()
+  for (const row of rows) {
+    const label = `${row.vendor_slug} · ${row.operating_system_slug ?? 'vendor'}`
+    const group = groups.get(label) ?? {
+      label,
+      coverageTotal: 0,
+      sourceCount: 0,
+      targetCount: 0
+    }
+    group.coverageTotal += numberOf(row.coverage_percent)
+    group.sourceCount += numberOf(row.source_count)
+    group.targetCount += 1
+    groups.set(label, group)
+  }
+  const visible = [...groups.values()]
+    .sort((left, right) =>
+      right.targetCount - left.targetCount ||
+      right.sourceCount - left.sourceCount ||
+      left.label.localeCompare(right.label),
+    )
+    .slice(0, 20)
+    .map((group) => ({
+      ...group,
+      coverage: Math.round(group.coverageTotal / group.targetCount)
+    }))
+    .sort((left, right) => left.coverage - right.coverage)
   return {
     tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
     grid: { left: 150, right: 35, top: 12, bottom: 30 },
@@ -128,16 +152,16 @@ function coverageChart(rows: CoverageTarget[]) {
     },
     yAxis: {
       type: 'category',
-      data: sorted.map((row) => `${row.vendor_slug} · ${row.operating_system_slug ?? 'vendor'}`),
+      data: visible.map((group) => group.label),
       axisTick: { show: false },
       axisLine: { show: false },
       axisLabel: { color: '#344054', fontWeight: 600 }
     },
     series: [{
       type: 'bar',
-      data: sorted.map((row) => ({
-        value: numberOf(row.coverage_percent),
-        itemStyle: { color: numberOf(row.coverage_percent) >= 75 ? '#22a06b' : numberOf(row.coverage_percent) >= 40 ? '#f5a524' : '#d92d20' }
+      data: visible.map((group) => ({
+        value: group.coverage,
+        itemStyle: { color: group.coverage >= 75 ? '#22a06b' : group.coverage >= 40 ? '#f5a524' : '#d92d20' }
       })),
       barMaxWidth: 14,
       itemStyle: { borderRadius: [0, 4, 4, 0] },

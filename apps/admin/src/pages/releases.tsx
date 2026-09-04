@@ -39,11 +39,7 @@ export function ReleasesPage() {
         <DataTable rows={query.data} columns={RELEASE_COLUMNS} rowKey={(row) => row.id} empty="No knowledge releases have been created." actions={(row) => row.active ? <Status tone="good">Serving</Status> : (
           <Button variant="danger" onClick={() => action.open({
             title: `Activate release #${row.sequence}`,
-            summary: `Atomically switch public MCP search to release #${row.sequence} containing ${row.revision_count} revisions. The current release remains immutable and can be restored.`,
             path: `/admin/api/v1/releases/${row.id}/activate`,
-            confirmText: `ACTIVATE ${row.sequence}`,
-            requireReason: true,
-            danger: true,
             buildBody: (reason) => ({ reason })
           })}>Activate / rollback</Button>
         )} />

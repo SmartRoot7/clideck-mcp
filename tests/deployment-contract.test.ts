@@ -56,6 +56,20 @@ describe('production database role contract', () => {
     )
   })
 
+  it('lets an admin-triggered discovery refill reconcile demand work', async () => {
+    const grants = await readFile(
+      resolve(process.cwd(), 'ops/sql/grants.sql'),
+      'utf8',
+    )
+
+    expect(grants).toMatch(
+      /GRANT UPDATE ON[\s\S]*?knowledge_demands,[\s\S]*?demand_topics[\s\S]*?TO clideck_mcp_admin;/,
+    )
+    expect(grants).toMatch(
+      /GRANT INSERT, UPDATE ON knowledge_demand_source_attempts\s+TO clideck_mcp_admin;/,
+    )
+  })
+
   it('lets the researcher scheduler inspect active reprocess runs', async () => {
     const grants = await readFile(
       resolve(process.cwd(), 'ops/sql/grants.sql'),

@@ -91,7 +91,7 @@ describe('shared operations runtime', () => {
     expect(screen.getByText('Shared page content')).toBeInTheDocument()
   })
 
-  it('keeps confirmation dialogs for other actions without sending a demo mutation', async () => {
+  it('runs admin actions immediately without a confirmation dialog', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch')
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } }
@@ -103,11 +103,7 @@ describe('shared operations runtime', () => {
         <>
           <button type="button" onClick={() => action.open({
             title: 'Activate release 24',
-            summary: 'Open the real release confirmation flow.',
             path: '/admin/api/v1/releases/release-24/activate',
-            confirmText: 'ACTIVATE 24',
-            requireReason: true,
-            danger: true,
             buildBody: (reason) => ({ reason })
           })}>
             Open action
@@ -127,16 +123,7 @@ describe('shared operations runtime', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Open action' }))
-    expect(
-      screen.getByRole('dialog', { name: 'Activate release 24' }),
-    ).toBeInTheDocument()
-    fireEvent.change(screen.getByLabelText(/^Reason/), {
-      target: { value: 'Public demo validation' }
-    })
-    fireEvent.change(screen.getByLabelText(/Type ACTIVATE 24 to confirm/), {
-      target: { value: 'ACTIVATE 24' }
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'Activate release 24' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 
     await waitFor(() => {
       expect(

@@ -174,27 +174,17 @@ function actionSpec(
   const labels = {
     retry_deep: {
       title: 'Retry automatic deep review',
-      confirmation: 'RETRY',
-      summary: 'Return this candidate to a fresh low-pass Luna review.'
     },
     publish: {
       title: 'Publish through safety gates',
-      confirmation: 'PUBLISH',
-      summary: 'Mark the candidate verified. Schema, context and risk gates still run before publication.'
     },
     reject: {
       title: 'Reject candidate',
-      confirmation: 'REJECT',
-      summary: 'Exclude this candidate from publication while preserving its review history.'
     }
   }[action]
   return {
     title: labels.title,
-    summary: labels.summary,
     path: `/admin/api/v1/review-exceptions/${candidate.id}/action`,
-    confirmText: labels.confirmation,
-    requireReason: true,
-    danger: action === 'reject',
     buildBody: (reason: string) => ({ action, reason })
   }
 }

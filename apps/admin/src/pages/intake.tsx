@@ -68,24 +68,11 @@ export function IntakePage() {
     onSuccess: () => { setPasteText(''); setPasteTitle(''); void refresh() }
   })
   const reprocess = useMutation({
-    mutationFn: async () => {
-      const response = await fetch('/admin/api/v1/intake/reprocess/preview', {
-        credentials: 'same-origin'
-      })
-      if (!response.ok) throw new Error('Reprocess preview failed')
-      const preview = reprocessPreviewSchema.parse(await response.json())
-      const gib = (preview.estimated_bytes / 1024 ** 3).toFixed(2)
-      if (!window.confirm(
-        `Reprocess ${preview.eligible} eligible sources (${gib} GiB)? ` +
-        `${preview.unavailable} sources are unavailable and ` +
-        `${preview.active_runs} already have an active run.`,
-      )) return null
-      return postJson('/admin/api/v1/intake/reprocess', {
+    mutationFn: () => postJson('/admin/api/v1/intake/reprocess', {
         source_ids: null,
         confirmed: true
-      }, intakeAckSchema)
-    },
-    onSuccess: (result) => { if (result) void refresh() }
+      }, intakeAckSchema),
+    onSuccess: () => void refresh()
   })
   const action = useMutation({
     mutationFn: ({ id, action }: { id: string; action: string }) => postJson(`/admin/api/v1/intake/jobs/${id}/action`, { action }, intakeActionAckSchema),
@@ -129,14 +116,6 @@ export function IntakePage() {
 
 const intakeAckSchema = z.object({ ok: z.literal(true), job_id: z.string() }).passthrough()
 const intakeActionAckSchema = z.object({ ok: z.literal(true) }).passthrough()
-const reprocessPreviewSchema = z.object({
-  sources: z.coerce.number(),
-  eligible: z.coerce.number(),
-  unavailable: z.coerce.number(),
-  active_runs: z.coerce.number(),
-  estimated_bytes: z.coerce.number()
-})
-
 function jobColumns(onAction: (id: string, action: string) => void): Array<TableColumn<IntakeJob>> {
   return [
     { key: 'job', label: 'Job', render: (row) => <div className="primary-cell"><strong>{row.title}</strong><span>{titleCase(row.job_kind)} · {formatDate(row.created_at)}</span></div> },

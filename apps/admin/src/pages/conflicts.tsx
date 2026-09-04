@@ -40,18 +40,12 @@ export function ConflictsPage() {
           <div className="row-actions">
             <Button variant="primary" onClick={() => action.open({
               title: 'Resolve conflict',
-              summary: 'Mark this disagreement resolved after reviewing both revisions. The decision and reason are audited.',
               path: `/admin/api/v1/conflicts/${row.id}/decision`,
-              confirmText: 'RESOLVE',
-              requireReason: true,
               buildBody: (reason) => ({ decision: 'resolved', reason })
             })}>Resolve</Button>
             <Button variant="secondary" onClick={() => action.open({
               title: 'Accept documented conflict',
-              summary: 'Keep both revisions while recording that their difference is intentional and understood.',
               path: `/admin/api/v1/conflicts/${row.id}/decision`,
-              confirmText: 'ACCEPT',
-              requireReason: true,
               buildBody: (reason) => ({ decision: 'accepted', reason })
             })}>Accept</Button>
           </div>

@@ -175,7 +175,11 @@ GRANT UPDATE ON
   knowledge_candidates,
   expert_tasks,
   knowledge_conflicts,
-  agent_runs
+  agent_runs,
+  knowledge_demands,
+  demand_topics
+TO clideck_mcp_admin;
+GRANT INSERT, UPDATE ON knowledge_demand_source_attempts
 TO clideck_mcp_admin;
 
 GRANT SELECT, INSERT ON

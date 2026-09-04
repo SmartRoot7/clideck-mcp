@@ -65,16 +65,12 @@ export function SourcesPage() {
             </label>
             <Button variant="primary" onClick={() => action.open({
               title: 'Run source discovery',
-              summary: 'Queue the next highest-priority coverage target for official-source discovery.',
               path: '/admin/api/v1/pipeline/discover',
-              confirmText: 'DISCOVER',
               buildBody: () => ({ coverage_target_id: null })
             })}><Search size={16} />Discover source</Button>
             <Button variant="secondary" disabled={selected.size === 0} onClick={() => action.open({
               title: 'Reprocess selected sources',
-              summary: `Create a versioned processing run for ${selected.size} selected source materials. Active knowledge remains available during processing.`,
               path: '/admin/api/v1/intake/reprocess',
-              confirmText: 'REPROCESS',
               buildBody: () => ({ source_ids: [...selected], confirmed: true })
             })}><RotateCcw size={15} />Reprocess selected ({selected.size})</Button>
           </div>
@@ -88,34 +84,22 @@ export function SourcesPage() {
           <div className="row-actions">
             <Button variant="quiet" onClick={() => action.open({
               title: 'Reprocess source',
-              summary: `Create a new immutable processing run for “${row.title}”.`,
               path: '/admin/api/v1/intake/reprocess',
-              confirmText: 'REPROCESS',
               buildBody: () => ({ source_ids: [row.id], confirmed: true })
             })}><RotateCcw size={15} />Reprocess</Button>
             <Button variant="quiet" onClick={() => action.open({
               title: 'Retry source',
-              summary: `Return “${row.title}” to its last safe processing stage. Existing accepted work is kept.`,
               path: `/admin/api/v1/sources/${row.id}/action`,
-              confirmText: 'RETRY',
-              requireReason: true,
               buildBody: (reason) => ({ action: 'retry', reason })
             })}><RotateCcw size={15} />Retry</Button>
             <Button variant="quiet" onClick={() => action.open({
               title: 'Skip source',
-              summary: `Stop processing “${row.title}” and immediately return the planner to the next target.`,
               path: `/admin/api/v1/sources/${row.id}/action`,
-              confirmText: 'SKIP',
-              requireReason: true,
               buildBody: (reason) => ({ action: 'skip', reason })
             })}>Skip</Button>
             <Button variant="danger" onClick={() => action.open({
               title: 'Reject source',
-              summary: `Reject “${row.title}”. It will not publish knowledge unless an operator explicitly retries it later.`,
               path: `/admin/api/v1/sources/${row.id}/action`,
-              confirmText: 'REJECT',
-              danger: true,
-              requireReason: true,
               buildBody: (reason) => ({ action: 'reject', reason })
             })}><Trash2 size={15} />Reject</Button>
           </div>

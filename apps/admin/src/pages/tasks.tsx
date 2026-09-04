@@ -52,21 +52,14 @@ export function TasksPage() {
             {['failed', 'cancelled', 'expired'].includes(row.status) && (
               <Button variant="secondary" onClick={() => action.open({
                 title: 'Requeue expert task',
-                summary: 'Return this task to the highest-priority expert queue. Previous failed execution artifacts are not reused.',
                 path: `/admin/api/v1/tasks/${row.public_id}/action`,
-                confirmText: 'REQUEUE',
-                requireReason: true,
                 buildBody: (reason) => ({ action: 'requeue', reason })
               })}><RotateCcw size={15} />Requeue</Button>
             )}
             {['queued', 'claimed', 'running', 'waiting_for_input'].includes(row.status) && (
               <Button variant="danger" onClick={() => action.open({
                 title: 'Cancel expert task',
-                summary: 'Stop this expert task. A currently running Luna process is allowed to terminate safely and its partial output is discarded.',
                 path: `/admin/api/v1/tasks/${row.public_id}/action`,
-                confirmText: 'CANCEL',
-                requireReason: true,
-                danger: true,
                 buildBody: (reason) => ({ action: 'cancel', reason })
               })}>Cancel</Button>
             )}

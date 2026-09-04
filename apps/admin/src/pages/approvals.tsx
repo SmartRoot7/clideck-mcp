@@ -40,19 +40,12 @@ export function ApprovalsPage() {
           <div className="row-actions">
             <Button variant="primary" onClick={() => action.open({
               title: 'Approve code change',
-              summary: 'Approve this specific repository change after reviewing the summary and risk assessment.',
               path: `/admin/api/v1/approvals/${row.id}/decision`,
-              confirmText: 'APPROVE',
-              requireReason: true,
               buildBody: (reason) => ({ decision: 'approved', reason })
             })}>Approve</Button>
             <Button variant="danger" onClick={() => action.open({
               title: 'Reject code change',
-              summary: 'Reject this proposed repository change. The workflow will stop and retain the audited decision.',
               path: `/admin/api/v1/approvals/${row.id}/decision`,
-              confirmText: 'REJECT',
-              requireReason: true,
-              danger: true,
               buildBody: (reason) => ({ decision: 'rejected', reason })
             })}>Reject</Button>
           </div>
