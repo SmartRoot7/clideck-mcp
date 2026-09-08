@@ -5,6 +5,48 @@ Read it before changing the scheduler, executor bridge, processing runs, or
 production grants. A restart may load a deployed correction, but it is never
 accepted as the correction itself.
 
+## 2026-09-08 — PostgreSQL JIT delayed admin and demo Overview
+
+### Evidence and cause
+
+- Local admin login returned HTTP 200, but nine subsequent Overview requests
+  returned HTTP 502 after the application's ten-second database read timeout.
+  API, admin, worker, researcher and PostgreSQL remained active; memory and
+  disk capacity were healthy.
+- A read-only production EXPLAIN of the source-intake query took 25.350 seconds
+  with JIT enabled and reported 1,241 JIT functions. The same query with
+  transaction-local JIT disabled took 1.990 seconds. The complete deployed
+  Overview function then completed in 2.170 seconds with JIT disabled.
+- Repeated table scans remain an optimization opportunity, but this comparison
+  identifies JIT overhead as the immediate, configuration-correctable cause
+  of the observed timeout.
+
+### Minimal correction
+
+- At the user's explicit request, disable JIT across the production PostgreSQL
+  cluster with `ALTER SYSTEM SET jit = 'off'` and `pg_reload_conf()`. This
+  covers the private admin, public demo, API and background database clients.
+- No role or database override was present. PostgreSQL confirmed `jit=off`
+  from `postgresql.auto.conf`, with the setting applied, no configuration
+  error, and no pending restart. No application or database restart, schema
+  change, timeout increase, application deployment, or lane restriction was
+  performed. The setting persists across restarts and can be reversed later
+  with `ALTER SYSTEM RESET jit` followed by a configuration reload.
+
+### Verification and deployed revision
+
+- The deployed application remains
+  `b48d745f255fc706a6886ef38eba0e0ab3f0b92b`; this is a configuration-only
+  correction, so there is no new application deployment commit.
+- A fresh read-only connection inherited `jit=off` without a session override.
+  The full deployed admin Overview completed in 1.951 seconds under its
+  existing ten-second timeout, returned eight executors, and reported the
+  pipeline enabled.
+- The public demo Overview returned HTTP 200 in 2.449 seconds and public stats
+  returned HTTP 200 in 0.200 seconds. All four application services remained
+  active with zero restarts. These checks establish the new read-only
+  observation baseline; they do not claim completion of an extended soak.
+
 ## 2026-09-01 — Future refresh fallback repeated only eight targets
 
 ### Evidence and cause
