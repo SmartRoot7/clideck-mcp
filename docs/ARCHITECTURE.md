@@ -1,218 +1,84 @@
 # Architecture
 
-## Product contract
+Deterministic reads, asynchronous evidence processing, immutable publication.
+PostgreSQL 16 is the state store, queue, search engine and release coordinator;
+Redis, vector databases and external model APIs are not required.
 
-CliDeck MCP is an agent-native framework for verified, continuously updated MCP
-knowledge systems. It returns deterministic, domain-validated knowledge without
-calling an AI model in the read path.
+## Boundaries
 
-The production MCP URL is `https://mcp.clideck.com/mcp`. The displayed server
-name remains `CliDeck MCP — Network Knowledge` because Network Knowledge is the
-first production Domain Pack and public product instance.
+| Component | Responsibility |
+| --- | --- |
+| API | Public MCP, health/readiness/metrics, optional authenticated remote admin and website BFF facade |
+| Worker | Acquire, convert/OCR, chunk, reconcile, publish, expire retained data |
+| Researcher | Loopback-only authenticated task/lease/artifact bridge |
+| macOS pool | Eight isolated ephemeral Codex executors; no DB credentials; bounded leased payloads |
+| Local admin | Authenticated operations console, loopback port 8790 behind Caddy/Tailscale |
+| Browser | Shared `/admin` and `/demo` bundle; separate `/webmcp` evidence workspace |
 
-## Process boundaries
+Researcher/model output is untrusted until validated. The core owns revisions,
+provenance, release activation, risk/conflict handling and audit. Packs registered
+from local code define subject schemas, normalization, validation and mappers.
+Providers add storage/spatial/relations/labs through Domain Kit interfaces.
 
-1. `clideck-mcp-api` exposes the public MCP endpoint, health/readiness/metrics,
-   and an authenticated admin API.
-2. `clideck-mcp-worker` downloads public sources, converts and chunks them,
-   releases stale leases, validates deterministic gates, and atomically
-   publishes source packages.
-3. `clideck-mcp-researcher` exposes a loopback-only, token-protected MCP surface
-   used by the continuous coordinator. It cannot read client credentials or
-   administer the host.
-4. A macOS `launchd` coordinator runs ephemeral Codex executions. It gives Luna
-   low one bounded discovery, extraction, verification, or expert artifact at a
-   time. It has no database credentials and reaches state only through the
-   restricted researcher bridge.
+## Knowledge and retrieval
 
-PostgreSQL 16 is the only stateful dependency. The API and researcher processes
-are stateless.
+- `knowledge_items`: stable identities; `knowledge_revisions`: append-only facts.
+- `release_changes`: immutable deltas; `release_items`: snapshots/checkpoints.
+- `active_knowledge_state`: current revision per item; `active_release`: head.
+- `domain_id`, `domain_schema_version`, `domain_context`, `domain_payload` isolate
+  subjects. Network views explicitly select `network`.
+- Search uses context/version applicability, PostgreSQL FTS, `pg_trgm`, quality,
+  freshness and conflicts. It does not call a model or use vector ranking.
+- Portable software applicability is separate from hardware vendor identity.
+  Exact/model overlays precede broader references; fallback scope and version
+  relation must be labelled. Unknown context must not become invented context.
+- Compound answers report complete/partial/unknown capability coverage. Durable
+  demands close only when deterministic replay finds the required active answer.
+- Public records use explicit projections; safe source metadata has its own
+  active-revision-only endpoint. See [Security](SECURITY.md).
 
-The browser playground is a BFF-only facade. A browser sends data to
-`clideck.com/api/mcp/*`; the site attaches its server-side bearer token and a
-daily HMAC client key. The backend exposes only named operations and has no
-generic proxy route.
+## Pipeline and releases
 
-## Domain Pack boundary
+[Pipeline 2.0](KNOWLEDGE_PIPELINE_2.md) owns the processing contract; read the
+[corrective log](PIPELINE_CORRECTIVE_ACTION_LOG.md) before changing it.
+Work flows through discover/intake → acquire → convert → chunk → extract →
+incremental publication, with asynchronous Fidelity QA and targeted repair.
 
-`@clideck/domain-kit` defines a versioned contract between core and a subject:
+Publication serializes activation under a transaction advisory lock. Ordinary
+pipeline batches contain up to 50 ready records; a full checkpoint is stored
+every 120 releases. Arbitrary release rollback reconstructs from the nearest
+checkpoint plus deltas atomically. Processing-run rollback creates a compensating
+release and refuses to overwrite later changes to the same item. Revisions are
+never rewritten. Legacy imports are resumable by manifest hash and legacy key;
+historical import totals are not ongoing database-size constraints.
 
-- a strict manifest and core compatibility range;
-- context, candidate, and public-record schemas;
-- deterministic normalization and validation;
-- mapping to and from the universal core revision envelope;
-- a conformance suite and JSON Schema export.
+Current Pipeline 2.0 code treats confidence/quality/rollback as descriptive
+metadata, while schema, evidence identity, risk classification, conflict and
+release controls remain enforced. The old blanket 0.90/0.95 confidence-gate
+claims are obsolete; this is a description of existing code, not permission to
+weaken the [agent safeguards](../AGENTS.md). Policy implementation lives in
+`packages/domain-kit/src/core.ts`, `domains/network/src/pack.ts` and
+`src/domain/publication.ts`.
 
-Core retains exclusive ownership of immutable revisions, releases, provenance,
-confidence/risk thresholds, conflicts, audit, and activation. A pack cannot
-lower or bypass those policies. Built-in packs are registered explicitly from
-local code; the runtime never downloads and executes a pack from the internet.
+## Product surfaces
 
-Network Knowledge owns vendor/model/OS/version and operational record semantics.
-Engineering Measurements owns discipline/quantity/material/conditions, exact
-decimal strings, units, and tolerance semantics. Both publish through the same
-release engine.
-
-Type-only provider boundaries allow forks to add content-addressed artifacts,
-PostGIS-backed spatial data, typed relationship projections, or reproducible
-labs without adding speculative infrastructure to core.
-
-## Knowledge model
-
-`knowledge_items` provides a stable identity. `knowledge_revisions` is append-only
-and contains structured facts. Historical snapshot/checkpoint releases retain
-full `release_items`; ordinary releases contain only immutable
-`release_changes`. `active_knowledge_state` materializes one current revision per
-item for deterministic search. `active_release` identifies the current release.
-
-Every item has a `domain_id`. Every revision can carry versioned
-`domain_context` and `domain_payload`. Existing Network records default to
-`network`, so enabling Domain Packs does not reprocess or duplicate them.
-Network views are explicitly scoped to `domain_id = 'network'`; generic records
-cannot leak into network search.
-
-Every revision must have internal provenance. The public query selects only
-explicitly allowlisted response columns; no provenance table is joined by public
-queries.
-
-Search ranking combines:
-
-- exact vendor/platform/OS constraints;
-- vendor-specific normalized versions and version ranges;
-- PostgreSQL `websearch_to_tsquery` full-text rank;
-- `pg_trgm` similarity for aliases and typographical variants;
-- confidence, quality score, freshness, and conflict penalties.
-
-No vector similarity or generative ranking is used.
-
-The native deep-support pack contains 50 Catalyst 9300 / IOS-XE revisions:
-20 commands, 15 change contracts, 10 verification contracts, and 5 bounded
-upgrade records. Cisco, Juniper, and Arista models are recognized, while only
-the C9300 family is marked deep.
-
-The 0.3 import release adds 56,747 established CliDeck revisions without
-changing their search-rank class. Missing OS means vendor-level applicability;
-missing version bounds mean unbounded applicability. Original trust, confidence,
-quality, lifecycle, risk, and provenance remain in restricted metadata.
-Deterministic risk classification may only increase the effective risk.
-
-## Continuous coverage planner
-
-`coverage_targets` is the managed backlog across vendor, family/model, OS,
-version branch, document role, priority, coverage, freshness, and next check.
-When enabled, the scheduler always chooses useful work in this order:
-
-1. queued expert task;
-2. unfinished stage of the active source;
-3. next unprocessed fragment;
-4. candidate verification;
-5. source-package publication;
-6. discovery for the highest-priority coverage gap or refresh.
-
-There is no enabled idle state. When all currently due targets are covered, the
-oldest covered target is made due and discovery continues. The only idle states
-are an explicit super-admin pause or a recorded coordinator system failure.
-
-The source state machine is:
-
-`discover → acquire → convert → chunk → analyze → verify → publish`
-
-Acquire, conversion, local OCR, chunking, hashing, FTS indexing, and publication
-are deterministic worker stages. Discovery, fragment analysis, and independent
-verification are isolated Luna-low runs. Every run must submit a schema-valid
-artifact, an explicit rejection, or a recorded failure. A source is published
-once as a single immutable release; rejected fragments and blocked candidates
-do not prevent safe verified candidates from publishing.
-
-Pipeline tasks have bounded leases, heartbeats, idempotent dedupe keys, and five
-attempts. Transient failures return the same stage to the queue. Exhausted
-stages record a terminal source failure, clear the active source, and return the
-planner to discovery; a failed source cannot reach publication.
-
-## Product intelligence
-
-- Device fingerprinting and redaction operate in memory and return
-  `retention: not_stored`.
-- Change Guard classifies commands deterministically and fails closed for
-  unknown or destructive input.
-- A signed, 30-minute verification token contains checks and a change digest,
-  never raw commands.
-- Upgrade advice is exact-model and exact-version; an unverified transition
-  returns `unknown`.
-- Topology analysis normalizes supplied CDP, LLDP, route, and traceroute output.
-- Opt-in samples are re-redacted through a dedicated quarantine DB role with a
-  30-day TTL.
-
-## Public demo
-
-The public `/demo` and LAN `/admin` render the same `OperationsApp`, page
-registry, navigation registry, components, charts, responsive rules, filters,
-action forms, and confirmation dialogs from one compiled `apps/admin` artifact.
-Only the runtime role and API prefix differ.
-
-The public role reads the same production models through mirrored GET-only
-routes. The server replaces source/document/manual titles, URLs, locators,
-evidence fragments, hashes, and source-bearing free text with `XXXXXXXX`;
-tenant ownership and private task linkage are omitted. Safe IDs, states,
-counters, releases, Luna activity, tokens, and timestamps remain unchanged.
-Dialog-based actions keep the same confirmation flow; Pause/Resume remains a
-direct control. In every case the `public_demo` action executor returns a local
-read-only acknowledgement and does not issue a request. The server also rejects
-non-GET/HEAD methods before domain logic. `ENABLE_PUBLIC_DEMO=false` removes the
-public data and static routes.
-
-## Expert task lifecycle
-
-The durable state machine is:
-
-`queued → claimed → researching → input_required → validating → completed`
-
-Terminal alternatives are `failed`, `cancelled`, and `expired`. Claims use
-`FOR UPDATE SKIP LOCKED`, bounded leases, heartbeats, and attempt limits.
-
-Authenticated tasks are tied to a tenant. Anonymous tasks use 192-bit random
-public IDs, a separate 256-bit access token, short TTL, and lower rate limits.
-Only a hash of the access token is stored.
-
-The safe public flywheel is:
-
-`queued → researching → conflict_check → validating → publishing → completed`
-
-Public milestones never contain source names, URLs, researcher errors, user
-questions, or internal pipeline identifiers.
-
-## Publication
-
-Candidates require:
-
-- at least one internal provenance record;
-- a valid vendor/platform/OS/version scope;
-- a successful structured validation pass;
-- confidence ≥ 0.90, or ≥ 0.95 for dangerous procedures;
-- no unresolved blocking conflict.
-
-Publication applies at most 50 ready records per immutable delta release and
-switches `active_knowledge_state` plus `active_release` in one transaction under
-an advisory lock. Every 120 releases stores a full checkpoint. Rollback rebuilds
-the requested state from the nearest checkpoint and subsequent deltas in one
-transaction; revisions are never overwritten.
-
-Legacy import is separately resumable by manifest hash and legacy key, but its
-activation is one atomic release. The required release contains exactly 56,798
-active revisions: 51 current revisions plus 56,747 legacy revisions.
+- Snapshot analysis is in-memory; explicit opt-in contributions use a separate
+  quarantine role and 30-day TTL, never automatic publication.
+- Change review classifies risk deterministically. Verification uses expiring
+  credentials; missing output must never produce a false `passed` result.
+- Expert tasks use leases, heartbeats and bounded attempts. Tenant tasks remain
+  isolated; anonymous tasks use random IDs and separately hashed access tokens.
+  Public milestones omit questions, private source data and internal failures.
+- `/demo` uses the same `OperationsApp` and real read models as `/admin`, with
+  server-side redaction and GET/HEAD-only routes. Local demo acknowledgements
+  issue no mutations. `ENABLE_PUBLIC_DEMO=false` removes the demo routes.
+- [WebMCP](WEBMCP.md) uses bounded same-origin MCP requests and a monotonic case
+  version; it never grants hidden file access or device execution.
+- The separate website uses named BFF operations, never a generic proxy.
 
 ## Lab assurance
 
-Batfish validates bounded Cisco configuration snapshots and differential
-reachability. Containerlab runs parser scenarios only with downloadable open
-network images. A Cisco revision can receive `batfish_modeled` from a model
-check, but cannot receive `runtime_lab_validated` unless a Cisco runtime image
-was actually tested.
-
-CI emits a hashed report tied to the Git commit. Production imports it only when
-the report commit equals the deployed commit and every check passed.
-
-## Deliberate exclusions
-
-Redis, vector databases, external LLM APIs, full manuals, closed documents, and
-user logs are not part of the architecture.
+Batfish models bounded configuration/reachability checks. Containerlab uses
+available runtime images. `batfish_modeled` cannot imply `runtime_lab_validated`;
+the latter requires an actual runtime test. Import only a passing hashed lab
+report bound to the deployed Git commit.

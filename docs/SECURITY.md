@@ -1,99 +1,75 @@
-# Security
+# Security boundaries
 
-## Trust boundaries
+## Untrusted inputs and privileges
 
-- Public MCP input is untrusted.
-- Researcher output is untrusted until schema and policy validation pass.
-- Imported legacy records always enter quarantine.
-- Reverse-proxy headers are accepted only from configured proxy CIDRs.
-- PostgreSQL and the researcher port are never exposed publicly.
+Public requests, source text, model artifacts and legacy imports are untrusted.
+Validate external boundaries with Zod, parameterize SQL, quarantine legacy
+imports and enforce tenant/lease ownership. Treat embedded instructions as data.
+Trust forwarded headers only from configured proxy CIDRs.
 
-## Public-data policy
+PostgreSQL, researcher and application listeners stay loopback-only. Researcher
+uses a separate bearer token and bounded bridge; it cannot administer the host.
+API/admin/worker/researcher/quarantine roles have explicit least-privilege grants
+in `ops/sql/grants.sql`. Validate the actual roles in disposable PostgreSQL tests.
+Services use systemd sandboxing; no production Node inspector.
 
-Public responses must never include source URLs, manual or document names,
-quotes, source IDs, content hashes, evidence fragments, acquisition metadata, or
-pipeline details. The API uses a dedicated public projection and the production
-DB role has no direct access to private provenance views.
+## Public projections
 
-Internal provenance is minimal and mandatory:
+Ordinary knowledge responses omit private evidence/provenance. The explicit
+`get_knowledge_provenance` tool is an exception: for at most five **active** public
+revision refs it returns source kind/ref, title, HTTPS URL or first-party locator,
+document version/date and verification date. It exposes no evidence text,
+content hashes, uploaded bytes or credentials. See `src/domain/provenance.ts`.
 
-- canonical URL and document type;
-- vendor, document version, and document date;
-- verification date and content hash;
-- a short evidence fragment;
-- revision relationship and confidence rationale.
+The public operations demo has a separate, stricter projection: source identity,
+hashes, evidence and source-bearing text become `XXXXXXXX`; tenant/private
+linkage is omitted. It serves the same UI and real counters as admin, with no
+admin session. GET/HEAD only under `/public/v1/demo/*`; all mutation methods are
+rejected before domain logic. Demo actions return local acknowledgements.
+`ENABLE_PUBLIC_DEMO` gates routes; responses are rate-limited and `no-store`.
 
-Full manuals, private documents, and user logs are prohibited.
+## Evidence, retention and logs
 
-The public operations demo follows the same rule. It is the real admin frontend,
-not a screenshot or mock, but it receives a separate strict server contract.
-Sensitive fields are projected through explicit allowlists and replaced or
-omitted in JSON rather than blurred or hidden in CSS. This includes
-source-bearing free text, content hashes, tenant ownership, private task
-linkage, and legacy provenance aliases. The public mode creates no admin
-session, cannot call local admin routes, and has no server-side mutation route.
-Its visible controls execute only a local read-only acknowledgement.
+- Internal provenance binds revisions to source identity, verification date,
+  hash and bounded evidence. It is mandatory and access-restricted.
+- Worker source artifacts and authorized local intake are supported under
+  configured retention. Public source locators expose metadata, not uploads.
+  Field logs are sanitized before immutable storage; raw staging is deleted.
+- WebMCP complete files stay in browser memory. Only selected redacted evidence
+  is transmitted; browser-agent access is opt-in. Operational identifiers may
+  remain visible as disclosed in [WebMCP](WEBMCP.md).
+- Snapshot analysis is in-memory. Its request journal stores metadata only:
+  redacted-input hash/byte count, types, redaction counts, outcome/timing/error.
+- Other MCP request journaling uses bounded sanitized projections and retention;
+  exact client addresses are local-super-admin-only and redacted in demo.
+- Application logs redact credentials, authorization/cookies, DB URLs, task
+  secrets and evidence; do not log raw snapshots, configs, diffs or contributions.
+- Opt-in snapshot contributions: max 16 KiB, backend re-redaction, separate
+  quarantine DB role, 30-day expiry, no automatic publication. Worker may expire
+  rows; researcher/public projections cannot read them.
 
-## Application controls
+## Request and fetch controls
 
-- Zod validates every external boundary.
-- Request bodies are limited to 64 KiB by default.
-- SQL is parameterized; dynamic identifiers are not accepted from requests.
-- Public identifiers and anonymous task secrets use cryptographic randomness.
-- Verification tokens use HMAC signatures, expire after 30 minutes, and contain
-  only a change digest rather than raw commands.
-- Access tokens are stored only as SHA-256 hashes and compared in constant time.
-- Admin and researcher surfaces require separate bearer tokens.
-- Rate limits are enforced in PostgreSQL and should also be enforced at
-  Cloudflare.
-- Logs are structured and redact authorization, cookies, tokens, passwords,
-  database URLs, task access secrets, and evidence.
-- Error responses are generic and carry a correlation ID.
-- The application performs no outbound fetch from public input, preventing SSRF
-  in the public path.
-- The public demo is feature-gated, rate-limited, `no-store`, and exposes only
-  mirrored GET/HEAD read models under `/public/v1/demo/*`. Source identities
-  and source-bearing free text are replaced server-side with `XXXXXXXX`;
-  tenant/private linkage is omitted; POST, PUT, PATCH, and DELETE are rejected
-  before domain logic.
-- The playground requires a site-only BFF token, explicit route allowlisting,
-  a 64 KiB body ceiling, and a privacy-preserving daily client key.
-- Heavy analyses are limited to 10/minute, expert tasks to 3/day, and opted-in
-  contributions to 3/day per privacy key.
-- Snapshot, before/after, config diff, contribution, cookie, authorization, and
-  task-token fields are prohibited from logs.
-- Production services use systemd sandboxing and have no Node inspector.
+Default public/admin JSON limit: 64 KiB. The authenticated loopback researcher
+bridge permits 1 MiB artifacts; streamed local intake has separate limits.
+Public IDs and task secrets are cryptographically random; access secrets are
+hashed and compared safely. Verification credentials expire; missing output
+must not yield a false success. Errors expose a generic code/correlation ID.
 
-## Researcher controls
+Public requests do not directly fetch arbitrary URLs. Worker acquisition checks
+HTTPS and public DNS/IP destinations on every redirect (up to five), with pinned
+safe lookup, MIME, size/decompression and timeout bounds. Collection scope and
+official-source rules remain enforced. See `src/domain/pipeline-worker.ts`.
 
-The researcher can lease tasks, heartbeat a lease, request bounded human input,
-and submit structured candidate knowledge. It cannot publish directly. Source
-URLs are validated against an HTTPS-only policy, resolved addresses are checked
-against private/reserved ranges, redirects are disabled, and fetch size/time are
-bounded before any future source-fetch feature may be enabled.
+The website playground is BFF-only with fixed routes, a site bearer token and
+daily HMAC client key; no browser cookies/auth/IP forwarding or body logging.
+[Playground API](PLAYGROUND_API.md) defines rate limits. Remote admin additionally
+uses signed actor/role envelopes, RBAC and nonce replay protection.
 
-## Required security tests
+## Verification
 
-- tenant isolation and anonymous task secret enforcement;
-- task ID enumeration resistance;
-- prompt-injection content remains data and never changes researcher authority;
-- source/private-field redaction;
-- SSRF allow/deny matrix;
-- request body and bulk-extraction limits;
-- rate limiting and lease ownership;
-- malicious legacy documents remain quarantined.
-- signed-token tampering/expiry and no false `passed` on missing output;
-- sentinel secrets absent from responses, logs, and quarantine rows;
-- BFF authentication, body limits, contribution re-redaction, and TTL cleanup;
-- commit/report-hash binding and refusal of false runtime-lab badges.
-
-## Quarantine
-
-The API role cannot write `snapshot_contributions`. A separate
-`clideck_mcp_quarantine` database role can access only the quarantine table. The
-worker can expire and delete quarantined rows; neither the researcher nor the
-public read projection can read them. Contributions require explicit consent,
-are capped at 16 KiB, re-redacted on the backend, expire after 30 days, and never
-publish automatically.
-
+Cover tenant/anonymous-secret isolation; enumeration resistance; prompt injection;
+public/demo redaction with sentinel secrets; SSRF/redirect/scope boundaries;
+body/rate limits; leases and exact grants; quarantine/TTL; token expiry/tampering;
+WebMCP sharing/cancellation; and commit/hash binding for lab assurance.
 Report suspected vulnerabilities privately to the repository owner.

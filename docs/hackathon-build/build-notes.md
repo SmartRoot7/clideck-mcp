@@ -1,85 +1,18 @@
-# Hackathon build notes
+# WebMCP build history
 
-- 2026-08-30: Devpost registration was confirmed. Existing immutable knowledge,
-  public MCP, research pipeline, admin, demo, and deployment workflow predate
-  the challenge.
-- 2026-08-30: The first challenge implementation used a deterministic lab and
-  approval-gated execution. User review correctly found it artificial and not
-  useful outside the demo.
-- 2026-08-31: The lab was replaced with Network Evidence Workbench: a real
-  question/evidence/context/results workspace that remains useful without
-  WebMCP and never claims access to customer equipment.
-- 2026-08-31: Full files remain local. Only an explicit evidence window is
-  redacted and sent to CliDeck. Browser-agent access has one visible opt-in;
-  filenames and task access tokens are not exposed.
-- 2026-08-31: Case versions plus cancellation prevent parse, MCP, presentation,
-  or polling results from leaking into a changed case.
-- 2026-08-31: Added safe active-revision provenance, metadata-only snapshot
-  observability, and pre-quota expert-task idempotency.
-- 2026-08-31: `pdfjs-dist` is pinned, lazy-loaded, and served with a same-origin
-  worker. OCR, encrypted PDFs, image-only PDFs, device connections, and command
-  execution are deliberately not claimed.
-- 2026-08-31: Independent code/privacy review found five material boundary
-  defects before release: missing production grants for provenance, incomplete
-  structured-secret redaction, a full sanitized-snapshot echo to the browser
-  agent, missing unmount cancellation, and an over-wide combined result set.
-  All were corrected before deployment. Acceptance tests now cover JSON/YAML/
-  env/JWT secrets, file and page limits, PDF cancellation, execution-signal and
-  unmount cancellation, stale research status, and task-token non-disclosure.
-- 2026-08-31: Production walkthrough found a cross-vendor result caused by a
-  coincident version number. The workbench now prefers the detected vendor when
-  that vendor has results, falls back broadly only when it has none, and marks
-  out-of-range guidance as nearest rather than version-matched.
-- 2026-08-31: The same walkthrough exposed an IOS XE display-format mismatch:
-  `17.08.01` was treated as older than `17.3.2a`. Automatically detected numeric
-  version segments are now canonicalized (`17.8.1`) before retrieval; manual
-  context remains untouched.
-- 2026-08-31: A production query matrix exposed three core retrieval defects:
-  model-only context could select an arbitrary vendor OS, global widening could
-  outrank same-vendor guidance, and widened results could be reported as a
-  complete answer. Resolution now preserves known vendor context without
-  inventing an OS; broad retrieval is vendor-first; widened, cross-vendor, and
-  versionless upgrade guidance remains available but is explicitly partial.
-  Small intent checks also prevent a reboot-only result from satisfying an
-  erase-configuration request and a rollback action from satisfying a display
-  request.
-- 2026-08-31: Production deploy no longer opens an interactive remote password
-  prompt. It requires reusable `sudo -n` authorization before starting and
-  otherwise exits before tests, uploads, service changes, or production data
-  changes.
-- 2026-08-31: Post-deploy query replay found three remaining retrieval defects:
-  the phrase `startup configuration` was rewritten as a boot-mode question,
-  generic exact-context commands could outrank the requested SSH/configuration
-  operation, and an unknown `Fruit Networks` context fuzzily resolved to F5
-  because both names ended in `Networks`. The boot classifier now preserves
-  startup-configuration questions, candidate retrieval receives a small
-  deterministic operation-relevance ordering pass, and low-confidence vendor
-  suffix matches remain unresolved. These changes reorder existing knowledge;
-  they do not add publication gates or suppress documented commands.
-- 2026-08-31: The first production replay of that ordering exposed a tie case:
-  equally relevant widened NX-OS records could outrank an IOS XE record because
-  their stored scope was narrower. The final tie-break now prefers a direct
-  applicability result over widened guidance before comparing stored scope.
-- 2026-09-01: Broad retrieval now rejects only candidates without a substantive
-  question match, then returns useful other-version and cross-platform records
-  as explicit best-effort references. Responses expose the factual context and
-  documented version relation instead of calling every broad result a same-branch
-  match. WebMCP keeps those references visible with a warning; exact, portable,
-  provenance, exclusions, risk, and publication-integrity controls are unchanged.
-- 2026-09-02: The challenge submission copy was aligned with the shipped
-  six-tool Network Evidence Workbench, committed and pushed to `main` as
-  `6eee9db`, and deployed through `ops/scripts/deploy-production.sh`. The full
-  preflight, production build, database backup and migration flow, smoke tests,
-  public routes, MCP discovery, and production WebMCP manual-mode walkthrough
-  passed. Production reports the deployed commit and all eight Luna executor
-  lanes active.
-- 2026-09-02: An authorized Devpost draft was created with the title, tagline,
-  description, technology list, live application URL, public MCP endpoint, and
-  public GitHub repository.
-- 2026-09-02: After the participant confirmed United States residence and
-  enabled Chrome's WebMCP testing support, production reported
-  `WebMCP connected · 6/6 tools`. The IOS XE 17.8.1 analysis and
-  version-matched search flow passed, all Devpost additional-information fields
-  were saved, and a production screenshot was uploaded and processed as the
-  project thumbnail. The public video and final submission remain intentionally
-  pending.
+Historical record; the hackathon is over and the freeze is lifted. Current
+contract: [WebMCP](../WEBMCP.md). Full dated notes remain in Git.
+
+- 2026-08-30: Registration confirmed; core MCP/research/admin predated the event.
+- 2026-08-31: Replaced the artificial execution lab with the real evidence
+  workbench. Added local extraction/redaction, sharing consent, six tools,
+  cancellation/case versions, active provenance and idempotent research.
+- Pre-release privacy review fixed missing grants, structured-secret redaction,
+  over-wide evidence/results and unmount cancellation. Production replay fixed
+  vendor/version/context ordering and intent/relevance errors.
+- 2026-09-01: Broader guidance remained visible with honest scope/version labels;
+  exact applicability and evidence integrity were preserved.
+- 2026-09-02: `6eee9db` passed canonical deployment and manual walkthrough;
+  WebMCP-enabled Chrome reported 6/6 tools. Draft and thumbnail were prepared.
+- Later [submission record](../../devpost-submission.md) confirms the public video
+  and final submission; earlier “pending” notes are superseded.

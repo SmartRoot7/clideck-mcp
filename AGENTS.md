@@ -1,69 +1,44 @@
-# CliDeck MCP Agent Instructions
+# CliDeck MCP agent rules
 
-## Git workflow
+- Use only `main`; commit/push directly and keep `origin/main` synchronized.
+  Create branches, worktrees or PRs only on explicit request.
+- The hackathon freeze is lifted: edits, commits, pushes and deployments are
+  allowed under these rules. Load only task-relevant [docs](docs/README.md);
+  historical plans are not startup instructions or active tasks.
 
-- Use only the `main` branch for this repository.
-- Commit and push project changes directly to `main`.
-- Do not create feature branches, worktree branches, or pull requests unless the user explicitly requests one.
-- Keep local `main` synchronized with `origin/main`.
+## Production
 
-The production application host is `val@100.116.82.78` over Tailscale. Its
-internal address is `10.77.0.10`. The former host `10.11.5.83` is rollback-only
-and must not receive normal deployments.
+- Host: `val@100.116.82.78` (Tailscale), internal `10.77.0.10`.
+  Former `10.11.5.83` is rollback-only, never a normal deployment target.
+- Deploy a **clean `main` commit** only via `ops/scripts/deploy-production.sh`.
+  It owns tests/build, backups, migrations/grants, reconciliation/stats,
+  pause/restore, atomic switch, restarts, smokes and application/knowledge rollback.
+  Never reproduce deployment with ad hoc SSH/SCP/SQL/symlink/systemctl steps.
+- `.secrets/clideck-mcp-server.env` must target `100.116.82.78`. Never store a
+  sudo password; authorize remote sudo interactively before deploying.
+- Host moves use only `ops/scripts/migrate-production-host.sh`, never ad hoc
+  database/secret/artifact/tunnel/certificate transfers. See [operations](docs/OPERATIONS.md).
 
-## Production deployment
+## Pipeline
 
-- Run full production deployments only with
-  `ops/scripts/deploy-production.sh`.
-- Do not reproduce the deployment as ad hoc SSH, SCP, migration, symlink, or
-  systemctl commands.
-- The script owns preflight tests, PostgreSQL backup, the Linux build, additive
-  migrations, grants, pipeline pause/restore, reconciliation, stats priming,
-  atomic release switching, service restart, smoke tests, and automatic
-  application plus knowledge-release rollback.
-- A production release must be a clean commit from `main`. Do not deploy a
-  dirty working tree.
-- Keep `.secrets/clideck-mcp-server.env` pointed at `100.116.82.78`; never put
-  a sudo password in that file. Authorize sudo interactively before deployment.
-- The one-time host move is owned only by
-  `ops/scripts/migrate-production-host.sh`. Do not reproduce its database,
-  secret, artifact, tunnel, or certificate transfer with ad hoc commands.
+- Before changes/monitoring, read [corrective log](docs/PIPELINE_CORRECTIVE_ACTION_LOG.md).
+  Repeated soak failures need a root-cause code/schema/grant/config fix, not a
+  restart. Record evidence, cause, correction, deployed SHA and result; restart
+  the read-only soak window after correction.
+- Fill all eight physical Luna lanes with useful work. No global single-task or
+  stage cap: discovery, demand, analysis, verification and review may use every
+  free lane. `next_check_at` orders refreshes; it never blocks idle capacity.
+- No throughput cooldowns, daily quotas, cost throttles or queue blockers without
+  explicit user approval. Preserve per-item dedupe, transactional leases, bounded
+  context, official-source policy, scoped circuits and operator Pause/Resume.
 
-## Corrective production monitoring
+## Packs and core integrity
 
-- Before changing or monitoring the knowledge pipeline, read
-  `docs/PIPELINE_CORRECTIVE_ACTION_LOG.md`.
-- A repeated soak-test failure requires a root-cause code, schema, grant, or
-  configuration fix. Do not treat a service restart as the fix.
-- Record the evidence, cause, minimal correction, deployment commit, and
-  post-deploy result in that log, then restart the read-only soak window.
-
-## Pipeline capacity policy
-
-- The enabled production pipeline is work-conserving: when useful work exists,
-  fill all eight physical Luna executor lanes.
-- Do not add a global single-task or single-stage lane cap. Discovery, demand
-  diagnosis, analysis, verification, and deep review may use every otherwise
-  free executor lane.
-- `next_check_at` orders coverage refreshes; it must not make an idle executor
-  wait for a future calendar date.
-- Do not add throughput cooldowns, daily quotas, cost throttles, or artificial
-  queue blockers without the user's explicit approval.
-- Preserve controls required for data integrity and safety: one live task per
-  durable work item, transactional leases, bounded model context, official
-  source policy, immutable revisions, provenance, publication thresholds,
-  risk handling, circuit isolation, audit, and explicit operator pause.
-
-## Domain Pack workflow
-
-- Put subject-specific schemas, prompts, validators, fixtures, and mappers in
-  `domains/<domain-id>`.
-- Start with `pnpm domain:create -- --id <id> --name "<name>"`.
-- Run `pnpm domain:validate -- --id <id>` before integrating a pack.
-- Do not weaken or bypass core immutable revisions, provenance, publication
-  thresholds, risk rules, conflict handling, audit, or release activation.
-- Add storage, spatial, relation, or lab integrations as separate provider
-  packages implementing Domain Kit interfaces.
-- Never load and execute a pack from a URL, upload, or untrusted npm package.
-- Preserve backward compatibility for existing MCP tools unless a versioned
-  public contract change is explicitly approved.
+- Subject schemas/prompts/validators/fixtures/mappers: `domains/<id>`.
+  Scaffold `pnpm domain:create -- --id <id> --name "<name>"`; validate with
+  `pnpm domain:validate -- --id <id>` before integration.
+- Providers implement Domain Kit interfaces in separate packages. Never execute
+  packs from URLs, uploads or untrusted npm packages.
+- Preserve immutable revisions, provenance, publication thresholds, risk/conflict
+  rules, audit and release activation. Preserve MCP compatibility unless a
+  versioned public-contract change is explicitly approved.

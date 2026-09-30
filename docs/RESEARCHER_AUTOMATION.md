@@ -1,32 +1,45 @@
-# Parallel Luna pipeline
+# Researcher automation
 
-The macOS `launchd` service runs one local pool supervisor and eight isolated
-executor lanes. PostgreSQL is the source of truth for the configured
-capacity, which is fixed at the eight physical executors. No stage has a
-smaller shared-lane cap. Priorities choose work order without reserving idle
-capacity.
-Standby lanes poll the restricted researcher bridge but never start Codex until
-they atomically lease useful work.
+The macOS launchd pool supervises `pipeline-executor-01` through `08`.
+Each leases one useful task atomically through the restricted researcher bridge;
+standby polling starts no Codex run. PostgreSQL owns task/lease state.
+See [capacity policy](PIPELINE_CAPACITY_AUDIT.md) and read the
+[corrective log](PIPELINE_CORRECTIVE_ACTION_LOG.md) before changes or monitoring.
 
-Credentials remain in the ignored `.secrets/researcher-bridge.env` file:
+## Runtime policy
+
+`src/cli/pipeline-codex-policy.ts` and `src/domain/pipeline.ts` enforce:
+
+- Default: `gpt-5.6-luna`, reasoning `low`.
+- Medium reasoning: only `candidate_deep_review` and `demand_diagnosis`.
+- Scoped fallback: `gpt-5.6-terra`/`medium` for those same two task types when
+  the scheduler's circuit policy allows it; it is not a general model override.
+- Web research: only expert research, source discovery and refresh. These enable
+  `code_mode`, `code_mode_host` and `standalone_web_search` together.
+- Other tasks have no web access. All runs are ephemeral, bounded, read-only,
+  without inherited MCP servers, plugins, shell tools or application secrets.
+
+Acquire, conversion/OCR, chunking, hashing, indexing and publication are worker
+operations. Scheduling prioritizes useful work without reserving idle capacity;
+publication activation is serialized transactionally.
+
+## Local setup
+
+Ignored `.secrets/researcher-bridge.env`:
 
 ```text
 CLIDECK_RESEARCHER_URL=http://127.0.0.1:28788/mcp
-CLIDECK_RESEARCHER_TOKEN=<random researcher bearer token>
+CLIDECK_RESEARCHER_TOKEN=<researcher bearer token>
 CLIDECK_PIPELINE_MODEL=gpt-5.6-luna
 CLIDECK_PIPELINE_REASONING=low
 CLIDECK_PIPELINE_CODEX_BINARY=/absolute/path/to/codex
-CLIDECK_RESEARCHER_SSH_HOST=<fixed server LAN address>
+CLIDECK_RESEARCHER_SSH_HOST=100.116.82.78
 CLIDECK_RESEARCHER_SSH_USER=<restricted SSH user>
 CLIDECK_RESEARCHER_SSH_IDENTITY=/absolute/path/to/private-key
 CLIDECK_RESEARCHER_TUNNEL_PORT=28788
 ```
 
-The model and reasoning values are enforced in the database, coordinator, and
-pool supervisor. Production AI work cannot run with anything except
-`gpt-5.6-luna` and reasoning `low`.
-
-Install or replace the pool after the matching backend migration is healthy:
+After the matching backend migration is healthy:
 
 ```bash
 pnpm pipeline:install-launchd
@@ -34,54 +47,19 @@ pnpm pipeline:pool-status
 launchctl print "gui/$(id -u)/com.clideck.mcp.pipeline-tunnel"
 ```
 
-The installer keeps the authenticated SSH tunnel separate from the Luna pool.
-Each executor uses its own ignored lease directory:
+The tunnel is independent of the pool. Lease files live in
+`.secrets/pipeline/<executor-id>/`; schemas/artifacts/usage in
+`tmp/pipeline/<executor-id>/`. Never include credentials, lease tokens or another
+executor's files in model prompts. Normal deployments manage pool reloads.
 
-```text
-.secrets/pipeline/pipeline-executor-01/
-.secrets/pipeline/pipeline-executor-02/
-.secrets/pipeline/pipeline-executor-03/
-.secrets/pipeline/pipeline-executor-04/
-.secrets/pipeline/pipeline-executor-05/
-.secrets/pipeline/pipeline-executor-06/
-.secrets/pipeline/pipeline-executor-07/
-.secrets/pipeline/pipeline-executor-08/
-```
+## Pause and recovery
 
-Temporary schemas, output, submissions, and usage files are likewise isolated
-under `tmp/pipeline/<executor-id>/`. Every AI run is ephemeral and receives only
-its bounded leased payload. Bearer tokens, leases, database credentials, and
-other executor files are never included in prompts.
+Super-admin **Pause all Luna** calls `POST /admin/v1/pipeline/state` with
+`{"enabled":false,"reason":"manual pause"}`; resume uses `{"enabled":true}`.
+Runs poll control at most every five seconds and terminate within ten seconds,
+discard partial output and return reservations. A running mechanical step may
+finish; no new work is claimed while paused.
 
-The scheduler reserves work in this order: expert, verify, analyze, then
-discover/refresh. Acquire, conversion, OCR, chunking, indexing, and publication
-remain deterministic worker operations. Publication is serialized with a
-transaction advisory lock.
-
-## Stopping token use
-
-The normal control is the super-admin `Pause all Luna` action, backed by:
-
-```http
-POST /admin/v1/pipeline/state
-{"enabled":false,"reason":"manual pause"}
-```
-
-Active Luna runs poll control at most every five seconds, terminate within ten
-seconds, discard partial output, and return their reservations to the queue.
-An already-running deterministic worker step may finish, but no new work is
-claimed. Resume uses the same endpoint with `{"enabled":true}`.
-
-If the website or backend control is unavailable, stop or start the local pool:
-
-```bash
-pnpm pipeline:pool-stop
-pnpm pipeline:pool-start
-```
-
-The tunnel stays available. An emergency stop creates no AI token usage; any
-unreported lease is recovered by the normal lease expiry policy.
-
-Executor capacity is not an operator setting. An enabled production pipeline
-uses all eight physical lanes whenever useful work exists. The only operator
-control is explicit Pause/Resume for maintenance or an actual incident.
+If backend controls are unavailable, use `pnpm pipeline:pool-stop` or
+`pnpm pipeline:pool-start`; the tunnel remains available and abandoned leases
+expire normally. Capacity is fixed at eight, not an operator throttle.

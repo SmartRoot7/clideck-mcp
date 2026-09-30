@@ -1,168 +1,82 @@
 # Operations
 
-## Network exposure
+## Host and exposure
 
-Only Cloudflare Tunnel publishes `https://mcp.clideck.com/mcp` and the public
-health endpoint. The API binds to loopback on the server. The website reaches
-the allowlisted playground facade with a shared BFF token. PostgreSQL and the
-researcher process bind to loopback and must not be published.
+Production: `val@100.116.82.78` over Tailscale; internal `10.77.0.10`.
+Former host `10.11.5.83` is rollback-only. The primary admin URL is
+`https://clideck-mcp.taild43e46.ts.net/admin`; `.lan` is recovery-only.
 
-The production host is `val@100.116.82.78` over Tailscale, with internal address
-`10.77.0.10`. The former `10.11.5.83` host is retained only for rollback. SSH
-and the LAN admin are reachable through Tailscale; PostgreSQL, API, admin and
-researcher listeners remain loopback-only.
-The primary admin URL is
-`https://clideck-mcp.taild43e46.ts.net/admin`; the `.lan` hostname is retained
-only as a recovery path.
+Cloudflare Tunnel publishes the API's public routes at `mcp.clideck.com`.
+API (8787), researcher (8788), admin (8790) and PostgreSQL listen on loopback;
+Caddy exposes admin only to trusted networks. Application services are
+`clideck-mcp-{api,worker,researcher,admin}.service`, under separate service users.
+Supporting services: PostgreSQL, Caddy, cloudflared and backup timer.
+Secrets are root-owned files in `/etc/clideck-mcp`, outside Git.
 
-## Services
-
-```text
-clideck-mcp-api.service
-clideck-mcp-worker.service
-clideck-mcp-researcher.service
-cloudflared.service
-postgresql.service
-```
-
-The three application services run as separate non-login users. Secrets live in
-root-owned environment files outside the repository.
-
-## Release
-
-Full production deployment has exactly one supported entry point:
+## Deploy
 
 ```bash
 ops/scripts/deploy-production.sh
 ```
 
-Do not manually reproduce its SSH, archive, migration, grant, symlink, restart,
-or smoke-test steps. The script requires a clean commit on `main` and performs:
+Only a clean `main` commit is deployable. Keep local/remote `main` synchronized.
+The script owns preflight typecheck, disposable PostgreSQL migrations/seed/grants,
+all integration tests, 250-case eval, build, remote Linux build, backup,
+reconciliation, stats priming, atomic switch, services, smokes and rollback.
+It preserves Pause/Resume, keeps capacity fixed at eight, and reloads a previously
+running local Luna pool so executors use the deployed coordinator code.
+Do not replace it with manual SSH/SCP, migrations, grants, symlinks or restarts.
 
-1. typecheck and production build;
-2. a clean temporary PostgreSQL migration and seed;
-3. every PostgreSQL integration test without skip;
-4. the 250-case product eval;
-5. an isolated Linux dependency install and build on `100.116.82.78`;
-6. a PostgreSQL and `/etc/clideck-mcp` backup;
-7. preserve the current pipeline settings, pause Luna, and drain active leases;
-8. additive migrations, least-privilege grants, reconciliation, seed, and
-   public-stats cache priming;
-9. an atomic `/opt/clideck-mcp/current` switch;
-10. researcher, worker, API, and admin restart followed by restoration of the
-    previous pipeline state;
-11. local and public health, MCP discovery, retrieval, redaction, destructive
-    advisory, verification-token, and upgrade smoke tests;
-12. automatic application, knowledge-release, environment, and pipeline-state
-    rollback when any post-switch check fails.
+Local deployment credentials: `.secrets/clideck-mcp-server.env`, host
+`100.116.82.78`; override path with `CLIDECK_MCP_DEPLOY_SECRETS_FILE` if needed.
+Authorize `sudo -v` interactively on the production host beforehand. The deploy
+script checks `sudo -n` and stops before changes if authorization is absent.
+Never save a sudo password; `sudo -K` invalidates the remote ticket.
 
-The default local credentials file is
-`.secrets/clideck-mcp-server.env`; it is ignored by Git. Override it with
-`CLIDECK_MCP_DEPLOY_SECRETS_FILE` when necessary. The previous immutable
-release and deployment backup are retained for rollback.
+Read [corrective log](PIPELINE_CORRECTIVE_ACTION_LOG.md) before pipeline work
+or monitoring. Its latest production baseline and operational-only grants must
+be checked before reconciliation; a healthy service is not proof of ingestion,
+publication or a completed soak.
 
-`val` uses a seven-day global sudo timestamp on the production VM. Run
-`sudo -v` interactively before deployment; the deploy script never reads or
-stores the password. Use `sudo -K` to invalidate the ticket immediately.
+## Recovery and host moves
 
-## Production host migration
+Failed post-switch checks trigger application, knowledge-release, environment
+and pipeline-state rollback. Keep the previous release and backup. Knowledge
+rollback reconstructs a selected release atomically without modifying revisions;
+do not blindly reverse additive migrations.
 
-The supported one-time move from `10.11.5.83` to `100.116.82.78` is:
+Host transfer is owned only by `ops/scripts/migrate-production-host.sh`:
+`preflight` → `prepare` → `rehearsal` → `cutover` → `verify`.
+Cutover requires `CLIDECK_MCP_CONFIRM_CUTOVER=YES`. The script verifies manifests,
+rehearses restore and pauses traffic-time writes. Rollback before new writes
+requires `CLIDECK_MCP_CONFIRM_ROLLBACK=YES`; after new writes, the new database
+must be migrated back instead of starting a stale copy. This is a recovery
+reference, not an instruction to repeat the completed host move.
 
-```bash
-ops/scripts/migrate-production-host.sh preflight
-ops/scripts/migrate-production-host.sh prepare
-ops/scripts/migrate-production-host.sh rehearsal
-CLIDECK_MCP_CONFIRM_CUTOVER=YES \
-  ops/scripts/migrate-production-host.sh cutover
-ops/scripts/migrate-production-host.sh verify
-```
+## Storage and backups
 
-The script checkpoints every phase under the ignored `tmp/` tree, verifies
-SHA-256 manifests, rehearses a complete restore, keeps the pipeline paused
-during the traffic switch, and leaves the old host intact. Rollback before new
-writes requires `CLIDECK_MCP_CONFIRM_ROLLBACK=YES`; after new writes, migrate
-the new database back instead of starting the stale copy.
+- Worker artifacts: `/var/lib/clideck-mcp/source-artifacts`, owner
+  `clideck_mcp_worker:clideck_mcp`, mode `0750`; `SOURCE_STORAGE_DIR` and the
+  unit's `ReadWritePaths` must agree. Preserve `ProtectSystem=strict` elsewhere.
+- Backups: `/var/backups/clideck-mcp`, owner
+  `clideck_mcp_backup:clideck_mcp`, mode `0700`.
+- Backup policy: daily custom-format `pg_dump`, encrypted offsite transfer,
+  14 daily and 8 weekly copies, monthly restore test. A timer success alone
+  is insufficient: verify checksum and restore after host migration.
+- Offsite destination and critical alert channel were previously external
+  prerequisites; verify their actual configuration before claiming recovery
+  readiness. This documentation review did not inspect production.
 
-Lab validation and initial legacy import are separate one-time release gates;
-they are not repeated by every application deployment. Import only a lab report
-whose commit equals the deployed commit.
+## Admin and monitoring
 
-Production uses separate API, admin, worker, researcher, and quarantine DB roles.
-The site and backend share their playground token only through secret stores.
+Use [LAN admin operations](lan-admin-operations.md). The optional website admin
+BFF requires `ADMIN_TOKEN` plus an actor/role HMAC, a 120-second clock window,
+nonce replay rejection, fixed routes, RBAC and `no-store`. Browser code must
+never receive either signing secret. Ordinary admins are read-only and cannot
+read private provenance; super admins own protected reads/mutations.
 
-The worker stores temporary acquired documents under
-`/var/lib/clideck-mcp/source-artifacts`. Create that directory with owner
-`clideck_mcp_worker:clideck_mcp` and mode `0750`, set
-`SOURCE_STORAGE_DIR=/var/lib/clideck-mcp/source-artifacts` in `worker.env`, and
-keep the matching `ReadWritePaths=` allowlist in the worker systemd unit.
-`ProtectSystem=strict` remains enabled for every other path.
-
-## CliDeck site admin
-
-The website reaches the admin API through explicit server-side BFF routes. Every
-admin request requires both `ADMIN_TOKEN` and a short-lived signed actor envelope
-using `CLIDECK_MCP_ADMIN_ACTOR_HMAC_SECRET`. The actor ID and role are included in
-the HMAC input; mutation audit columns store the verified actor ID.
-
-The backend accepts signatures within 120 seconds of its clock and rejects nonce
-replay in the running API process. Keep the website and backend clocks
-synchronized. Cloudflare Access is optional for this deployment; whether used
-or not, never make the admin bearer token or HMAC secret available to browser
-code.
-
-`/admin/mcp` is an independent control center. It uses only fixed BFF mappings,
-strict response filtering, `no-store`, bearer + HMAC, and server-side RBAC.
-Enable the website feature flag only after testing all of these through the BFF:
-
-1. `admin` can read Overview, Coverage, Sources, Pipeline, Active Source,
-   Knowledge, Imports, Agent Runs, Expert Tasks, Quality, Lab, Conflicts,
-   Releases, Feedback, and Approvals.
-2. `admin` cannot read provenance, source URLs, or perform mutations.
-3. `super_admin` can read provenance.
-4. A confirmed release switch returns the complete active release.
-5. A confirmed approval decision returns the complete updated approval.
-6. Reusing a signed request nonce fails.
-
-The control-center performance targets on the full release are p95 ≤1 second
-for Overview and Knowledge pagination. Raw UUIDs are secondary labels; releases
-use their sequence as the primary identifier.
-
-## Backup
-
-Run daily `pg_dump --format=custom`, encrypt before offsite transfer, retain 14
-daily and 8 weekly copies, and test restore monthly. The repository does not
-contain offsite credentials. Recovery is incomplete until offsite storage is
-provided.
-
-`/var/backups/clideck-mcp` must be owned by
-`clideck_mcp_backup:clideck_mcp` with mode `0700`. A successful timer invocation
-is not sufficient: verify its checksum and restore the newest dump into a
-temporary database after every host migration.
-
-## Knowledge rollback
-
-Use the admin release endpoint to atomically select a previously published
-release. The server reconstructs the target from the nearest immutable
-snapshot/checkpoint plus ordered deltas and replaces `active_knowledge_state`
-inside the same transaction. This does not mutate or delete knowledge revisions.
-
-Application rollback restores the previous checkout and services. Browser
-rollback disables its playground feature flag. Knowledge rollback remains the
-atomic release switch; schema migrations are not blindly reversed.
-
-For the 0.3 rollout, rollback stops the launchd coordinator, restores the
-previous backend checkout, and atomically activates release sequence 3. Imported
-immutable revisions remain stored and are not deleted.
-
-## Alerts
-
-Alert on API readiness failure, worker heartbeat age, task backlog/age, failed
-publication, DB saturation, backup age, disk pressure, and elevated 429/5xx
-rates. A critical notification channel is still an external prerequisite.
-
-## External release blockers
-
-- `mcp.clideck.com` must resolve to the Cloudflare Tunnel.
-- The site and backend need the same generated playground token.
-- Offsite backup storage and a critical alert channel remain required.
+Check actual authenticated Overview response time, executor leases and end-to-end
+progress, not just health endpoints. Track readiness, backlog/age, publication
+failures, DB saturation, backup age, disk pressure and elevated 429/5xx rates.
+The September 8 correction set PostgreSQL `jit=off`; preserve and verify this
+configuration when moving/restoring the database (see the corrective log).

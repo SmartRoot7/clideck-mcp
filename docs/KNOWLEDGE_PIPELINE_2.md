@@ -1,124 +1,78 @@
-# CliDeck Knowledge Pipeline 2.0
+# Knowledge Pipeline 2.0
 
-## Product rule
+Read [corrective log](PIPELINE_CORRECTIVE_ACTION_LOG.md) before pipeline work.
+[Agent safeguards](../AGENTS.md) and [capacity policy](PIPELINE_CAPACITY_AUDIT.md)
+remain mandatory. Current implementation: `src/domain/pipeline.ts`,
+`pipeline-worker.ts`, `pipeline-v2.ts`, `intake.ts`, `publication.ts`.
 
-CliDeck is a source-faithful technical reference, not an execution policy
-engine. A documented command, option, operational fact, diagnostic observation
-or procedure is eligible for publication. Risk, confidence, quality, rollback,
-vendor, operating system, model and version remain useful metadata and ranking
-signals; none is a publication gate. Retrieval ranks exact context first and
-then widens progressively instead of returning an empty answer.
+## Processing contract
 
-Document navigation, copyright, part inventories, physical installation,
-general safety boilerplate and marketing can be classified as
-`non_knowledge`. Technical logs, sample configurations, troubleshooting,
-commands and multi-command examples are always potential knowledge.
+CliDeck is a source-faithful technical reference. Source-backed commands,
+options, facts, diagnostics and procedures are eligible knowledge. Navigation,
+copyright, inventories, installation boilerplate and marketing may be
+`non_knowledge`; technical logs/configurations/examples remain potential evidence.
+Do not fabricate exact vendor/model/version context or suppress a documented
+command merely because it is risky.
 
-## Reliability rule: useful work must keep moving
+Optional telemetry/QA failure must not discard an otherwise processable result.
+Record degradation and continue useful work. Invalid structure, missing required
+bytes, persistence failure, broken provenance or lost lease require a scoped
+failure. Preserve schema, risk/conflict, source-binding and release controls;
+new blocking conditions need evidence and regression coverage.
 
-CliDeck is fail-open for optional quality and telemetry signals. A valid,
-processable result must continue to the next stage even when an optional
-runtime event, confidence hint, exact context field, QA response or other
-observability signal is missing. Such absence is recorded and shown to the
-operator; it does not become a rejection, retry loop, global circuit or
-publication stop.
+Pipeline 2.0 stores confidence, quality and rollback as metadata, not the old
+blanket 0.90/0.95 publication gate. See the implementation/policy distinction in
+[Architecture](ARCHITECTURE.md); do not change policy as a documentation cleanup.
 
-A hard stop is allowed only when the next operation is technically impossible
-or would corrupt state: invalid structure that cannot be parsed, unavailable
-required bytes, failed persistence, broken provenance identity or loss of the
-task lease. New blocking conditions require evidence that continuing cannot
-work, a narrowly scoped failure, and a regression test. Telemetry must never be
-used as proof that the underlying work did not happen.
+## Identity and lifecycle
 
-When uncertain, preserve the result, continue processing and let downstream
-Acquire, conversion, schema validation, deduplication and asynchronous QA
-provide evidence. The product must prefer degraded but useful operation over a
-fully idle pipeline.
-
-## Versioned source processing
-
-Sources have stable `source_kind`, `source_ref` and `display_locator` identity.
-The supported kinds are `official_web`, `admin_web`, `admin_document`,
-`pasted_text` and `field_log`. Every distinct content hash is an immutable
-artifact; it is never overwritten by a later fetch.
-
-Each processing version creates a `source_processing_runs` record binding the
-artifact to converter, segmenter, extractor, prompt and model versions.
-Fragments and candidates link to this run. Exact candidate duplicates create a
-run occurrence rather than disappearing from completeness statistics.
-
-The source-oriented flow is:
-
-1. Discover or authenticated Intake.
-2. Acquire an immutable artifact.
-3. Convert all content; PDF OCR advances in resumable page ranges without a
-   document-wide 100-page ceiling.
-4. Segment with structural page/heading context and controlled overlap.
-5. Extract commands, options, facts, workflows and diagnostics.
-6. Publish confirmed source-backed units incrementally.
-7. Audit fidelity asynchronously against a shared source window.
-8. Repair only a concrete failed unit with Deep Low; use Deep Medium only when
-   the Low repair remains ambiguous.
-9. Normalize optional context, deduplicate and retain every provenance
-   occurrence.
-
-Every fragment ends as `knowledge_extracted`, `non_knowledge`,
-`continuation_required` or `targeted_retry`. A processing run is incomplete
-while a continuation or retry is open.
+- Sources: stable `source_kind`, `source_ref`, `display_locator`; kinds are
+  `official_web`, `admin_web`, `admin_document`, `pasted_text`, `field_log`.
+- Content hashes identify immutable artifacts. Processing runs bind an artifact
+  to converter, segmenter, extractor, prompt and model versions. Fragments and
+  candidates belong to an exact run; duplicates retain run occurrences.
+- Flow: discover/authenticated intake → acquire → convert → segment → extract →
+  incremental publish → asynchronous Fidelity QA → targeted repair.
+- Conversion processes all content; worker PDF OCR resumes by page range.
+  Segmentation preserves page/heading context and bounded overlap.
+- Fragment dispositions: `knowledge_extracted`, `non_knowledge`,
+  `continuation_required`, `targeted_retry`. Open continuation/retry means the
+  run is incomplete. Terminal reconciliation must preserve fresh leased work.
 
 ## Fidelity and repair
 
-Fidelity QA checks omissions, unsupported additions, syntax damage, incorrect
-option descriptions, broken boundaries, duplicates and lost workflows. It is
-observability and targeted repair, not a gate in front of all publication.
-A QA outage records `unavailable` and does not alter knowledge state.
+QA checks omissions, unsupported additions, syntax/options, boundaries,
+duplicates and lost workflows against the shared source window. QA outage is
+`unavailable`, not a global publication stop. Checks are recorded in
+`pipeline_quality_checks`.
 
-New converter/extractor/prompt/model profiles are checked at 100%. After 1,000
-checks and a material-error rate below 1%, deterministic sampling falls to 10%.
-A material error restores 100% coverage for the next 20 batches. QA, repair and
-exclusion results are recorded in `pipeline_quality_checks`.
+New profiles receive 100% checks; after 1,000 checks with material error below
+1%, sampling is 10%. A material error restores full coverage for 20 batches.
+Deep Low repairs at most eight related records per bounded evidence batch;
+Deep Medium handles at most four unresolved Low records. Preserve partial valid
+output and retry omitted indices in smaller batches. These are context bounds,
+not executor caps: every stage may use all eight free lanes.
 
-Fidelity and Deep Repair share at most two executor lanes. Deep Low receives at
-most eight records sharing a run, error class and evidence window. Deep Medium
-receives at most four unresolved Low records. Partial valid output is retained;
-omitted indices return in smaller batches.
+## Intake and crawl
 
-## Intake, crawl and logs
+Local `super_admin` intake accepts HTTPS roots, supported documents, pasted text
+and field logs. Uploads stream into protected staging outside the JSON limit;
+MIME checks, hashes and atomic promotion precede processing. Field-log secrets
+and stable identifiers are replaced before storage, and raw staging is deleted.
 
-The local `super_admin` Intake page accepts an HTTPS documentation root, pasted
-text, supported documents and field logs. Uploads stream outside the JSON body
-limit into protected staging. Files are MIME-sniffed, hashed and atomically
-promoted. Field-log secrets and stable identifiers are replaced before the
-immutable artifact is stored; raw staging is deleted immediately.
+Website jobs use a durable frontier, prefer sitemaps, then traverse inside the
+original host/path scope. HTTPS/DNS/SSRF checks apply on every fetch/redirect.
+A URL keyword is not proof that a page contains or lacks knowledge.
 
-Website jobs use a durable page frontier, prefer sitemap data and then traverse
-breadth-first inside the original host/path prefix. DNS/SSRF and scope checks
-apply to every fetch and redirect. No URL keyword filter decides whether a page
-contains knowledge.
+## Reprocess and rollback
 
-## Reprocess and releases
+Only one global reprocess job runs at a time (state integrity, not a lane cap).
+Retained artifacts receive new processing versions; purged web sources are
+refetched, unavailable local artifacts are reported without changing knowledge.
+Duplicates become occurrences, changed facts become revisions, new facts become
+items; unmatched legacy knowledge is reported, not deleted.
 
-One global reprocess job may run at a time. Retained artifacts are processed
-under a new version; purged web sources are downloaded again and purged local
-sources are reported unavailable without changing active knowledge. Exact
-duplicates are occurrences/no-ops, matching items receive revisions, new facts
-receive new items and unmatched legacy knowledge is reported rather than
-deleted.
-
-Delta releases support both `upsert` and `deactivate`. A processing-run rollback
-is a new compensating release on top of the current head. It restores each
-previous revision or deactivates a net-new item. If the same item changed after
-the target run, the preview reports a conflict and apply refuses to overwrite
-it. Unrelated later items are untouched.
-
-## Capacity and compatibility
-
-The local pool contains `pipeline-executor-01` through `08`; enabled production
-capacity is fixed at all eight physical lanes. Discovery, extraction analysis,
-verification, Deep Review, repair, and demand work have no smaller stage cap.
-Priorities decide which task runs first, and discovery/refresh fills every lane
-left free by higher-priority useful work.
-
-Existing public MCP contracts, `/admin`, `/demo` and `/webmcp` remain backward
-compatible. First-party source locators expose safe metadata only and never the
-uploaded content.
+Delta releases support `upsert` and `deactivate`. Processing-run rollback appends
+a compensating release, restores prior revisions/deactivates net-new items,
+refuses conflicts with later changes to the same item and preserves unrelated
+later work. Public MCP, `/admin`, `/demo` and `/webmcp` remain compatible.

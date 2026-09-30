@@ -1,23 +1,9 @@
-# CliDeck WebMCP demo — English voiceover master
+# WebMCP demo voiceover master — historical
 
-## Recording target
-
-- Target spoken duration: **0:50–0:54**.
-- Recommended delivery: energetic but controlled, 145–152 words per minute.
-- Leave roughly two seconds before the first sentence and two seconds after the
-  last sentence. The final video will be fitted to the delivered audio rather
-  than forcing the audio to individual clicks.
-- Read the script as one continuous product story. Do not add phrases such as
-  “on screen,” “right now,” “click,” “here,” or “as you can see.”
-
-Pronunciation guide:
-
-- CliDeck: “Cli Deck”
-- WebMCP: “Web M C P”
-- IOS XE: “I O S X E”
-- C9300: “C ninety-three hundred”
-
-## Voiceover text
+Published video: [YouTube](https://youtu.be/O5nXMNo9o20). Retained as a reusable
+creative asset, not instructions for agent startup. Target 50–54 seconds at
+145–152 words/minute, with two-second head/tail room. Pronounce CliDeck “Cli Deck”,
+WebMCP “Web M C P”, IOS XE “I O S X E”, C9300 “C ninety-three hundred”.
 
 An answer can look right. In network operations, the wrong version is the
 wrong answer.
@@ -41,8 +27,5 @@ inspectable, current, and grounded in sources.
 
 That is CliDeck MCP.
 
-## TTS handoff
-
-Return a lossless WAV file if the service supports it; 48 kHz, mono or stereo,
-24-bit is preferred. Do not add music, compression, reverb, or hard limiting.
-Those belong in the final video mix.
+For a new recording: continuous delivery without click/scene references;
+prefer 48 kHz lossless WAV, no music/reverb/limiting in the voice master.
