@@ -54,6 +54,7 @@ const LabPage = lazy(() => import('./pages/lab').then((module) => ({ default: mo
 const McpRequestsPage = lazy(() => import('./pages/mcp-requests').then((module) => ({ default: module.McpRequestsPage })))
 const OverviewPage = lazy(() => import('./pages/overview').then((module) => ({ default: module.OverviewPage })))
 const PipelinePage = lazy(() => import('./pages/pipeline').then((module) => ({ default: module.PipelinePage })))
+const ModelsPage = lazy(() => import('./pages/models').then((module) => ({ default: module.ModelsPage })))
 const ProvenancePage = lazy(() => import('./pages/provenance').then((module) => ({ default: module.ProvenancePage })))
 const QualityPage = lazy(() => import('./pages/quality').then((module) => ({ default: module.QualityPage })))
 const ReleasesPage = lazy(() => import('./pages/releases').then((module) => ({ default: module.ReleasesPage })))
@@ -260,6 +261,7 @@ export const OPERATIONS_PAGE_REGISTRY: Record<
   overview: (overview) => <OverviewPage overview={overview} />,
   'mcp-requests': () => <McpRequestsPage />,
   pipeline: (overview) => <PipelinePage overview={overview} />,
+  models: () => <ModelsPage />,
   'active-source': () => <ActiveSourcePage />,
   'agent-runs': (overview) => <AgentRunsPage overview={overview} />,
   coverage: () => <CoveragePage />,

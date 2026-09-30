@@ -6358,13 +6358,14 @@ describeIntegration('PostgreSQL integration', () => {
   it('isolates a repeated Deep Medium platform failure from other Luna work', async () => {
     const suffix = randomUUID().replaceAll('-', '').slice(0, 12)
     const fingerprint = `sha256:${'d'.repeat(64)}`
+    await database.query("UPDATE pipeline_execution_profiles SET fallback_model = NULL, fallback_reasoning_effort = NULL WHERE profile_id = 'luna_high'")
     await database.query(
       `UPDATE pipeline_tasks
           SET status = 'cancelled',
               completed_at = now(),
               updated_at = now()
         WHERE status IN ('queued', 'claimed', 'running');
-       DELETE FROM pipeline_ai_circuits;
+       DELETE FROM pipeline_model_circuits;
        UPDATE pipeline_settings
           SET enabled = true,
               max_concurrent_ai_runs = 1,
@@ -6395,7 +6396,7 @@ describeIntegration('PostgreSQL integration', () => {
       [suffix],
     )
 
-    for (let index = 0; index < 4; index += 1) {
+    for (let index = 0; index < 2; index += 1) {
       const claim = await claimPipelineTask(
         database,
         config,
@@ -6411,8 +6412,8 @@ describeIntegration('PostgreSQL integration', () => {
         output_tokens: 0,
         reasoning_output_tokens: 0,
         duration_ms: 1,
-        error_code: 'CODEX_MODEL_UNAVAILABLE',
-        diagnostic_code: 'CODEX_MODEL_UNAVAILABLE',
+        error_code: 'CODEX_RATE_LIMITED',
+        diagnostic_code: 'CODEX_RATE_LIMITED',
         diagnostic_fingerprint: fingerprint,
       })
       await database.query(
@@ -6430,7 +6431,7 @@ describeIntegration('PostgreSQL integration', () => {
       reasoning_effort: string
     }>(
       `SELECT task_type, reasoning_effort
-       FROM pipeline_ai_circuits
+       FROM pipeline_model_circuits
        WHERE task_type = 'candidate_deep_review'
          AND reasoning_effort = 'medium'
          AND open_until > now()`,
@@ -6486,7 +6487,8 @@ describeIntegration('PostgreSQL integration', () => {
         WHERE id = $1`,
       [String(usefulClaim['pipeline_task_id'])],
     )
-    await database.query('DELETE FROM pipeline_ai_circuits')
+    await database.query('DELETE FROM pipeline_model_circuits')
+    await database.query("UPDATE pipeline_execution_profiles SET fallback_model = 'gpt-5.6-terra', fallback_reasoning_effort = 'medium' WHERE profile_id = 'luna_high'")
   })
 
   it('keeps repeated Medium platform failures on Medium review', async () => {
@@ -6498,7 +6500,7 @@ describeIntegration('PostgreSQL integration', () => {
               completed_at = now(),
               updated_at = now()
         WHERE status IN ('queued', 'claimed', 'running');
-       DELETE FROM pipeline_ai_circuits;
+       DELETE FROM pipeline_model_circuits;
        UPDATE pipeline_settings
           SET enabled = true,
               max_concurrent_ai_runs = 2,
@@ -6748,7 +6750,7 @@ describeIntegration('PostgreSQL integration', () => {
               completed_at = now(),
               updated_at = now()
         WHERE status IN ('queued', 'claimed', 'running');
-       DELETE FROM pipeline_ai_circuits;`,
+       DELETE FROM pipeline_model_circuits;`,
     )
     await database.query(
       `INSERT INTO pipeline_tasks (
@@ -6778,7 +6780,8 @@ describeIntegration('PostgreSQL integration', () => {
       [suffix],
     )
     await database.query(
-      `INSERT INTO pipeline_ai_circuits (
+      `INSERT INTO pipeline_model_circuits (
+         execution_profile, model,
          task_type,
          reasoning_effort,
          diagnostic_fingerprint,
@@ -6786,6 +6789,7 @@ describeIntegration('PostgreSQL integration', () => {
          probe_executor_id
        )
        VALUES (
+         'luna_high', 'gpt-5.6-luna',
          'candidate_deep_review',
          'medium',
          $1,
@@ -6794,6 +6798,10 @@ describeIntegration('PostgreSQL integration', () => {
        )`,
       [fingerprint],
     )
+    await database.query(`INSERT INTO agent_runs (
+      pipeline_task_id, executor_id, model, reasoning_effort, execution_profile, status
+    ) SELECT id, 'pipeline-executor-01', 'gpt-5.6-luna', 'medium', 'luna_high', 'running'
+      FROM pipeline_tasks WHERE dedupe_key = 'overview-circuit-probe-' || $1`, [suffix])
     await database.query(
       `INSERT INTO worker_heartbeats (
          worker_name,
@@ -6843,6 +6851,8 @@ describeIntegration('PostgreSQL integration', () => {
     )?.status_reason).toBe('circuit_cooldown')
     expect(JSON.stringify(overview)).not.toContain(fingerprint)
 
+    await database.query(`UPDATE agent_runs SET status = 'cancelled', completed_at = now()
+      WHERE pipeline_task_id IN (SELECT id FROM pipeline_tasks WHERE dedupe_key = 'overview-circuit-probe-' || $1)`, [suffix])
     await database.query(
       `UPDATE pipeline_tasks
           SET status = 'cancelled',
@@ -6852,7 +6862,7 @@ describeIntegration('PostgreSQL integration', () => {
       `,
       [suffix],
     )
-    await database.query('DELETE FROM pipeline_ai_circuits')
+    await database.query('DELETE FROM pipeline_model_circuits')
   })
 
   it('routes one marked Medium attempt through Terra while Luna cools down', async () => {
@@ -6864,7 +6874,7 @@ describeIntegration('PostgreSQL integration', () => {
               updated_at = now()
         WHERE status IN ('queued', 'claimed', 'running');
        DELETE FROM active_source_slots;
-       DELETE FROM pipeline_ai_circuits;
+       DELETE FROM pipeline_model_circuits;
        UPDATE source_candidates
           SET status = 'completed',
               updated_at = now()
@@ -6907,13 +6917,15 @@ describeIntegration('PostgreSQL integration', () => {
       [suffix],
     )
     await database.query(
-      `INSERT INTO pipeline_ai_circuits (
+      `INSERT INTO pipeline_model_circuits (
+         execution_profile, model,
          task_type,
          reasoning_effort,
          diagnostic_fingerprint,
          open_until
        )
        VALUES (
+         'luna_high', 'gpt-5.6-luna',
          'candidate_deep_review',
          'medium',
          'sha256:' || repeat('f', 64),
@@ -6947,10 +6959,10 @@ describeIntegration('PostgreSQL integration', () => {
       error_code: 'TERRA_FALLBACK_FAILED'
     })
     const stillOpen = await database.query<{ count: number }>(
-      `SELECT count(*)::int AS count FROM pipeline_ai_circuits`,
+      `SELECT count(*)::int AS count FROM pipeline_model_circuits`,
     )
     expect(stillOpen.rows[0]?.count).toBe(1)
-    await database.query('DELETE FROM pipeline_ai_circuits')
+    await database.query('DELETE FROM pipeline_model_circuits')
   })
 
   it('reclaims an expired circuit probe after its executor disappears', async () => {
@@ -6962,7 +6974,7 @@ describeIntegration('PostgreSQL integration', () => {
               completed_at = now(),
               updated_at = now()
         WHERE status IN ('queued', 'claimed', 'running');
-       DELETE FROM pipeline_ai_circuits;
+       DELETE FROM pipeline_model_circuits;
        UPDATE pipeline_settings
           SET enabled = true,
               max_concurrent_ai_runs = 1,
@@ -6993,7 +7005,8 @@ describeIntegration('PostgreSQL integration', () => {
       [suffix],
     )
     await database.query(
-      `INSERT INTO pipeline_ai_circuits (
+      `INSERT INTO pipeline_model_circuits (
+         execution_profile, model,
          task_type,
          reasoning_effort,
          diagnostic_fingerprint,
@@ -7001,6 +7014,7 @@ describeIntegration('PostgreSQL integration', () => {
          probe_executor_id
        )
        VALUES (
+         'luna_high', 'gpt-5.6-luna',
          'candidate_deep_review',
          'medium',
          $1,
@@ -7024,7 +7038,7 @@ describeIntegration('PostgreSQL integration', () => {
       probe_executor_id: string | null
     }>(
       `SELECT probe_executor_id
-       FROM pipeline_ai_circuits
+       FROM pipeline_model_circuits
        WHERE task_type = 'candidate_deep_review'
          AND reasoning_effort = 'medium'`,
     )
@@ -7041,7 +7055,7 @@ describeIntegration('PostgreSQL integration', () => {
     })
     const closedCircuit = await database.query<{ count: number }>(
       `SELECT count(*)::int AS count
-       FROM pipeline_ai_circuits
+       FROM pipeline_model_circuits
        WHERE task_type = 'candidate_deep_review'
          AND reasoning_effort = 'medium'`,
     )
@@ -7065,7 +7079,7 @@ describeIntegration('PostgreSQL integration', () => {
               updated_at = now()
         WHERE status IN ('queued', 'claimed', 'running');
        DELETE FROM active_source_slots;
-       DELETE FROM pipeline_ai_circuits;
+       DELETE FROM pipeline_model_circuits;
        UPDATE pipeline_settings
           SET enabled = true,
               max_concurrent_ai_runs = 4,
@@ -7208,7 +7222,7 @@ describeIntegration('PostgreSQL integration', () => {
               updated_at = now()
         WHERE status IN ('queued', 'claimed', 'running');
        DELETE FROM active_source_slots;
-       DELETE FROM pipeline_ai_circuits;
+       DELETE FROM pipeline_model_circuits;
        UPDATE pipeline_settings
           SET enabled = true,
               max_concurrent_ai_runs = 4,

@@ -53,7 +53,7 @@ export function AgentRunsPage({ overview }: { overview: Overview }) {
         <Chart option={option} height={300} />
       </Panel>
       <Panel
-        title="Luna run ledger"
+        title="Agent run ledger"
         icon={Bot}
         help="Every ephemeral AI execution with its exact model, reasoning level, token use, duration and result."
         action={
@@ -65,7 +65,7 @@ export function AgentRunsPage({ overview }: { overview: Overview }) {
           </label>
         }
       >
-        <DataTable rows={rows} columns={RUN_COLUMNS} rowKey={(row) => row.id} empty="No Luna runs match this filter." />
+        <DataTable rows={rows} columns={RUN_COLUMNS} rowKey={(row) => row.id} empty="No agent runs match this filter." />
       </Panel>
     </div>
   )
@@ -74,7 +74,7 @@ export function AgentRunsPage({ overview }: { overview: Overview }) {
 const RUN_COLUMNS: Array<TableColumn<AgentRun>> = [
   { key: 'work', label: 'Run', render: (row) => <div className="primary-cell"><strong>{titleCase(row.task_type ?? row.stage)}</strong><span>{formatDate(row.started_at)}</span></div> },
   { key: 'status', label: 'Status', render: (row) => <Status>{titleCase(row.status)}</Status> },
-  { key: 'model', label: 'Model', render: (row) => <span className="model-pill">{row.model} · {row.reasoning_effort}</span> },
+  { key: 'model', label: 'Model', render: (row) => <div className="primary-cell"><span className="model-pill">{row.model} · {row.reasoning_effort}</span><span>{row.execution_profile === 'luna_high' ? 'Luna High' : row.execution_profile === 'luna' ? 'Luna' : 'Legacy run'} · settings {row.settings_version}{row.fallback_from_model && ` · fallback from ${row.fallback_from_model}`}</span></div> },
   { key: 'tokens', label: 'Tokens', render: (row) => compactNumber(row.total_tokens) },
   { key: 'output', label: 'Published', render: (row) => formatNumber(row.published_revisions, 0) },
   { key: 'efficiency', label: 'Tokens / revision', render: (row) => row.tokens_per_revision === null ? '—' : compactNumber(row.tokens_per_revision) },

@@ -2,11 +2,11 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { access } from 'node:fs/promises'
 import { resolve } from 'node:path'
+import { discoverCodexModels } from './codex-model-catalog.js'
+import { callPipelineBridge } from './pipeline-bridge.js'
 
 import {
   pipelineExecutorIds,
-  pipelineModel,
-  pipelineReasoning,
   type PipelineExecutorId
 } from './pipeline-runtime.js'
 
@@ -19,6 +19,7 @@ const secretEnvPath = resolve(
 const poolInstanceId = randomUUID().replaceAll('-', '')
 const children = new Map<string, ChildProcess>()
 let stopping = false
+let runtimeUsable = false
 
 await access(secretEnvPath)
 
@@ -32,13 +33,11 @@ function coordinatorArguments(): string[] {
 }
 
 function spawnExecutor(executorId: PipelineExecutorId): void {
-  if (stopping) return
+  if (stopping || !runtimeUsable || children.has(executorId)) return
   const child = spawn(process.execPath, coordinatorArguments(), {
     cwd: projectRoot,
     env: {
       ...process.env,
-      CLIDECK_PIPELINE_MODEL: pipelineModel,
-      CLIDECK_PIPELINE_REASONING: pipelineReasoning,
       CLIDECK_PIPELINE_EXECUTOR_ID: executorId,
       CLIDECK_RESEARCHER_ID: executorId,
       CLIDECK_RESEARCHER_INSTANCE_ID:
@@ -85,7 +84,30 @@ async function stopPool(): Promise<void> {
   }
 }
 
+let refreshing = false
+let lastCatalogRefresh = 0
+async function refreshCatalog(): Promise<void> {
+  if (refreshing || stopping) return
+  refreshing = true
+  try {
+    const control = await callPipelineBridge(process.env, 'get_pipeline_runtime_settings', {})
+    const requested = typeof control['refresh_requested_at'] === 'string' ? Date.parse(control['refresh_requested_at']) : 0
+    if (Date.now() - lastCatalogRefresh < 5 * 60_000 && requested <= lastCatalogRefresh) return
+    const report = await discoverCodexModels(process.env['CLIDECK_PIPELINE_CODEX_BINARY'] ?? 'codex', process.env)
+    await callPipelineBridge(process.env, 'publish_pipeline_model_catalog', report)
+    lastCatalogRefresh = Date.now()
+    runtimeUsable = report.error !== 'CODEX_BINARY_UNAVAILABLE' && report.error !== 'CODEX_INCOMPATIBLE'
+    if (runtimeUsable) for (const executorId of pipelineExecutorIds) spawnExecutor(executorId)
+    if (report.error) process.stderr.write(`${new Date().toISOString()} ${report.error}\n`)
+  } catch {
+    process.stderr.write(`${new Date().toISOString()} PIPELINE_CATALOG_REPORT_FAILED\n`)
+  } finally { refreshing = false }
+}
+await refreshCatalog()
+const catalogTimer = setInterval(() => void refreshCatalog(), 30_000)
 for (const executorId of pipelineExecutorIds) spawnExecutor(executorId)
+process.once('SIGTERM', () => clearInterval(catalogTimer))
+process.once('SIGINT', () => clearInterval(catalogTimer))
 
 await new Promise<void>((resolvePromise) => {
   const finish = () => {

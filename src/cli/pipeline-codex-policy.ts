@@ -1,4 +1,5 @@
 import type { PipelineTaskRow } from '../domain/pipeline.js'
+import { executionModelSchema, executionReasoningSchema } from '@clideck/admin-contracts'
 
 type PipelineTaskType = PipelineTaskRow['task_type']
 
@@ -38,27 +39,8 @@ export function assertPipelineAiPolicy(input: {
   model: string
   reasoning: string
 }): void {
-  const fallbackEligible =
-    input.model === 'gpt-5.6-terra' &&
-    input.reasoning === 'medium' &&
-    ['candidate_deep_review', 'demand_diagnosis'].includes(input.taskType)
-  if (input.model !== 'gpt-5.6-luna' && !fallbackEligible) {
-    throw new Error('PIPELINE_LUNA_MODEL_REQUIRED')
-  }
-  if (
-    input.reasoning !== 'low' &&
-    !(
-      (
-        input.taskType === 'candidate_deep_review' &&
-        input.reasoning === 'medium'
-      ) || (
-        input.taskType === 'demand_diagnosis' &&
-        input.reasoning === 'medium'
-      )
-    )
-  ) {
-    throw new Error('PIPELINE_REASONING_POLICY_REJECTED')
-  }
+  executionModelSchema.parse(input.model)
+  executionReasoningSchema.parse(input.reasoning)
 }
 
 export function codexExecutorArguments(input: {
@@ -97,6 +79,8 @@ export function codexExecutorArguments(input: {
         ]),
     '-m',
     input.model,
+    '-c',
+    'model_provider="openai"',
     '-c',
     `model_reasoning_effort="${input.reasoning}"`,
     '-c',

@@ -1,3 +1,4 @@
+import { executionModelSchema, executionReasoningSchema, executionProtocolVersion } from '@clideck/admin-contracts'
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import {
@@ -53,11 +54,7 @@ import {
 } from './pipeline-codex-policy.js'
 
 const environmentSchema = z.object({
-  CLIDECK_PIPELINE_MODEL: z.literal(pipelineModel)
-    .default(pipelineModel),
   CLIDECK_PIPELINE_CODEX_BINARY: z.string().min(1).default('codex'),
-  CLIDECK_PIPELINE_REASONING: z.literal(pipelineReasoning)
-    .default(pipelineReasoning),
   CLIDECK_PIPELINE_EXECUTOR_ID: z.enum(pipelineExecutorIds)
     .default(pipelineExecutorIds[0]),
   CLIDECK_RESEARCHER_URL: z.string().url(),
@@ -86,9 +83,11 @@ const claimedTaskSchema = z.object({
     'source_refresh'
   ]),
   stage: z.string(),
-  requested_reasoning_effort: z.enum(['low', 'medium']).default('low'),
-  requested_model: z.enum([pipelineModel, pipelineFallbackModel])
-    .default(pipelineModel),
+  requested_reasoning_effort: executionReasoningSchema,
+  requested_model: executionModelSchema,
+  execution_profile: z.enum(['luna', 'luna_high']),
+  settings_version: z.number().int(),
+  fallback_from_model: z.string().nullable(),
   payload: z.record(z.string(), z.unknown())
 })
 
@@ -210,7 +209,7 @@ async function runClient(
 ): Promise<Record<string, unknown>> {
   await mkdir(secretDirectory, { recursive: true, mode: 0o700 })
   if (action === 'claim') {
-    const result = await callResearcherTool('claim_pipeline_task', {})
+    const result = await callResearcherTool('claim_pipeline_task', { runtime_protocol_version: executionProtocolVersion })
     if (!result['pipeline_task_id']) {
       await cleanupLease()
       return result
@@ -233,10 +232,10 @@ async function runClient(
       lease_until: result['lease_until'],
       requested_reasoning_effort:
         normalizeTaskReasoning(result['requested_reasoning_effort']),
-      requested_model:
-        result['requested_model'] === pipelineFallbackModel
-          ? pipelineFallbackModel
-          : pipelineModel,
+      requested_model: executionModelSchema.parse(result['requested_model']),
+      execution_profile: result['execution_profile'],
+      settings_version: result['settings_version'],
+      fallback_from_model: result['fallback_from_model'],
       payload
     }
     await Promise.all([
@@ -639,12 +638,6 @@ async function runCodex(
   diagnosticCode?: string
   diagnosticFingerprint?: string
 }> {
-  if (
-    task.requested_reasoning_effort === 'medium' &&
-    !['candidate_deep_review', 'demand_diagnosis'].includes(task.task_type)
-  ) {
-    throw new Error('PIPELINE_MEDIUM_REASONING_NOT_ALLOWED')
-  }
   const startedAt = Date.now()
   await writeFile(
     agentOutputSchemaPath,
@@ -1112,8 +1105,8 @@ async function main(): Promise<void> {
       }
       const status = await runClient('status')
       const artifactRecorded = status['artifact_recorded'] === true
-      const processFailureCode = task.requested_model === pipelineFallbackModel
-        ? 'TERRA_FALLBACK_FAILED'
+      const processFailureCode = Boolean(task.fallback_from_model)
+        ? 'MODEL_FALLBACK_FAILED'
         : run.diagnosticCode ?? 'CODEX_PROCESS_FAILED'
       if (!artifactRecorded) {
         const failureCode = run.timedOut
@@ -1182,8 +1175,8 @@ async function main(): Promise<void> {
       const failureCode = launchFailed
         ? 'AGENT_LAUNCH_FAILED'
         : retryablePlatformArtifact
-          ? task.requested_model === pipelineFallbackModel
-            ? 'TERRA_FALLBACK_FAILED'
+          ? Boolean(task.fallback_from_model)
+            ? 'MODEL_FALLBACK_FAILED'
             : 'CODEX_PROCESS_FAILED'
           : artifactRejected
           ? 'AGENT_ARTIFACT_REJECTED'

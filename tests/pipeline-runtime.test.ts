@@ -106,7 +106,7 @@ describe('parallel Luna runtime', () => {
       .toBe('--disable')
   })
 
-  it('allows medium reasoning only for deep review and demand diagnosis', () => {
+  it('preserves selected reasoning independently of task routing', () => {
     const common = {
       model: pipelineModel,
       reasoning: 'medium',
@@ -114,10 +114,7 @@ describe('parallel Luna runtime', () => {
       outputSchemaPath: '/tmp/schema.json',
       workingDirectory: '/tmp/lane'
     }
-    expect(() => codexExecutorArguments({
-      ...common,
-      taskType: 'fragment_analysis'
-    })).toThrow('PIPELINE_REASONING_POLICY_REJECTED')
+    expect(codexExecutorArguments({ ...common, taskType: 'fragment_analysis' })).toContain('model_reasoning_effort="medium"')
     const deepReview = codexExecutorArguments({
       ...common,
       taskType: 'candidate_deep_review'
@@ -136,7 +133,7 @@ describe('parallel Luna runtime', () => {
     ).toBe('--disable')
   })
 
-  it('allows Terra only as a medium fallback for bounded work types', () => {
+  it('allows selected models while retaining task-specific tool isolation', () => {
     const common = {
       model: pipelineFallbackModel,
       reasoning: 'medium',
@@ -157,8 +154,7 @@ describe('parallel Luna runtime', () => {
       'fragment_analysis',
       'candidate_verification'
     ] as const) {
-      expect(() => codexExecutorArguments({ ...common, taskType }))
-        .toThrow('PIPELINE_LUNA_MODEL_REQUIRED')
+      expect(codexExecutorArguments({ ...common, taskType })).toContain(pipelineFallbackModel)
     }
   })
 
@@ -189,6 +185,6 @@ describe('pipeline task reasoning', () => {
     expect(normalizeTaskReasoning('medium')).toBe('medium')
     expect(normalizeTaskReasoning('low')).toBe('low')
     expect(normalizeTaskReasoning(undefined)).toBe('low')
-    expect(normalizeTaskReasoning('high')).toBe('low')
+    expect(normalizeTaskReasoning('high')).toBe('high')
   })
 })

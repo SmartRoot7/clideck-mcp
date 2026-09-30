@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+export * from './execution.js'
+
 export const scalarNumberSchema = z.union([z.number(), z.string()])
 export const nullableScalarNumberSchema = scalarNumberSchema.nullable()
 export const nullableStringSchema = z.string().nullable()
@@ -33,7 +35,7 @@ export const processSchema = z.object({
 export const pipelineExecutorSchema = z.object({
   executor_id: z.string(),
   instance_id: nullableStringSchema,
-  state: z.enum(['running', 'standby', 'paused', 'stale']),
+  state: z.enum(['running', 'standby', 'paused', 'stale', 'disabled', 'draining']),
   healthy: z.boolean(),
   stage: nullableStringSchema,
   task_id: nullableStringSchema,
@@ -48,7 +50,8 @@ export const pipelineExecutorSchema = z.object({
 
 export const aiCircuitSchema = z.object({
   task_type: z.string(),
-  reasoning_effort: z.enum(['low', 'medium']),
+  reasoning_effort: z.string(),
+  model: nullableStringSchema.optional().default(null),
   state: z.enum(['cooldown', 'probing']),
   next_retry_at: timestampSchema,
   probe_executor_id: nullableStringSchema,
@@ -615,6 +618,9 @@ export const agentRunSchema = z.object({
   task_type: nullableStringSchema,
   stage: nullableStringSchema,
   model: z.string(),
+  execution_profile: nullableStringSchema.optional().default(null),
+  settings_version: scalarNumberSchema.optional().default(0),
+  fallback_from_model: nullableStringSchema.optional().default(null),
   reasoning_effort: z.string(),
   status: z.string(),
   input_tokens: scalarNumberSchema,

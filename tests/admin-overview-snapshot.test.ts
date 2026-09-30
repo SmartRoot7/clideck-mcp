@@ -34,6 +34,8 @@ describeIntegration('admin runtime snapshot', () => {
     const suffix = randomUUID().replaceAll('-', '').slice(0, 12)
     try {
       await client.query('BEGIN')
+      await client.query('UPDATE pipeline_settings SET max_concurrent_ai_runs = 8 WHERE singleton')
+      await client.query("DELETE FROM worker_heartbeats WHERE worker_name = 'pipeline-executor-08'")
       const before = await getAdminOverview(
         client as unknown as Database,
         'snapshot-before',

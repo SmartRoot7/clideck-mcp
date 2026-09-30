@@ -27,7 +27,7 @@ Local admin is the primary operations console; see
 Only pipeline state mutation:
 `POST /api/admin/mcp/pipeline/state` → `POST /admin/v1/pipeline/state`,
 body `{ enabled: boolean, reason?: string }`.
-Display Pause/Resume, fixed eight-lane capacity, current/queued work and executor
+Display Pause/Resume, selected 1–8 capacity, current/queued work and executor
 heartbeats. Pause stops AI within ten seconds; a running mechanical step may
 finish. Safe Overview fields:
 

@@ -23,8 +23,8 @@ Only a clean `main` commit is deployable. Keep local/remote `main` synchronized.
 The script owns preflight typecheck, disposable PostgreSQL migrations/seed/grants,
 all integration tests, 250-case eval, build, remote Linux build, backup,
 reconciliation, stats priming, atomic switch, services, smokes and rollback.
-It preserves Pause/Resume, keeps capacity fixed at eight, and reloads a previously
-running local Luna pool so executors use the deployed coordinator code.
+It preserves Pause/Resume, selected capacity and model profiles, and reloads a
+previously running local pool so executors use the deployed coordinator code.
 Do not replace it with manual SSH/SCP, migrations, grants, symlinks or restarts.
 
 Local deployment credentials: `.secrets/clideck-mcp-server.env`, host

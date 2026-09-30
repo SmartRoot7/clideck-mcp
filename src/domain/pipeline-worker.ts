@@ -1324,7 +1324,7 @@ async function acquireSource(
          ) VALUES (
            $1, $2, $3, 'pipeline-v2-convert-1', 'pipeline-v2-segment-1',
            'pipeline-v2-extract-1', 'pipeline-v2-fidelity-1',
-           'gpt-5.6-luna-low', 'converting', now()
+           'pinned-agent-runs-v2', 'converting', now()
          )
          ON CONFLICT (source_candidate_id, processing_version)
          DO UPDATE SET source_artifact_id = excluded.source_artifact_id,

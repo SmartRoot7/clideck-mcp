@@ -78,23 +78,26 @@ async function replaceLaunchAgent(
   path: string,
   serviceLabel: string,
 ): Promise<void> {
-  await execFileAsync('launchctl', ['bootout', domain, path])
+  await execFileAsync('/bin/zsh', ['-lc', 'launchctl unload -w "$1"', 'zsh', path])
+    .catch(() => execFileAsync('launchctl', ['bootout', domain, path]))
     .catch(() => undefined)
   await execFileAsync('launchctl', [
     'enable',
     `${domain}/${serviceLabel}`
   ])
-  await execFileAsync('launchctl', ['bootstrap', domain, path])
-  await execFileAsync('launchctl', [
-    'kickstart',
-    '-k',
-    `${domain}/${serviceLabel}`
-  ])
+  // Use the same Aqua-session entrypoint as control-pipeline-launchd; direct
+  // bootstrap has intermittently returned EIO on the executor host.
+  await execFileAsync('/bin/zsh', ['-lc', 'launchctl load -w "$1"', 'zsh', path])
+  for (let attempt = 0; attempt < 20; attempt++) {
+    try {
+      await execFileAsync('launchctl', ['print', `${domain}/${serviceLabel}`])
+      return
+    } catch { await new Promise((done) => setTimeout(done, 250)) }
+  }
+  throw new Error(`Launch agent not registered: ${serviceLabel}`)
 }
 
 const legacyTunnelLabel = 'com.clideck.mcp.tunnel'
-const pnpm = (await execFileAsync('/usr/bin/which', ['pnpm'])).stdout.trim()
-if (!pnpm.startsWith('/')) throw new Error('PNPM_BINARY_NOT_FOUND')
 await access(secretEnvPath)
 await mkdir(launchAgentsDirectory, { recursive: true, mode: 0o755 })
 await mkdir(dirname(errorLog), { recursive: true, mode: 0o750 })
@@ -147,13 +150,6 @@ await access(sshIdentity)
 const knownHostsPath = resolve(homedir(), '.ssh', 'known_hosts')
 await access(knownHostsPath)
 
-const command = [
-  'exec',
-  `'${pnpm.replaceAll("'", "'\\''")}'`,
-  '--dir',
-  `'${projectRoot.replaceAll("'", "'\\''")}'`,
-  'pipeline:pool'
-].join(' ')
 const plist = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
   "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -163,9 +159,11 @@ const plist = `<?xml version="1.0" encoding="UTF-8"?>
   <string>${label}</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/bin/zsh</string>
-    <string>-lc</string>
-    <string>${xml(command)}</string>
+    <string>${xml(process.execPath)}</string>
+    <string>--env-file=${xml(secretEnvPath)}</string>
+    <string>--import</string>
+    <string>tsx</string>
+    <string>src/cli/pipeline-pool.ts</string>
   </array>
   <key>WorkingDirectory</key>
   <string>${xml(projectRoot)}</string>

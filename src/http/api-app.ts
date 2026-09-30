@@ -28,6 +28,11 @@ import {
   reviewExceptionsSchema,
   sourcesSchema
 } from '@clideck/admin-contracts'
+import { executionSettingsInputSchema, executionModelsSchema, executionSettingsSchema, executionModelRetrySchema } from '@clideck/admin-contracts'
+import {
+  getExecutionSettings, getExecutionModels, setExecutionSettings,
+  refreshModelPricing, requestModelRefresh, retryConfiguredModel
+} from '../domain/pipeline-execution.js'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { Hono, type Context } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
@@ -534,6 +539,16 @@ export function createApiApp(dependencies: ApiDependencies) {
       await getPipelineDetails(adminDatabase),
     ))),
   )
+  app.get('/public/v1/demo/pipeline/settings', async (context) =>
+    context.json(await getExecutionSettings(adminDatabase)),
+  )
+  app.get('/public/v1/demo/pipeline/models', async (context) => {
+    const result = parseHttpContract(executionModelsSchema, await getExecutionModels(adminDatabase))
+    return context.json({
+      catalog: { ...result.catalog, cli_version: 'Codex', error: null },
+      pricing: result.pricing, metrics: result.metrics, circuits: []
+    })
+  })
 
   app.get('/public/v1/demo/active-source', async (context) =>
     context.json(sanitizeDemoActiveSource(parseHttpContract(
@@ -1176,6 +1191,48 @@ export function createApiApp(dependencies: ApiDependencies) {
       actor,
       parsed.data.reason ?? null,
     ))
+  })
+
+  app.get('/admin/v1/pipeline/settings', async (context) =>
+    context.json(await getExecutionSettings(adminDatabase)),
+  )
+  app.get('/admin/v1/pipeline/models', async (context) => {
+    void refreshModelPricing(adminDatabase).catch(() => undefined)
+    return context.json(await getExecutionModels(adminDatabase))
+  })
+  app.post('/admin/v1/pipeline/models/refresh', async (context) => {
+    const actor = context.get('adminActor')
+    if (actor.role !== 'super_admin') return context.json({ error: 'forbidden' }, 403)
+    await requestModelRefresh(adminDatabase)
+    await recordAdminAudit(adminDatabase, actor, 'pipeline.models_refresh', 'pipeline', null)
+    return context.json({ ok: true })
+  })
+  app.post('/admin/v1/pipeline/models/retry', async (context) => {
+    const actor = context.get('adminActor')
+    if (actor.role !== 'super_admin') return context.json({ error: 'forbidden' }, 403)
+    const parsed = executionModelRetrySchema.safeParse(await context.req.json<unknown>())
+    if (!parsed.success) return context.json({ error: 'invalid_model_retry' }, 400)
+    try { return context.json(await retryConfiguredModel(adminDatabase, parsed.data, actor)) }
+    catch (error) {
+      if (error instanceof Error && error.message === 'EXECUTION_MODEL_UNSUPPORTED') return context.json({ error: error.message }, 400)
+      throw error
+    }
+  })
+  app.post('/admin/v1/pipeline/settings', async (context) => {
+    const actor = context.get('adminActor')
+    if (actor.role !== 'super_admin') return context.json({ error: 'forbidden' }, 403)
+    const parsed = executionSettingsInputSchema.safeParse(await context.req.json<unknown>())
+    if (!parsed.success) return context.json({ error: 'invalid_execution_settings' }, 400)
+    try {
+      return context.json(await setExecutionSettings(adminDatabase, parsed.data, actor))
+    } catch (error) {
+      const message = error instanceof Error ? error.message : ''
+      if (message === 'EXECUTION_SETTINGS_CONFLICT') return context.json({ error: message }, 409)
+      if (['EXECUTION_CATALOG_STALE', 'CODEX_INCOMPATIBLE', 'EXECUTION_MODEL_UNSUPPORTED'].includes(message)) {
+        return context.json({ error: message }, 400)
+      }
+      throw error
+    }
   })
 
   app.post('/admin/v1/coverage/:targetId/priority', async (context) => {

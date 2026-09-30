@@ -1,3 +1,4 @@
+import { executionModelSchema, executionReasoningSchema, executionProtocolVersion } from '@clideck/admin-contracts'
 import {
   mkdir,
   readFile,
@@ -130,7 +131,7 @@ async function run(): Promise<void> {
 
   switch (action) {
     case 'claim': {
-      const result = await callTool('claim_pipeline_task', {})
+      const result = await callTool('claim_pipeline_task', { runtime_protocol_version: executionProtocolVersion })
       if (!result['pipeline_task_id']) {
         await cleanup()
         process.stdout.write(`${JSON.stringify(result)}\n`)
@@ -158,10 +159,10 @@ async function run(): Promise<void> {
         lease_until: result['lease_until'],
         requested_reasoning_effort:
           normalizeTaskReasoning(result['requested_reasoning_effort']),
-        requested_model:
-          result['requested_model'] === pipelineFallbackModel
-            ? pipelineFallbackModel
-            : pipelineModel,
+        requested_model: executionModelSchema.parse(result['requested_model']),
+      execution_profile: result['execution_profile'],
+      settings_version: result['settings_version'],
+      fallback_from_model: result['fallback_from_model'],
         payload
       }
       await writeFile(leasePath, JSON.stringify(lease), {

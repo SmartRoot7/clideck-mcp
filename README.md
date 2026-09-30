@@ -22,7 +22,8 @@ CliDeck provides guidance and never connects to devices or executes commands.
 - **Domain Packs:** subject-specific schemas and deterministic validation over
   the shared revision/release core. Engineering Measurements demonstrates exact
   decimal values, units and tolerances outside networking.
-- **Continuous research:** eight isolated executors; downloads, conversion,
+- **Continuous research:** 1–8 enabled isolated executors, independent Luna/High
+  models and official price comparison in `/admin/models`; downloads, conversion,
   OCR, chunking, indexing and publication are mechanical. AI receives bounded
   tasks through the researcher bridge. See [model policy](docs/RESEARCHER_AUTOMATION.md).
 - **WebMCP:** six typed browser tools share a versioned case with the engineer.

@@ -1,5 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
+import { executionCatalogReportSchema, executionProtocolVersion } from '@clideck/admin-contracts'
+import { getExecutionSettings, publishExecutionCatalog } from '../domain/pipeline-execution.js'
 
 import type { AppConfig } from '../config.js'
 import type { Database } from '../db.js'
@@ -75,12 +77,28 @@ export function createResearcherMcpServer(
     version: '0.4.0'
   })
 
+  server.registerTool('get_pipeline_runtime_settings', {
+    description: 'Read operator execution settings and the catalog refresh request; does not run a model.',
+    inputSchema: z.object({}), annotations: { readOnlyHint: true, openWorldHint: false }
+  }, wrapResearcherTool(dependencies, 'get_pipeline_runtime_settings', async () => {
+    const settings = await getExecutionSettings(dependencies.database)
+    const catalog = await dependencies.database.query('SELECT refresh_requested_at FROM pipeline_runtime_catalog WHERE singleton')
+    return { ...settings, protocol_version: executionProtocolVersion,
+      refresh_requested_at: catalog.rows[0]?.['refresh_requested_at'] ?? null }
+  }))
+  server.registerTool('publish_pipeline_model_catalog', {
+    description: 'Publish bounded model capabilities from the executor runtime. Cannot change operator settings.',
+    inputSchema: executionCatalogReportSchema, annotations: { readOnlyHint: false, openWorldHint: false }
+  }, wrapResearcherTool(dependencies, 'publish_pipeline_model_catalog', async (input) =>
+    publishExecutionCatalog(dependencies.database, input, dependencies.researcherId),
+  ))
+
   server.registerTool(
     'claim_pipeline_task',
     {
       description:
         'Lease the next useful AI stage from the continuous knowledge pipeline. When deterministic worker work is active, returns that active stage without creating an AI run.',
-      inputSchema: z.object({}),
+      inputSchema: z.object({ runtime_protocol_version: z.literal(executionProtocolVersion).optional() }),
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
@@ -88,12 +106,13 @@ export function createResearcherMcpServer(
         openWorldHint: false
       }
     },
-    wrapResearcherTool(dependencies, 'claim_pipeline_task', async () =>
+    wrapResearcherTool(dependencies, 'claim_pipeline_task', async (input) =>
       claimPipelineTask(
         dependencies.database,
         dependencies.config,
         dependencies.researcherId,
         dependencies.researcherInstanceId,
+        input.runtime_protocol_version ?? 1,
       ),
     ),
   )

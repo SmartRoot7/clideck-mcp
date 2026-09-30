@@ -51,7 +51,7 @@ New profiles receive 100% checks; after 1,000 checks with material error below
 Deep Low repairs at most eight related records per bounded evidence batch;
 Deep Medium handles at most four unresolved Low records. Preserve partial valid
 output and retry omitted indices in smaller batches. These are context bounds,
-not executor caps: every stage may use all eight free lanes.
+not executor caps: every stage may use every enabled free lane (admin-selected 1–8).
 
 ## Intake and crawl
 

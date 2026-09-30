@@ -19,12 +19,25 @@ if (!['start', 'stop', 'status'].includes(action ?? '')) {
   throw new Error('Action must be start, stop, or status.')
 }
 
-async function isRegistered(): Promise<boolean> {
+async function isRegistered(name = service): Promise<boolean> {
   try {
-    await execFileAsync('launchctl', ['print', service])
+    await execFileAsync('launchctl', ['print', name])
     return true
   } catch {
     return false
+  }
+}
+
+const legacyLabels = Array.from({ length: 8 }, (_, index) =>
+  `com.clideck.mcp.pipeline-executor-${String(index + 1).padStart(2, '0')}`)
+async function stopLegacyExecutors() {
+  for (const legacyLabel of legacyLabels) {
+    const legacyService = `gui/${process.getuid?.() ?? 0}/${legacyLabel}`
+    if (!(await isRegistered(legacyService))) continue
+    const legacyPlist = resolve(homedir(), 'Library', 'LaunchAgents', `${legacyLabel}.plist`)
+    await execFileAsync('/bin/zsh', ['-lc', 'launchctl unload -w "$1"', 'zsh', legacyPlist])
+      .catch(() => execFileAsync('launchctl', ['bootout', legacyService]))
+    await execFileAsync('launchctl', ['disable', legacyService])
   }
 }
 
@@ -58,6 +71,7 @@ async function legacyUnload(): Promise<void> {
 }
 
 if (action === 'stop') {
+  await stopLegacyExecutors()
   // The legacy pair is the only restart path that has been reliable in the
   // interactive Aqua session on this host.  `bootout` remains a fallback for
   // a partially registered service, but direct disable/bootstrap is avoided.
@@ -78,6 +92,15 @@ if (action === 'stop') {
   }
   process.stdout.write('CliDeck MCP Luna pool started.\n')
 } else {
-  const result = await execFileAsync('launchctl', ['print', service])
-  process.stdout.write(result.stdout)
+  if (await isRegistered()) {
+    const result = await execFileAsync('launchctl', ['print', service])
+    process.stdout.write(result.stdout)
+  } else {
+    const legacy = []
+    for (const name of legacyLabels) {
+      if (await isRegistered(`gui/${process.getuid?.() ?? 0}/${name}`)) legacy.push(name)
+    }
+    if (!legacy.length) throw new Error('PIPELINE_LAUNCH_AGENT_NOT_REGISTERED')
+    process.stdout.write(`Legacy executor services: ${legacy.join(', ')}\n`)
+  }
 }

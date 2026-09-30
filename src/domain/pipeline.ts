@@ -49,6 +49,9 @@ import {
 import { enforceKnowledgeRisk } from './risk.js'
 import { batchEvidenceUnits, shouldRunQualityCheck } from './pipeline-v2.js'
 import { reconcileTerminalProcessingRunsWithClient } from './intake.js'
+import { executionProtocolVersion, type ExecutionReasoning } from '@clideck/admin-contracts'
+import { capacityLockSql, claimableExecutionSql, clearStaleModelProbes, readExecutionProfiles, fidelityExecutionProfileKey, ensureFidelityExecutionProfile } from './pipeline-execution.js'
+import { pipelineExecutorIds } from './pipeline-runtime.js'
 
 const pipelineLeaseSchema = z.object({
   pipeline_task_id: z.string().uuid(),
@@ -821,6 +824,7 @@ export type PipelineTaskRow = {
   expert_task_id: string | null
   knowledge_demand_id: string | null
   processing_run_id?: string | null
+  execution_profile?: 'luna' | 'luna_high'
   requested_reasoning_effort?: 'low' | 'medium'
   queue_class?: 'baseline' | 'demand'
   attempts?: number
@@ -982,16 +986,6 @@ const aiPriorities = {
   analyze: 80,
   discover: 50
 } as const
-
-function supportsTerraFallback(
-  taskType: PipelineTaskRow['task_type'],
-  reasoningEffort: 'low' | 'medium',
-): boolean {
-  return reasoningEffort === 'medium' && [
-    'candidate_deep_review',
-    'demand_diagnosis'
-  ].includes(taskType)
-}
 
 export function boundFragmentAnalysisBatch<
   T extends { content: string }
@@ -1976,32 +1970,8 @@ async function queueSourceWork(
     mode === 'ai' ||
     mode === 'verification'
   ) {
-    // Fidelity is an asynchronous audit lane. Keep it in the bounded Verify
-    // allocator; an Analyze request must always reserve extraction work.
-    // The profile is shared by every Fidelity batch. Create it once, but do
-    // not update (and therefore do not row-lock) it while selecting candidate
-    // work. Submission aggregates its counters in one short update after the
-    // candidate work is complete.
-    await client.query(
-      `INSERT INTO pipeline_quality_profiles (
-         stage, profile_key, extractor_version, prompt_version, model
-       ) VALUES (
-         'extract_fidelity', 'pipeline-v2-default',
-         'pipeline-v2-extract-1', 'pipeline-v2-fidelity-1',
-         'gpt-5.6-luna'
-       ) ON CONFLICT (stage, profile_key) DO NOTHING`,
-    )
-    const profile = await client.query<{
-      checked_count: number
-      material_error_count: number
-      forced_full_batches_remaining: number
-    }>(
-      `SELECT checked_count, material_error_count,
-              forced_full_batches_remaining
-         FROM pipeline_quality_profiles
-        WHERE stage = 'extract_fidelity'
-          AND profile_key = 'pipeline-v2-default'`,
-    )
+    // Fidelity is an asynchronous audit lane; Analyze stays in extraction.
+    const verifier = (await readExecutionProfiles(client)).find((profile) => profile.profile_id === 'luna')!
     const fidelityCandidates = await client.query<{
       id: string
       stable_key: string
@@ -2012,15 +1982,22 @@ async function queueSourceWork(
       evidence_span_id: string | null
       evidence_content: string | null
       evidence_window: number | null
+      extraction_model: string
+      extraction_reasoning_effort: string
     }>(
       `SELECT kc.id, kc.stable_key, kc.payload, kc.dangerous,
               kc.confidence, kc.quality_score,
+              coalesce(extraction.model, 'legacy-unknown') AS extraction_model,
+              coalesce(extraction.reasoning_effort, 'unknown') AS extraction_reasoning_effort,
               fragment.id AS evidence_span_id,
               fragment.content AS evidence_content,
               floor(fragment.ordinal / 8.0)::int AS evidence_window
          FROM knowledge_candidates kc
          JOIN pipeline_tasks origin ON origin.id = kc.pipeline_task_id
          LEFT JOIN source_fragments fragment ON fragment.id = kc.source_fragment_id
+         LEFT JOIN LATERAL (SELECT run.model, run.reasoning_effort FROM agent_runs run
+           WHERE run.pipeline_task_id = kc.pipeline_task_id AND run.started_at <= kc.created_at
+           ORDER BY run.started_at DESC LIMIT 1) extraction ON true
         WHERE origin.source_candidate_id = $1
           AND kc.processing_run_id IS NOT DISTINCT FROM $2::uuid
           AND kc.status IN ('verified', 'published')
@@ -2032,10 +2009,14 @@ async function queueSourceWork(
       [source.id, source.processing_run_id],
     )
     if (fidelityCandidates.rows.length > 0) {
-      const quality = profile.rows[0]!
+      const first = fidelityCandidates.rows[0]!
+      fidelityCandidates.rows = fidelityCandidates.rows.filter((candidate) =>
+        candidate.extraction_model === first.extraction_model && candidate.extraction_reasoning_effort === first.extraction_reasoning_effort)
+      const qualityProfileKey = fidelityExecutionProfileKey(first.extraction_model, first.extraction_reasoning_effort, verifier.model, verifier.reasoning_effort)
+      const quality = await ensureFidelityExecutionProfile(client, qualityProfileKey, first.extraction_model)
       const sampled = fidelityCandidates.rows.filter((candidate) =>
         shouldRunQualityCheck({
-          profileKey: 'pipeline-v2-default',
+          profileKey: qualityProfileKey,
           sampleKey: candidate.id,
           checkedCount: Number(quality.checked_count),
           materialErrorCount: Number(quality.material_error_count),
@@ -2081,6 +2062,9 @@ async function queueSourceWork(
         payload: {
           ...basePayload,
           audit_mode: 'fidelity',
+          quality_profile_key: qualityProfileKey,
+          quality_extraction_model: first.extraction_model,
+          quality_extraction_reasoning_effort: first.extraction_reasoning_effort,
           evidence_window: [...new Map(selected.flatMap((candidate) =>
             candidate.evidence_span_id && candidate.evidence_content
               ? [[candidate.evidence_span_id, {
@@ -3294,22 +3278,7 @@ async function ensureLegacyWorkInTransaction(
   // Only the advisory-lock owner clears abandoned probes. Running this bulk
   // update in every concurrent claim and then locking every circuit row could
   // make two executors acquire circuit tuples in opposite orders at startup.
-  await client.query(
-    `UPDATE pipeline_ai_circuits circuit
-        SET probe_executor_id = NULL,
-            updated_at = now()
-      WHERE circuit.probe_executor_id IS NOT NULL
-        AND NOT EXISTS (
-          SELECT 1
-          FROM pipeline_tasks task
-          WHERE task.claim_owner = circuit.probe_executor_id
-            AND task.task_type = circuit.task_type
-            AND coalesce(task.requested_reasoning_effort, 'low') =
-                circuit.reasoning_effort
-            AND task.status IN ('claimed', 'running')
-            AND task.lease_until > now()
-        )`,
-  )
+  await clearStaleModelProbes(client)
   const settings = await client.query<{
     enabled: boolean
     ai_model: string
@@ -3329,12 +3298,6 @@ async function ensureLegacyWorkInTransaction(
   )
   const pipeline = settings.rows[0]
   if (!pipeline?.enabled) return
-  if (
-    pipeline.ai_model !== requiredPipelineModel ||
-    pipeline.reasoning_effort !== requiredPipelineReasoning
-  ) {
-    throw new Error('PIPELINE_LUNA_CONFIGURATION_REQUIRED')
-  }
 
   // Always materialize a newly-arrived expert task, even when every Luna slot
   // is occupied. Claim ordering then guarantees it receives the next free slot.
@@ -3670,12 +3633,6 @@ async function ensureStreamingWorkInTransaction(
   )
   const pipeline = settings.rows[0]
   if (!pipeline?.enabled) return
-  if (
-    pipeline.ai_model !== requiredPipelineModel ||
-    pipeline.reasoning_effort !== requiredPipelineReasoning
-  ) {
-    throw new Error('PIPELINE_LUNA_CONFIGURATION_REQUIRED')
-  }
 
   await reconcileCompletedSources(client)
   await reconcileTechnicalDemandFailures(client)
@@ -3772,18 +3729,25 @@ async function ensureStreamingWorkInTransaction(
   // can make the other three executors look "full" while Analyze and Verify
   // records wait untouched.
   const blockedCircuits = await client.query<AiCircuitRow>(
-    `SELECT task_type, reasoning_effort, open_until, probe_executor_id
-       FROM pipeline_ai_circuits
-      WHERE open_until > now()
-         OR probe_executor_id IS NOT NULL`,
+    `SELECT circuit.task_type,
+       CASE WHEN profile.profile_id = 'luna_high' THEN 'medium' ELSE 'low' END AS reasoning_effort,
+       circuit.open_until, circuit.probe_executor_id
+     FROM pipeline_model_circuits circuit
+     JOIN pipeline_execution_profiles profile ON profile.profile_id = circuit.execution_profile
+       AND profile.model = circuit.model AND profile.reasoning_effort = circuit.reasoning_effort
+     WHERE (circuit.configuration_error OR circuit.open_until > now() OR circuit.probe_executor_id IS NOT NULL)
+       AND (profile.fallback_model IS NULL OR EXISTS (
+         SELECT 1 FROM pipeline_model_circuits fallback WHERE fallback.execution_profile = profile.profile_id
+           AND fallback.task_type = circuit.task_type AND fallback.model = profile.fallback_model
+           AND fallback.reasoning_effort = profile.fallback_reasoning_effort
+           AND (fallback.configuration_error OR fallback.open_until > now() OR fallback.probe_executor_id IS NOT NULL)
+       ))`,
   )
   const isCircuitBlocked = (
     taskType: PipelineTaskRow['task_type'],
     reasoningEffort: 'low' | 'medium',
-  ) => !supportsTerraFallback(taskType, reasoningEffort) &&
-    blockedCircuits.rows.some((circuit) =>
-    circuit.task_type === taskType &&
-    circuit.reasoning_effort === reasoningEffort,
+  ) => blockedCircuits.rows.some((circuit) =>
+    circuit.task_type === taskType && circuit.reasoning_effort === reasoningEffort,
   )
   const activeAi = await client.query<{
     scheduler_stage: WeightedAiStage | 'expert' | 'discover'
@@ -3810,28 +3774,7 @@ async function ensureStreamingWorkInTransaction(
          OR (
            status = 'queued'
            AND available_at <= now()
-           AND NOT EXISTS (
-             SELECT 1
-             FROM pipeline_ai_circuits circuit
-             WHERE circuit.task_type = pipeline_tasks.task_type
-               AND circuit.reasoning_effort = coalesce(
-                 pipeline_tasks.requested_reasoning_effort,
-                 'low'
-               )
-               AND (
-                 circuit.open_until > now()
-                 OR circuit.probe_executor_id IS NOT NULL
-               )
-               AND NOT (
-                 pipeline_tasks.requested_reasoning_effort = 'medium'
-                 AND pipeline_tasks.task_type IN (
-                   'candidate_deep_review',
-                   'demand_diagnosis'
-                 )
-                 AND pipeline_tasks.payload->>'terra_fallback_attempted'
-                   IS DISTINCT FROM 'true'
-               )
-           )
+           AND ${claimableExecutionSql('pipeline_tasks')}
          )
        )
        AND task_type = ANY($1::text[])
@@ -3867,15 +3810,16 @@ async function ensureStreamingWorkInTransaction(
     WeightedAiStage,
     () => Promise<boolean>
   > = {
-    deep_medium: () => queueDeepReviewWork(client, 'medium'),
+    deep_medium: () => isCircuitBlocked('candidate_deep_review', 'medium')
+      ? Promise.resolve(false) : queueDeepReviewWork(client, 'medium'),
     deep_low: () => isCircuitBlocked(
       'candidate_deep_review',
       'low',
     )
       ? Promise.resolve(false)
       : queueDeepReviewWork(client, 'low'),
-    verify: () => queueVerificationFromAnySource(client),
-    analyze: () => queueAnalysisFromLanes(client, activeSourceIds)
+    verify: () => isCircuitBlocked('candidate_verification', 'low') ? Promise.resolve(false) : queueVerificationFromAnySource(client),
+    analyze: () => isCircuitBlocked('fragment_analysis', 'low') ? Promise.resolve(false) : queueAnalysisFromLanes(client, activeSourceIds)
   }
   const allocation = await fillWeightedAiCapacity({
     concurrency: pipeline.max_concurrent_ai_runs,
@@ -3916,20 +3860,24 @@ export async function claimPipelineTask(
   config: AppConfig,
   researcherId: string,
   researcherInstanceId = researcherId,
+  runtimeProtocolVersion = 1,
 ): Promise<Record<string, unknown>> {
   await ensurePipelineWork(database)
   return withTransaction(database, async (client) => {
+    await client.query(capacityLockSql)
     const settings = await client.query<{
       enabled: boolean
       ai_model: string
       reasoning_effort: string
       max_concurrent_ai_runs: number
+      settings_version: number
     }>(
       `SELECT
          enabled,
          ai_model,
          reasoning_effort,
-         max_concurrent_ai_runs
+         max_concurrent_ai_runs,
+         settings_version
        FROM pipeline_settings
        WHERE singleton`,
     )
@@ -3943,52 +3891,25 @@ export async function claimPipelineTask(
       )
       return { enabled: false, reason: 'pipeline_paused' }
     }
-    if (
-      pipeline.ai_model !== requiredPipelineModel ||
-      pipeline.reasoning_effort !== requiredPipelineReasoning
-    ) {
-      throw new Error('PIPELINE_LUNA_CONFIGURATION_REQUIRED')
+    const executorIndex = pipelineExecutorIds.indexOf(researcherId as typeof pipelineExecutorIds[number])
+    if (runtimeProtocolVersion === executionProtocolVersion && executorIndex >= pipeline.max_concurrent_ai_runs) {
+      await recordExecutorHeartbeat(client, researcherId, researcherInstanceId, { status: 'disabled', reason: 'operator_capacity' })
+      return { enabled: true, pipeline_state: 'executor_disabled' }
     }
-    // A deployment or local supervisor restart can terminate the sole circuit
-    // probe after reservation but before submission. Every claim must be able
-    // to recover it even when that claim did not win the non-blocking scheduler
-    // lock. Lock only stale rows, in a stable order; do not lock the full circuit
-    // table for the rest of the claim transaction.
-    await client.query(
-      `WITH stale_circuits AS MATERIALIZED (
-         SELECT circuit.task_type, circuit.reasoning_effort
-         FROM pipeline_ai_circuits circuit
-         WHERE circuit.probe_executor_id IS NOT NULL
-           AND NOT EXISTS (
-             SELECT 1
-             FROM pipeline_tasks task
-             WHERE task.claim_owner = circuit.probe_executor_id
-               AND task.task_type = circuit.task_type
-               AND coalesce(task.requested_reasoning_effort, 'low') =
-                   circuit.reasoning_effort
-               AND task.status IN ('claimed', 'running')
-               AND task.lease_until > now()
-           )
-         ORDER BY circuit.task_type, circuit.reasoning_effort
-         FOR UPDATE OF circuit
-       )
-       UPDATE pipeline_ai_circuits circuit
-          SET probe_executor_id = NULL,
-              updated_at = now()
-         FROM stale_circuits stale
-        WHERE circuit.task_type = stale.task_type
-          AND circuit.reasoning_effort = stale.reasoning_effort`,
-    )
-    // A Codex incident is isolated to the exact Luna work class that exposed
-    // it.  Deep Medium may be paused while useful discovery, analysis and
-    // verification continue to fill and advance the knowledge pipeline. The
-    // later conditional UPDATE is the sole probe reservation; reading here
-    // does not need to lock every circuit row for the whole claim transaction.
-    const circuits = await client.query<AiCircuitRow>(
-      `SELECT task_type, reasoning_effort, open_until, probe_executor_id
-       FROM pipeline_ai_circuits
-       ORDER BY task_type, reasoning_effort`,
-    )
+    const profiles = await readExecutionProfiles(client)
+    if (runtimeProtocolVersion !== executionProtocolVersion && profiles.some((profile) =>
+      profile.model !== requiredPipelineModel ||
+      profile.reasoning_effort !== (profile.profile_id === 'luna_high' ? 'medium' : 'low') ||
+      (profile.fallback_model !== null && (profile.profile_id !== 'luna_high' || profile.fallback_model !== fallbackPipelineModel || profile.fallback_reasoning_effort !== 'medium'))
+    )) {
+      await recordExecutorHeartbeat(client, researcherId, researcherInstanceId, { status: 'standby', reason: 'runtime_upgrade_required' })
+      return { enabled: true, pipeline_state: 'runtime_upgrade_required' }
+    }
+    await clearStaleModelProbes(client)
+    const circuits = await client.query<{
+      execution_profile: string; task_type: string; model: string; reasoning_effort: ExecutionReasoning;
+      open_until: string | Date; probe_executor_id: string | null; configuration_error: boolean
+    }>(`SELECT * FROM pipeline_model_circuits ORDER BY execution_profile, task_type, model, reasoning_effort`)
     const runningAi = await client.query<{ count: number }>(
       `SELECT count(*)::int AS count
        FROM pipeline_tasks
@@ -4028,6 +3949,7 @@ export async function claimPipelineTask(
          expert_task_id,
          knowledge_demand_id,
          requested_reasoning_effort,
+         execution_profile,
          queue_class
        FROM pipeline_tasks
        WHERE status = 'queued'
@@ -4042,28 +3964,7 @@ export async function claimPipelineTask(
                 AND exhausted_fragment.attempts >= 10
            )
          )
-         AND NOT EXISTS (
-           SELECT 1
-           FROM pipeline_ai_circuits circuit
-           WHERE circuit.task_type = pipeline_tasks.task_type
-             AND circuit.reasoning_effort = coalesce(
-               pipeline_tasks.requested_reasoning_effort,
-               'low'
-             )
-             AND (
-               circuit.open_until > now()
-               OR circuit.probe_executor_id IS NOT NULL
-             )
-             AND NOT (
-               pipeline_tasks.requested_reasoning_effort = 'medium'
-               AND pipeline_tasks.task_type IN (
-                 'candidate_deep_review',
-                 'demand_diagnosis'
-               )
-               AND pipeline_tasks.payload->>'terra_fallback_attempted'
-                 IS DISTINCT FROM 'true'
-             )
-         )
+         AND ${claimableExecutionSql('pipeline_tasks')}
        ORDER BY priority DESC, created_at
        FOR UPDATE SKIP LOCKED
        LIMIT 1`,
@@ -4130,56 +4031,29 @@ export async function claimPipelineTask(
       }
     }
 
-    const taskReasoning = task.requested_reasoning_effort ?? 'low'
-    const matchingCircuit = circuits.rows.find((circuit) =>
-      circuit.task_type === task.task_type &&
-      circuit.reasoning_effort === taskReasoning,
-    )
-    const expiredCircuit = matchingCircuit &&
-      matchingCircuit.probe_executor_id === null &&
-      new Date(matchingCircuit.open_until).getTime() <= Date.now()
-        ? matchingCircuit
-        : null
-    if (expiredCircuit) {
-      const probe = await client.query<{ task_type: string }>(
-        `UPDATE pipeline_ai_circuits
-            SET probe_executor_id = $3,
-                updated_at = now()
-          WHERE task_type = $1
-            AND reasoning_effort = $2
-            AND probe_executor_id IS NULL
-            AND open_until <= now()
-          RETURNING task_type`,
-        [task.task_type, taskReasoning, researcherId],
+    const profile = profiles.find((entry) => entry.profile_id === task.execution_profile)!
+    const primaryCircuit = circuits.rows.find((circuit) => circuit.execution_profile === profile.profile_id &&
+      circuit.task_type === task.task_type && circuit.model === profile.model && circuit.reasoning_effort === profile.reasoning_effort)
+    const usingModelFallback = Boolean(primaryCircuit && (primaryCircuit.configuration_error ||
+      new Date(primaryCircuit.open_until).getTime() > Date.now() || primaryCircuit.probe_executor_id !== null) &&
+      profile.fallback_model && task.payload['model_fallback_attempted_for'] !== `${profile.model}:${profile.reasoning_effort}`)
+    const requestedModel = usingModelFallback ? profile.fallback_model! : profile.model
+    const taskReasoning = usingModelFallback ? profile.fallback_reasoning_effort! : profile.reasoning_effort
+    const matchingCircuit = circuits.rows.find((circuit) => circuit.execution_profile === profile.profile_id &&
+      circuit.task_type === task.task_type && circuit.model === requestedModel && circuit.reasoning_effort === taskReasoning)
+    if (matchingCircuit) {
+      const probe = await client.query(
+        `UPDATE pipeline_model_circuits SET probe_executor_id = $5, updated_at = now()
+         WHERE execution_profile = $1 AND task_type = $2 AND model = $3 AND reasoning_effort = $4
+           AND probe_executor_id IS NULL AND NOT configuration_error AND open_until <= now() RETURNING task_type`,
+        [profile.profile_id, task.task_type, requestedModel, taskReasoning, researcherId],
       )
       if (!probe.rows[0]) {
-        await recordExecutorHeartbeat(
-          client,
-          researcherId,
-          researcherInstanceId,
-          {
-            status: 'standby',
-            reason: 'circuit_cooldown',
-            circuit_task_type: task.task_type,
-            circuit_reasoning_effort: taskReasoning,
-            retry_at: expiredCircuit.open_until
-          },
-        )
-        return {
-          enabled: true,
-          pipeline_state: 'scoped_ai_circuit_open'
-        }
+        await recordExecutorHeartbeat(client, researcherId, researcherInstanceId,
+          { status: 'standby', reason: 'circuit_cooldown', model: requestedModel, reasoning_effort: taskReasoning })
+        return { enabled: true, pipeline_state: 'scoped_ai_circuit_open' }
       }
     }
-    const terraFallbackAllowed = supportsTerraFallback(
-      task.task_type,
-      taskReasoning,
-    )
-    const requestedModel = matchingCircuit && !expiredCircuit &&
-        terraFallbackAllowed
-      ? fallbackPipelineModel
-      : requiredPipelineModel
-    const usingTerraFallback = requestedModel === fallbackPipelineModel
 
     const leaseToken = randomUrlToken()
     const leaseUntil = new Date(
@@ -4196,8 +4070,8 @@ export async function claimPipelineTask(
               payload = CASE WHEN $5::boolean
                 THEN jsonb_set(
                   payload,
-                  '{terra_fallback_attempted}',
-                  'true'::jsonb,
+                  '{model_fallback_attempted_for}',
+                  to_jsonb($6::text),
                   true
                 )
                 ELSE payload
@@ -4209,7 +4083,8 @@ export async function claimPipelineTask(
         researcherId,
         sha256(leaseToken),
         leaseUntil.toISOString(),
-        usingTerraFallback
+        usingModelFallback,
+        `${profile.model}:${profile.reasoning_effort}`
       ],
     )
     const run = await client.query<{ id: string }>(
@@ -4217,11 +4092,12 @@ export async function claimPipelineTask(
          pipeline_task_id,
          model,
          reasoning_effort,
+         execution_profile, settings_version, fallback_from_model,
          status
        )
-       VALUES ($1, $2, $3, 'running')
+       VALUES ($1, $2, $3, $4, $5, $6, 'running')
        RETURNING id`,
-      [task.id, requestedModel, taskReasoning],
+      [task.id, requestedModel, taskReasoning, profile.profile_id, pipeline.settings_version, usingModelFallback ? profile.model : null],
     )
     await client.query(
       `UPDATE agent_runs
@@ -4235,9 +4111,10 @@ export async function claimPipelineTask(
       researcherInstanceId,
       {
         status: 'running',
+        execution_profile: profile.profile_id, settings_version: pipeline.settings_version,
         model: requestedModel,
-        fallback_from_model: usingTerraFallback
-          ? requiredPipelineModel
+        fallback_from_model: usingModelFallback
+          ? profile.model
           : null,
         reasoning_effort: taskReasoning,
         task_id: task.id,
@@ -4246,9 +4123,15 @@ export async function claimPipelineTask(
       },
     )
 
-    let payload = usingTerraFallback
-      ? { ...task.payload, terra_fallback_attempted: true }
+    let payload = usingModelFallback
+      ? { ...task.payload, model_fallback_attempted_for: `${profile.model}:${profile.reasoning_effort}` }
       : task.payload
+    if (payload['audit_mode'] === 'fidelity') {
+      payload = { ...payload, quality_profile_key: fidelityExecutionProfileKey(
+        String(payload['quality_extraction_model'] ?? 'legacy-unknown'),
+        String(payload['quality_extraction_reasoning_effort'] ?? 'unknown'), requestedModel, taskReasoning) }
+      await client.query('UPDATE pipeline_tasks SET payload = $2::jsonb WHERE id = $1', [task.id, JSON.stringify(payload)])
+    }
     if (task.task_type === 'expert_research' && task.expert_task_id) {
       const expert = await client.query<{
         public_id: string
@@ -4374,9 +4257,11 @@ export async function claimPipelineTask(
       lease_token: leaseToken,
       lease_until: leaseUntil.toISOString(),
       agent_run_id: run.rows[0]!.id,
-      requested_reasoning_effort:
-        task.requested_reasoning_effort ?? 'low',
+      requested_reasoning_effort: taskReasoning,
       requested_model: requestedModel,
+      execution_profile: profile.profile_id,
+      settings_version: pipeline.settings_version,
+      fallback_from_model: usingModelFallback ? profile.model : null,
       payload
     }
   })
@@ -4549,7 +4434,7 @@ export async function completeMechanicalPipelineTask(
              ) VALUES (
                $1, $2, $3, 'pipeline-v2-convert-1', 'pipeline-v2-segment-1',
                'pipeline-v2-extract-1', 'pipeline-v2-fidelity-1',
-               'gpt-5.6-luna-low', 'converting', now()
+               'pinned-agent-runs-v2', 'converting', now()
              )
              ON CONFLICT (source_candidate_id, processing_version)
              DO UPDATE SET source_artifact_id = excluded.source_artifact_id,
@@ -4631,7 +4516,8 @@ export async function recordAgentRunResult(
     id: string
     executor_id: string | null
     task_type: PipelineTaskRow['task_type'] | null
-    reasoning_effort: 'low' | 'medium'
+    reasoning_effort: ExecutionReasoning
+    execution_profile: 'luna' | 'luna_high' | null
     model: string
   }>(
     `UPDATE agent_runs run
@@ -4659,7 +4545,7 @@ export async function recordAgentRunResult(
                 run.executor_id,
                 task.task_type,
                 run.reasoning_effort,
-                run.model`,
+                run.model, run.execution_profile`,
     [
       input.agent_run_id,
       input.status,
@@ -4700,95 +4586,42 @@ export async function recordAgentRunResult(
         input.reasoning_output_tokens
     }
   }
-  const executorId = result.rows[0].executor_id
-  const taskType = result.rows[0].task_type
-  const reasoningEffort = result.rows[0].reasoning_effort
-  const runModel = result.rows[0].model
-  if (
-    input.status === 'completed' &&
-    executorId &&
-    taskType &&
-    runModel === requiredPipelineModel &&
-    isAiTaskType(taskType)
-  ) {
-    await database.query(
-      `DELETE FROM pipeline_ai_circuits
-       WHERE task_type = $1
-         AND reasoning_effort = $2
-         AND probe_executor_id = $3`,
-      [taskType, reasoningEffort, executorId],
-    )
-  } else if (
-    input.status === 'failed' &&
-    retryableCodexPlatformDiagnosticCodes.includes(
-      input.diagnostic_code as typeof retryableCodexPlatformDiagnosticCodes[number],
-    ) &&
-    input.diagnostic_fingerprint &&
-    taskType &&
-    runModel === requiredPipelineModel &&
-    isAiTaskType(taskType)
-  ) {
+  const run = result.rows[0]
+  const executorId = run.executor_id
+  const taskType = run.task_type
+  const reasoningEffort = run.reasoning_effort
+  const runModel = run.model
+  const profileId = run.execution_profile ?? (reasoningEffort === 'medium' ? 'luna_high' : 'luna')
+  if (input.status === 'completed' && executorId && taskType && isAiTaskType(taskType)) {
+    await database.query(`DELETE FROM pipeline_model_circuits WHERE execution_profile = $1 AND task_type = $2
+      AND model = $3 AND reasoning_effort = $4 AND probe_executor_id = $5`,
+    [profileId, taskType, runModel, reasoningEffort, executorId])
+  } else if (input.status === 'failed' && taskType && isAiTaskType(taskType) &&
+    retryableCodexPlatformDiagnosticCodes.includes(input.diagnostic_code as typeof retryableCodexPlatformDiagnosticCodes[number]) &&
+    input.diagnostic_fingerprint) {
     const failures = await database.query<{ count: number }>(
-      `SELECT count(*)::int AS count
-       FROM agent_runs run
-       JOIN pipeline_tasks task ON task.id = run.pipeline_task_id
-       WHERE run.status = 'failed'
-         AND run.diagnostic_code = ANY($5::text[])
-         AND run.diagnostic_fingerprint = $1
-         AND task.task_type = $2
-         AND run.reasoning_effort = $3
-         AND run.model = $4
+      `SELECT count(*)::int AS count FROM agent_runs run JOIN pipeline_tasks task ON task.id = run.pipeline_task_id
+       WHERE run.status = 'failed' AND run.diagnostic_code = ANY($5::text[])
+         AND run.diagnostic_fingerprint = $1 AND task.task_type = $2 AND run.reasoning_effort = $3
+         AND run.model = $4 AND run.execution_profile = $6
          AND run.completed_at >= now() - interval '15 minutes'`,
-      [
-        input.diagnostic_fingerprint,
-        taskType,
-        reasoningEffort,
-        requiredPipelineModel,
-        retryableCodexPlatformDiagnosticCodes,
-      ],
+      [input.diagnostic_fingerprint, taskType, reasoningEffort, runModel, retryableCodexPlatformDiagnosticCodes, profileId],
     )
-    const cooldownSeconds = codexCircuitCooldownSeconds(
-      failures.rows[0]?.count ?? 0,
+    const configurationError = input.diagnostic_code === 'CODEX_MODEL_UNAVAILABLE'
+    const cooldownSeconds = configurationError ? 86400 : codexCircuitCooldownSeconds(failures.rows[0]?.count ?? 0)
+    if (cooldownSeconds > 0) await database.query(
+      `INSERT INTO pipeline_model_circuits (execution_profile, task_type, model, reasoning_effort,
+        diagnostic_fingerprint, open_until, probe_executor_id, configuration_error)
+       VALUES ($1, $2, $3, $4, $5, now() + make_interval(secs => $6::int), NULL, $7)
+       ON CONFLICT (execution_profile, task_type, model, reasoning_effort) DO UPDATE SET
+         diagnostic_fingerprint = excluded.diagnostic_fingerprint,
+         open_until = greatest(pipeline_model_circuits.open_until, excluded.open_until),
+         configuration_error = excluded.configuration_error,
+         probe_executor_id = CASE WHEN pipeline_model_circuits.probe_executor_id IS NULL
+           OR pipeline_model_circuits.probe_executor_id = $8 THEN NULL ELSE pipeline_model_circuits.probe_executor_id END,
+         updated_at = now()`,
+      [profileId, taskType, runModel, reasoningEffort, input.diagnostic_fingerprint, cooldownSeconds, configurationError, executorId],
     )
-    if (cooldownSeconds > 0) {
-      await database.query(
-        `INSERT INTO pipeline_ai_circuits (
-           task_type,
-           reasoning_effort,
-           diagnostic_fingerprint,
-           open_until,
-           probe_executor_id
-         )
-         VALUES (
-           $1,
-           $2,
-           $3,
-           now() + make_interval(secs => $4::int),
-           NULL
-         )
-         ON CONFLICT (task_type, reasoning_effort)
-         DO UPDATE SET
-           diagnostic_fingerprint = excluded.diagnostic_fingerprint,
-           open_until = greatest(
-             pipeline_ai_circuits.open_until,
-             excluded.open_until
-           ),
-           probe_executor_id = CASE
-             WHEN pipeline_ai_circuits.probe_executor_id IS NULL
-               OR pipeline_ai_circuits.probe_executor_id = $5
-               THEN NULL
-             ELSE pipeline_ai_circuits.probe_executor_id
-           END,
-           updated_at = now()`,
-        [
-          taskType,
-          reasoningEffort,
-          input.diagnostic_fingerprint,
-          cooldownSeconds,
-          executorId,
-        ],
-      )
-    }
   }
   return {
     agent_run_id: result.rows[0].id,
@@ -6224,22 +6057,11 @@ export async function submitCandidateVerification(
       requeued: 0
     }
     if (task.payload['audit_mode'] === 'fidelity') {
-      await client.query(
-        `INSERT INTO pipeline_quality_profiles (
-           stage, profile_key, extractor_version, prompt_version, model
-         ) VALUES (
-           'extract_fidelity', 'pipeline-v2-default',
-           'pipeline-v2-extract-1', 'pipeline-v2-fidelity-1',
-           'gpt-5.6-luna'
-         )
-         ON CONFLICT (stage, profile_key) DO NOTHING`,
-      )
-      const profile = await client.query<{ id: string }>(
-        `SELECT id
-           FROM pipeline_quality_profiles
-          WHERE stage = 'extract_fidelity'
-            AND profile_key = 'pipeline-v2-default'`,
-      )
+      const actualRun = await client.query<{ id: string; model: string }>(
+        `SELECT id, model FROM agent_runs WHERE pipeline_task_id = $1 ORDER BY started_at DESC LIMIT 1`, [task.id])
+      const verifierModel = actualRun.rows[0]?.model ?? 'legacy-unknown'
+      const qualityProfileKey = String(task.payload['quality_profile_key'] ?? 'pipeline-v2-default')
+      const profile = await ensureFidelityExecutionProfile(client, qualityProfileKey, String(task.payload['quality_extraction_model'] ?? 'legacy-unknown'))
       const completed = new Set<string>()
       const publishedRejections: string[] = []
       let checkedCount = 0
@@ -6309,19 +6131,20 @@ export async function submitCandidateVerification(
         await client.query(
           `INSERT INTO pipeline_quality_checks (
              profile_id, processing_run_id, pipeline_task_id, stage, status,
-             error_categories, material_error, coverage_count, model, findings
+             error_categories, material_error, coverage_count, model, findings, agent_run_id, extraction_model, extraction_reasoning_effort
            ) VALUES (
              $1, $2, $3, 'extract_fidelity', $4, $5::text[], $6, 1,
-             'gpt-5.6-luna', $7::jsonb
+             $8, $7::jsonb, $9, $10, $11
            )`,
           [
-            profile.rows[0]!.id,
+            profile.id,
             reserved.rows[0].processing_run_id,
             task.id,
             passed ? 'passed' : 'repair',
             passed ? [] : ['fidelity_mismatch'],
             !passed,
-            JSON.stringify(decision.findings)
+            JSON.stringify(decision.findings), verifierModel, actualRun.rows[0]?.id ?? null,
+            task.payload['quality_extraction_model'] ?? null, task.payload['quality_extraction_reasoning_effort'] ?? null
           ],
         )
         checkedCount += 1
@@ -6379,7 +6202,7 @@ export async function submitCandidateVerification(
                   updated_at = now()
             WHERE id = $1`,
           [
-            profile.rows[0]!.id,
+            profile.id,
             checkedCount,
             materialErrorCount,
             forcedFullBatchesAfterError,

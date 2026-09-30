@@ -25,9 +25,11 @@
   Repeated soak failures need a root-cause code/schema/grant/config fix, not a
   restart. Record evidence, cause, correction, deployed SHA and result; restart
   the read-only soak window after correction.
-- Fill all eight physical Luna lanes with useful work. No global single-task or
+- Fill all enabled executor lanes (operator-selected 1–8) with useful work. No global single-task or
   stage cap: discovery, demand, analysis, verification and review may use every
   free lane. `next_check_at` orders refreshes; it never blocks idle capacity.
+- Models/efforts for Luna and Luna High come from versioned admin settings;
+  preserve the claim snapshot for active runs. See [runtime](docs/RESEARCHER_AUTOMATION.md).
 - No throughput cooldowns, daily quotas, cost throttles or queue blockers without
   explicit user approval. Preserve per-item dedupe, transactional leases, bounded
   context, official-source policy, scoped circuits and operator Pause/Resume.

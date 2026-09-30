@@ -4,6 +4,14 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 describe('production database role contract', () => {
+  it('upgrades the local supervisor only after the production rollout succeeds', async () => {
+    const deploy = await readFile(resolve(process.cwd(), 'ops/scripts/deploy-production.sh'), 'utf8')
+    expect(deploy.lastIndexOf('pnpm pipeline:install-launchd')).toBeGreaterThan(deploy.indexOf('REMOTE_CONVERTERS\n'))
+    expect(deploy).not.toMatch(/UPDATE pipeline_execution_profiles|SET max_concurrent_ai_runs/)
+    const installer = await readFile(resolve(process.cwd(), 'src/cli/install-pipeline-launchd.ts'), 'utf8')
+    expect(installer).toContain('xml(process.execPath)')
+    expect(installer).not.toContain('pnpm pipeline:pool')
+  })
   it('aggregates admin summary metrics once per large table', async () => {
     const admin = await readFile(
       resolve(process.cwd(), 'src/domain/admin.ts'),
@@ -133,7 +141,7 @@ describe('production database role contract', () => {
     )
   })
 
-  it('constructs Terra fallback only for explicitly allowed Medium work', async () => {
+  it('constructs fallback only from the configured profile and records its primary identity', async () => {
     const pipeline = await readFile(
       resolve(process.cwd(), 'src/domain/pipeline.ts'),
       'utf8',
@@ -143,7 +151,7 @@ describe('production database role contract', () => {
       "throw new Error('PIPELINE_TERRA_FALLBACK_NOT_ALLOWED')",
     )
     expect(pipeline).toMatch(
-      /const terraFallbackAllowed = supportsTerraFallback\([\s\S]*?matchingCircuit && !expiredCircuit &&[\s\S]*?terraFallbackAllowed[\s\S]*?\? fallbackPipelineModel/,
+      /profile\.fallback_model && task\.payload\['model_fallback_attempted_for'\][\s\S]*?usingModelFallback \? profile\.fallback_model![\s\S]*?fallback_from_model: usingModelFallback \? profile\.model : null/,
     )
   })
 
@@ -248,27 +256,17 @@ describe('production database role contract', () => {
       pipeline.indexOf('async function queueSourceWork'),
       pipeline.indexOf('async function queuePublicationFromAnySource'),
     )
-    const profileAt = sourceWork.indexOf(
-      'INSERT INTO pipeline_quality_profiles',
-    )
-    const candidateLockAt = sourceWork.indexOf('FOR UPDATE OF kc SKIP LOCKED')
-
-    expect(profileAt).toBeGreaterThan(0)
-    expect(candidateLockAt).toBeGreaterThan(profileAt)
-    expect(sourceWork.slice(profileAt, candidateLockAt)).toMatch(
-      /ON CONFLICT \(stage, profile_key\) DO NOTHING/,
-    )
-    expect(sourceWork.slice(profileAt, candidateLockAt)).not.toMatch(
-      /DO UPDATE SET updated_at/,
-    )
+    const execution = await readFile(resolve(process.cwd(), 'src/domain/pipeline-execution.ts'), 'utf8')
+    expect(sourceWork).toContain('ensureFidelityExecutionProfile')
+    expect(execution).toMatch(/if \(existing.rows\[0\]\) return existing.rows\[0\]/)
+    expect(execution).toMatch(/ON CONFLICT \(stage, profile_key\) DO NOTHING/)
+    expect(execution.slice(execution.indexOf('export async function ensureFidelityExecutionProfile'), execution.indexOf('export async function readExecutionProfiles'))).not.toContain('FOR UPDATE')
     const fidelitySubmission = pipeline.slice(
       pipeline.indexOf("if (task.payload['audit_mode'] === 'fidelity')"),
       pipeline.indexOf('for (const decision of input.decisions)',
         pipeline.indexOf("if (task.payload['audit_mode'] === 'fidelity')")),
     )
-    expect(fidelitySubmission).toMatch(
-      /ON CONFLICT \(stage, profile_key\) DO NOTHING/,
-    )
+    expect(fidelitySubmission).toContain('ensureFidelityExecutionProfile')
     const fidelityBodyStart = pipeline.indexOf(
       "if (task.payload['audit_mode'] === 'fidelity')",
     )

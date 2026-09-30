@@ -230,7 +230,7 @@ ssh -o ConnectTimeout=10 "$remote_host" \
 
 if [[ "$pipeline_pool_was_running" -eq 1 ]]; then
   printf '==> Start local Luna pool on %s\n' "$commit_sha"
-  pnpm pipeline:pool-start
+  pnpm pipeline:install-launchd
   pipeline_pool_restarted=1
   pnpm pipeline:pool-status >/dev/null
 fi

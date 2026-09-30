@@ -33,6 +33,7 @@ import {
   toneFor
 } from '../lib/format'
 import { usePipeline } from '../lib/queries'
+import { ExecutionSettingsPanel } from './models'
 
 export function PipelinePage({
   overview
@@ -57,9 +58,10 @@ export function PipelinePage({
   const recordBacklog = pipelineRecordBacklog(overview.record_pipeline)
   return (
     <div className="dashboard-stack">
+      <ExecutionSettingsPanel />
       <section className="metric-grid metric-grid--four">
         <Metric label="Record backlog" value={recordBacklog} icon={ListChecks} help="Knowledge records waiting for standard verification, Deep Low, or Deep Medium. Task batches are shown only in the diagnostic table below." />
-        <Metric label="Active Luna" value={`${overview.active_luna_executors} / ${overview.max_concurrent_ai_runs}`} icon={Bot} help="AI tasks currently running versus the configured pool capacity." tone="good" />
+        <Metric label="Active agents" value={`${overview.active_luna_executors} / ${overview.max_concurrent_ai_runs}`} icon={Bot} help="AI tasks currently running versus the configured pool capacity." tone="good" />
         <Metric label="Stages / 24h" value={overview.completed_stages_24h} icon={Waypoints} help="Mechanical and AI pipeline stages completed over the rolling last 24 hours." />
         <Metric label="Failures / 24h" value={overview.failures_24h} icon={AlertTriangle} help="Stages that failed during the rolling last 24 hours." tone={numberOf(overview.failures_24h) ? 'danger' : 'good'} />
       </section>

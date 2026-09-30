@@ -416,6 +416,21 @@ TO clideck_mcp_researcher;
 GRANT DELETE ON active_knowledge_state TO clideck_mcp_researcher;
 GRANT DELETE ON active_source_slots TO clideck_mcp_researcher;
 GRANT DELETE ON pipeline_ai_circuits TO clideck_mcp_researcher;
+GRANT SELECT ON pipeline_execution_profiles, pipeline_runtime_catalog,
+  pipeline_model_pricing, pipeline_model_circuits TO clideck_mcp_admin;
+GRANT UPDATE ON pipeline_execution_profiles, pipeline_model_pricing TO clideck_mcp_admin;
+GRANT UPDATE (refresh_requested_at) ON pipeline_runtime_catalog TO clideck_mcp_admin;
+GRANT SELECT ON pipeline_execution_profiles, pipeline_runtime_catalog,
+  pipeline_model_circuits TO clideck_mcp_researcher, clideck_mcp_worker;
+GRANT UPDATE ON pipeline_runtime_catalog TO clideck_mcp_researcher;
+GRANT INSERT, UPDATE, DELETE ON pipeline_model_circuits TO clideck_mcp_researcher;
+GRANT UPDATE ON pipeline_model_circuits TO clideck_mcp_worker;
+-- Codify the narrow operational intake grants recorded on 2026-09-21.
+GRANT INSERT (coverage_target_id, canonical_url, vendor_domain, collection_type,
+  status, crawl_depth, link_limit, path_prefix, intake_job_id, next_scan_at)
+ON source_collections TO clideck_mcp_admin;
+GRANT UPDATE (link_limit, path_prefix, intake_job_id, status, next_scan_at, updated_at)
+ON source_collections TO clideck_mcp_admin;
 GRANT USAGE, SELECT ON SEQUENCE
   task_messages_id_seq,
   task_public_events_id_seq,

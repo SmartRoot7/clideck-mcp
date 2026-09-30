@@ -39,6 +39,7 @@ export type SectionId =
   | 'overview'
   | 'mcp-requests'
   | 'pipeline'
+  | 'models'
   | 'active-source'
   | 'agent-runs'
   | 'coverage'
@@ -93,6 +94,7 @@ const GROUPS: Array<{
   {
     label: 'Control',
     items: [
+      { id: 'models', label: 'Agents & Models', icon: Bot },
       { id: 'tasks', label: 'Expert Tasks', icon: Bot },
       { id: 'releases', label: 'Releases', icon: Tag },
       { id: 'approvals', label: 'Approvals', icon: FileSearch },
@@ -198,11 +200,11 @@ export function AppShell({
           <div className="command-bar__actions">
             <Button
               variant={enabled ? 'secondary' : 'primary'}
-              aria-label={enabled ? 'Pause all Luna' : 'Resume pipeline'}
+              aria-label={enabled ? 'Pause all agents' : 'Resume pipeline'}
               onClick={onPause}
             >
               {enabled ? <Pause size={16} /> : <Play size={16} />}
-              <span>{enabled ? 'Pause all Luna' : 'Resume pipeline'}</span>
+              <span>{enabled ? 'Pause all agents' : 'Resume pipeline'}</span>
             </Button>
             <Button variant="quiet" aria-label="Refresh live data" onClick={onRefresh} disabled={refreshing}>
               <RefreshCw size={17} className={refreshing ? 'spin' : ''} />
@@ -230,6 +232,7 @@ const SECTION_COPY: Record<SectionId, string> = {
   overview: 'Published knowledge, live throughput, cost and operational health.',
   'mcp-requests': 'Questions, safe responses, latency, errors and demand-driven learning.',
   pipeline: 'Every stage from source discovery through immutable publication.',
+  models: 'Choose agent capacity and compare model prices, performance and extraction quality.',
   'active-source': 'Up to eight concurrent source lanes, extraction progress and candidate outcomes.',
   'agent-runs': 'Luna capacity, token efficiency, duration and run outcomes.',
   coverage: 'Prioritised vendor, model, operating system and document gaps.',

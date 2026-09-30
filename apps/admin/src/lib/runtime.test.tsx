@@ -29,7 +29,7 @@ describe('shared operations runtime', () => {
     const sectionIds = NAVIGATION_GROUPS.flatMap((group) =>
       group.items.map((item) => item.id),
     )
-    expect(sectionIds).toHaveLength(19)
+    expect(sectionIds).toHaveLength(20)
     expect(Object.keys(OPERATIONS_PAGE_REGISTRY).sort()).toEqual(
       [...sectionIds].sort(),
     )

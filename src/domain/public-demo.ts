@@ -225,6 +225,7 @@ export function sanitizeDemoOverview(overview: Overview): Overview {
       status_reason: executor.status_reason
     })),
     ai_circuits: overview.ai_circuits.map((circuit) => ({
+      model: circuit.model,
       task_type: circuit.task_type,
       reasoning_effort: circuit.reasoning_effort,
       state: circuit.state,

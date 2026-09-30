@@ -31,6 +31,7 @@ import {
   sessionSchema,
   sourcesSchema
 } from '@clideck/admin-contracts'
+import { executionModelsSchema, executionSettingsSchema, executionSettingsInputSchema, executionModelRetrySchema } from '@clideck/admin-contracts'
 import { Hono, type Context } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
@@ -96,7 +97,7 @@ type AdminUiBindings = {
 
 type ForwardResult =
   | { ok: true; value: unknown }
-  | { ok: false; status: 400 | 401 | 403 | 404 | 409 | 429 | 500 | 502 }
+  | { ok: false; status: 400 | 401 | 403 | 404 | 409 | 429 | 500 | 502; error?: string }
 
 function safeStatus(
   status: number,
@@ -161,7 +162,7 @@ export function createAdminUiApp(dependencies: AdminUiDependencies) {
         defaultSrc: ["'self'"],
         baseUri: ["'self'"],
         connectSrc: ["'self'"],
-        fontSrc: ["'self'"],
+        fontSrc: ["'self'", 'data:'],
         formAction: ["'self'"],
         frameAncestors: ["'none'"],
         imgSrc: ["'self'", 'data:'],
@@ -310,6 +311,11 @@ export function createAdminUiApp(dependencies: AdminUiDependencies) {
       },
     ))
     if (!response.ok) {
+      const payload = await response.json().catch(() => ({})) as { error?: string }
+      if (payload.error && ['EXECUTION_SETTINGS_CONFLICT', 'EXECUTION_CATALOG_STALE',
+        'EXECUTION_MODEL_UNSUPPORTED', 'CODEX_INCOMPATIBLE'].includes(payload.error)) {
+        return { ok: false, status: safeStatus(response.status), error: payload.error }
+      }
       return { ok: false, status: safeStatus(response.status) }
     }
     if (method === 'POST' || response.status === 204) {
@@ -366,7 +372,7 @@ export function createAdminUiApp(dependencies: AdminUiDependencies) {
       body,
     )
     if (!result.ok) {
-      return context.json({ error: 'admin_action_failed' }, result.status)
+      return context.json({ error: result.error ?? 'admin_action_failed' }, result.status)
     }
     return context.json(mutationAckSchema.parse({
       ok: true,
@@ -618,6 +624,28 @@ export function createAdminUiApp(dependencies: AdminUiDependencies) {
   app.get('/admin/api/v1/pipeline', (context) =>
     readEndpoint(context, '/admin/v1/pipeline', pipelineDetailsSchema),
   )
+  app.get('/admin/api/v1/pipeline/settings', (context) =>
+    readEndpoint(context, '/admin/v1/pipeline/settings', executionSettingsSchema),
+  )
+  app.get('/admin/api/v1/pipeline/models', (context) =>
+    readEndpoint(context, '/admin/v1/pipeline/models', executionModelsSchema),
+  )
+  app.post('/admin/api/v1/pipeline/settings', async (context) => {
+    const parsed = executionSettingsInputSchema.safeParse(await context.req.json<unknown>())
+    if (!parsed.success) return context.json({ error: 'invalid_execution_settings' }, 400)
+    return mutationEndpoint(context, '/admin/v1/pipeline/settings', parsed.data,
+      'Agent settings saved. New tasks use the selected models.', null)
+  })
+  app.post('/admin/api/v1/pipeline/models/refresh', (context) =>
+    mutationEndpoint(context, '/admin/v1/pipeline/models/refresh', {},
+      'Refresh requested. Check model and price timestamps below.', null),
+  )
+  app.post('/admin/api/v1/pipeline/models/retry', async (context) => {
+    const parsed = executionModelRetrySchema.safeParse(await context.req.json<unknown>())
+    if (!parsed.success) return context.json({ error: 'invalid_model_retry' }, 400)
+    return mutationEndpoint(context, '/admin/v1/pipeline/models/retry', parsed.data,
+      'Model retry enabled. The next task probes this model once.', null)
+  })
   app.get('/admin/api/v1/active-source', (context) =>
     readEndpoint(
       context,
@@ -743,7 +771,7 @@ export function createAdminUiApp(dependencies: AdminUiDependencies) {
       context,
       '/admin/v1/pipeline/state',
       parsed.data,
-      parsed.data.enabled ? 'Pipeline resumed.' : 'All Luna executors paused.',
+      parsed.data.enabled ? 'Pipeline resumed.' : 'All agents paused.',
       'pipeline',
     )
   })

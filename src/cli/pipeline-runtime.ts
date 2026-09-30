@@ -1,4 +1,5 @@
 import { resolve } from 'node:path'
+import { executionReasoningSchema, type ExecutionReasoning } from '@clideck/admin-contracts'
 
 import {
   pipelineExecutorIds,
@@ -15,8 +16,8 @@ export type PipelineModel =
 export const pipelineReasoning = 'low' as const
 export function normalizeTaskReasoning(
   value: unknown,
-): 'low' | 'medium' {
-  return value === 'medium' ? 'medium' : 'low'
+): ExecutionReasoning {
+  return executionReasoningSchema.parse(value ?? 'low')
 }
 
 export function pipelineExecutorPaths(

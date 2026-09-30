@@ -230,8 +230,8 @@ export async function getAdminOverview(
          (SELECT count(*)::int FROM active_knowledge_state)
            AS published_revisions,
          ps.enabled AS pipeline_enabled,
-         ps.ai_model,
-         ps.reasoning_effort,
+         (SELECT model FROM pipeline_execution_profiles WHERE profile_id = 'luna') AS ai_model,
+         (SELECT reasoning_effort FROM pipeline_execution_profiles WHERE profile_id = 'luna') AS reasoning_effort,
          ps.max_concurrent_ai_runs,
          ps.max_active_sources,
          ps.max_deep_review_runs,
@@ -389,17 +389,16 @@ export async function getAdminOverview(
        ai_circuit_runtime AS (
          SELECT
            circuit.task_type,
-           circuit.reasoning_effort,
+           circuit.reasoning_effort, circuit.model, runtime_profile.fallback_model,
            CASE
              WHEN EXISTS (
                SELECT 1
                FROM live_tasks task
                WHERE task.claim_owner = circuit.probe_executor_id
                  AND task.task_type = circuit.task_type
-                 AND coalesce(
-                   task.requested_reasoning_effort,
-                   'low'
-                 ) = circuit.reasoning_effort
+                 AND EXISTS (SELECT 1 FROM agent_runs run WHERE run.pipeline_task_id = task.id
+                   AND run.status = 'running' AND run.model = circuit.model
+                   AND run.reasoning_effort = circuit.reasoning_effort)
              ) THEN 'probing'
              ELSE 'cooldown'
            END AS state,
@@ -410,14 +409,17 @@ export async function getAdminOverview(
                FROM live_tasks task
                WHERE task.claim_owner = circuit.probe_executor_id
                  AND task.task_type = circuit.task_type
-                 AND coalesce(
-                   task.requested_reasoning_effort,
-                   'low'
-                 ) = circuit.reasoning_effort
+                 AND EXISTS (SELECT 1 FROM agent_runs run WHERE run.pipeline_task_id = task.id
+                   AND run.status = 'running' AND run.model = circuit.model
+                   AND run.reasoning_effort = circuit.reasoning_effort)
              ) THEN circuit.probe_executor_id
              ELSE NULL
            END AS probe_executor_id
-         FROM pipeline_ai_circuits circuit
+         FROM pipeline_model_circuits circuit
+         JOIN pipeline_execution_profiles runtime_profile ON runtime_profile.profile_id = circuit.execution_profile
+           AND ((runtime_profile.model = circuit.model AND runtime_profile.reasoning_effort = circuit.reasoning_effort)
+             OR (runtime_profile.fallback_model = circuit.model AND runtime_profile.fallback_reasoning_effort = circuit.reasoning_effort))
+         WHERE circuit.configuration_error OR circuit.open_until > now() OR circuit.probe_executor_id IS NOT NULL
        ),
        queued_publication_sources AS (
          SELECT DISTINCT task.source_candidate_id
@@ -624,7 +626,8 @@ export async function getAdminOverview(
            executor.ordinal,
            heartbeat.instance_id,
            CASE
-             WHEN task.id IS NOT NULL THEN 'running'
+             WHEN task.id IS NOT NULL THEN CASE WHEN executor.ordinal > settings.max_concurrent_ai_runs THEN 'draining' ELSE 'running' END
+             WHEN executor.ordinal > settings.max_concurrent_ai_runs THEN 'disabled'
              WHEN heartbeat.heartbeat_at IS NULL
                OR heartbeat.heartbeat_at <
                   snapshot.snapshot_at - interval '2 minutes'
@@ -760,14 +763,8 @@ export async function getAdminOverview(
                  'state', state,
                  'next_retry_at', next_retry_at,
                  'probe_executor_id', probe_executor_id,
-                 'fallback_model', CASE
-                   WHEN reasoning_effort = 'medium'
-                     AND task_type IN (
-                       'candidate_deep_review',
-                       'demand_diagnosis'
-                     ) THEN 'gpt-5.6-terra'
-                   ELSE NULL
-                 END
+                 'model', model,
+                 'fallback_model', fallback_model
                )
                ORDER BY task_type, reasoning_effort
              ),
@@ -1422,7 +1419,8 @@ export async function getPipelineDetails(database: Database) {
     )
   ])
   return {
-    settings: settings.rows[0],
+    settings: { ...settings.rows[0],
+      ...(await database.query("SELECT model AS ai_model, reasoning_effort FROM pipeline_execution_profiles WHERE profile_id = 'luna'")).rows[0] },
     tasks: tasks.rows,
     events: events.rows
   }
@@ -2039,7 +2037,7 @@ export async function listAgentRuns(database: Database, limit: number) {
        ar.pipeline_task_id,
        pt.task_type,
        pt.stage,
-       ar.model,
+       ar.model, ar.execution_profile, coalesce(ar.settings_version, 0) AS settings_version, ar.fallback_from_model,
        ar.reasoning_effort,
        ar.status,
        ar.input_tokens,

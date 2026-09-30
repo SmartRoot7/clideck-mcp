@@ -14,19 +14,31 @@ Verify live state before acting.
 
 - **Open:** Cisco/Akamai 403 blocks intake; September 21 restored Linux downloads
   only. End-to-end publication and an extended soak are not established.
-- **Operational drift:** September 21 `source_collections` admin grants are not
-  in `ops/sql/grants.sql`; account for the exact columns below before reconciling.
+- **Grants:** September 21 narrow `source_collections` admin grants are now
+  codified in `ops/sql/grants.sql`; preserve the exact columns below.
 - **Configuration:** September 8 cluster `jit=off` resolved Overview timeouts;
   preserve/verify after restore or host migration.
 - **Policy drift:** old docs claimed universal 0.90/0.95 publication thresholds;
   current Pipeline 2.0 core treats confidence/quality/rollback as metadata.
   Documentation now describes this accurately; no code/policy change was made.
   Preserve remaining core controls and resolve policy changes explicitly.
-- **Capacity:** fixed eight lanes, no smaller stage cap. Earlier `8/2`, calendar
+- **Capacity:** operator-selected 1–8 lanes, no smaller stage cap. Earlier `8/2`, calendar
   blockers and no-push notes below were superseded; they are not instructions.
 
 Resolved incidents are condensed below. Full evidence/test counts and previous
 soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.md`.
+
+## 2026-09-29 — Configurable execution and obsolete local runtime
+
+- Before deployment: production `b48d745` services healthy, enabled/8, no running
+  agent tasks, one fresh executor heartbeat; PostgreSQL `jit=off` preserved.
+- Cause: local unified pool was unregistered; two legacy standalone executors
+  remained on Node 20 and configured Codex path no longer existed.
+- Correction: versioned profiles/capacity with atomic reservations, model-scoped
+  circuits and Fidelity identity; authenticated runtime catalog and dated official
+  prices; pinned Node 24 launchd pool, retire legacy executors through the normal
+  deployment workflow. Corrected ignored Codex path and env mode to `0600`.
+- Deployment SHA and measured post-deploy result: pending release verification.
 
 ## 2026-09-21 — Temporary intake recovery without an application change
 
