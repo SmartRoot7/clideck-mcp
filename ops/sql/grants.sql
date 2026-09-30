@@ -322,12 +322,12 @@ GRANT EXECUTE ON FUNCTION queue_network_knowledge_gap(
   bytea
 ) TO clideck_mcp_api;
 GRANT EXECUTE ON FUNCTION queue_network_knowledge_demand(text,text,jsonb,bytea)
-  TO clideck_mcp_admin, clideck_mcp_researcher;
+  TO clideck_mcp_admin, clideck_mcp_researcher, clideck_mcp_worker;
 GRANT SELECT (id,tool_name,request_payload,response_payload,outcome,
   knowledge_demand_id,occurred_at,learning_recovery_checked_at) ON mcp_request_logs
   TO clideck_mcp_researcher;
 GRANT UPDATE (knowledge_demand_id,learning_recovery_checked_at) ON mcp_request_logs
-  TO clideck_mcp_researcher;
+  TO clideck_mcp_researcher, clideck_mcp_worker;
 
 GRANT SELECT, UPDATE ON expert_tasks TO clideck_mcp_researcher;
 GRANT SELECT, INSERT ON task_messages TO clideck_mcp_researcher;

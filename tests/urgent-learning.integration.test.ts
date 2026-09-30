@@ -62,14 +62,14 @@ suite('urgent learning reliability', () => {
       expect(progress).toMatchObject({ status: 'unresolved', needs_context: true, queued_tasks: 0, active_tasks: 0 })
     })
   })
-  it('recovers a durable intake failure with the actual researcher permissions', async () => {
+  it.each(['clideck_mcp_researcher','clideck_mcp_worker'])('recovers a durable intake failure with the actual %s permissions', async (role) => {
     await transaction(async (db,client) => {
       const request = { question: question(), context }
       const log = await client.query(`INSERT INTO mcp_request_logs
         (request_id,actor_kind,tool_name,request_payload,response_payload,question_preview,response_preview,outcome,duration_ms)
         VALUES ($1,'anonymous','query_network_knowledge',$2,'{"unknown":true}', $3,'unknown','unknown',1) RETURNING id`,
       [randomUUID(),request,request.question])
-      await client.query('SET LOCAL ROLE clideck_mcp_researcher')
+      await client.query(`SET LOCAL ROLE ${role}`)
       await recoverUnqueuedKnowledgeDemands(client)
       const stored = await client.query('SELECT knowledge_demand_id,learning_recovery_checked_at FROM mcp_request_logs WHERE id=$1',[log.rows[0]!.id])
       expect(stored.rows[0]?.knowledge_demand_id).toBeTruthy()
@@ -138,17 +138,45 @@ suite('urgent learning reliability', () => {
       expect(tasks.rows).toContainEqual({task_type:'fragment_analysis'})
     })
   })
+  it('starts a ready user question despite an exhausted topic with a future eligibility date', async () => {
+    await transaction(async (db,client) => {
+      await client.query("UPDATE pipeline_tasks SET status='cancelled' WHERE status IN ('queued','claimed','running')")
+      await client.query("UPDATE knowledge_demands SET status='published'")
+      await client.query('DELETE FROM pipeline_model_circuits')
+      await client.query('UPDATE pipeline_settings SET enabled=true,max_concurrent_ai_runs=8 WHERE singleton')
+      const id = await queueUnknownKnowledgeDemand(db,'query_network_knowledge',{
+        question: question(), context: { vendor: `topic-fixture-${randomUUID()}`, operating_system: 'IOS XE' }
+      },{unknown:true})
+      await client.query("UPDATE pipeline_tasks SET status='cancelled' WHERE knowledge_demand_id=$1",[id])
+      await client.query("UPDATE knowledge_demands SET status='queued',diagnosis_status='completed',next_retry_at=now() WHERE id=$1",[id])
+      const topic=(await client.query(`INSERT INTO demand_topics(topic_key,topic_slug,scope,state,next_eligible_at)
+        VALUES ($1,'macsec','{}','exhausted',now()+interval '7 days') RETURNING id`,[sha256Label(randomUUID())])).rows[0]!
+      await client.query(`INSERT INTO knowledge_demand_topic_memberships(knowledge_demand_id,demand_topic_id)
+        VALUES ($1,$2)`,[id,topic.id])
+      await ensurePipelineWork(db)
+      const work=await client.query("SELECT task_type FROM pipeline_tasks WHERE knowledge_demand_id=$1 AND status='queued'",[id])
+      expect(work.rows).toEqual([{task_type:'source_discovery'}])
+      expect((await client.query('SELECT state FROM demand_topics WHERE id=$1',[topic.id])).rows[0]!.state).toBe('active')
+    })
+  })
   it('audits terminal sources using the original run even when a newer run exists', async () => {
     await transaction(async (db,client) => {
       await client.query("UPDATE pipeline_tasks SET status='cancelled' WHERE status IN ('queued','claimed','running')")
       await client.query("UPDATE knowledge_demands SET status='published'")
       await client.query('DELETE FROM pipeline_model_circuits')
       await client.query('UPDATE pipeline_settings SET enabled=true,max_concurrent_ai_runs=8 WHERE singleton')
+      // Background queue capacity must not hide a user's terminal-source audit.
+      for (let i=0;i<8;i++) await client.query(`INSERT INTO pipeline_tasks(task_type,stage,dedupe_key,payload)
+        VALUES ('fragment_analysis','analyze',$1,'{}')`,[randomUUID()])
+      const demandId=await queueUnknownKnowledgeDemand(db,'query_network_knowledge',{question:question(),context},{unknown:true})
+      await client.query("UPDATE pipeline_tasks SET status='cancelled' WHERE knowledge_demand_id=$1",[demandId])
+      await client.query("UPDATE knowledge_demands SET status='processing',diagnosis_status='completed' WHERE id=$1",[demandId])
       const target = (await client.query(`INSERT INTO coverage_targets(vendor_slug,operating_system_slug,document_role,status)
         VALUES ('cisco','ios-xe','commands','paused') ON CONFLICT DO NOTHING RETURNING id`)).rows[0]
         ?? (await client.query("SELECT id FROM coverage_targets WHERE vendor_slug='cisco' AND operating_system_slug='ios-xe' LIMIT 1")).rows[0]
       const source = (await client.query(`INSERT INTO source_candidates(coverage_target_id,canonical_url,document_type,title,status,discovered_by)
         VALUES ($1,$2,'command_reference','Terminal fidelity fixture','completed','test') RETURNING id`,[target.id,`https://www.cisco.com/${randomUUID()}`])).rows[0]
+      await client.query('UPDATE source_candidates SET knowledge_demand_id=$1 WHERE id=$2',[demandId,source.id])
       const run = (await client.query(`INSERT INTO source_processing_runs(source_candidate_id,processing_version,status)
         VALUES ($1,'test-v1','completed') RETURNING id`,[source.id])).rows[0]
       await client.query(`INSERT INTO source_processing_runs(source_candidate_id,processing_version,status)

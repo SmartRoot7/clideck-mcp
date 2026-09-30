@@ -8,18 +8,19 @@ soak. A clean baseline is not a completed extended observation window.
 
 ## Handoff as of production verification, 2026-09-30
 
-Live application: `04ddae1ea2de7e935e452cdd38bfbd500dd9e873` on
+Live application: `7bc91258c9f14b5bd75c04ecb1534978da04fce0` on
 `100.116.82.78`, deployed through `ops/scripts/deploy-production.sh`.
 Pipeline enabled, capacity 8. At the later learning audit, operator settings
 version 8 used `gpt-6-luna` low/medium, High fallback `gpt-5.6-terra` medium.
 
 - **Open:** Cisco/Akamai 403 blocks intake; September 21 restored Linux downloads
   only. End-to-end publication and an extended soak are not established.
-- **Learning audit:** 15/20 unknown questions lost diagnosis tasks; a global
+- **Learning audit baseline:** 15/20 unknown questions lost diagnosis tasks; a global
   migration-029 trigger silently blocks concurrent inserts while reconciliation
   omits orphan `queued` demands. EVPN falsely closed with OSPF; terminal sources
   strand Fidelity backlog; public stats remain stale since August 30. Corrections
-  are implemented below; production verification is pending.
+  are implemented below. All 20 later requests retained diagnosis tasks;
+  end-to-end answers and the final corrective release remain under verification.
 - **Grants:** September 21 narrow `source_collections` admin grants are now
   codified in `ops/sql/grants.sql`; preserve the exact columns below.
 - **Configuration:** September 8 cluster `jit=off` resolved Overview timeouts;
@@ -72,7 +73,23 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
   source reuse and evidence filtering.
 - Follow-up validation: 334 tests and 250 evaluation fixtures passed on a fresh
   database, including nonblocking single refresh and future-retry/full-background
-  queue regression checks. Follow-up deployment and final live result pending.
+  queue regression checks. Follow-up `7bc91258c9f14b5bd75c04ecb1534978da04fce0`
+  deployed successfully; the worker refreshed statistics at 21:26:27 UTC in
+  18.647 s with no cache error, while public reads remained fast.
+  Post-deploy observation found worker-role journal recovery missing UPDATE
+  permission: SELECT FOR UPDATE requires it even without rows. Add only the
+  two recovery columns and intake-function execution to the existing worker
+  grants; verify recovery as both real scheduler roles.
+  Four diagnosed cohort questions remained queued behind a shared topic's
+  exhausted state and future seven-day eligibility. Topic history now orders
+  ready user questions instead of blocking them; retain each demand's retry
+  date, live-task uniqueness and circuit isolation. Terminal-source audits
+  also join urgent materialization instead of waiting behind a full background
+  queue. Both scheduling failures were reproduced before correction.
+  Final correction passed 336 tests and 250 evaluation fixtures on a fresh
+  database, plus type checks and network-pack validation. The worker-role
+  failure was reproduced before applying the scoped grants and passed after.
+  Final corrective deployment and live answer result pending.
   The short acceptance window is not a completed extended soak.
 
 ## 2026-09-30 — Knowledge quality and 20-question learning audit

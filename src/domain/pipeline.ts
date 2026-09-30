@@ -2485,13 +2485,8 @@ async function queueDemandDiscoveryWork(
      LEFT JOIN demand_topics topic ON topic.id = membership.demand_topic_id
      WHERE demand.status IN ('queued', 'unresolved', 'failed')
        AND demand.diagnosis_status = 'completed'
-       AND (
-         topic.id IS NULL
-         OR (
-           topic.state IN ('active', 'cooldown')
-           AND topic.next_eligible_at <= now()
-         )
-       )
+       -- A topic's historical exhaustion must not block a ready user request.
+       -- Demand-specific retry dates and live leases still prevent retry loops.
        AND demand.next_retry_at <= now()
        AND NOT EXISTS (
          SELECT 1
@@ -2606,7 +2601,8 @@ async function queueDemandDiscoveryWork(
     )
     await client.query(
       `UPDATE demand_topics topic
-          SET last_served_at = now(), updated_at = now()
+          SET state = 'active', next_eligible_at = now(),
+              last_served_at = now(), updated_at = now()
          FROM knowledge_demand_topic_memberships membership
         WHERE membership.knowledge_demand_id = $1
           AND membership.demand_topic_id = topic.id`,
@@ -2659,7 +2655,8 @@ async function queueDemandDiscoveryWork(
   )
   await client.query(
     `UPDATE demand_topics topic
-        SET last_served_at = now(), updated_at = now()
+        SET state = 'active', next_eligible_at = now(),
+            last_served_at = now(), updated_at = now()
        FROM knowledge_demand_topic_memberships membership
       WHERE membership.knowledge_demand_id = $1
         AND membership.demand_topic_id = topic.id`,
@@ -3645,7 +3642,18 @@ async function queueUrgentDemandWork(client: DatabaseClient, capacity: number): 
     if (await queueDeepReviewWork(client, 'medium', true) || await queueDeepReviewWork(client, 'low', true)) continue
     const sources = await client.query<{ id: string }>(
       `SELECT source.id FROM source_candidates source JOIN knowledge_demands demand ON demand.id=source.knowledge_demand_id
-        WHERE demand.status<>'published' AND source.status IN ('prepared','analyzing','verifying')
+        WHERE demand.status<>'published' AND (
+          source.status IN ('prepared','analyzing','verifying') OR (
+            source.status IN ('completed','completed_with_exceptions','duplicate','rejected')
+            AND EXISTS (
+              SELECT 1 FROM knowledge_candidates candidate
+              JOIN pipeline_tasks origin ON origin.id=candidate.pipeline_task_id
+              WHERE origin.source_candidate_id=source.id
+                AND candidate.status IN ('verified','published')
+                AND candidate.fidelity_status='pending' AND candidate.fidelity_task_id IS NULL
+            )
+          )
+        )
         ORDER BY (SELECT count(*) FROM pipeline_tasks task WHERE task.source_candidate_id=source.id AND task.status IN ('queued','claimed','running')),
           demand.priority DESC,demand.first_seen_at LIMIT 16`)
     let queued = false
