@@ -9,7 +9,8 @@ const features = [
 function hasTerm(text: string, term: string): boolean {
   text = text.replace(/\bospfv?[23]\b/gi, 'ospf').replace(/\bis-is\b/gi, 'isis')
   const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  return new RegExp(`(?:^|[^a-z0-9])${escaped}s?(?=$|[^a-z0-9])`, 'i').test(text)
+  const suffix = ['vlan','flowtable'].includes(term) ? 's?' : ''
+  return new RegExp(`(?:^|[^a-z0-9])${escaped}${suffix}(?=$|[^a-z0-9])`, 'i').test(text)
 }
 
 export function networkDemandFeatureTerms(question: string): string[] {
@@ -18,4 +19,12 @@ export function networkDemandFeatureTerms(question: string): string[] {
 
 export function networkAnswerMatchesFeatures(question: string, evidence: string): boolean {
   return networkDemandFeatureTerms(question).every((term) => hasTerm(evidence, term))
+}
+
+export function networkDemandFeaturePatterns(question: string): string[] {
+  return networkDemandFeatureTerms(question).map((term) => {
+    const expression = term === 'ospf' ? 'ospf(v?[23])?' : term === 'isis' ? 'is-?is'
+      : ['vlan','flowtable'].includes(term) ? `${term}s?` : term
+    return `(^|[^a-z0-9])${expression}($|[^a-z0-9])`
+  })
 }

@@ -1,8 +1,14 @@
 import { performance } from 'node:perf_hooks'
+import type { QueryResultRow } from 'pg'
 
 import type { Database } from '../db.js'
 
 type QueryableDatabase = Pick<Database, 'query'>
+
+function boundedStatsQuery<T extends QueryResultRow>(database: QueryableDatabase, text: string) {
+  const query = { text, query_timeout: 60_000 }
+  return database.query<T>(query)
+}
 
 export type UsageOutcome =
   | 'success'
@@ -32,8 +38,7 @@ export async function recordPublicUsage(
 }
 
 export async function computePublicStats(database: QueryableDatabase) {
-  const [coverage, usage, growth, evaluation] = await Promise.all([
-    database.query<{
+  const coverage = await boundedStatsQuery<{
       release_sequence: number
       release_published_at: string | Date
       published_knowledge: number
@@ -44,7 +49,7 @@ export async function computePublicStats(database: QueryableDatabase) {
       version_scopes: number
       workflows: number
       lab_validated_revisions: number
-    }>(
+    }>(database,
       `WITH active_coverage AS MATERIALIZED (
          SELECT operating_system_slug, version_min, version_max, kind
          FROM public_active_knowledge
@@ -88,11 +93,11 @@ export async function computePublicStats(database: QueryableDatabase) {
              AND validation_type IN ('batfish_modeled', 'runtime_lab_validated')
          ) AS lab_validated_revisions
        FROM public_active_release_summary r`,
-    ),
-    database.query<{
+    )
+  const usage = await boundedStatsQuery<{
       known_answers_served: number
       expert_answers_published: number
-    }>(
+    }>(database,
       `SELECT
          coalesce(sum(request_count) FILTER (
            WHERE operation IN ('query_network_knowledge', 'get_network_workflow')
@@ -101,13 +106,13 @@ export async function computePublicStats(database: QueryableDatabase) {
          (SELECT count(*)::int FROM expert_tasks WHERE status = 'completed')
            AS expert_answers_published
        FROM public_usage_daily`,
-    ),
-    database.query<{
+    )
+  const growth = await boundedStatsQuery<{
       day: string | Date
       answers: number
       new_knowledge: number
       lab_validations: number
-    }>(
+    }>(database,
       `WITH
        days AS (
          SELECT generate_series(
@@ -156,8 +161,8 @@ export async function computePublicStats(database: QueryableDatabase) {
        LEFT JOIN knowledge_by_day USING (day)
        LEFT JOIN lab_by_day USING (day)
        ORDER BY days.day`,
-    ),
-    database.query<{
+    )
+  const evaluation = await boundedStatsQuery<{
       suite: string
       commit_sha: string | null
       case_count: number
@@ -168,11 +173,10 @@ export async function computePublicStats(database: QueryableDatabase) {
       p95_ms: string
       max_ms: string
       executed_at: string | Date
-    }>(
+    }>(database,
       `SELECT *
        FROM public_latest_eval_result`,
     )
-  ])
 
   const coverageRow = coverage.rows[0]
   const usageRow = usage.rows[0] ?? {
@@ -244,6 +248,7 @@ export async function refreshPublicStatsCache(
 ): Promise<PublicStats> {
   const startedAt = performance.now()
   const client = await database.connect()
+  let transactionStarted = false
   try {
     const locked = await client.query<{ locked: boolean }>(
       `SELECT pg_try_advisory_lock(hashtext('clideck:public-stats-cache'))
@@ -256,7 +261,10 @@ export async function refreshPublicStatsCache(
       if (existing.rows[0]) return existing.rows[0].payload
       throw new Error('PUBLIC_STATS_REFRESH_BUSY')
     }
-    const stats = await computePublicStats(database)
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ')
+    transactionStarted = true
+    await client.query("SET LOCAL statement_timeout = '55s'")
+    const stats = await computePublicStats(client as QueryableDatabase)
     await client.query(
       `INSERT INTO public_stats_cache (
          singleton,
@@ -284,8 +292,11 @@ export async function refreshPublicStatsCache(
          refresh_error_code = NULL`,
       [JSON.stringify(stats), Math.max(0, Math.round(performance.now() - startedAt))],
     )
+    await client.query('COMMIT')
+    transactionStarted = false
     return stats
   } catch (error) {
+    if (transactionStarted) await client.query('ROLLBACK')
     await client.query(
       `UPDATE public_stats_cache
           SET refresh_error_code = $1

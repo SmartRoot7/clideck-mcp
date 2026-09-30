@@ -15,10 +15,14 @@ import { purgeExpiredMcpRequestLogs } from '../domain/mcp-observability.js'
 import { reconcileTerminalProcessingRuns } from '../domain/intake.js'
 import { refreshPublicStatsCacheIfStale } from '../domain/telemetry.js'
 import { createLogger } from '../logger.js'
+import { backgroundMaintenance } from '../background-maintenance.js'
 
 const config = getConfig()
 const logger = createLogger(config)
 const database = createDatabase(config, logger, config.workerDatabaseUrl)
+const statsDatabase = createDatabase({ ...config, databaseMaxConnections: 2 }, logger, config.workerDatabaseUrl, { queryTimeoutMs: 60_000 })
+const statsRefresh = backgroundMaintenance(() => refreshPublicStatsCacheIfStale(statsDatabase), (error) =>
+  logger.warn({ err: error }, 'Background public statistics refresh failed'))
 const instanceId = `worker-${randomUUID()}`
 const abortController = new AbortController()
 let nextRequestLogCleanupAt = 0
@@ -37,7 +41,7 @@ try {
         nextProcessingReconciliationAt = Date.now() + 30_000
       }
       await runWorkerMaintenance(database, instanceId)
-      await refreshPublicStatsCacheIfStale(database)
+      statsRefresh.start()
       await purgeExpiredSourceArtifacts(database, logger)
       if (Date.now() >= nextRequestLogCleanupAt) {
         await purgeExpiredMcpRequestLogs(
@@ -78,6 +82,8 @@ try {
   logger.fatal({ err: error, instanceId }, 'Worker stopped unexpectedly')
   process.exitCode = 1
 } finally {
+  await statsRefresh.finish()
+  await statsDatabase.end()
   await database.end()
   logger.info({ instanceId }, 'CliDeck MCP worker stopped')
 }

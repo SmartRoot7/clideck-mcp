@@ -3637,8 +3637,10 @@ async function prepareUrgentDemandSources(client: DatabaseClient, capacity: numb
 async function queueUrgentDemandWork(client: DatabaseClient, capacity: number): Promise<void> {
   const ready = await client.query<{ count: number }>(
     `SELECT count(*)::int count FROM pipeline_tasks task JOIN knowledge_demands demand ON demand.id=task.knowledge_demand_id
-      WHERE demand.status<>'published' AND task.status IN ('queued','claimed','running')
-        AND task.task_type=ANY($1::text[]) AND ${claimableExecutionSql('task')}`, [aiTaskTypes])
+      WHERE demand.status<>'published'
+        AND (task.status IN ('claimed','running') OR
+          (task.status='queued' AND task.available_at<=now() AND ${claimableExecutionSql('task')}))
+        AND task.task_type=ANY($1::text[])`, [aiTaskTypes])
   for (let count = ready.rows[0]?.count ?? 0; count < capacity; count++) {
     if (await queueDeepReviewWork(client, 'medium', true) || await queueDeepReviewWork(client, 'low', true)) continue
     const sources = await client.query<{ id: string }>(

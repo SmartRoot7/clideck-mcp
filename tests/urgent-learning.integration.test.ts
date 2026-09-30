@@ -110,6 +110,34 @@ suite('urgent learning reliability', () => {
       expect(tasks.rows).toHaveLength(1)
     })
   })
+  it('materializes urgent analysis despite future retries and an already full background queue', async () => {
+    await transaction(async (db,client) => {
+      await client.query("UPDATE pipeline_tasks SET status='cancelled' WHERE status IN ('queued','claimed','running')")
+      await client.query("UPDATE knowledge_demands SET status='published'")
+      await client.query('DELETE FROM pipeline_model_circuits')
+      await client.query('UPDATE pipeline_settings SET enabled=true,max_concurrent_ai_runs=8 WHERE singleton')
+      for (let i=0;i<8;i++) {
+        const retryId = await queueUnknownKnowledgeDemand(db,'query_network_knowledge',{ question: question(), context },{unknown:true})
+        await client.query("UPDATE pipeline_tasks SET available_at=now()+interval '1 hour' WHERE knowledge_demand_id=$1",[retryId])
+        await client.query(`INSERT INTO pipeline_tasks(task_type,stage,dedupe_key,payload)
+          VALUES ('fragment_analysis','analyze',$1,'{}')`,[randomUUID()])
+      }
+      const id = await queueUnknownKnowledgeDemand(db,'query_network_knowledge',{question:question(),context},{unknown:true})
+      await client.query("UPDATE pipeline_tasks SET status='cancelled' WHERE knowledge_demand_id=$1",[id])
+      await client.query("UPDATE knowledge_demands SET diagnosis_status='completed',status='processing' WHERE id=$1",[id])
+      const source = (await client.query(`INSERT INTO source_candidates(coverage_target_id,canonical_url,document_type,title,status,discovered_by,knowledge_demand_id)
+        SELECT coverage_target_id,$2,'command_reference','MACsec fixture','prepared','test',id FROM knowledge_demands WHERE id=$1 RETURNING id`,[id,`https://www.cisco.com/${randomUUID()}`])).rows[0]!
+      const text='MACsec interface inspection: show macsec interface.'
+      const hash=sha256Label(randomUUID())
+      const artifact=(await client.query(`INSERT INTO source_artifacts(source_candidate_id,media_type,byte_size,content_hash,storage_path,status)
+        VALUES ($1,'text/plain',$2,$3,'/tmp/urgent-fixture.txt','chunked') RETURNING id`,[source.id,text.length,hash])).rows[0]!
+      await client.query(`INSERT INTO source_fragments(source_artifact_id,ordinal,content,content_hash)
+        VALUES ($1,0,$2,$3)`,[artifact.id,text,hash])
+      await ensurePipelineWork(db)
+      const tasks=await client.query("SELECT task_type FROM pipeline_tasks WHERE knowledge_demand_id=$1 AND status='queued'",[id])
+      expect(tasks.rows).toContainEqual({task_type:'fragment_analysis'})
+    })
+  })
   it('audits terminal sources using the original run even when a newer run exists', async () => {
     await transaction(async (db,client) => {
       await client.query("UPDATE pipeline_tasks SET status='cancelled' WHERE status IN ('queued','claimed','running')")

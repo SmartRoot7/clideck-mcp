@@ -56,8 +56,24 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
   on a fresh disposable PostgreSQL database; network pack validation passed.
   Added parallel-20, duplicate, orphan/recovery, role-grant, urgent-claim,
   terminal/original-run and EVPN/OSPF regression checks.
-- Deployment SHA, live experiment and read-only soak: pending normal deployment
-  and post-deploy measurement. A successful preflight is not a completed soak.
+- First deployment: `ed4ae50c5dc8eb1d0b2c40e696608ef537240a95` through the
+  production script, migration 044 and smoke checks passed. Twenty parallel
+  genuine unknown questions all received durable learning IDs; no orphan
+  queued/running diagnosis remained. All diagnoses completed; research and
+  source preparation progressed, but no complete answer yet at the interim
+  21:10 UTC checkpoint. Official-source gaps remain explicit.
+- Follow-up cause: the worker awaited expensive statistics before every source
+  operation. The projected coverage query measured 12.225 s against a 10 s
+  client timeout; retries kept the August 30 snapshot and delayed sources.
+  Move one refresh to its own background pool, use a consistent transaction,
+  sequential aggregates, a 55 s server deadline and a 60 s client deadline.
+  Preserve the fast public cache and fallback. Future retry tasks now consume
+  urgent queue capacity only once ready; domain aliases/plurals match in both
+  source reuse and evidence filtering.
+- Follow-up validation: 334 tests and 250 evaluation fixtures passed on a fresh
+  database, including nonblocking single refresh and future-retry/full-background
+  queue regression checks. Follow-up deployment and final live result pending.
+  The short acceptance window is not a completed extended soak.
 
 ## 2026-09-30 — Knowledge quality and 20-question learning audit
 

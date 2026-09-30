@@ -2284,15 +2284,18 @@ describeIntegration('PostgreSQL integration', () => {
         WHERE singleton`,
     )
     const timeoutDatabase = {
-      connect: database.connect.bind(database),
-      query: ((statement: string | { text?: string }, values?: unknown[]) => {
-        const text = typeof statement === 'string' ? statement : statement.text
-        if (text?.includes('FROM public_active_knowledge')) {
-          return Promise.reject(new Error('Query read timeout'))
+      query: database.query.bind(database),
+      connect: async () => {
+        const client = await database.connect()
+        return {
+          query: (statement: string | { text?: string }, values?: unknown[]) => {
+            const text = typeof statement === 'string' ? statement : statement.text
+            if (text?.includes('FROM public_active_knowledge')) return Promise.reject(new Error('Query read timeout'))
+            return client.query(statement as string, values)
+          }, release: () => client.release()
         }
-        return database.query(statement as string, values)
-      }) as Database['query']
-    } as Database
+      }
+    } as unknown as Database
     expect(await refreshPublicStatsCacheIfStale(timeoutDatabase)).toBe(false)
     expect((await getPublicStats(database)).cache.stale).toBe(true)
     await refreshPublicStatsCache(database)

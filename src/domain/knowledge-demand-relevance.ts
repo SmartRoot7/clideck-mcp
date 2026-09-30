@@ -1,4 +1,4 @@
-import { networkDemandFeatureTerms, networkAnswerMatchesFeatures } from '@clideck/domain-network'
+import { networkDemandFeaturePatterns, networkAnswerMatchesFeatures } from '@clideck/domain-network'
 
 const ignoredTerms = new Set([
   'can', 'could', 'do', 'does', 'inspect', 'display', 'list', 'identify',
@@ -54,8 +54,9 @@ function matchesTerm(text: string, term: string): boolean {
  * promote a substring such as "remacsec" for the demand term "macsec".
  */
 export function knowledgeDemandTermPatterns(question: string): string[] {
-  const features = networkDemandFeatureTerms(question)
-  return (features.length > 0 ? features : knowledgeDemandTerms(question)).map((term) => {
+  const patterns = networkDemandFeaturePatterns(question)
+  if (patterns.length > 0) return patterns
+  return knowledgeDemandTerms(question).map((term) => {
     const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     return `(^|[^a-z0-9])${escaped}($|[^a-z0-9])`
   })
@@ -84,6 +85,9 @@ export function isRelevantToKnowledgeDemand(
   evidence: readonly string[],
 ): boolean {
   const relevance = assessKnowledgeDemandRelevance(question, evidence)
+  if (networkDemandFeaturePatterns(question).length > 0) {
+    return networkAnswerMatchesFeatures(question, evidence.join('\n'))
+  }
   return networkAnswerMatchesFeatures(question, evidence.join('\n')) &&
     (relevance.terms.length === 0 || relevance.matchedTerms.length > 0)
 }

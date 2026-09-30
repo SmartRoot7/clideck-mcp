@@ -55,6 +55,8 @@ describe('knowledge-demand relevance', () => {
   })
 
   it('keeps ordinary operational terms usable for concrete network questions', () => {
+    expect(isRelevantToKnowledgeDemand('Display VLAN configuration', ['Allowed VLANs.'])).toBe(true)
+    expect(isRelevantToKnowledgeDemand('Display OSPF state', ['OSPFv3 interface state.'])).toBe(true)
     const vlanQuestion = 'Safely add VLAN 200 to an existing trunk without replacing allowed VLANs'
     expect(knowledgeDemandTerms(vlanQuestion)).toEqual(
       expect.arrayContaining(['vlan', 'trunk']),
