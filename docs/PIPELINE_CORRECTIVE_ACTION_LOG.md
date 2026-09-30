@@ -6,11 +6,12 @@ a restart alone is not a fix. Add evidence → cause → minimal correction → 
 SHA (or configuration-only status) → measured result, then restart the read-only
 soak. A clean baseline is not a completed extended observation window.
 
-## Handoff as of the documentation review, 2026-09-29
+## Handoff as of production verification, 2026-09-30
 
-No production inspection or deployment was performed for this review. Latest
-recorded application SHA (September 21): `b48d745f255fc706a6886ef38eba0e0ab3f0b92b`.
-Verify live state before acting.
+Live application: `04ddae1ea2de7e935e452cdd38bfbd500dd9e873` on
+`100.116.82.78`, deployed through `ops/scripts/deploy-production.sh`.
+Pipeline enabled, capacity 8; original Luna-low/Luna-medium/Terra fallback
+restored after acceptance checks. Settings version 5; nine fresh runtime models.
 
 - **Open:** Cisco/Akamai 403 blocks intake; September 21 restored Linux downloads
   only. End-to-end publication and an extended soak are not established.
@@ -28,7 +29,7 @@ Verify live state before acting.
 Resolved incidents are condensed below. Full evidence/test counts and previous
 soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.md`.
 
-## 2026-09-29 — Configurable execution and obsolete local runtime
+## 2026-09-30 — Configurable execution and obsolete local runtime
 
 - Before deployment: production `b48d745` services healthy, enabled/8, no running
   agent tasks, one fresh executor heartbeat; PostgreSQL `jit=off` preserved.
@@ -38,11 +39,35 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
   circuits and Fidelity identity; authenticated runtime catalog and dated official
   prices; pinned Node 24 launchd pool, retire legacy executors through the normal
   deployment workflow. Corrected ignored Codex path and env mode to `0600`.
-- Deployment SHA and measured post-deploy result: pending release verification.
+- Deployed clean `main` commits `d1ed0bb0283c484f92474071a9c2039ca53c225d`
+  then `04ddae1ea2de7e935e452cdd38bfbd500dd9e873`, both through the production
+  script with backup, migrations, grants, Linux build and smoke checks.
 - Additional role check found missing admin column privileges for model retry
   and cold Fidelity-profile creation. Corrected only required UPDATE/INSERT
   columns; regression executes settings/retry/profile queries under the actual
   `clideck_mcp_admin` role rather than the fixture's PostgreSQL owner.
+- Validation: typecheck/build passed; 323 tests and 250/250 evaluations passed,
+  dangerous false-safe count zero. Desktop/mobile browser checks covered model
+  selection, capacity save and readonly production demo without console errors.
+- Real production web canary: admin-selected `gpt-6-luna`/low, capacity 1,
+  `source_discovery` completed in 19,006 ms with accepted structured output.
+  Run snapshot retained `luna`, settings version 2 and the selected model.
+- High acceptance used a disposable database because no High task was eligible
+  in production: admin API → real bridge/lease/coordinator → authenticated Codex
+  `gpt-6-luna`/medium → accepted `demand_diagnosis`, 10,364 ms. This verifies
+  execution/routing, not comparative model quality or production High ingestion.
+- Live capacity reduction 8 → 2 preserved existing runs; after draining, two
+  active runs used the new version. Pause terminated both Codex processes
+  4,923 ms after API acknowledgment; retry API accepted under the admin role.
+  Original profiles/capacity were restored and Resume enabled the pool.
+- At 06:06 UTC: all eight coordinator heartbeats observed; completed production
+  runs continued, only the intentional Pause cancellations in the sample.
+  Health/readiness/admin Models/demo Models returned 200; settings/models/
+  Overview reads took 192/73/2,624 ms. Catalog/pricing refresh had no error;
+  official Standard-credit rates refreshed at 06:05:08Z. PostgreSQL `jit=off`;
+  no structured service error in the 05:47–06:06 UTC sample.
+- Restart the read-only soak from this baseline. Extended observation and
+  Cisco/Akamai recovery remain unproven; no default model change was made.
 
 ## 2026-09-21 — Temporary intake recovery without an application change
 
