@@ -2201,6 +2201,8 @@ async function queueSourceWork(
     const demandTermPatterns = source.demand_question
       ? knowledgeDemandTermPatterns(source.demand_question)
       : []
+    // Lock/bound evidence first; historical-key lookup must not execute for
+    // every fragment considered by the relevance sort.
     const queuedFragments = await client.query<{
       id: string
       ordinal: number
@@ -2210,41 +2212,39 @@ async function queueSourceWork(
       content_hash: string
       prior_candidate_keys: string[]
     }>(
-      `SELECT
+      `WITH selected_fragments AS MATERIALIZED (
+       SELECT
          sf.id,
          sf.ordinal,
          sf.section_title,
          sf.source_locator,
          sf.content,
          sf.content_hash,
-         coalesce((
-           SELECT array_agg(candidate.stable_key ORDER BY candidate.stable_key)
-             FROM knowledge_candidates candidate
-            WHERE candidate.source_fragment_id = sf.id
-         ), '{}'::text[]) AS prior_candidate_keys
+         COALESCE((
+           SELECT sum(
+             CASE WHEN coalesce(sf.section_title, '') ~* demand_pattern THEN 4 ELSE 0 END +
+             CASE WHEN sf.content ~* demand_pattern THEN 1 ELSE 0 END
+           ) FROM unnest($2::text[]) AS terms(demand_pattern)
+         ), 0) AS demand_score
        FROM source_fragments sf
        JOIN source_artifacts sa ON sa.id = sf.source_artifact_id
        WHERE sa.source_candidate_id = $1
          AND sf.processing_run_id IS NOT DISTINCT FROM $3::uuid
          AND sf.status = 'queued'
          AND sf.reservation_task_id IS NULL
-       ORDER BY
-         COALESCE((
-           SELECT sum(
-             CASE
-               WHEN coalesce(sf.section_title, '') ~* demand_pattern THEN 4
-               ELSE 0
-             END +
-             CASE
-               WHEN sf.content ~* demand_pattern THEN 1
-               ELSE 0
-             END
-           )
-           FROM unnest($2::text[]) AS terms(demand_pattern)
-         ), 0) DESC,
-         sf.ordinal
+       ORDER BY demand_score DESC, sf.ordinal
        LIMIT 16
-       FOR UPDATE OF sf SKIP LOCKED`,
+       FOR UPDATE OF sf SKIP LOCKED
+       )
+       SELECT selected.id, selected.ordinal, selected.section_title,
+         selected.source_locator, selected.content, selected.content_hash,
+         coalesce((
+           SELECT array_agg(candidate.stable_key ORDER BY candidate.stable_key)
+           FROM knowledge_candidates candidate
+           WHERE candidate.source_fragment_id = selected.id
+         ), '{}'::text[]) AS prior_candidate_keys
+       FROM selected_fragments selected
+       ORDER BY selected.demand_score DESC, selected.ordinal`,
       [source.id, demandTermPatterns, source.processing_run_id],
     )
     const analysisFragments = boundFragmentAnalysisBatch(

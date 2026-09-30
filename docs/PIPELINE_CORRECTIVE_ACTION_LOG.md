@@ -8,7 +8,7 @@ soak. A clean baseline is not a completed extended observation window.
 
 ## Handoff as of production verification, 2026-09-30
 
-Live application: `7c58632c727b0632aef52fea2e2760d89549a369` on
+Live application: `7be2bfd602db7e36ee09de117faf0311b2e91eae` on
 `100.116.82.78`, deployed through `ops/scripts/deploy-production.sh`.
 Pipeline enabled, capacity 8. At the later learning audit, operator settings
 version 8 used `gpt-6-luna` low/medium, High fallback `gpt-5.6-terra` medium.
@@ -133,8 +133,27 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
 - Before the correction, full review and verification queues both reproduced
   missing analysis. The terminal/original-run regression now also includes a
   full urgent analysis queue. All 339 tests, 250 evaluation fixtures, type
-  checks and network-pack validation passed on a fresh database. Deployment
-  and final end-to-end answer result pending.
+  checks and network-pack validation passed on a fresh database. `7be2bfd`
+  deployed successfully at 22:58 UTC; migration 045, smoke tests and settings
+  (enabled/8, selected models) verified. All 20 original questions remained
+  unknown; the new scheduler reached a separate analysis-history timeout.
+
+## 2026-09-30 — Analysis history lookup timed out at production scale
+
+- Evidence: after `7be2bfd`, the worker logged Query read timeout inside
+  `queueSourceWork`'s fragment selection. PostgreSQL EXPLAIN showed a parallel
+  full scan of `knowledge_candidates` even for one fragment's historical keys.
+  The missing evidence-fragment index and history projection during relevance
+  selection made urgent preparation roll back. Restarting did not correct it.
+- Correction: select and lock at most 16 relevant fragments in a materialized
+  CTE before reading their history. Migration 046 indexes fragment ID and stable
+  key across all candidate statuses. Preserve relevance ordering, all historical
+  keys, context bounds, transactional reservations and SKIP LOCKED.
+- Validation: the history/relevance regression and all urgent-learning tests
+  pass. On a fresh database, 340 tests and 250 evaluation fixtures passed; type
+  checks passed. A separate production-scale Fidelity read used migration-045
+  indexes and completed in 6.144 ms, so no speculative change to it was needed.
+  Deployment and end-to-end answer verification pending.
 
 ## 2026-09-30 — Knowledge quality and 20-question learning audit
 

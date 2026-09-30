@@ -147,6 +147,40 @@ suite('urgent learning reliability', () => {
       expect((await client.query('SELECT knowledge_demand_id FROM pipeline_tasks WHERE id=$1',[claim['pipeline_task_id']])).rows[0]!.knowledge_demand_id).toBe(id)
     })
   })
+  it('keeps relevant evidence first and preserves every historical key in bounded analysis', async () => {
+    await transaction(async (db,client) => {
+      await client.query("UPDATE pipeline_tasks SET status='cancelled' WHERE status IN ('queued','claimed','running')")
+      await client.query("UPDATE knowledge_demands SET status='published'")
+      await client.query('DELETE FROM pipeline_model_circuits')
+      await client.query('UPDATE pipeline_settings SET enabled=true,max_concurrent_ai_runs=8 WHERE singleton')
+      const id=await queueUnknownKnowledgeDemand(db,'query_network_knowledge',{question:question(),context},{unknown:true})
+      await client.query("UPDATE pipeline_tasks SET status='cancelled' WHERE knowledge_demand_id=$1",[id])
+      await client.query("UPDATE knowledge_demands SET status='processing',diagnosis_status='completed' WHERE id=$1",[id])
+      const source=(await client.query(`INSERT INTO source_candidates(coverage_target_id,canonical_url,document_type,title,status,discovered_by,knowledge_demand_id)
+        SELECT coverage_target_id,$2,'command_reference','MACsec history fixture','prepared','test',id FROM knowledge_demands WHERE id=$1 RETURNING id`,[id,`https://www.cisco.com/${randomUUID()}`])).rows[0]!
+      const artifact=(await client.query(`INSERT INTO source_artifacts(source_candidate_id,media_type,byte_size,content_hash,storage_path,status)
+        VALUES ($1,'text/plain',1024,$2,'/tmp/fragment-history-fixture.txt','chunked') RETURNING id`,[source.id,sha256Label(randomUUID())])).rows[0]!
+      let relevantId=''
+      for (let ordinal=0;ordinal<32;ordinal++) {
+        const fragment=(await client.query(`INSERT INTO source_fragments(source_artifact_id,ordinal,section_title,content,content_hash)
+          VALUES ($1,$2,$3,$4,$5) RETURNING id`,[artifact.id,ordinal,ordinal===31?'MACsec inspection':'Background reference',
+          ordinal===31?'Inspect MACsec interface using show macsec interface.':'Background command reference.',sha256Label(randomUUID())])).rows[0]!
+        if (ordinal===31) relevantId=fragment.id
+      }
+      const origin=(await client.query(`INSERT INTO pipeline_tasks(task_type,stage,dedupe_key,payload,status,source_candidate_id)
+        VALUES ('fragment_analysis','analyze',$1,'{}','completed',$2) RETURNING id`,[randomUUID(),source.id])).rows[0]!
+      const keys=[`history.a.${randomUUID()}`,`history.z.${randomUUID()}`]
+      for (const [index,key] of keys.entries()) await client.query(`INSERT INTO knowledge_candidates
+        (pipeline_task_id,source_fragment_id,stable_key,payload,content_hash,status,dangerous,confidence,quality_score,fidelity_status)
+        VALUES ($1,$2,$3,'{}',$4,$5,false,.98,.98,'sampled_out')`,[origin.id,relevantId,key,sha256Label(randomUUID()),index===0?'published':'rejected'])
+      await ensurePipelineWork(db)
+      const claim=await claimPipelineTask(db,config,'luna-1','test:fragment-history',executionProtocolVersion)
+      expect(claim['task_type']).toBe('fragment_analysis')
+      const payload=(await client.query('SELECT payload FROM pipeline_tasks WHERE id=$1',[claim['pipeline_task_id']])).rows[0]!.payload
+      expect(payload.fragments[0]).toMatchObject({id:relevantId,prior_candidate_keys:keys})
+      expect(payload.fragments.length).toBeLessThanOrEqual(16)
+    })
+  })
   it('starts a ready user question despite an exhausted topic with a future eligibility date', async () => {
     await transaction(async (db,client) => {
       await client.query("UPDATE pipeline_tasks SET status='cancelled' WHERE status IN ('queued','claimed','running')")
