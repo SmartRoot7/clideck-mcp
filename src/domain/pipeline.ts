@@ -3645,10 +3645,10 @@ async function queueUrgentDemandWork(client: DatabaseClient, capacity: number): 
         WHERE demand.status<>'published' AND (
           source.status IN ('prepared','analyzing','verifying') OR (
             source.status IN ('completed','completed_with_exceptions','duplicate','rejected')
-            AND EXISTS (
-              SELECT 1 FROM knowledge_candidates candidate
-              JOIN pipeline_tasks origin ON origin.id=candidate.pipeline_task_id
-              WHERE origin.source_candidate_id=source.id
+            AND source.id IN (
+              SELECT DISTINCT origin.source_candidate_id FROM pipeline_tasks origin
+              JOIN knowledge_candidates candidate ON candidate.pipeline_task_id=origin.id
+              WHERE origin.source_candidate_id IS NOT NULL
                 AND candidate.status IN ('verified','published')
                 AND candidate.fidelity_status='pending' AND candidate.fidelity_task_id IS NULL
             )

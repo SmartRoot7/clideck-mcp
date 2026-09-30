@@ -89,6 +89,12 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
   Final correction passed 336 tests and 250 evaluation fixtures on a fresh
   database, plus type checks and network-pack validation. The worker-role
   failure was reproduced before applying the scoped grants and passed after.
+  Deployment of `ae14e1d9cf21b9526af8c7bfa1c1ac3b2d083ed4` was stopped during
+  backup before application switching: a read-only production-scale plan check
+  timed out at 15 s. The terminal-source correlated candidate lookup rescanned
+  the large table. Replace it with one distinct source-ID set; the same
+  production-scale read completed in 784 ms. Deployment cleanup restored the
+  local executor pool; the application remained on `7bc9125`.
   Final corrective deployment and live answer result pending.
   The short acceptance window is not a completed extended soak.
 
