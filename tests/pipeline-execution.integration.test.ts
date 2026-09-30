@@ -15,7 +15,7 @@ import { createMetrics } from '../src/metrics.js'
 import { claimPipelineTask, recordAgentRunResult } from '../src/domain/pipeline.js'
 import {
   getExecutionSettings, getExecutionModels, publishExecutionCatalog, setExecutionSettings,
-  refreshModelPricing, retryConfiguredModel
+  refreshModelPricing, retryConfiguredModel, ensureFidelityExecutionProfile
 } from '../src/domain/pipeline-execution.js'
 import { pipelineExecutorIds } from '../src/domain/pipeline-runtime.js'
 import { createTestConfig, integrationDatabaseUrl } from './helpers.js'
@@ -203,6 +203,8 @@ suite('configurable execution integration', () => {
     expect(probes.filter((claim) => claim['task_type'] === 'fragment_analysis')).toHaveLength(1)
     expect(probes.find((claim) => claim['task_type'] === 'fragment_analysis')).toMatchObject({ requested_model: 'gpt-6-luna', fallback_from_model: null })
     expect((await database.query("SELECT count(*)::int AS count FROM admin_audit_events WHERE actor_id = $1 AND action = 'pipeline.model_retry'", [actor.id])).rows[0]?.['count']).toBe(1)
+    await retryConfiguredModel(database, { profile_id: 'luna', model: 'gpt-6-luna', reasoning_effort: 'low' }, actor)
+    expect((await database.query("SELECT probe_executor_id FROM pipeline_model_circuits WHERE execution_profile = 'luna' AND model = 'gpt-6-luna' AND task_type = 'fragment_analysis'")).rows[0]?.['probe_executor_id']).toBeTruthy()
   })
 
   it('caches dated official prices and retains them on an outage without repeated fetches', async () => {
@@ -223,6 +225,22 @@ suite('configurable execution integration', () => {
       const failed = (await getExecutionModels(database)).pricing
       expect(failed).toMatchObject({ prices: successful.prices, updated_at: successful.updated_at, stale: true, error: 'PRICING_REFRESH_FAILED' })
     } finally { fetcher.mockRestore() }
+  })
+
+  it('supports settings, scoped retries and new Fidelity profiles with the production admin role', async () => {
+    const admin = new pg.Pool({ connectionString: integrationDatabaseUrl, options: '-c role=clideck_mcp_admin' })
+    try {
+      const current = await getExecutionSettings(admin)
+      await setExecutionSettings(admin, { expected_version: current.settings_version, max_concurrent_ai_runs: 1, profiles }, actor)
+      await database.query(`INSERT INTO pipeline_model_circuits (
+        execution_profile, task_type, model, reasoning_effort, diagnostic_fingerprint, open_until, configuration_error
+      ) VALUES ('luna', 'fragment_analysis', 'gpt-6-luna', 'low', $1, now() + interval '1 day', true)`, [`sha256:${'c'.repeat(64)}`])
+      await retryConfiguredModel(admin, { profile_id: 'luna', model: 'gpt-6-luna', reasoning_effort: 'low' }, actor)
+      const client = await admin.connect()
+      try { expect(await ensureFidelityExecutionProfile(client, `admin-role-${randomUUID()}`, 'gpt-6-luna')).toHaveProperty('id') }
+      finally { client.release() }
+      expect((await getExecutionModels(admin)).catalog.models.length).toBe(4)
+    } finally { await admin.end() }
   })
 
   it('requires super-admin authorization and keeps model settings read-only in the demo', async () => {

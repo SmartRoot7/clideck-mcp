@@ -39,6 +39,10 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
   prices; pinned Node 24 launchd pool, retire legacy executors through the normal
   deployment workflow. Corrected ignored Codex path and env mode to `0600`.
 - Deployment SHA and measured post-deploy result: pending release verification.
+- Additional role check found missing admin column privileges for model retry
+  and cold Fidelity-profile creation. Corrected only required UPDATE/INSERT
+  columns; regression executes settings/retry/profile queries under the actual
+  `clideck_mcp_admin` role rather than the fixture's PostgreSQL owner.
 
 ## 2026-09-21 — Temporary intake recovery without an application change
 

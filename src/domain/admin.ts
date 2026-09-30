@@ -398,7 +398,8 @@ export async function getAdminOverview(
                  AND task.task_type = circuit.task_type
                  AND EXISTS (SELECT 1 FROM agent_runs run WHERE run.pipeline_task_id = task.id
                    AND run.status = 'running' AND run.model = circuit.model
-                   AND run.reasoning_effort = circuit.reasoning_effort)
+                   AND run.reasoning_effort = circuit.reasoning_effort
+                   AND run.execution_profile = circuit.execution_profile)
              ) THEN 'probing'
              ELSE 'cooldown'
            END AS state,
@@ -411,7 +412,8 @@ export async function getAdminOverview(
                  AND task.task_type = circuit.task_type
                  AND EXISTS (SELECT 1 FROM agent_runs run WHERE run.pipeline_task_id = task.id
                    AND run.status = 'running' AND run.model = circuit.model
-                   AND run.reasoning_effort = circuit.reasoning_effort)
+                   AND run.reasoning_effort = circuit.reasoning_effort
+                   AND run.execution_profile = circuit.execution_profile)
              ) THEN circuit.probe_executor_id
              ELSE NULL
            END AS probe_executor_id

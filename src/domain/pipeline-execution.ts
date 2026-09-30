@@ -314,7 +314,7 @@ export async function retryConfiguredModel(database: Database,
       [input.profile_id, input.model, input.reasoning_effort])
     if (!selected.rows[0]) throw new Error('EXECUTION_MODEL_UNSUPPORTED')
     await client.query(`UPDATE pipeline_model_circuits SET configuration_error = false, open_until = now(),
-      probe_executor_id = NULL, updated_at = now()
+      updated_at = now()
       WHERE execution_profile = $1 AND model = $2 AND reasoning_effort = $3`,
       [input.profile_id, input.model, input.reasoning_effort])
     await client.query(`INSERT INTO admin_audit_events (actor_id, actor_role, action, target_type, metadata)

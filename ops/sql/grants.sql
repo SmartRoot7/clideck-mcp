@@ -419,6 +419,10 @@ GRANT DELETE ON pipeline_ai_circuits TO clideck_mcp_researcher;
 GRANT SELECT ON pipeline_execution_profiles, pipeline_runtime_catalog,
   pipeline_model_pricing, pipeline_model_circuits TO clideck_mcp_admin;
 GRANT UPDATE ON pipeline_execution_profiles, pipeline_model_pricing TO clideck_mcp_admin;
+GRANT UPDATE (configuration_error, open_until, updated_at)
+  ON pipeline_model_circuits TO clideck_mcp_admin;
+GRANT INSERT (stage, profile_key, extractor_version, prompt_version, model)
+  ON pipeline_quality_profiles TO clideck_mcp_admin;
 GRANT UPDATE (refresh_requested_at) ON pipeline_runtime_catalog TO clideck_mcp_admin;
 GRANT SELECT ON pipeline_execution_profiles, pipeline_runtime_catalog,
   pipeline_model_circuits TO clideck_mcp_researcher, clideck_mcp_worker;
