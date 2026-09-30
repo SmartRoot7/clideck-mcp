@@ -8,7 +8,7 @@ soak. A clean baseline is not a completed extended observation window.
 
 ## Handoff as of production verification, 2026-09-30
 
-Live application: `56fb9fe722caeb4a00fc9e470b39a74e8fbec04c` on
+Live application: `7c58632c727b0632aef52fea2e2760d89549a369` on
 `100.116.82.78`, deployed through `ops/scripts/deploy-production.sh`.
 Pipeline enabled, capacity 8. At the later learning audit, operator settings
 version 8 used `gpt-6-luna` low/medium, High fallback `gpt-5.6-terra` medium.
@@ -118,7 +118,23 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
   release; coverage also includes simultaneously full background and urgent
   search queues. All 337 tests and 250 evaluation fixtures passed on a fresh
   database; type checks passed. The revised read-only production source
-  selection took 829 ms. Corrective deployment and live result pending.
+  selection took 829 ms. `7c58632c727b0632aef52fea2e2760d89549a369`
+  deployed successfully; all four queued cohort demands entered discovery.
+  Deep review resumed (38 completions by 22:27 UTC), worker restart count zero.
+- Further observation: the shared source-progress reservation still let a
+  large older review backlog block analysis and Fidelity. Separate ready
+  reservation counts for analysis, verification, Deep Medium and Deep Low;
+  every class may queue the selected operator capacity, while physical leases
+  enforce that capacity across all classes. Prepare analysis and verification
+  before review refill. No new lane cap, cooldown or quota.
+- Only candidate-bearing sources enter verification selection. Migration 045
+  indexes extraction task history and pending published-candidate audit joins;
+  the old live-task/open-candidate indexes omitted those rows.
+- Before the correction, full review and verification queues both reproduced
+  missing analysis. The terminal/original-run regression now also includes a
+  full urgent analysis queue. All 339 tests, 250 evaluation fixtures, type
+  checks and network-pack validation passed on a fresh database. Deployment
+  and final end-to-end answer result pending.
 
 ## 2026-09-30 — Knowledge quality and 20-question learning audit
 

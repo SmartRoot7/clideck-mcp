@@ -3632,41 +3632,49 @@ async function prepareUrgentDemandSources(client: DatabaseClient, capacity: numb
 /** Materialize urgent work before counting the existing background queue.
  * A queued plan must not occupy the opportunity to start a real user request. */
 async function queueUrgentDemandWork(client: DatabaseClient, capacity: number): Promise<void> {
-  // Reserve source progress independently of queued searches. Physical leases
-  // still enforce operator capacity; a search backlog must not strand evidence.
-  const ready = await client.query<{ count: number }>(
-    `SELECT count(*)::int count FROM pipeline_tasks task JOIN knowledge_demands demand ON demand.id=task.knowledge_demand_id
+  // Each work class may prepare a full operator-capacity queue. A backlog in
+  // one class must not block another; physical leases still limit all AI runs.
+  const ready = await client.query<{ work_class: string; count: number }>(
+    `SELECT CASE task.task_type
+        WHEN 'fragment_analysis' THEN 'analysis'
+        WHEN 'candidate_verification' THEN 'verification'
+        ELSE CASE WHEN task.requested_reasoning_effort='medium' THEN 'deep_medium' ELSE 'deep_low' END
+      END work_class,count(*)::int count
+      FROM pipeline_tasks task JOIN knowledge_demands demand ON demand.id=task.knowledge_demand_id
       WHERE demand.status<>'published'
         AND (task.status IN ('claimed','running') OR
           (task.status='queued' AND task.available_at<=now() AND ${claimableExecutionSql('task')}))
-        AND task.task_type IN ('fragment_analysis','candidate_verification','candidate_deep_review')`)
-  for (let count = ready.rows[0]?.count ?? 0; count < capacity; count++) {
-    if (await queueDeepReviewWork(client, 'medium', true) || await queueDeepReviewWork(client, 'low', true)) continue
-    const sources = await client.query<{ id: string }>(
-      `SELECT source.id FROM source_candidates source JOIN knowledge_demands demand ON demand.id=source.knowledge_demand_id
-        WHERE demand.status<>'published' AND (
-          source.status IN ('prepared','analyzing','verifying') OR (
-            source.status IN ('completed','completed_with_exceptions','duplicate','rejected')
-            AND source.id IN (
-              SELECT DISTINCT origin.source_candidate_id FROM pipeline_tasks origin
-              JOIN knowledge_candidates candidate ON candidate.pipeline_task_id=origin.id
-              WHERE origin.source_candidate_id IS NOT NULL
-                AND candidate.status IN ('verified','published')
-                AND candidate.fidelity_status='pending' AND candidate.fidelity_task_id IS NULL
-            )
-          )
-        )
-        ORDER BY CASE WHEN source.status IN ('prepared','analyzing','verifying') THEN 0 ELSE 1 END,
-          (SELECT count(*) FROM pipeline_tasks task WHERE task.source_candidate_id=source.id AND task.status IN ('queued','claimed','running')),
-          demand.priority DESC,demand.first_seen_at LIMIT 16`)
-    let queued = false
-    for (const source of sources.rows) {
-      if (await queueSourceWork(client, source.id, 'analysis') || await queueSourceWork(client, source.id, 'verification')) {
-        queued = true
-        break
+        AND task.task_type IN ('fragment_analysis','candidate_verification','candidate_deep_review')
+      GROUP BY 1`)
+  const counts=new Map(ready.rows.map(row=>[row.work_class,row.count]))
+  for (const mode of ['analysis','verification'] as const) {
+    for (let count=counts.get(mode) ?? 0;count<capacity;count++) {
+      const sources=await client.query<{ id: string }>(
+        `SELECT source.id FROM source_candidates source JOIN knowledge_demands demand ON demand.id=source.knowledge_demand_id
+          WHERE demand.status<>'published'
+            AND (source.status IN ('prepared','analyzing','verifying') OR
+              ($1='verification' AND source.status IN ('completed','completed_with_exceptions','duplicate','rejected')))
+            AND ($1='analysis' OR source.id IN (
+                SELECT DISTINCT origin.source_candidate_id FROM pipeline_tasks origin
+                JOIN knowledge_candidates candidate ON candidate.pipeline_task_id=origin.id
+                WHERE origin.source_candidate_id IS NOT NULL
+                  AND ((candidate.status IN ('verified','published') AND candidate.fidelity_status='pending' AND candidate.fidelity_task_id IS NULL)
+                    OR (candidate.status='analyzed' AND candidate.verification_task_id IS NULL))
+            ))
+          ORDER BY CASE WHEN source.status IN ('prepared','analyzing','verifying') THEN 0 ELSE 1 END,
+            (SELECT count(*) FROM pipeline_tasks task WHERE task.source_candidate_id=source.id AND task.status IN ('queued','claimed','running')),
+            demand.priority DESC,demand.first_seen_at LIMIT 16`,[mode])
+      let queued=false
+      for (const source of sources.rows) {
+        if (await queueSourceWork(client,source.id,mode)) { queued=true;break }
       }
+      if (!queued) break
     }
-    if (!queued) break
+  }
+  for (const mode of ['medium','low'] as const) {
+    for (let count=counts.get(`deep_${mode}`) ?? 0;count<capacity;count++) {
+      if (!(await queueDeepReviewWork(client,mode,true))) break
+    }
   }
 }
 

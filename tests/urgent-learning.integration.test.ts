@@ -110,7 +110,7 @@ suite('urgent learning reliability', () => {
       expect(tasks.rows).toHaveLength(1)
     })
   })
-  it.each(['background','urgent_discovery'])('materializes and claims urgent analysis despite future retries and a full %s queue', async (queuedKind) => {
+  it.each(['background','urgent_discovery','urgent_review','urgent_verification'])('materializes and claims urgent analysis despite future retries and a full %s queue', async (queuedKind) => {
     await transaction(async (db,client) => {
       await client.query("UPDATE pipeline_tasks SET status='cancelled' WHERE status IN ('queued','claimed','running')")
       await client.query("UPDATE knowledge_demands SET status='published'")
@@ -119,9 +119,11 @@ suite('urgent learning reliability', () => {
       for (let i=0;i<8;i++) {
         const retryId = await queueUnknownKnowledgeDemand(db,'query_network_knowledge',{ question: question(), context },{unknown:true})
         await client.query("UPDATE pipeline_tasks SET available_at=now()+interval '1 hour' WHERE knowledge_demand_id=$1",[retryId])
-        if (queuedKind === 'urgent_discovery') {
+        if (queuedKind !== 'background') {
           await client.query(`INSERT INTO pipeline_tasks(task_type,stage,dedupe_key,payload,knowledge_demand_id,queue_class)
-            VALUES ('source_discovery','discover',$1,'{}',$2,'demand')`,[randomUUID(),retryId])
+            VALUES ($3,$4,$1,'{}',$2,'demand')`,[randomUUID(),retryId,
+              queuedKind === 'urgent_discovery' ? 'source_discovery' : queuedKind === 'urgent_review' ? 'candidate_deep_review' : 'candidate_verification',
+              queuedKind === 'urgent_discovery' ? 'discover' : queuedKind === 'urgent_review' ? 'deep_review' : 'verify'])
         }
         await client.query(`INSERT INTO pipeline_tasks(task_type,stage,dedupe_key,payload)
           VALUES ('fragment_analysis','analyze',$1,'{}')`,[randomUUID()])
@@ -178,6 +180,8 @@ suite('urgent learning reliability', () => {
       const demandId=await queueUnknownKnowledgeDemand(db,'query_network_knowledge',{question:question(),context},{unknown:true})
       await client.query("UPDATE pipeline_tasks SET status='cancelled' WHERE knowledge_demand_id=$1",[demandId])
       await client.query("UPDATE knowledge_demands SET status='processing',diagnosis_status='completed' WHERE id=$1",[demandId])
+      for (let i=0;i<8;i++) await client.query(`INSERT INTO pipeline_tasks(task_type,stage,dedupe_key,payload,knowledge_demand_id,queue_class)
+        VALUES ('fragment_analysis','analyze',$1,'{}',$2,'demand')`,[randomUUID(),demandId])
       const target = (await client.query(`INSERT INTO coverage_targets(vendor_slug,operating_system_slug,document_role,status)
         VALUES ('cisco','ios-xe','commands','paused') ON CONFLICT DO NOTHING RETURNING id`)).rows[0]
         ?? (await client.query("SELECT id FROM coverage_targets WHERE vendor_slug='cisco' AND operating_system_slug='ios-xe' LIMIT 1")).rows[0]
