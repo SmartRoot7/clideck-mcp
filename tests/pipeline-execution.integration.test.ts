@@ -34,6 +34,7 @@ suite('configurable execution integration', () => {
   let originalProfiles: ExecutionProfile[]
   let originalCapacity: number
   const taskIds: string[] = []
+  let schedulerFixture: pg.PoolClient
 
   beforeAll(async () => {
     const original = await getExecutionSettings(database)
@@ -53,6 +54,16 @@ suite('configurable execution integration', () => {
       }))
     }, 'pipeline-pool')
     await database.query('UPDATE pipeline_settings SET enabled = true WHERE singleton')
+    // These tests measure explicit execution fixtures. Prevent reconciliation
+    // of unfinished learning/source fixtures from other suites from adding
+    // unrelated tasks while exercising model routing and physical capacity.
+    schedulerFixture = await database.connect()
+    await schedulerFixture.query('BEGIN')
+    await schedulerFixture.query("SELECT pg_advisory_xact_lock(hashtext('clideck-mcp:pipeline-scheduler'))")
+  })
+  afterEach(async () => {
+    await schedulerFixture.query('ROLLBACK')
+    schedulerFixture.release()
   })
   afterAll(async () => {
     for (const profile of originalProfiles) await database.query(
@@ -110,15 +121,7 @@ suite('configurable execution integration', () => {
   it('reserves exactly three of eight simultaneous claims and blocks disabled lanes', async () => {
     await save(3)
     for (let index = 0; index < 8; index++) await queue()
-    const scheduler = await database.connect()
-    let claims: Record<string, unknown>[]
-    try {
-      // The queue is already materialized. Keep unrelated maintenance from
-      // locking these fixtures so this test measures simultaneous reservations.
-      await scheduler.query('BEGIN')
-      await scheduler.query("SELECT pg_advisory_xact_lock(hashtext('clideck-mcp:pipeline-scheduler'))")
-      claims = await Promise.all(pipelineExecutorIds.map((id) => claimPipelineTask(database, config, id, `${id}:test`, executionProtocolVersion)))
-    } finally { await scheduler.query('ROLLBACK'); scheduler.release() }
+    const claims = await Promise.all(pipelineExecutorIds.map((id) => claimPipelineTask(database, config, id, `${id}:test`, executionProtocolVersion)))
     expect(claims.filter((claim) => claim['pipeline_task_id'])).toHaveLength(3)
     expect(claims.slice(3).every((claim) => claim['pipeline_state'] === 'executor_disabled')).toBe(true)
     const snapshot = await database.query('SELECT model, reasoning_effort, execution_profile, settings_version FROM agent_runs WHERE pipeline_task_id = ANY($1::uuid[]) AND status = \'running\'', [taskIds])

@@ -14,4 +14,10 @@ describe('network learning evidence constraints', () => {
     expect(networkAnswerMatchesFeatures('Inspect nftables flowtable offload', 'nftables rules')).toBe(false)
     expect(networkAnswerMatchesFeatures('Inspect nftables flowtable offload', 'nftables flowtable counters')).toBe(true)
   })
+  it('distinguishes reverse path filtering from reverse-path forwarding and retains RPF aliases', () => {
+    expect(networkAnswerMatchesFeatures('Identify Linux reverse path filtering mode', 'Permit established reverse-path connections')).toBe(false)
+    expect(networkAnswerMatchesFeatures('Identify Linux reverse path filtering mode', 'Read net.ipv4.conf.eth0.rp_filter')).toBe(true)
+    expect(networkAnswerMatchesFeatures('Inspect RPF mode', 'Reverse-path filtering settings')).toBe(true)
+    expect(networkDemandFeatureTerms('Inspect XDP redirect failures')).toEqual(['xdp'])
+  })
 })

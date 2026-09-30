@@ -8,13 +8,13 @@ soak. A clean baseline is not a completed extended observation window.
 
 ## Handoff as of production verification, 2026-09-30
 
-Live application: `7be2bfd602db7e36ee09de117faf0311b2e91eae` on
+Live application: `18064091fd831940d97aa049eb5ecace70fb66dd` on
 `100.116.82.78`, deployed through `ops/scripts/deploy-production.sh`.
 Pipeline enabled, capacity 8. At the later learning audit, operator settings
 version 8 used `gpt-6-luna` low/medium, High fallback `gpt-5.6-terra` medium.
 
 - **Open:** Cisco/Akamai 403 blocks intake; September 21 restored Linux downloads
-  only. End-to-end publication and an extended soak are not established.
+  only. One public Junos answer is verified below; an extended soak is not established.
 - **Learning audit baseline:** 15/20 unknown questions lost diagnosis tasks; a global
   migration-029 trigger silently blocks concurrent inserts while reconciliation
   omits orphan `queued` demands. EVPN falsely closed with OSPF; terminal sources
@@ -153,7 +153,36 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
   pass. On a fresh database, 340 tests and 250 evaluation fixtures passed; type
   checks passed. A separate production-scale Fidelity read used migration-045
   indexes and completed in 6.144 ms, so no speculative change to it was needed.
-  Deployment and end-to-end answer verification pending.
+  `18064091fd831940d97aa049eb5ecace70fb66dd` deployed at 23:21 UTC; the history
+  probe now uses an index-only scan (0.246 ms). By 23:37 UTC: 52 analyses,
+  82 verifications, 76 publications; 317 Fidelity passes and 32 repairs since
+  restart. Worker restart count zero, no new worker query timeout. Public MCP
+  confirmed the formerly unknown Junos SRv6 local-SID question (HTTP 200);
+  the remaining 19 original queries were still unknown in the first public
+  recheck. These are observed answers, not counts of newly learned revisions.
+
+## 2026-09-30 — Completion replay changed unspecified vendor context
+
+- Public replay exposed three internal completions still unknown to an OS-only
+  Linux request. Read-only probes at limits 3 and 5 reproduced the difference:
+  an omitted vendor resolves to NULL; the stored display label `Not specified`
+  resolves to a real legacy vendor/OS and falsely accepts a tc NAT configuration
+  for reverse-path-filter inspection. Public intake correctly reopens the gap.
+- Correction: reconstruct replay context without the display-label vendor.
+  Preserve explicit nulls rather than filling them with diagnostic guesses;
+  retain diagnosis fallback only for keys absent from older stored rows.
+  Read intents include identify/determine/compare and require an actual reading
+  command/procedure. Domain-pack RPF aliases and XDP constraints reject unrelated
+  forwarding/configuration evidence. Migration 047 rechecks potentially affected
+  demand completion metadata without changing published knowledge revisions.
+- Validation: 343 tests and 250 evaluation fixtures passed on a fresh database,
+  plus type checks and network-pack validation. The context integration test
+  includes a real placeholder vendor and conflicting diagnostic guesses.
+  Execution fixtures now hold the scheduler advisory lock to isolate model/
+  capacity checks from unfinished learning fixtures; all lease, drain, profile,
+  fallback and pause checks remain enabled. History-batch testing inspects the
+  reserved evidence instead of relying on identical transaction timestamps.
+  Deployment and final public recheck pending.
 
 ## 2026-09-30 — Knowledge quality and 20-question learning audit
 

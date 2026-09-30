@@ -14,7 +14,7 @@ import {
   normalizeTopicSlug,
   type NetworkQuestionPart
 } from './network-intent.js'
-import type { PublicKnowledge } from './schemas.js'
+import type { NetworkContextInput, PublicKnowledge } from './schemas.js'
 import { networkAnswerMatchesFeatures } from '@clideck/domain-network'
 
 export const answerStatusSchema = z.enum(['complete', 'partial', 'unknown'])
@@ -273,7 +273,7 @@ function evidenceText(answer: CapabilityEvidence): string {
 }
 
 const readIntentPattern =
-  /\b(?:show|display|list|inspect|view|read|get\s+(?:the\s+)?current)\b/i
+  /\b(?:show|display|list|inspect|view|read|identify|determine|compare|get\s+(?:the\s+)?current)\b/i
 const readEvidencePattern =
   /(?:^|[\s`])(?:cat|dir|display|ls|more|show|view)(?:[\s`]|$)|\b(?:tc\s+(?:-\S+\s+)*qdisc\s+(?:show|list)|conntrack\s+-(?:L|S)|ethtool\s+(?:-[Sxnu]|--show-\S+)|sysctl\s+(?:-a|[a-z][\w.]+\s*$)|ip\s+-(?:s|d)\s+link)\b/i
 const destructiveConfigurationIntentPattern =
@@ -291,7 +291,7 @@ export function answerSupportsRequestedAction(
     return destructiveConfigurationEvidencePattern.test(text)
   }
   if (readIntentPattern.test(question)) {
-    return readEvidencePattern.test(text)
+    return readEvidencePattern.test(answer.command ?? answer.procedure.join('\n'))
   }
   return true
 }
@@ -473,33 +473,28 @@ export function diagnosticTopicIdentity(
   }
 }
 
+export function demandReplayContext(context: Record<string, unknown> = {}): NetworkContextInput {
+  // Resolved output stores this display label for an absent vendor. Passing it
+  // back as explicit input resolves a real legacy "Not Specified" catalog row.
+  // A diagnosis must never narrow the user's context by guessing missing keys.
+  return Object.fromEntries(['vendor','model','operating_system','version','runtime_mode','shell_environment']
+    .flatMap((key) => typeof context[key] === 'string' && context[key].trim() &&
+      !(key === 'vendor' && /^not[ -]specified$/i.test(context[key].trim()))
+      ? [[key,context[key]]] : [])) as NetworkContextInput
+}
+
 export async function replayDemandCoverage(
   client: Database | DatabaseClient,
   demand: { question: string; tool_name: string; context?: Record<string, unknown> },
   artifact: DemandDiagnosisArtifact,
 ): Promise<KnowledgeCoverage & { context: InternalResolvedContext }> {
   const original = demand.context ?? {}
-  const context = await resolveNetworkContext(client as unknown as Database, {
-    ...(artifact.canonical_context.vendor
-      ? { vendor: artifact.canonical_context.vendor }
-      : {}),
-    ...(artifact.canonical_context.model
-      ? { model: artifact.canonical_context.model }
-      : {}),
-    operating_system: typeof original['operating_system'] === 'string'
-      ? original['operating_system'] : artifact.canonical_context.operating_system,
-    ...(artifact.canonical_context.version
-      ? { version: artifact.canonical_context.version }
-      : {}),
-    ...(artifact.canonical_context.runtime_mode
-      ? { runtime_mode: artifact.canonical_context.runtime_mode }
-      : {}),
-    ...(artifact.canonical_context.shell_environment
-      ? { shell_environment: artifact.canonical_context.shell_environment }
-      : {}),
-    ...Object.fromEntries(['vendor', 'model', 'version', 'runtime_mode', 'shell_environment']
-      .flatMap((key) => typeof original[key] === 'string' ? [[key, original[key]]] : []))
-  })
+  // Older demand rows did not persist all context keys. Only those absent
+  // keys may use their recorded diagnosis; explicit nulls/placeholders stay
+  // unspecified, just as in the original public request.
+  const replayContext = Object.fromEntries(Object.entries(artifact.canonical_context)
+    .map(([key,value]) => [key,key in original ? original[key] : value]))
+  const context = await resolveNetworkContext(client as unknown as Database, demandReplayContext(replayContext))
   const workflow = demand.tool_name === 'get_network_workflow'
   return {
     context,

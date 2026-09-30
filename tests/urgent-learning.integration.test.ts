@@ -8,6 +8,8 @@ import {
   recoverUnqueuedKnowledgeDemands, reportKnowledgeGap
 } from '../src/domain/mcp-observability.js'
 import { claimPipelineTask, ensurePipelineWork } from '../src/domain/pipeline.js'
+import { demandDiagnosisAgentArtifactSchema, replayDemandCoverage } from '../src/domain/demand-intelligence.js'
+import { resolveNetworkContext } from '../src/domain/context.js'
 import { createTestConfig, integrationDatabaseUrl } from './helpers.js'
 
 const suite = integrationDatabaseUrl ? describe : describe.skip
@@ -60,6 +62,24 @@ suite('urgent learning reliability', () => {
       await client.query('SET LOCAL ROLE clideck_mcp_api')
       const progress = await getKnowledgeLearningProgress(db,id!)
       expect(progress).toMatchObject({ status: 'unresolved', needs_context: true, queued_tasks: 0, active_tasks: 0 })
+    })
+  })
+  it('replays an absent vendor exactly like the public query even with a legacy placeholder vendor and diagnostic guesses', async () => {
+    await transaction(async (db,client) => {
+      await client.query("INSERT INTO vendors(slug,display_name) VALUES ('not-specified','Not Specified') ON CONFLICT (slug) DO NOTHING")
+      const diagnosis=demandDiagnosisAgentArtifactSchema.parse({
+        failure_class:'missing_knowledge',answer_status:'unknown',
+        canonical_context:{vendor:'Cisco',model:'C9300',operating_system:'IOS XE',version:'17.15',runtime_mode:'normal',shell_environment:'IOS CLI'},
+        subquestions:[{capability:'rp-filter',label:'RPF mode',status:'missing',explanation:'No applicable answer.',search_terms:['rp_filter']}],
+        existing_coverage_summary:'No applicable answer.',missing_capabilities:['rp-filter'],search_expansions:['rp_filter'],
+        document_roles:['commands'],recommended_action:'targeted_discovery',reasoning_summary:'Find official inspection guidance.'
+      })
+      const expected=await resolveNetworkContext(db,{operating_system:'Linux'})
+      const replay=await replayDemandCoverage(db,{question:'Identify Linux reverse path filtering mode',tool_name:'query_network_knowledge',
+        context:{vendor:'Not specified',vendor_slug:'not-specified',model:null,operating_system:'Linux',version:null,runtime_mode:null,shell_environment:null}},diagnosis)
+      expect(replay.context).toMatchObject({vendorId:expected.vendorId,operatingSystemId:expected.operatingSystemId,
+        softwareFamilyId:expected.softwareFamilyId,model:null,version:null,runtime_mode:null,shell_environment:null})
+      expect(replay.context.vendorId).toBeNull()
     })
   })
   it.each(['clideck_mcp_researcher','clideck_mcp_worker'])('recovers a durable intake failure with the actual %s permissions', async (role) => {
@@ -174,9 +194,11 @@ suite('urgent learning reliability', () => {
         (pipeline_task_id,source_fragment_id,stable_key,payload,content_hash,status,dangerous,confidence,quality_score,fidelity_status)
         VALUES ($1,$2,$3,'{}',$4,$5,false,.98,.98,'sampled_out')`,[origin.id,relevantId,key,sha256Label(randomUUID()),index===0?'published':'rejected'])
       await ensurePipelineWork(db)
-      const claim=await claimPipelineTask(db,config,'luna-1','test:fragment-history',executionProtocolVersion)
-      expect(claim['task_type']).toBe('fragment_analysis')
-      const payload=(await client.query('SELECT payload FROM pipeline_tasks WHERE id=$1',[claim['pipeline_task_id']])).rows[0]!.payload
+      // now() is shared by every task inserted in this transaction; a lease
+      // tie may choose any batch. Inspect the batch reserving this evidence.
+      const payload=(await client.query(`SELECT payload FROM pipeline_tasks
+        WHERE knowledge_demand_id=$1 AND task_type='fragment_analysis'
+          AND payload->'fragments' @> jsonb_build_array(jsonb_build_object('id',$2::text))`,[id,relevantId])).rows[0]!.payload
       expect(payload.fragments[0]).toMatchObject({id:relevantId,prior_candidate_keys:keys})
       expect(payload.fragments.length).toBeLessThanOrEqual(16)
     })

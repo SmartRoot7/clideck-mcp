@@ -8,6 +8,7 @@ import {
   answerProvidesContextualCoverage,
   answerSupportsCapability,
   answerSupportsRequestedAction,
+  demandReplayContext,
   demandDiagnosisSubmissionPayload,
   demandDiagnosisAgentArtifactSchema,
   diagnosticTopicIdentity,
@@ -21,6 +22,12 @@ import {
 } from '../src/domain/knowledge.js'
 
 describe('Demand Intelligence', () => {
+  it('replays the original context without turning absent vendor labels into a catalog vendor', () => {
+    expect(demandReplayContext({vendor:'Not specified',vendor_slug:'not-specified',operating_system:'linux',model:null,version:null}))
+      .toEqual({operating_system:'linux'})
+    expect(demandReplayContext({vendor:'Cisco',model:'C9300',operating_system:'IOS XE',version:'17.15',runtime_mode:'normal',shell_environment:'IOS CLI'}))
+      .toEqual({vendor:'Cisco',model:'C9300',operating_system:'IOS XE',version:'17.15',runtime_mode:'normal',shell_environment:'IOS CLI'})
+  })
   it('separates other-platform references from applicable answers', () => {
     const sameFamily = {
       applicability: { context_relation: 'same_software_family' as const }
@@ -284,6 +291,15 @@ describe('Demand Intelligence', () => {
   })
 
   it('keeps read and destructive configuration intent aligned with evidence', () => {
+    expect(answerSupportsRequestedAction('Identify the RPF mode', {
+      title:'Show RPF configuration',summary:'Inspect the reverse path filtering mode.',command:'sysctl -w net.ipv4.conf.eth0.rp_filter=0',procedure:[]
+    })).toBe(false)
+    expect(answerSupportsRequestedAction('How do I identify whether Linux reverse path filtering uses strict or loose mode?', {
+      title:'Build a NAT firewall',summary:'Permit reverse-path connections.',command:'tc qdisc add dev eth0 ingress',procedure:[]
+    })).toBe(false)
+    expect(answerSupportsRequestedAction('How do I identify whether Linux reverse path filtering uses strict or loose mode?', {
+      title:'Read rp_filter mode',summary:'Read the current reverse path filtering mode.',command:'sysctl net.ipv4.conf.eth0.rp_filter',procedure:[]
+    })).toBe(true)
     expect(answerSupportsRequestedAction('Display the EVPN designated forwarder election state', {
       title: 'OSPFv3 interface priority', summary: 'Show interface election configuration.',
       command: 'show ipv6 ospf interface', procedure: []
