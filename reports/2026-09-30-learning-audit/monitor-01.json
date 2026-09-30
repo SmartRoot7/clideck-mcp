@@ -1,0 +1,1387 @@
+{
+  "sections": [
+    {
+      "section": "demands",
+      "at": "2026-09-30T15:53:16.290503+00:00",
+      "rows": [
+        {
+          "id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "question": "How do I display the Linux netfilter conntrack expectation table without deleting entries?",
+          "status": "processing",
+          "diagnosis_status": "completed",
+          "replay_status": "unknown",
+          "last_error_code": null,
+          "demand_count": 1,
+          "first_seen_at": "2026-09-30T15:50:49.130519+00:00",
+          "last_seen_at": "2026-09-30T15:51:50.970721+00:00",
+          "next_retry_at": "2026-09-30T15:51:06.543016+00:00",
+          "completed_at": null,
+          "result_revision_id": null
+        },
+        {
+          "id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+          "question": "How can I inspect a Linux MACsec interface cipher suite and replay protection settings?",
+          "status": "processing",
+          "diagnosis_status": "completed",
+          "replay_status": "unknown",
+          "last_error_code": null,
+          "demand_count": 1,
+          "first_seen_at": "2026-09-30T15:51:57.586835+00:00",
+          "last_seen_at": "2026-09-30T15:52:21.206425+00:00",
+          "next_retry_at": "2026-09-30T15:52:21.206425+00:00",
+          "completed_at": null,
+          "result_revision_id": null
+        },
+        {
+          "id": "d7cae6bf-99f0-4502-b08b-c50039f26c7f",
+          "question": "How can I identify packet drops caused by XDP redirect failures using Linux tracepoints?",
+          "status": "diagnosing",
+          "diagnosis_status": "queued",
+          "replay_status": null,
+          "last_error_code": null,
+          "demand_count": 1,
+          "first_seen_at": "2026-09-30T15:52:05.614154+00:00",
+          "last_seen_at": "2026-09-30T15:52:05.614154+00:00",
+          "next_retry_at": "2026-09-30T15:52:05.614154+00:00",
+          "completed_at": null,
+          "result_revision_id": null
+        },
+        {
+          "id": "6ff0c421-5538-4d3c-9743-620b09dfaff6",
+          "question": "How can I inspect an SRv6 seg6local route and its End.DT6 behavior with iproute2?",
+          "status": "diagnosing",
+          "diagnosis_status": "queued",
+          "replay_status": null,
+          "last_error_code": null,
+          "demand_count": 1,
+          "first_seen_at": "2026-09-30T15:52:07.907288+00:00",
+          "last_seen_at": "2026-09-30T15:52:07.907288+00:00",
+          "next_retry_at": "2026-09-30T15:52:07.907288+00:00",
+          "completed_at": null,
+          "result_revision_id": null
+        },
+        {
+          "id": "05961a92-ebd3-4566-b7de-3afc98f2f843",
+          "question": "How do I diagnose DNS over HTTPS bootstrap lookup failures in an OpenWrt https-dns-proxy deployment?",
+          "status": "diagnosing",
+          "diagnosis_status": "queued",
+          "replay_status": null,
+          "last_error_code": null,
+          "demand_count": 1,
+          "first_seen_at": "2026-09-30T15:52:08.621289+00:00",
+          "last_seen_at": "2026-09-30T15:52:08.621289+00:00",
+          "next_retry_at": "2026-09-30T15:52:08.621289+00:00",
+          "completed_at": null,
+          "result_revision_id": null
+        },
+        {
+          "id": "aa02154a-022a-49ce-a441-f6fa920bda86",
+          "question": "How can I inspect Junos SRv6 locator and local SID allocation state?",
+          "status": "diagnosing",
+          "diagnosis_status": "queued",
+          "replay_status": null,
+          "last_error_code": null,
+          "demand_count": 1,
+          "first_seen_at": "2026-09-30T15:52:10.533487+00:00",
+          "last_seen_at": "2026-09-30T15:52:10.533487+00:00",
+          "next_retry_at": "2026-09-30T15:52:10.533487+00:00",
+          "completed_at": null,
+          "result_revision_id": null
+        },
+        {
+          "id": "b2df17d6-237a-47c6-aaa8-7e1340998acc",
+          "question": "How can I inspect Arista EOS EVPN multihoming designated forwarder election state?",
+          "status": "published",
+          "diagnosis_status": "completed",
+          "replay_status": "complete",
+          "last_error_code": null,
+          "demand_count": 1,
+          "first_seen_at": "2026-09-30T15:52:13.055175+00:00",
+          "last_seen_at": "2026-09-30T15:52:23.584673+00:00",
+          "next_retry_at": "2026-09-30T15:52:13.055175+00:00",
+          "completed_at": "2026-09-30T15:52:23.584673+00:00",
+          "result_revision_id": "7bf35871-494c-48c4-8657-d15213820ed4"
+        },
+        {
+          "id": "21da84ca-78d6-429e-8aa8-7862f6906ec9",
+          "question": "How do I identify whether Linux reverse path filtering uses strict or loose mode on an interface?",
+          "status": "diagnosing",
+          "diagnosis_status": "queued",
+          "replay_status": null,
+          "last_error_code": null,
+          "demand_count": 1,
+          "first_seen_at": "2026-09-30T15:52:16.972651+00:00",
+          "last_seen_at": "2026-09-30T15:52:16.972651+00:00",
+          "next_retry_at": "2026-09-30T15:52:16.972651+00:00",
+          "completed_at": null,
+          "result_revision_id": null
+        },
+        {
+          "id": "f9a16bc4-70e2-4f89-84b6-6f24408f5e5a",
+          "question": "How can I inspect Linux network device RSS hash functions and indirection tables?",
+          "status": "diagnosing",
+          "diagnosis_status": "queued",
+          "replay_status": null,
+          "last_error_code": null,
+          "demand_count": 1,
+          "first_seen_at": "2026-09-30T15:52:20.390205+00:00",
+          "last_seen_at": "2026-09-30T15:52:20.390205+00:00",
+          "next_retry_at": "2026-09-30T15:52:20.390205+00:00",
+          "completed_at": null,
+          "result_revision_id": null
+        },
+        {
+          "id": "01a7f35c-ee7e-4498-a027-e0a805aa9098",
+          "question": "How can I inspect a tc cake qdisc flow isolation mode and packet drop counters?",
+          "status": "queued",
+          "diagnosis_status": "completed",
+          "replay_status": "unknown",
+          "last_error_code": null,
+          "demand_count": 1,
+          "first_seen_at": "2026-09-30T15:52:39.833227+00:00",
+          "last_seen_at": "2026-09-30T15:52:51.993576+00:00",
+          "next_retry_at": "2026-09-30T15:52:51.993576+00:00",
+          "completed_at": null,
+          "result_revision_id": null
+        },
+        {
+          "id": "dc360e74-1883-4f0b-836b-005b46626842",
+          "question": "How do I inspect the per-network-namespace nftables flowtable offload configuration?",
+          "status": "diagnosing",
+          "diagnosis_status": "queued",
+          "replay_status": null,
+          "last_error_code": null,
+          "demand_count": 1,
+          "first_seen_at": "2026-09-30T15:52:44.000817+00:00",
+          "last_seen_at": "2026-09-30T15:52:44.000817+00:00",
+          "next_retry_at": "2026-09-30T15:52:44.000817+00:00",
+          "completed_at": null,
+          "result_revision_id": null
+        },
+        {
+          "id": "afbd8f51-294a-4ae0-b04b-9c74015ae707",
+          "question": "How can I inspect Multipath TCP endpoint flags and connection subflows with ip mptcp?",
+          "status": "diagnosing",
+          "diagnosis_status": "queued",
+          "replay_status": null,
+          "last_error_code": null,
+          "demand_count": 1,
+          "first_seen_at": "2026-09-30T15:52:47.648497+00:00",
+          "last_seen_at": "2026-09-30T15:52:47.648497+00:00",
+          "next_retry_at": "2026-09-30T15:52:47.648497+00:00",
+          "completed_at": null,
+          "result_revision_id": null
+        },
+        {
+          "id": "064756d9-b732-4580-9e28-d8e0ec866394",
+          "question": "How can I compare Linux IPv6 route cache exceptions with the main IPv6 routing table?",
+          "status": "diagnosing",
+          "diagnosis_status": "queued",
+          "replay_status": null,
+          "last_error_code": null,
+          "demand_count": 1,
+          "first_seen_at": "2026-09-30T15:52:54.434609+00:00",
+          "last_seen_at": "2026-09-30T15:52:54.434609+00:00",
+          "next_retry_at": "2026-09-30T15:52:54.434609+00:00",
+          "completed_at": null,
+          "result_revision_id": null
+        },
+        {
+          "id": "23d48bea-d205-4ab3-9502-553a0a6f420f",
+          "question": "How do I verify OpenWrt mwan3 policy routing rules for an existing connection?",
+          "status": "diagnosing",
+          "diagnosis_status": "queued",
+          "replay_status": null,
+          "last_error_code": null,
+          "demand_count": 1,
+          "first_seen_at": "2026-09-30T15:52:57.129453+00:00",
+          "last_seen_at": "2026-09-30T15:52:57.129453+00:00",
+          "next_retry_at": "2026-09-30T15:52:57.129453+00:00",
+          "completed_at": null,
+          "result_revision_id": null
+        },
+        {
+          "id": "1bef9ff6-29e1-4e87-a4f2-ee0f98639e27",
+          "question": "How can I inspect the active OpenWrt SQM cake overhead compensation settings?",
+          "status": "diagnosing",
+          "diagnosis_status": "queued",
+          "replay_status": null,
+          "last_error_code": null,
+          "demand_count": 1,
+          "first_seen_at": "2026-09-30T15:52:58.08978+00:00",
+          "last_seen_at": "2026-09-30T15:52:58.08978+00:00",
+          "next_retry_at": "2026-09-30T15:52:58.08978+00:00",
+          "completed_at": null,
+          "result_revision_id": null
+        },
+        {
+          "id": "7534f229-3723-48ad-b5c0-fd2ee2754ebf",
+          "question": "How can I inspect Linux bridge multicast database entries and their source-specific filters?",
+          "status": "diagnosing",
+          "diagnosis_status": "running",
+          "replay_status": null,
+          "last_error_code": null,
+          "demand_count": 1,
+          "first_seen_at": "2026-09-30T15:53:03.961409+00:00",
+          "last_seen_at": "2026-09-30T15:53:04.271795+00:00",
+          "next_retry_at": "2026-09-30T15:53:03.961409+00:00",
+          "completed_at": null,
+          "result_revision_id": null
+        },
+        {
+          "id": "477eae13-7f97-42b0-a425-5ef08b7b811b",
+          "question": "How can I inspect OpenWrt firewall4 nftables flow offloading rules without restarting the firewall?",
+          "status": "diagnosing",
+          "diagnosis_status": "queued",
+          "replay_status": null,
+          "last_error_code": null,
+          "demand_count": 1,
+          "first_seen_at": "2026-09-30T15:53:05.207371+00:00",
+          "last_seen_at": "2026-09-30T15:53:05.207371+00:00",
+          "next_retry_at": "2026-09-30T15:53:05.207371+00:00",
+          "completed_at": null,
+          "result_revision_id": null
+        },
+        {
+          "id": "24ddd12f-c3bd-47a4-8f3b-d5a6d5fd6fcb",
+          "question": "How do I identify whether a Linux UDP socket uses UDP_SEGMENT or UDP_GRO?",
+          "status": "diagnosing",
+          "diagnosis_status": "queued",
+          "replay_status": null,
+          "last_error_code": null,
+          "demand_count": 1,
+          "first_seen_at": "2026-09-30T15:53:09.229429+00:00",
+          "last_seen_at": "2026-09-30T15:53:09.229429+00:00",
+          "next_retry_at": "2026-09-30T15:53:09.229429+00:00",
+          "completed_at": null,
+          "result_revision_id": null
+        },
+        {
+          "id": "5dfb632a-52bc-4d61-a190-b569a8bf1292",
+          "question": "How can I inspect ethtool receive flow classification rules without modifying them?",
+          "status": "diagnosing",
+          "diagnosis_status": "queued",
+          "replay_status": null,
+          "last_error_code": null,
+          "demand_count": 1,
+          "first_seen_at": "2026-09-30T15:53:11.312189+00:00",
+          "last_seen_at": "2026-09-30T15:53:11.312189+00:00",
+          "next_retry_at": "2026-09-30T15:53:11.312189+00:00",
+          "completed_at": null,
+          "result_revision_id": null
+        },
+        {
+          "id": "5c828d23-db3f-4c36-8455-f7c2d620e47c",
+          "question": "How do I verify IOS XE segment routing microloop avoidance state?",
+          "status": "diagnosing",
+          "diagnosis_status": "queued",
+          "replay_status": null,
+          "last_error_code": null,
+          "demand_count": 1,
+          "first_seen_at": "2026-09-30T15:53:12.535074+00:00",
+          "last_seen_at": "2026-09-30T15:53:12.535074+00:00",
+          "next_retry_at": "2026-09-30T15:53:12.535074+00:00",
+          "completed_at": null,
+          "result_revision_id": null
+        }
+      ]
+    },
+    {
+      "section": "tasks",
+      "at": "2026-09-30T15:53:16.290503+00:00",
+      "rows": [
+        {
+          "id": "63d4f76d-a9c9-41ab-8c59-3301549d7e73",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "demand_diagnosis",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:50:49.130519+00:00",
+          "updated_at": "2026-09-30T15:51:02.232619+00:00",
+          "completed_at": "2026-09-30T15:51:02.232619+00:00",
+          "result": {
+            "topic": "linux-normal-identify-the-supported-read-only-command-or-interface-for-displ",
+            "answer_status": "unknown",
+            "missing_capabilities": [
+              "general"
+            ],
+            "reused_existing_knowledge": false
+          }
+        },
+        {
+          "id": "7f0674e0-cb97-4fbd-b7a2-d9a7fd1bd892",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "candidate_deep_review",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:51:06.543016+00:00",
+          "updated_at": "2026-09-30T15:51:36.388196+00:00",
+          "completed_at": "2026-09-30T15:51:36.388196+00:00",
+          "result": {
+            "conflict": 0,
+            "rejected": 0,
+            "verified": 0,
+            "quarantined": 0,
+            "manual_exception": 0,
+            "escalated_to_medium": 1
+          }
+        },
+        {
+          "id": "07819b37-0eef-4737-93c7-089067a31f59",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "candidate_deep_review",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:51:06.543016+00:00",
+          "updated_at": "2026-09-30T15:51:42.633646+00:00",
+          "completed_at": "2026-09-30T15:51:42.633646+00:00",
+          "result": {
+            "conflict": 0,
+            "rejected": 0,
+            "verified": 0,
+            "quarantined": 0,
+            "manual_exception": 0,
+            "escalated_to_medium": 2
+          }
+        },
+        {
+          "id": "aa51f58c-155d-4c23-af1a-bddd7ce800a0",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "candidate_deep_review",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:51:06.543016+00:00",
+          "updated_at": "2026-09-30T15:51:38.570805+00:00",
+          "completed_at": "2026-09-30T15:51:38.570805+00:00",
+          "result": {
+            "conflict": 0,
+            "rejected": 0,
+            "verified": 0,
+            "quarantined": 0,
+            "manual_exception": 0,
+            "escalated_to_medium": 2
+          }
+        },
+        {
+          "id": "c48d8083-ab38-4858-9ffc-627638f17584",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "candidate_deep_review",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:51:06.543016+00:00",
+          "updated_at": "2026-09-30T15:51:51.773248+00:00",
+          "completed_at": "2026-09-30T15:51:51.773248+00:00",
+          "result": {
+            "conflict": 0,
+            "rejected": 0,
+            "verified": 0,
+            "quarantined": 0,
+            "manual_exception": 0,
+            "escalated_to_medium": 7
+          }
+        },
+        {
+          "id": "b26fa4e6-a18d-45cd-a50a-555fb3e5675b",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "candidate_deep_review",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:51:36.288709+00:00",
+          "updated_at": "2026-09-30T15:51:47.014439+00:00",
+          "completed_at": "2026-09-30T15:51:47.014439+00:00",
+          "result": {
+            "conflict": 0,
+            "rejected": 1,
+            "verified": 0,
+            "quarantined": 0,
+            "manual_exception": 0,
+            "escalated_to_medium": 0
+          }
+        },
+        {
+          "id": "87b08683-5e4b-4028-bec2-d47f405dd487",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "candidate_deep_review",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:51:38.588907+00:00",
+          "updated_at": "2026-09-30T15:51:47.744425+00:00",
+          "completed_at": "2026-09-30T15:51:47.744425+00:00",
+          "result": {
+            "conflict": 0,
+            "rejected": 2,
+            "verified": 0,
+            "quarantined": 0,
+            "manual_exception": 0,
+            "escalated_to_medium": 0
+          }
+        },
+        {
+          "id": "d4da36c9-93fd-433c-bc41-1bb282b2b0dd",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "candidate_deep_review",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:51:42.654861+00:00",
+          "updated_at": "2026-09-30T15:51:52.610366+00:00",
+          "completed_at": "2026-09-30T15:51:52.610366+00:00",
+          "result": {
+            "conflict": 0,
+            "rejected": 2,
+            "verified": 0,
+            "quarantined": 0,
+            "manual_exception": 0,
+            "escalated_to_medium": 0
+          }
+        },
+        {
+          "id": "d534f50e-1d3c-4428-b9b8-3ed82f72904f",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:51:47.089225+00:00",
+          "updated_at": "2026-09-30T15:52:03.525654+00:00",
+          "completed_at": "2026-09-30T15:52:03.525654+00:00",
+          "result": {
+            "rejection_reasons": [],
+            "candidates_created": 0,
+            "fragments_analyzed": 0,
+            "fragments_requeued": 2,
+            "fragments_without_candidates": 3,
+            "demand_irrelevant_candidates_ignored": 0
+          }
+        },
+        {
+          "id": "3bcb6fd5-7da4-4a19-9b81-5f29e344dd69",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:51:50.970721+00:00",
+          "updated_at": "2026-09-30T15:52:06.111473+00:00",
+          "completed_at": "2026-09-30T15:52:06.111473+00:00",
+          "result": {
+            "rejection_reasons": [],
+            "candidates_created": 0,
+            "fragments_analyzed": 0,
+            "fragments_requeued": 4,
+            "fragments_without_candidates": 4,
+            "demand_irrelevant_candidates_ignored": 0
+          }
+        },
+        {
+          "id": "c922b78c-b518-4e4e-9c21-c060970f7039",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:51:50.970721+00:00",
+          "updated_at": "2026-09-30T15:52:56.022299+00:00",
+          "completed_at": "2026-09-30T15:52:56.022299+00:00",
+          "result": {
+            "rejection_reasons": [],
+            "candidates_created": 6,
+            "fragments_analyzed": 1,
+            "fragments_requeued": 0,
+            "fragments_without_candidates": 0,
+            "demand_irrelevant_candidates_ignored": 0
+          }
+        },
+        {
+          "id": "062b23af-0ed5-4703-9e5c-48950d6ce411",
+          "knowledge_demand_id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+          "task_type": "demand_diagnosis",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:51:57.586835+00:00",
+          "updated_at": "2026-09-30T15:52:08.510302+00:00",
+          "completed_at": "2026-09-30T15:52:08.510302+00:00",
+          "result": {
+            "topic": "linux-normal-linux-macsec-interface-cipher-suite-inspection-linux-macsec-replay-protection-setting-inspection",
+            "answer_status": "unknown",
+            "missing_capabilities": [
+              "general"
+            ],
+            "reused_existing_knowledge": false
+          }
+        },
+        {
+          "id": "71c04093-b4f7-42b4-b8c6-dc2c23c8eb83",
+          "knowledge_demand_id": "b2df17d6-237a-47c6-aaa8-7e1340998acc",
+          "task_type": "demand_diagnosis",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:52:13.055175+00:00",
+          "updated_at": "2026-09-30T15:52:23.584673+00:00",
+          "completed_at": "2026-09-30T15:52:23.584673+00:00",
+          "result": {
+            "topic": "arista-eos-normal-commands-or-workflow-to-inspect-designated-forwarder-election-s",
+            "answer_status": "complete",
+            "missing_capabilities": [],
+            "reused_existing_knowledge": true
+          }
+        },
+        {
+          "id": "090b1ccb-99bc-419a-91ed-533174bd1e53",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "candidate_deep_review",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:52:21.206425+00:00",
+          "updated_at": "2026-09-30T15:52:43.948761+00:00",
+          "completed_at": "2026-09-30T15:52:43.948761+00:00",
+          "result": {
+            "conflict": 0,
+            "rejected": 3,
+            "verified": 0,
+            "quarantined": 0,
+            "manual_exception": 0,
+            "escalated_to_medium": 0
+          }
+        },
+        {
+          "id": "c9dd8c8f-7cca-422f-92ed-197b31482f85",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "candidate_deep_review",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:52:21.206425+00:00",
+          "updated_at": "2026-09-30T15:52:39.179637+00:00",
+          "completed_at": "2026-09-30T15:52:39.179637+00:00",
+          "result": {
+            "conflict": 0,
+            "rejected": 4,
+            "verified": 0,
+            "quarantined": 0,
+            "manual_exception": 0,
+            "escalated_to_medium": 0
+          }
+        },
+        {
+          "id": "e87e2788-9c9d-4065-a9df-d17157110387",
+          "knowledge_demand_id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+          "task_type": "candidate_deep_review",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:52:21.206425+00:00",
+          "updated_at": "2026-09-30T15:52:31.895128+00:00",
+          "completed_at": "2026-09-30T15:52:31.895128+00:00",
+          "result": {
+            "conflict": 0,
+            "rejected": 0,
+            "verified": 0,
+            "quarantined": 0,
+            "manual_exception": 0,
+            "escalated_to_medium": 1
+          }
+        },
+        {
+          "id": "e0d45a7a-69d3-4961-b823-0174422a0e6f",
+          "knowledge_demand_id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+          "task_type": "candidate_deep_review",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:52:21.206425+00:00",
+          "updated_at": "2026-09-30T15:52:34.76408+00:00",
+          "completed_at": "2026-09-30T15:52:34.76408+00:00",
+          "result": {
+            "conflict": 0,
+            "rejected": 0,
+            "verified": 0,
+            "quarantined": 0,
+            "manual_exception": 0,
+            "escalated_to_medium": 1
+          }
+        },
+        {
+          "id": "4da3f232-981a-47d5-abaf-d56e3af06354",
+          "knowledge_demand_id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+          "task_type": "candidate_deep_review",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:52:21.206425+00:00",
+          "updated_at": "2026-09-30T15:52:38.305156+00:00",
+          "completed_at": "2026-09-30T15:52:38.305156+00:00",
+          "result": {
+            "conflict": 0,
+            "rejected": 0,
+            "verified": 0,
+            "quarantined": 0,
+            "manual_exception": 0,
+            "escalated_to_medium": 1
+          }
+        },
+        {
+          "id": "5c508115-b7f0-4cf1-b313-2bbe1cc70adf",
+          "knowledge_demand_id": "01a7f35c-ee7e-4498-a027-e0a805aa9098",
+          "task_type": "demand_diagnosis",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:52:39.833227+00:00",
+          "updated_at": "2026-09-30T15:52:51.993576+00:00",
+          "completed_at": "2026-09-30T15:52:51.993576+00:00",
+          "result": {
+            "topic": "linux-normal-inspect-cake-flow-isolation-mode-inspect-cake-packet-drop-counters",
+            "answer_status": "unknown",
+            "missing_capabilities": [
+              "interface-counters"
+            ],
+            "reused_existing_knowledge": false
+          }
+        },
+        {
+          "id": "cc528c6e-2012-41e4-b160-7a93135012ef",
+          "knowledge_demand_id": "7534f229-3723-48ad-b5c0-fd2ee2754ebf",
+          "task_type": "demand_diagnosis",
+          "status": "running",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:53:03.961409+00:00",
+          "updated_at": "2026-09-30T15:53:14.978252+00:00",
+          "completed_at": null,
+          "result": null
+        }
+      ]
+    },
+    {
+      "section": "agent_runs",
+      "at": "2026-09-30T15:53:16.290503+00:00",
+      "rows": [
+        {
+          "id": "bb32f021-120c-45c5-ac3c-99beb9300eaf",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "demand_diagnosis",
+          "execution_profile": "luna_high",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "medium",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 12547,
+          "input_tokens": 11941,
+          "output_tokens": 282,
+          "started_at": "2026-09-30T15:50:49.362822+00:00",
+          "completed_at": "2026-09-30T15:51:06.597832+00:00"
+        },
+        {
+          "id": "1db9a3c8-66d8-494b-8f7a-679d05ed189d",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "candidate_deep_review",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 13682,
+          "input_tokens": 15038,
+          "output_tokens": 428,
+          "started_at": "2026-09-30T15:51:28.719476+00:00",
+          "completed_at": "2026-09-30T15:51:43.124056+00:00"
+        },
+        {
+          "id": "82268702-407a-411f-a147-daa6560a341d",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "candidate_deep_review",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 6992,
+          "input_tokens": 14312,
+          "output_tokens": 85,
+          "started_at": "2026-09-30T15:51:29.246187+00:00",
+          "completed_at": "2026-09-30T15:51:36.496165+00:00"
+        },
+        {
+          "id": "807c2067-50d4-4ecd-ae02-1400502031ee",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "candidate_deep_review",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 9090,
+          "input_tokens": 14870,
+          "output_tokens": 173,
+          "started_at": "2026-09-30T15:51:29.318169+00:00",
+          "completed_at": "2026-09-30T15:51:38.6752+00:00"
+        },
+        {
+          "id": "640ebbbf-74ba-4194-ba3c-dc91ae284362",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "candidate_deep_review",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 22090,
+          "input_tokens": 18488,
+          "output_tokens": 884,
+          "started_at": "2026-09-30T15:51:29.429355+00:00",
+          "completed_at": "2026-09-30T15:51:51.87965+00:00"
+        },
+        {
+          "id": "d7c40434-adb7-4e50-b6f4-5b3ea505295c",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "candidate_deep_review",
+          "execution_profile": "luna_high",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "medium",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 9024,
+          "input_tokens": 14348,
+          "output_tokens": 98,
+          "started_at": "2026-09-30T15:51:37.821333+00:00",
+          "completed_at": "2026-09-30T15:51:50.931077+00:00"
+        },
+        {
+          "id": "f5c937b9-5a3b-46c1-8822-8815e11dd4d6",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "candidate_deep_review",
+          "execution_profile": "luna_high",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "medium",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 8571,
+          "input_tokens": 14961,
+          "output_tokens": 147,
+          "started_at": "2026-09-30T15:51:38.973846+00:00",
+          "completed_at": "2026-09-30T15:51:47.857709+00:00"
+        },
+        {
+          "id": "57af690d-3266-4bf6-8162-f27fe83bace1",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "candidate_deep_review",
+          "execution_profile": "luna_high",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "medium",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 9268,
+          "input_tokens": 15173,
+          "output_tokens": 194,
+          "started_at": "2026-09-30T15:51:43.182544+00:00",
+          "completed_at": "2026-09-30T15:51:52.722951+00:00"
+        },
+        {
+          "id": "050d5a3c-cb7f-4df5-91ee-65013342fa5f",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 11332,
+          "input_tokens": 17636,
+          "output_tokens": 308,
+          "started_at": "2026-09-30T15:51:51.925672+00:00",
+          "completed_at": "2026-09-30T15:52:03.825593+00:00"
+        },
+        {
+          "id": "7b04997e-0ee3-4c68-9b7e-be3fba9e7c48",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 60848,
+          "input_tokens": 15025,
+          "output_tokens": 3132,
+          "started_at": "2026-09-30T15:51:54.960203+00:00",
+          "completed_at": "2026-09-30T15:52:56.36417+00:00"
+        },
+        {
+          "id": "2424f0ea-eeeb-4567-9e4e-1d10741142cd",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 9738,
+          "input_tokens": 17765,
+          "output_tokens": 309,
+          "started_at": "2026-09-30T15:51:56.135163+00:00",
+          "completed_at": "2026-09-30T15:52:06.336577+00:00"
+        },
+        {
+          "id": "52868d37-e7a4-471d-a18c-661531cb55b0",
+          "knowledge_demand_id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+          "task_type": "demand_diagnosis",
+          "execution_profile": "luna_high",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "medium",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 10043,
+          "input_tokens": 11941,
+          "output_tokens": 340,
+          "started_at": "2026-09-30T15:51:58.25651+00:00",
+          "completed_at": "2026-09-30T15:52:11.014227+00:00"
+        },
+        {
+          "id": "a022681f-4506-48b6-a6b2-8fe287fc5d8f",
+          "knowledge_demand_id": "b2df17d6-237a-47c6-aaa8-7e1340998acc",
+          "task_type": "demand_diagnosis",
+          "execution_profile": "luna_high",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "medium",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 10134,
+          "input_tokens": 11954,
+          "output_tokens": 281,
+          "started_at": "2026-09-30T15:52:13.209651+00:00",
+          "completed_at": "2026-09-30T15:52:25.570246+00:00"
+        },
+        {
+          "id": "f7c37b53-7354-404c-b9f9-3c38c9fd19f1",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "candidate_deep_review",
+          "execution_profile": "luna_high",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "medium",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 15409,
+          "input_tokens": 17088,
+          "output_tokens": 572,
+          "started_at": "2026-09-30T15:52:23.516636+00:00",
+          "completed_at": "2026-09-30T15:52:39.501881+00:00"
+        },
+        {
+          "id": "9bd6fe40-bde5-4e28-809e-9d341d4fa977",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "candidate_deep_review",
+          "execution_profile": "luna_high",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "medium",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 18889,
+          "input_tokens": 15392,
+          "output_tokens": 628,
+          "started_at": "2026-09-30T15:52:24.700629+00:00",
+          "completed_at": "2026-09-30T15:52:44.305204+00:00"
+        },
+        {
+          "id": "639a0807-fda8-43f3-bde5-f61343813386",
+          "knowledge_demand_id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+          "task_type": "candidate_deep_review",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 6840,
+          "input_tokens": 14257,
+          "output_tokens": 72,
+          "started_at": "2026-09-30T15:52:24.77273+00:00",
+          "completed_at": "2026-09-30T15:52:32.172232+00:00"
+        },
+        {
+          "id": "6da58e35-75c5-434f-af36-eb3ae3ad691a",
+          "knowledge_demand_id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+          "task_type": "candidate_deep_review",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 12834,
+          "input_tokens": 13680,
+          "output_tokens": 361,
+          "started_at": "2026-09-30T15:52:25.220523+00:00",
+          "completed_at": "2026-09-30T15:52:38.546147+00:00"
+        },
+        {
+          "id": "5a3a51d6-8d45-404c-ba3c-13a552349d8b",
+          "knowledge_demand_id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+          "task_type": "candidate_deep_review",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 8805,
+          "input_tokens": 14630,
+          "output_tokens": 96,
+          "started_at": "2026-09-30T15:52:25.576057+00:00",
+          "completed_at": "2026-09-30T15:52:35.053478+00:00"
+        },
+        {
+          "id": "ed81cd4a-684a-494e-90bf-32a3d3af2fb0",
+          "knowledge_demand_id": "01a7f35c-ee7e-4498-a027-e0a805aa9098",
+          "task_type": "demand_diagnosis",
+          "execution_profile": "luna_high",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "medium",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 10808,
+          "input_tokens": 11944,
+          "output_tokens": 314,
+          "started_at": "2026-09-30T15:52:40.762505+00:00",
+          "completed_at": "2026-09-30T15:52:59.841192+00:00"
+        },
+        {
+          "id": "94a4c490-220b-480b-add9-2803ae6e7cd1",
+          "knowledge_demand_id": "7534f229-3723-48ad-b5c0-fd2ee2754ebf",
+          "task_type": "demand_diagnosis",
+          "execution_profile": "luna_high",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "medium",
+          "status": "running",
+          "error_code": null,
+          "duration_ms": null,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "started_at": "2026-09-30T15:53:04.271795+00:00",
+          "completed_at": null
+        }
+      ]
+    },
+    {
+      "section": "sources",
+      "at": "2026-09-30T15:53:16.290503+00:00",
+      "rows": [
+        {
+          "id": "1697da5e-a5d3-4976-a203-0729349b5ee6",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "canonical_url": "https://ubuntu.com/desktop/docs/en/26.04/tutorial/the-linux-command-line-for-beginners/",
+          "status": "analyzing",
+          "failure_code": null,
+          "discovered_at": "2026-09-02T16:05:43.751271+00:00",
+          "completed_at": null
+        },
+        {
+          "id": "42a834a7-89b5-412d-ab43-d0e3ee1f5ea5",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "canonical_url": "https://docs.rockylinux.org/books/admin_guide/03-commands/",
+          "status": "analyzing",
+          "failure_code": null,
+          "discovered_at": "2026-09-03T16:04:56.164617+00:00",
+          "completed_at": null
+        },
+        {
+          "id": "ddf3b34f-9b73-432a-8cab-b58c8db008ab",
+          "knowledge_demand_id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+          "canonical_url": "https://ftp.gnu.org/old-gnu/Manuals/coreutils-4.5.4/html_node/coreutils_149.html",
+          "status": "prepared",
+          "failure_code": null,
+          "discovered_at": "2026-09-06T10:53:03.615485+00:00",
+          "completed_at": null
+        },
+        {
+          "id": "3fc2dffc-535f-4a5c-8c96-0c6276c91ff2",
+          "knowledge_demand_id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+          "canonical_url": "https://fedoraproject.org/wiki/User_Guide_-_Managing_Software",
+          "status": "analyzing",
+          "failure_code": null,
+          "discovered_at": "2026-09-06T17:04:11.600657+00:00",
+          "completed_at": null
+        },
+        {
+          "id": "f4ce8b4d-3b88-4d14-8973-eb10f3c40fdd",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "canonical_url": "https://ubuntu.com/server/docs/tutorial/managing-software/",
+          "status": "analyzing",
+          "failure_code": null,
+          "discovered_at": "2026-09-06T17:04:11.600657+00:00",
+          "completed_at": null
+        },
+        {
+          "id": "79406395-d666-43f2-8139-304eca3f8d05",
+          "knowledge_demand_id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+          "canonical_url": "https://www.dell.com/support/kbdoc/en-us/000123974/introduction-to-basic-troubleshooting-commands-within-ubuntu-linux",
+          "status": "prepared",
+          "failure_code": null,
+          "discovered_at": "2026-09-07T09:42:05.052161+00:00",
+          "completed_at": null
+        },
+        {
+          "id": "c45eb098-3d0b-48c1-b73e-bed820e81b39",
+          "knowledge_demand_id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+          "canonical_url": "https://docs.kernel.org/5.10/driver-api/ioctl.html",
+          "status": "analyzing",
+          "failure_code": null,
+          "discovered_at": "2026-09-07T14:27:38.876608+00:00",
+          "completed_at": null
+        },
+        {
+          "id": "52374a34-dd36-4d47-999b-1e88fe28145d",
+          "knowledge_demand_id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+          "canonical_url": "https://access.redhat.com/articles/1189123",
+          "status": "prepared",
+          "failure_code": null,
+          "discovered_at": "2026-09-10T14:03:23.683846+00:00",
+          "completed_at": null
+        },
+        {
+          "id": "b841df38-90ea-4f7b-b167-ad8d3f53a247",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "canonical_url": "https://manpages.ubuntu.com/manpages/resolute/man1/bash.1.html",
+          "status": "analyzing",
+          "failure_code": null,
+          "discovered_at": "2026-09-10T20:02:19.925057+00:00",
+          "completed_at": null
+        },
+        {
+          "id": "4dd4fd2b-6d83-4da9-8e8f-711ca90ab780",
+          "knowledge_demand_id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+          "canonical_url": "https://manpages.ubuntu.com/manpages/noble/man1/command.1posix.html",
+          "status": "prepared",
+          "failure_code": null,
+          "discovered_at": "2026-09-10T20:02:19.925057+00:00",
+          "completed_at": null
+        },
+        {
+          "id": "27f64d59-8f2a-4a64-993c-c0227068124a",
+          "knowledge_demand_id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+          "canonical_url": "https://refspecs.linuxfoundation.org/LSB_2.1.0/LSB-generic/LSB-generic/command.html",
+          "status": "prepared",
+          "failure_code": null,
+          "discovered_at": "2026-09-11T21:58:07.865398+00:00",
+          "completed_at": null
+        },
+        {
+          "id": "9982a2ce-f3df-4676-ac6d-bdeb9918ce92",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "canonical_url": "https://docs.oracle.com/cd/E88353_01/html/E37839/bash-1.html",
+          "status": "analyzing",
+          "failure_code": null,
+          "discovered_at": "2026-09-15T19:34:59.750399+00:00",
+          "completed_at": null
+        }
+      ]
+    },
+    {
+      "section": "requests",
+      "at": "2026-09-30T15:53:16.290503+00:00",
+      "rows": [
+        {
+          "id": 2269,
+          "tool_name": "query_network_knowledge",
+          "outcome": "unknown",
+          "answer_status": "unknown",
+          "learning": {
+            "status": "diagnosing"
+          },
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "duration_ms": 4436,
+          "error_code": null,
+          "occurred_at": "2026-09-30T15:50:49.179807+00:00"
+        },
+        {
+          "id": 2270,
+          "tool_name": "query_network_knowledge",
+          "outcome": "unknown",
+          "answer_status": "unknown",
+          "learning": {
+            "status": "diagnosing"
+          },
+          "knowledge_demand_id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+          "duration_ms": 2655,
+          "error_code": null,
+          "occurred_at": "2026-09-30T15:51:57.602511+00:00"
+        },
+        {
+          "id": 2271,
+          "tool_name": "query_network_knowledge",
+          "outcome": "unknown",
+          "answer_status": "unknown",
+          "learning": {
+            "status": "diagnosing"
+          },
+          "knowledge_demand_id": "d7cae6bf-99f0-4502-b08b-c50039f26c7f",
+          "duration_ms": 7736,
+          "error_code": null,
+          "occurred_at": "2026-09-30T15:52:05.64336+00:00"
+        },
+        {
+          "id": 2272,
+          "tool_name": "query_network_knowledge",
+          "outcome": "unknown",
+          "answer_status": "unknown",
+          "learning": {
+            "status": "diagnosing"
+          },
+          "knowledge_demand_id": "6ff0c421-5538-4d3c-9743-620b09dfaff6",
+          "duration_ms": 1930,
+          "error_code": null,
+          "occurred_at": "2026-09-30T15:52:07.92998+00:00"
+        },
+        {
+          "id": 2273,
+          "tool_name": "query_network_knowledge",
+          "outcome": "unknown",
+          "answer_status": "unknown",
+          "learning": {
+            "status": "diagnosing"
+          },
+          "knowledge_demand_id": "05961a92-ebd3-4566-b7de-3afc98f2f843",
+          "duration_ms": 430,
+          "error_code": null,
+          "occurred_at": "2026-09-30T15:52:08.645593+00:00"
+        },
+        {
+          "id": 2274,
+          "tool_name": "query_network_knowledge",
+          "outcome": "unknown",
+          "answer_status": "unknown",
+          "learning": {
+            "status": "diagnosing"
+          },
+          "knowledge_demand_id": "aa02154a-022a-49ce-a441-f6fa920bda86",
+          "duration_ms": 1579,
+          "error_code": null,
+          "occurred_at": "2026-09-30T15:52:10.555883+00:00"
+        },
+        {
+          "id": 2275,
+          "tool_name": "query_network_knowledge",
+          "outcome": "unknown",
+          "answer_status": "unknown",
+          "learning": {
+            "status": "diagnosing"
+          },
+          "knowledge_demand_id": "b2df17d6-237a-47c6-aaa8-7e1340998acc",
+          "duration_ms": 2243,
+          "error_code": null,
+          "occurred_at": "2026-09-30T15:52:13.088027+00:00"
+        },
+        {
+          "id": 2276,
+          "tool_name": "query_network_knowledge",
+          "outcome": "unknown",
+          "answer_status": "unknown",
+          "learning": {
+            "status": "diagnosing"
+          },
+          "knowledge_demand_id": "21da84ca-78d6-429e-8aa8-7862f6906ec9",
+          "duration_ms": 3651,
+          "error_code": null,
+          "occurred_at": "2026-09-30T15:52:17.011348+00:00"
+        },
+        {
+          "id": 2277,
+          "tool_name": "query_network_knowledge",
+          "outcome": "unknown",
+          "answer_status": "unknown",
+          "learning": {
+            "status": "diagnosing"
+          },
+          "knowledge_demand_id": "f9a16bc4-70e2-4f89-84b6-6f24408f5e5a",
+          "duration_ms": 3091,
+          "error_code": null,
+          "occurred_at": "2026-09-30T15:52:20.402019+00:00"
+        },
+        {
+          "id": 2278,
+          "tool_name": "query_network_knowledge",
+          "outcome": "unknown",
+          "answer_status": "unknown",
+          "learning": {
+            "status": "diagnosing"
+          },
+          "knowledge_demand_id": "01a7f35c-ee7e-4498-a027-e0a805aa9098",
+          "duration_ms": 19195,
+          "error_code": null,
+          "occurred_at": "2026-09-30T15:52:39.870285+00:00"
+        },
+        {
+          "id": 2279,
+          "tool_name": "query_network_knowledge",
+          "outcome": "unknown",
+          "answer_status": "unknown",
+          "learning": {
+            "status": "diagnosing"
+          },
+          "knowledge_demand_id": "dc360e74-1883-4f0b-836b-005b46626842",
+          "duration_ms": 3867,
+          "error_code": null,
+          "occurred_at": "2026-09-30T15:52:44.026411+00:00"
+        },
+        {
+          "id": 2280,
+          "tool_name": "query_network_knowledge",
+          "outcome": "unknown",
+          "answer_status": "unknown",
+          "learning": {
+            "status": "diagnosing"
+          },
+          "knowledge_demand_id": "afbd8f51-294a-4ae0-b04b-9c74015ae707",
+          "duration_ms": 3345,
+          "error_code": null,
+          "occurred_at": "2026-09-30T15:52:47.656702+00:00"
+        },
+        {
+          "id": 2281,
+          "tool_name": "query_network_knowledge",
+          "outcome": "unknown",
+          "answer_status": "unknown",
+          "learning": {
+            "status": "diagnosing"
+          },
+          "knowledge_demand_id": "064756d9-b732-4580-9e28-d8e0ec866394",
+          "duration_ms": 6409,
+          "error_code": null,
+          "occurred_at": "2026-09-30T15:52:54.45863+00:00"
+        },
+        {
+          "id": 2282,
+          "tool_name": "query_network_knowledge",
+          "outcome": "unknown",
+          "answer_status": "unknown",
+          "learning": {
+            "status": "diagnosing"
+          },
+          "knowledge_demand_id": "23d48bea-d205-4ab3-9502-553a0a6f420f",
+          "duration_ms": 2367,
+          "error_code": null,
+          "occurred_at": "2026-09-30T15:52:57.161355+00:00"
+        },
+        {
+          "id": 2283,
+          "tool_name": "query_network_knowledge",
+          "outcome": "unknown",
+          "answer_status": "unknown",
+          "learning": {
+            "status": "diagnosing"
+          },
+          "knowledge_demand_id": "1bef9ff6-29e1-4e87-a4f2-ee0f98639e27",
+          "duration_ms": 634,
+          "error_code": null,
+          "occurred_at": "2026-09-30T15:52:58.124212+00:00"
+        },
+        {
+          "id": 2284,
+          "tool_name": "query_network_knowledge",
+          "outcome": "unknown",
+          "answer_status": "unknown",
+          "learning": {
+            "status": "diagnosing"
+          },
+          "knowledge_demand_id": "7534f229-3723-48ad-b5c0-fd2ee2754ebf",
+          "duration_ms": 5545,
+          "error_code": null,
+          "occurred_at": "2026-09-30T15:53:03.979646+00:00"
+        },
+        {
+          "id": 2285,
+          "tool_name": "query_network_knowledge",
+          "outcome": "unknown",
+          "answer_status": "unknown",
+          "learning": {
+            "status": "diagnosing"
+          },
+          "knowledge_demand_id": "477eae13-7f97-42b0-a425-5ef08b7b811b",
+          "duration_ms": 995,
+          "error_code": null,
+          "occurred_at": "2026-09-30T15:53:05.225422+00:00"
+        },
+        {
+          "id": 2286,
+          "tool_name": "query_network_knowledge",
+          "outcome": "unknown",
+          "answer_status": "unknown",
+          "learning": {
+            "status": "diagnosing"
+          },
+          "knowledge_demand_id": "24ddd12f-c3bd-47a4-8f3b-d5a6d5fd6fcb",
+          "duration_ms": 3679,
+          "error_code": null,
+          "occurred_at": "2026-09-30T15:53:09.256465+00:00"
+        },
+        {
+          "id": 2287,
+          "tool_name": "query_network_knowledge",
+          "outcome": "unknown",
+          "answer_status": "unknown",
+          "learning": {
+            "status": "diagnosing"
+          },
+          "knowledge_demand_id": "5dfb632a-52bc-4d61-a190-b569a8bf1292",
+          "duration_ms": 1685,
+          "error_code": null,
+          "occurred_at": "2026-09-30T15:53:11.328842+00:00"
+        },
+        {
+          "id": 2288,
+          "tool_name": "query_network_knowledge",
+          "outcome": "unknown",
+          "answer_status": "unknown",
+          "learning": {
+            "status": "diagnosing"
+          },
+          "knowledge_demand_id": "5c828d23-db3f-4c36-8455-f7c2d620e47c",
+          "duration_ms": 920,
+          "error_code": null,
+          "occurred_at": "2026-09-30T15:53:12.544354+00:00"
+        }
+      ]
+    },
+    {
+      "section": "executors",
+      "at": "2026-09-30T15:53:16.290503+00:00",
+      "rows": [
+        {
+          "worker_name": "pipeline-executor-01",
+          "heartbeat_at": "2026-09-30T15:53:14.617017+00:00",
+          "status": "standby",
+          "reason": "deterministic_work_in_progress"
+        },
+        {
+          "worker_name": "pipeline-executor-02",
+          "heartbeat_at": "2026-09-30T15:53:14.899432+00:00",
+          "status": "standby",
+          "reason": "deterministic_work_in_progress"
+        },
+        {
+          "worker_name": "pipeline-executor-03",
+          "heartbeat_at": "2026-09-30T15:53:15.332927+00:00",
+          "status": "standby",
+          "reason": "deterministic_work_in_progress"
+        },
+        {
+          "worker_name": "pipeline-executor-04",
+          "heartbeat_at": "2026-09-30T15:53:14.648514+00:00",
+          "status": "standby",
+          "reason": "deterministic_work_in_progress"
+        },
+        {
+          "worker_name": "pipeline-executor-05",
+          "heartbeat_at": "2026-09-30T15:53:14.978252+00:00",
+          "status": "running",
+          "reason": null
+        },
+        {
+          "worker_name": "pipeline-executor-06",
+          "heartbeat_at": "2026-09-30T15:53:15.405183+00:00",
+          "status": "standby",
+          "reason": "deterministic_work_in_progress"
+        },
+        {
+          "worker_name": "pipeline-executor-07",
+          "heartbeat_at": "2026-09-30T15:53:15.647941+00:00",
+          "status": "standby",
+          "reason": "deterministic_work_in_progress"
+        },
+        {
+          "worker_name": "pipeline-executor-08",
+          "heartbeat_at": "2026-09-30T15:52:38.200903+00:00",
+          "status": "running",
+          "reason": null
+        }
+      ]
+    }
+  ]
+}

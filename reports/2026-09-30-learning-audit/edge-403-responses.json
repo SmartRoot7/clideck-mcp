@@ -1,0 +1,168 @@
+{
+  "started_at": "2026-09-30T15:49:50.145869+00:00",
+  "endpoint": "https://mcp.clideck.com/mcp",
+  "tool": "query_network_knowledge",
+  "responses": [
+    {
+      "experiment_id": 1,
+      "question": "How do I display the Linux netfilter conntrack expectation table without deleting entries?",
+      "sent_at": "2026-09-30T15:49:50.146182+00:00",
+      "received_at": "2026-09-30T15:49:50.515528+00:00",
+      "error": "HTTP Error 403: Forbidden",
+      "duration_ms": 369
+    },
+    {
+      "experiment_id": 2,
+      "question": "How can I inspect a Linux MACsec interface cipher suite and replay protection settings?",
+      "sent_at": "2026-09-30T15:49:50.517093+00:00",
+      "received_at": "2026-09-30T15:49:50.771683+00:00",
+      "error": "HTTP Error 403: Forbidden",
+      "duration_ms": 255
+    },
+    {
+      "experiment_id": 3,
+      "question": "How can I identify packet drops caused by XDP redirect failures using Linux tracepoints?",
+      "sent_at": "2026-09-30T15:49:50.773477+00:00",
+      "received_at": "2026-09-30T15:49:50.953891+00:00",
+      "error": "HTTP Error 403: Forbidden",
+      "duration_ms": 180
+    },
+    {
+      "experiment_id": 4,
+      "question": "How can I inspect an SRv6 seg6local route and its End.DT6 behavior with iproute2?",
+      "sent_at": "2026-09-30T15:49:50.955180+00:00",
+      "received_at": "2026-09-30T15:49:51.169818+00:00",
+      "error": "HTTP Error 403: Forbidden",
+      "duration_ms": 215
+    },
+    {
+      "experiment_id": 5,
+      "question": "How do I diagnose DNS over HTTPS bootstrap lookup failures in an OpenWrt https-dns-proxy deployment?",
+      "sent_at": "2026-09-30T15:49:51.171143+00:00",
+      "received_at": "2026-09-30T15:49:51.346434+00:00",
+      "error": "HTTP Error 403: Forbidden",
+      "duration_ms": 175
+    },
+    {
+      "experiment_id": 6,
+      "question": "How can I inspect Junos SRv6 locator and local SID allocation state?",
+      "sent_at": "2026-09-30T15:49:51.347735+00:00",
+      "received_at": "2026-09-30T15:49:51.528306+00:00",
+      "error": "HTTP Error 403: Forbidden",
+      "duration_ms": 181
+    },
+    {
+      "experiment_id": 7,
+      "question": "How can I inspect Arista EOS EVPN multihoming designated forwarder election state?",
+      "sent_at": "2026-09-30T15:49:51.529616+00:00",
+      "received_at": "2026-09-30T15:49:51.707289+00:00",
+      "error": "HTTP Error 403: Forbidden",
+      "duration_ms": 178
+    },
+    {
+      "experiment_id": 8,
+      "question": "How do I identify whether Linux reverse path filtering uses strict or loose mode on an interface?",
+      "sent_at": "2026-09-30T15:49:51.708939+00:00",
+      "received_at": "2026-09-30T15:49:51.976968+00:00",
+      "error": "HTTP Error 403: Forbidden",
+      "duration_ms": 268
+    },
+    {
+      "experiment_id": 9,
+      "question": "How can I inspect Linux network device RSS hash functions and indirection tables?",
+      "sent_at": "2026-09-30T15:49:51.978759+00:00",
+      "received_at": "2026-09-30T15:49:52.191237+00:00",
+      "error": "HTTP Error 403: Forbidden",
+      "duration_ms": 213
+    },
+    {
+      "experiment_id": 10,
+      "question": "How can I inspect a tc cake qdisc flow isolation mode and packet drop counters?",
+      "sent_at": "2026-09-30T15:49:52.192974+00:00",
+      "received_at": "2026-09-30T15:49:52.365322+00:00",
+      "error": "HTTP Error 403: Forbidden",
+      "duration_ms": 172
+    },
+    {
+      "experiment_id": 11,
+      "question": "How do I inspect the per-network-namespace nftables flowtable offload configuration?",
+      "sent_at": "2026-09-30T15:49:52.366719+00:00",
+      "received_at": "2026-09-30T15:49:52.577884+00:00",
+      "error": "HTTP Error 403: Forbidden",
+      "duration_ms": 211
+    },
+    {
+      "experiment_id": 12,
+      "question": "How can I inspect Multipath TCP endpoint flags and connection subflows with ip mptcp?",
+      "sent_at": "2026-09-30T15:49:52.579737+00:00",
+      "received_at": "2026-09-30T15:49:52.784864+00:00",
+      "error": "HTTP Error 403: Forbidden",
+      "duration_ms": 205
+    },
+    {
+      "experiment_id": 13,
+      "question": "How can I compare Linux IPv6 route cache exceptions with the main IPv6 routing table?",
+      "sent_at": "2026-09-30T15:49:52.787110+00:00",
+      "received_at": "2026-09-30T15:49:52.987759+00:00",
+      "error": "HTTP Error 403: Forbidden",
+      "duration_ms": 201
+    },
+    {
+      "experiment_id": 14,
+      "question": "How do I verify OpenWrt mwan3 policy routing rules for an existing connection?",
+      "sent_at": "2026-09-30T15:49:52.989774+00:00",
+      "received_at": "2026-09-30T15:49:53.201518+00:00",
+      "error": "HTTP Error 403: Forbidden",
+      "duration_ms": 212
+    },
+    {
+      "experiment_id": 15,
+      "question": "How can I inspect the active OpenWrt SQM cake overhead compensation settings?",
+      "sent_at": "2026-09-30T15:49:53.203510+00:00",
+      "received_at": "2026-09-30T15:49:53.436373+00:00",
+      "error": "HTTP Error 403: Forbidden",
+      "duration_ms": 233
+    },
+    {
+      "experiment_id": 16,
+      "question": "How can I inspect Linux bridge multicast database entries and their source-specific filters?",
+      "sent_at": "2026-09-30T15:49:53.437862+00:00",
+      "received_at": "2026-09-30T15:49:53.661759+00:00",
+      "error": "HTTP Error 403: Forbidden",
+      "duration_ms": 224
+    },
+    {
+      "experiment_id": 17,
+      "question": "How can I inspect OpenWrt firewall4 nftables flow offloading rules without restarting the firewall?",
+      "sent_at": "2026-09-30T15:49:53.663922+00:00",
+      "received_at": "2026-09-30T15:49:53.887163+00:00",
+      "error": "HTTP Error 403: Forbidden",
+      "duration_ms": 223
+    },
+    {
+      "experiment_id": 18,
+      "question": "How do I identify whether a Linux UDP socket uses UDP_SEGMENT or UDP_GRO?",
+      "sent_at": "2026-09-30T15:49:53.888625+00:00",
+      "received_at": "2026-09-30T15:49:54.138834+00:00",
+      "error": "HTTP Error 403: Forbidden",
+      "duration_ms": 250
+    },
+    {
+      "experiment_id": 19,
+      "question": "How can I inspect ethtool receive flow classification rules without modifying them?",
+      "sent_at": "2026-09-30T15:49:54.140539+00:00",
+      "received_at": "2026-09-30T15:49:54.351242+00:00",
+      "error": "HTTP Error 403: Forbidden",
+      "duration_ms": 211
+    },
+    {
+      "experiment_id": 20,
+      "question": "How do I verify IOS XE segment routing microloop avoidance state?",
+      "sent_at": "2026-09-30T15:49:54.352947+00:00",
+      "received_at": "2026-09-30T15:49:54.507449+00:00",
+      "error": "HTTP Error 403: Forbidden",
+      "duration_ms": 155
+    }
+  ],
+  "completed_at": "2026-09-30T15:49:54.509116+00:00"
+}

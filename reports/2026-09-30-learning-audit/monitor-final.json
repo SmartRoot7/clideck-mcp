@@ -1,0 +1,2829 @@
+{
+  "sections": [
+    {
+      "section": "demands",
+      "at": "2026-09-30T16:14:02.656083+00:00",
+      "rows": [
+        {
+          "id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "question": "How do I display the Linux netfilter conntrack expectation table without deleting entries?",
+          "status": "processing",
+          "diagnosis_status": "completed",
+          "replay_status": "unknown",
+          "last_error_code": null,
+          "demand_count": 1,
+          "first_seen_at": "2026-09-30T15:50:49.130519+00:00",
+          "last_seen_at": "2026-09-30T16:06:01.858904+00:00",
+          "next_retry_at": "2026-09-30T15:51:06.543016+00:00",
+          "completed_at": null,
+          "result_revision_id": null
+        },
+        {
+          "id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+          "question": "How can I inspect a Linux MACsec interface cipher suite and replay protection settings?",
+          "status": "processing",
+          "diagnosis_status": "completed",
+          "replay_status": "unknown",
+          "last_error_code": null,
+          "demand_count": 1,
+          "first_seen_at": "2026-09-30T15:51:57.586835+00:00",
+          "last_seen_at": "2026-09-30T16:05:55.80278+00:00",
+          "next_retry_at": "2026-09-30T15:52:21.206425+00:00",
+          "completed_at": null,
+          "result_revision_id": null
+        },
+        {
+          "id": "d7cae6bf-99f0-4502-b08b-c50039f26c7f",
+          "question": "How can I identify packet drops caused by XDP redirect failures using Linux tracepoints?",
+          "status": "diagnosing",
+          "diagnosis_status": "queued",
+          "replay_status": null,
+          "last_error_code": null,
+          "demand_count": 1,
+          "first_seen_at": "2026-09-30T15:52:05.614154+00:00",
+          "last_seen_at": "2026-09-30T15:52:05.614154+00:00",
+          "next_retry_at": "2026-09-30T15:52:05.614154+00:00",
+          "completed_at": null,
+          "result_revision_id": null
+        },
+        {
+          "id": "6ff0c421-5538-4d3c-9743-620b09dfaff6",
+          "question": "How can I inspect an SRv6 seg6local route and its End.DT6 behavior with iproute2?",
+          "status": "diagnosing",
+          "diagnosis_status": "queued",
+          "replay_status": null,
+          "last_error_code": null,
+          "demand_count": 1,
+          "first_seen_at": "2026-09-30T15:52:07.907288+00:00",
+          "last_seen_at": "2026-09-30T15:52:07.907288+00:00",
+          "next_retry_at": "2026-09-30T15:52:07.907288+00:00",
+          "completed_at": null,
+          "result_revision_id": null
+        },
+        {
+          "id": "05961a92-ebd3-4566-b7de-3afc98f2f843",
+          "question": "How do I diagnose DNS over HTTPS bootstrap lookup failures in an OpenWrt https-dns-proxy deployment?",
+          "status": "diagnosing",
+          "diagnosis_status": "queued",
+          "replay_status": null,
+          "last_error_code": null,
+          "demand_count": 1,
+          "first_seen_at": "2026-09-30T15:52:08.621289+00:00",
+          "last_seen_at": "2026-09-30T15:52:08.621289+00:00",
+          "next_retry_at": "2026-09-30T15:52:08.621289+00:00",
+          "completed_at": null,
+          "result_revision_id": null
+        },
+        {
+          "id": "aa02154a-022a-49ce-a441-f6fa920bda86",
+          "question": "How can I inspect Junos SRv6 locator and local SID allocation state?",
+          "status": "diagnosing",
+          "diagnosis_status": "queued",
+          "replay_status": null,
+          "last_error_code": null,
+          "demand_count": 1,
+          "first_seen_at": "2026-09-30T15:52:10.533487+00:00",
+          "last_seen_at": "2026-09-30T15:52:10.533487+00:00",
+          "next_retry_at": "2026-09-30T15:52:10.533487+00:00",
+          "completed_at": null,
+          "result_revision_id": null
+        },
+        {
+          "id": "b2df17d6-237a-47c6-aaa8-7e1340998acc",
+          "question": "How can I inspect Arista EOS EVPN multihoming designated forwarder election state?",
+          "status": "published",
+          "diagnosis_status": "completed",
+          "replay_status": "complete",
+          "last_error_code": null,
+          "demand_count": 1,
+          "first_seen_at": "2026-09-30T15:52:13.055175+00:00",
+          "last_seen_at": "2026-09-30T15:52:23.584673+00:00",
+          "next_retry_at": "2026-09-30T15:52:13.055175+00:00",
+          "completed_at": "2026-09-30T15:52:23.584673+00:00",
+          "result_revision_id": "7bf35871-494c-48c4-8657-d15213820ed4"
+        },
+        {
+          "id": "21da84ca-78d6-429e-8aa8-7862f6906ec9",
+          "question": "How do I identify whether Linux reverse path filtering uses strict or loose mode on an interface?",
+          "status": "diagnosing",
+          "diagnosis_status": "queued",
+          "replay_status": null,
+          "last_error_code": null,
+          "demand_count": 1,
+          "first_seen_at": "2026-09-30T15:52:16.972651+00:00",
+          "last_seen_at": "2026-09-30T15:52:16.972651+00:00",
+          "next_retry_at": "2026-09-30T15:52:16.972651+00:00",
+          "completed_at": null,
+          "result_revision_id": null
+        },
+        {
+          "id": "f9a16bc4-70e2-4f89-84b6-6f24408f5e5a",
+          "question": "How can I inspect Linux network device RSS hash functions and indirection tables?",
+          "status": "diagnosing",
+          "diagnosis_status": "queued",
+          "replay_status": null,
+          "last_error_code": null,
+          "demand_count": 1,
+          "first_seen_at": "2026-09-30T15:52:20.390205+00:00",
+          "last_seen_at": "2026-09-30T15:52:20.390205+00:00",
+          "next_retry_at": "2026-09-30T15:52:20.390205+00:00",
+          "completed_at": null,
+          "result_revision_id": null
+        },
+        {
+          "id": "01a7f35c-ee7e-4498-a027-e0a805aa9098",
+          "question": "How can I inspect a tc cake qdisc flow isolation mode and packet drop counters?",
+          "status": "discovering",
+          "diagnosis_status": "completed",
+          "replay_status": "unknown",
+          "last_error_code": null,
+          "demand_count": 1,
+          "first_seen_at": "2026-09-30T15:52:39.833227+00:00",
+          "last_seen_at": "2026-09-30T15:53:37.439978+00:00",
+          "next_retry_at": "2026-09-30T15:52:51.993576+00:00",
+          "completed_at": null,
+          "result_revision_id": null
+        },
+        {
+          "id": "dc360e74-1883-4f0b-836b-005b46626842",
+          "question": "How do I inspect the per-network-namespace nftables flowtable offload configuration?",
+          "status": "diagnosing",
+          "diagnosis_status": "queued",
+          "replay_status": null,
+          "last_error_code": null,
+          "demand_count": 1,
+          "first_seen_at": "2026-09-30T15:52:44.000817+00:00",
+          "last_seen_at": "2026-09-30T15:52:44.000817+00:00",
+          "next_retry_at": "2026-09-30T15:52:44.000817+00:00",
+          "completed_at": null,
+          "result_revision_id": null
+        },
+        {
+          "id": "afbd8f51-294a-4ae0-b04b-9c74015ae707",
+          "question": "How can I inspect Multipath TCP endpoint flags and connection subflows with ip mptcp?",
+          "status": "diagnosing",
+          "diagnosis_status": "queued",
+          "replay_status": null,
+          "last_error_code": null,
+          "demand_count": 1,
+          "first_seen_at": "2026-09-30T15:52:47.648497+00:00",
+          "last_seen_at": "2026-09-30T15:52:47.648497+00:00",
+          "next_retry_at": "2026-09-30T15:52:47.648497+00:00",
+          "completed_at": null,
+          "result_revision_id": null
+        },
+        {
+          "id": "064756d9-b732-4580-9e28-d8e0ec866394",
+          "question": "How can I compare Linux IPv6 route cache exceptions with the main IPv6 routing table?",
+          "status": "diagnosing",
+          "diagnosis_status": "queued",
+          "replay_status": null,
+          "last_error_code": null,
+          "demand_count": 1,
+          "first_seen_at": "2026-09-30T15:52:54.434609+00:00",
+          "last_seen_at": "2026-09-30T15:52:54.434609+00:00",
+          "next_retry_at": "2026-09-30T15:52:54.434609+00:00",
+          "completed_at": null,
+          "result_revision_id": null
+        },
+        {
+          "id": "23d48bea-d205-4ab3-9502-553a0a6f420f",
+          "question": "How do I verify OpenWrt mwan3 policy routing rules for an existing connection?",
+          "status": "diagnosing",
+          "diagnosis_status": "queued",
+          "replay_status": null,
+          "last_error_code": null,
+          "demand_count": 1,
+          "first_seen_at": "2026-09-30T15:52:57.129453+00:00",
+          "last_seen_at": "2026-09-30T15:52:57.129453+00:00",
+          "next_retry_at": "2026-09-30T15:52:57.129453+00:00",
+          "completed_at": null,
+          "result_revision_id": null
+        },
+        {
+          "id": "1bef9ff6-29e1-4e87-a4f2-ee0f98639e27",
+          "question": "How can I inspect the active OpenWrt SQM cake overhead compensation settings?",
+          "status": "diagnosing",
+          "diagnosis_status": "queued",
+          "replay_status": null,
+          "last_error_code": null,
+          "demand_count": 1,
+          "first_seen_at": "2026-09-30T15:52:58.08978+00:00",
+          "last_seen_at": "2026-09-30T15:52:58.08978+00:00",
+          "next_retry_at": "2026-09-30T15:52:58.08978+00:00",
+          "completed_at": null,
+          "result_revision_id": null
+        },
+        {
+          "id": "7534f229-3723-48ad-b5c0-fd2ee2754ebf",
+          "question": "How can I inspect Linux bridge multicast database entries and their source-specific filters?",
+          "status": "processing",
+          "diagnosis_status": "completed",
+          "replay_status": "unknown",
+          "last_error_code": null,
+          "demand_count": 1,
+          "first_seen_at": "2026-09-30T15:53:03.961409+00:00",
+          "last_seen_at": "2026-09-30T16:00:08.903502+00:00",
+          "next_retry_at": "2026-09-30T15:54:19.1918+00:00",
+          "completed_at": null,
+          "result_revision_id": null
+        },
+        {
+          "id": "477eae13-7f97-42b0-a425-5ef08b7b811b",
+          "question": "How can I inspect OpenWrt firewall4 nftables flow offloading rules without restarting the firewall?",
+          "status": "diagnosing",
+          "diagnosis_status": "queued",
+          "replay_status": null,
+          "last_error_code": null,
+          "demand_count": 1,
+          "first_seen_at": "2026-09-30T15:53:05.207371+00:00",
+          "last_seen_at": "2026-09-30T15:53:05.207371+00:00",
+          "next_retry_at": "2026-09-30T15:53:05.207371+00:00",
+          "completed_at": null,
+          "result_revision_id": null
+        },
+        {
+          "id": "24ddd12f-c3bd-47a4-8f3b-d5a6d5fd6fcb",
+          "question": "How do I identify whether a Linux UDP socket uses UDP_SEGMENT or UDP_GRO?",
+          "status": "diagnosing",
+          "diagnosis_status": "queued",
+          "replay_status": null,
+          "last_error_code": null,
+          "demand_count": 1,
+          "first_seen_at": "2026-09-30T15:53:09.229429+00:00",
+          "last_seen_at": "2026-09-30T15:53:09.229429+00:00",
+          "next_retry_at": "2026-09-30T15:53:09.229429+00:00",
+          "completed_at": null,
+          "result_revision_id": null
+        },
+        {
+          "id": "5dfb632a-52bc-4d61-a190-b569a8bf1292",
+          "question": "How can I inspect ethtool receive flow classification rules without modifying them?",
+          "status": "diagnosing",
+          "diagnosis_status": "queued",
+          "replay_status": null,
+          "last_error_code": null,
+          "demand_count": 1,
+          "first_seen_at": "2026-09-30T15:53:11.312189+00:00",
+          "last_seen_at": "2026-09-30T15:53:11.312189+00:00",
+          "next_retry_at": "2026-09-30T15:53:11.312189+00:00",
+          "completed_at": null,
+          "result_revision_id": null
+        },
+        {
+          "id": "5c828d23-db3f-4c36-8455-f7c2d620e47c",
+          "question": "How do I verify IOS XE segment routing microloop avoidance state?",
+          "status": "diagnosing",
+          "diagnosis_status": "queued",
+          "replay_status": null,
+          "last_error_code": null,
+          "demand_count": 1,
+          "first_seen_at": "2026-09-30T15:53:12.535074+00:00",
+          "last_seen_at": "2026-09-30T15:53:12.535074+00:00",
+          "next_retry_at": "2026-09-30T15:53:12.535074+00:00",
+          "completed_at": null,
+          "result_revision_id": null
+        }
+      ]
+    },
+    {
+      "section": "tasks",
+      "at": "2026-09-30T16:14:02.656083+00:00",
+      "rows": [
+        {
+          "id": "63d4f76d-a9c9-41ab-8c59-3301549d7e73",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "demand_diagnosis",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:50:49.130519+00:00",
+          "updated_at": "2026-09-30T15:51:02.232619+00:00",
+          "completed_at": "2026-09-30T15:51:02.232619+00:00",
+          "result": {
+            "topic": "linux-normal-identify-the-supported-read-only-command-or-interface-for-displ",
+            "answer_status": "unknown",
+            "missing_capabilities": [
+              "general"
+            ],
+            "reused_existing_knowledge": false
+          }
+        },
+        {
+          "id": "07819b37-0eef-4737-93c7-089067a31f59",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "candidate_deep_review",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:51:06.543016+00:00",
+          "updated_at": "2026-09-30T15:51:42.633646+00:00",
+          "completed_at": "2026-09-30T15:51:42.633646+00:00",
+          "result": {
+            "conflict": 0,
+            "rejected": 0,
+            "verified": 0,
+            "quarantined": 0,
+            "manual_exception": 0,
+            "escalated_to_medium": 2
+          }
+        },
+        {
+          "id": "7f0674e0-cb97-4fbd-b7a2-d9a7fd1bd892",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "candidate_deep_review",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:51:06.543016+00:00",
+          "updated_at": "2026-09-30T15:51:36.388196+00:00",
+          "completed_at": "2026-09-30T15:51:36.388196+00:00",
+          "result": {
+            "conflict": 0,
+            "rejected": 0,
+            "verified": 0,
+            "quarantined": 0,
+            "manual_exception": 0,
+            "escalated_to_medium": 1
+          }
+        },
+        {
+          "id": "aa51f58c-155d-4c23-af1a-bddd7ce800a0",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "candidate_deep_review",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:51:06.543016+00:00",
+          "updated_at": "2026-09-30T15:51:38.570805+00:00",
+          "completed_at": "2026-09-30T15:51:38.570805+00:00",
+          "result": {
+            "conflict": 0,
+            "rejected": 0,
+            "verified": 0,
+            "quarantined": 0,
+            "manual_exception": 0,
+            "escalated_to_medium": 2
+          }
+        },
+        {
+          "id": "c48d8083-ab38-4858-9ffc-627638f17584",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "candidate_deep_review",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:51:06.543016+00:00",
+          "updated_at": "2026-09-30T15:51:51.773248+00:00",
+          "completed_at": "2026-09-30T15:51:51.773248+00:00",
+          "result": {
+            "conflict": 0,
+            "rejected": 0,
+            "verified": 0,
+            "quarantined": 0,
+            "manual_exception": 0,
+            "escalated_to_medium": 7
+          }
+        },
+        {
+          "id": "b26fa4e6-a18d-45cd-a50a-555fb3e5675b",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "candidate_deep_review",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:51:36.288709+00:00",
+          "updated_at": "2026-09-30T15:51:47.014439+00:00",
+          "completed_at": "2026-09-30T15:51:47.014439+00:00",
+          "result": {
+            "conflict": 0,
+            "rejected": 1,
+            "verified": 0,
+            "quarantined": 0,
+            "manual_exception": 0,
+            "escalated_to_medium": 0
+          }
+        },
+        {
+          "id": "87b08683-5e4b-4028-bec2-d47f405dd487",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "candidate_deep_review",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:51:38.588907+00:00",
+          "updated_at": "2026-09-30T15:51:47.744425+00:00",
+          "completed_at": "2026-09-30T15:51:47.744425+00:00",
+          "result": {
+            "conflict": 0,
+            "rejected": 2,
+            "verified": 0,
+            "quarantined": 0,
+            "manual_exception": 0,
+            "escalated_to_medium": 0
+          }
+        },
+        {
+          "id": "d4da36c9-93fd-433c-bc41-1bb282b2b0dd",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "candidate_deep_review",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:51:42.654861+00:00",
+          "updated_at": "2026-09-30T15:51:52.610366+00:00",
+          "completed_at": "2026-09-30T15:51:52.610366+00:00",
+          "result": {
+            "conflict": 0,
+            "rejected": 2,
+            "verified": 0,
+            "quarantined": 0,
+            "manual_exception": 0,
+            "escalated_to_medium": 0
+          }
+        },
+        {
+          "id": "d534f50e-1d3c-4428-b9b8-3ed82f72904f",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:51:47.089225+00:00",
+          "updated_at": "2026-09-30T15:52:03.525654+00:00",
+          "completed_at": "2026-09-30T15:52:03.525654+00:00",
+          "result": {
+            "rejection_reasons": [],
+            "candidates_created": 0,
+            "fragments_analyzed": 0,
+            "fragments_requeued": 2,
+            "fragments_without_candidates": 3,
+            "demand_irrelevant_candidates_ignored": 0
+          }
+        },
+        {
+          "id": "c922b78c-b518-4e4e-9c21-c060970f7039",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:51:50.970721+00:00",
+          "updated_at": "2026-09-30T15:52:56.022299+00:00",
+          "completed_at": "2026-09-30T15:52:56.022299+00:00",
+          "result": {
+            "rejection_reasons": [],
+            "candidates_created": 6,
+            "fragments_analyzed": 1,
+            "fragments_requeued": 0,
+            "fragments_without_candidates": 0,
+            "demand_irrelevant_candidates_ignored": 0
+          }
+        },
+        {
+          "id": "3bcb6fd5-7da4-4a19-9b81-5f29e344dd69",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:51:50.970721+00:00",
+          "updated_at": "2026-09-30T15:52:06.111473+00:00",
+          "completed_at": "2026-09-30T15:52:06.111473+00:00",
+          "result": {
+            "rejection_reasons": [],
+            "candidates_created": 0,
+            "fragments_analyzed": 0,
+            "fragments_requeued": 4,
+            "fragments_without_candidates": 4,
+            "demand_irrelevant_candidates_ignored": 0
+          }
+        },
+        {
+          "id": "062b23af-0ed5-4703-9e5c-48950d6ce411",
+          "knowledge_demand_id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+          "task_type": "demand_diagnosis",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:51:57.586835+00:00",
+          "updated_at": "2026-09-30T15:52:08.510302+00:00",
+          "completed_at": "2026-09-30T15:52:08.510302+00:00",
+          "result": {
+            "topic": "linux-normal-linux-macsec-interface-cipher-suite-inspection-linux-macsec-replay-protection-setting-inspection",
+            "answer_status": "unknown",
+            "missing_capabilities": [
+              "general"
+            ],
+            "reused_existing_knowledge": false
+          }
+        },
+        {
+          "id": "71c04093-b4f7-42b4-b8c6-dc2c23c8eb83",
+          "knowledge_demand_id": "b2df17d6-237a-47c6-aaa8-7e1340998acc",
+          "task_type": "demand_diagnosis",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:52:13.055175+00:00",
+          "updated_at": "2026-09-30T15:52:23.584673+00:00",
+          "completed_at": "2026-09-30T15:52:23.584673+00:00",
+          "result": {
+            "topic": "arista-eos-normal-commands-or-workflow-to-inspect-designated-forwarder-election-s",
+            "answer_status": "complete",
+            "missing_capabilities": [],
+            "reused_existing_knowledge": true
+          }
+        },
+        {
+          "id": "c9dd8c8f-7cca-422f-92ed-197b31482f85",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "candidate_deep_review",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:52:21.206425+00:00",
+          "updated_at": "2026-09-30T15:52:39.179637+00:00",
+          "completed_at": "2026-09-30T15:52:39.179637+00:00",
+          "result": {
+            "conflict": 0,
+            "rejected": 4,
+            "verified": 0,
+            "quarantined": 0,
+            "manual_exception": 0,
+            "escalated_to_medium": 0
+          }
+        },
+        {
+          "id": "e87e2788-9c9d-4065-a9df-d17157110387",
+          "knowledge_demand_id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+          "task_type": "candidate_deep_review",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:52:21.206425+00:00",
+          "updated_at": "2026-09-30T15:52:31.895128+00:00",
+          "completed_at": "2026-09-30T15:52:31.895128+00:00",
+          "result": {
+            "conflict": 0,
+            "rejected": 0,
+            "verified": 0,
+            "quarantined": 0,
+            "manual_exception": 0,
+            "escalated_to_medium": 1
+          }
+        },
+        {
+          "id": "e0d45a7a-69d3-4961-b823-0174422a0e6f",
+          "knowledge_demand_id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+          "task_type": "candidate_deep_review",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:52:21.206425+00:00",
+          "updated_at": "2026-09-30T15:52:34.76408+00:00",
+          "completed_at": "2026-09-30T15:52:34.76408+00:00",
+          "result": {
+            "conflict": 0,
+            "rejected": 0,
+            "verified": 0,
+            "quarantined": 0,
+            "manual_exception": 0,
+            "escalated_to_medium": 1
+          }
+        },
+        {
+          "id": "4da3f232-981a-47d5-abaf-d56e3af06354",
+          "knowledge_demand_id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+          "task_type": "candidate_deep_review",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:52:21.206425+00:00",
+          "updated_at": "2026-09-30T15:52:38.305156+00:00",
+          "completed_at": "2026-09-30T15:52:38.305156+00:00",
+          "result": {
+            "conflict": 0,
+            "rejected": 0,
+            "verified": 0,
+            "quarantined": 0,
+            "manual_exception": 0,
+            "escalated_to_medium": 1
+          }
+        },
+        {
+          "id": "090b1ccb-99bc-419a-91ed-533174bd1e53",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "candidate_deep_review",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:52:21.206425+00:00",
+          "updated_at": "2026-09-30T15:52:43.948761+00:00",
+          "completed_at": "2026-09-30T15:52:43.948761+00:00",
+          "result": {
+            "conflict": 0,
+            "rejected": 3,
+            "verified": 0,
+            "quarantined": 0,
+            "manual_exception": 0,
+            "escalated_to_medium": 0
+          }
+        },
+        {
+          "id": "5c508115-b7f0-4cf1-b313-2bbe1cc70adf",
+          "knowledge_demand_id": "01a7f35c-ee7e-4498-a027-e0a805aa9098",
+          "task_type": "demand_diagnosis",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:52:39.833227+00:00",
+          "updated_at": "2026-09-30T15:52:51.993576+00:00",
+          "completed_at": "2026-09-30T15:52:51.993576+00:00",
+          "result": {
+            "topic": "linux-normal-inspect-cake-flow-isolation-mode-inspect-cake-packet-drop-counters",
+            "answer_status": "unknown",
+            "missing_capabilities": [
+              "interface-counters"
+            ],
+            "reused_existing_knowledge": false
+          }
+        },
+        {
+          "id": "cc528c6e-2012-41e4-b160-7a93135012ef",
+          "knowledge_demand_id": "7534f229-3723-48ad-b5c0-fd2ee2754ebf",
+          "task_type": "demand_diagnosis",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:53:03.961409+00:00",
+          "updated_at": "2026-09-30T15:53:15.021371+00:00",
+          "completed_at": "2026-09-30T15:53:15.021371+00:00",
+          "result": {
+            "topic": "linux-normal-commands-or-procedures-to-display-bridge-multicast-database-ent-commands-or-procedures-to-inspect-per-entry-source-specific-fil",
+            "answer_status": "unknown",
+            "missing_capabilities": [
+              "general"
+            ],
+            "reused_existing_knowledge": false
+          }
+        },
+        {
+          "id": "9d0abd2e-c7c5-442c-92e1-0dfceec43087",
+          "knowledge_demand_id": "01a7f35c-ee7e-4498-a027-e0a805aa9098",
+          "task_type": "source_discovery",
+          "status": "running",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:53:37.439978+00:00",
+          "updated_at": "2026-09-30T16:05:40.410784+00:00",
+          "completed_at": null,
+          "result": null
+        },
+        {
+          "id": "2a041c47-69ad-4da0-83be-d724d963c6e8",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:53:37.439978+00:00",
+          "updated_at": "2026-09-30T15:54:13.262015+00:00",
+          "completed_at": "2026-09-30T15:54:13.262015+00:00",
+          "result": {
+            "rejection_reasons": [],
+            "candidates_created": 0,
+            "fragments_analyzed": 0,
+            "fragments_requeued": 2,
+            "fragments_without_candidates": 2,
+            "demand_irrelevant_candidates_ignored": 0
+          }
+        },
+        {
+          "id": "c29fbe22-f35e-47d4-ad12-907b97fb31dd",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "candidate_publication",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:53:37.439978+00:00",
+          "updated_at": "2026-09-30T15:54:13.360863+00:00",
+          "completed_at": "2026-09-30T15:54:13.360863+00:00",
+          "result": {
+            "release_id": "1e2086ff-13fe-4f39-a011-562522be3254",
+            "records_reserved": 6,
+            "release_sequence": 19734,
+            "records_published": 6,
+            "records_excluded_malformed": 0,
+            "records_deferred_to_deep_review": 0
+          }
+        },
+        {
+          "id": "10c7c9d4-9089-4a9a-a1bd-ac531a5743b8",
+          "knowledge_demand_id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+          "task_type": "candidate_deep_review",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:53:37.439978+00:00",
+          "updated_at": "2026-09-30T15:54:23.483145+00:00",
+          "completed_at": "2026-09-30T15:54:23.483145+00:00",
+          "result": {
+            "conflict": 0,
+            "rejected": 1,
+            "verified": 0,
+            "quarantined": 0,
+            "manual_exception": 0,
+            "escalated_to_medium": 0
+          }
+        },
+        {
+          "id": "e999684a-c6ee-4acd-95b9-51b33d5e60fa",
+          "knowledge_demand_id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+          "task_type": "candidate_deep_review",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:53:37.439978+00:00",
+          "updated_at": "2026-09-30T15:54:17.05637+00:00",
+          "completed_at": "2026-09-30T15:54:17.05637+00:00",
+          "result": {
+            "conflict": 0,
+            "rejected": 1,
+            "verified": 0,
+            "quarantined": 0,
+            "manual_exception": 0,
+            "escalated_to_medium": 0
+          }
+        },
+        {
+          "id": "344a404f-94bf-48b5-b5d8-5e418fa2b569",
+          "knowledge_demand_id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+          "task_type": "fragment_analysis",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:53:37.439978+00:00",
+          "updated_at": "2026-09-30T15:54:13.517116+00:00",
+          "completed_at": "2026-09-30T15:54:13.517116+00:00",
+          "result": {
+            "rejection_reasons": [],
+            "candidates_created": 0,
+            "fragments_analyzed": 0,
+            "fragments_requeued": 2,
+            "fragments_without_candidates": 3,
+            "demand_irrelevant_candidates_ignored": 0
+          }
+        },
+        {
+          "id": "8d4fc21c-85d5-4938-a98d-22eb95079774",
+          "knowledge_demand_id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+          "task_type": "candidate_deep_review",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:53:37.439978+00:00",
+          "updated_at": "2026-09-30T15:54:12.251662+00:00",
+          "completed_at": "2026-09-30T15:54:12.251662+00:00",
+          "result": {
+            "conflict": 0,
+            "rejected": 1,
+            "verified": 0,
+            "quarantined": 0,
+            "manual_exception": 0,
+            "escalated_to_medium": 0
+          }
+        },
+        {
+          "id": "75a57b0a-cc2b-48ee-8507-29c07c386d06",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:53:37.439978+00:00",
+          "updated_at": "2026-09-30T15:54:15.569892+00:00",
+          "completed_at": "2026-09-30T15:54:15.569892+00:00",
+          "result": {
+            "rejection_reasons": [],
+            "candidates_created": 0,
+            "fragments_analyzed": 0,
+            "fragments_requeued": 3,
+            "fragments_without_candidates": 4,
+            "demand_irrelevant_candidates_ignored": 0
+          }
+        },
+        {
+          "id": "2a693404-010b-4970-af59-58cace9637bf",
+          "knowledge_demand_id": "7534f229-3723-48ad-b5c0-fd2ee2754ebf",
+          "task_type": "source_discovery",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:54:03.789032+00:00",
+          "updated_at": "2026-09-30T15:54:19.1918+00:00",
+          "completed_at": "2026-09-30T15:54:19.1918+00:00",
+          "result": {
+            "reused_sources": 0,
+            "active_source_id": "baea395f-d902-4c7b-989a-364fd2a7136a",
+            "inserted_sources": 1,
+            "rejection_reason": null,
+            "reused_fragments": 0,
+            "duplicate_sources": 0,
+            "preflight_failures": {},
+            "reopened_candidates": 0,
+            "preflight_rejected_sources": 0
+          }
+        },
+        {
+          "id": "babbf186-cfe5-46b9-9dec-e07103f7149d",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:54:13.277658+00:00",
+          "updated_at": "2026-09-30T15:54:25.23456+00:00",
+          "completed_at": "2026-09-30T15:54:25.23456+00:00",
+          "result": {
+            "rejection_reasons": [],
+            "candidates_created": 0,
+            "fragments_analyzed": 0,
+            "fragments_requeued": 2,
+            "fragments_without_candidates": 2,
+            "demand_irrelevant_candidates_ignored": 0
+          }
+        },
+        {
+          "id": "2423cc92-d672-41aa-bd93-8b2ca03ba72f",
+          "knowledge_demand_id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+          "task_type": "fragment_analysis",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:54:16.46515+00:00",
+          "updated_at": "2026-09-30T15:54:27.79177+00:00",
+          "completed_at": "2026-09-30T15:54:27.79177+00:00",
+          "result": {
+            "rejection_reasons": [],
+            "candidates_created": 0,
+            "fragments_analyzed": 0,
+            "fragments_requeued": 2,
+            "fragments_without_candidates": 2,
+            "demand_irrelevant_candidates_ignored": 0
+          }
+        },
+        {
+          "id": "f572f529-dba4-44da-a87d-a6cf413085f3",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:54:19.879242+00:00",
+          "updated_at": "2026-09-30T15:55:12.331097+00:00",
+          "completed_at": "2026-09-30T15:55:12.331097+00:00",
+          "result": {
+            "rejection_reasons": [],
+            "candidates_created": 4,
+            "fragments_analyzed": 1,
+            "fragments_requeued": 2,
+            "fragments_without_candidates": 2,
+            "demand_irrelevant_candidates_ignored": 0
+          }
+        },
+        {
+          "id": "60e8c3c0-d85b-4fa7-b584-32ae7c55bc70",
+          "knowledge_demand_id": "7534f229-3723-48ad-b5c0-fd2ee2754ebf",
+          "task_type": "source_acquisition",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:54:19.879242+00:00",
+          "updated_at": "2026-09-30T15:54:34.228063+00:00",
+          "completed_at": "2026-09-30T15:54:34.228063+00:00",
+          "result": {
+            "byte_size": 67825,
+            "duplicate": false,
+            "media_type": "text/html",
+            "content_hash": "sha256:3604117fe68929bca1cb529354df84b2d52a19c09b265f843228285e5637532b",
+            "processing_run_id": "c2065c4e-10e3-4f0b-818d-86f7e3611f91"
+          }
+        },
+        {
+          "id": "51903f68-9333-48ba-9d46-1dc3c130b2ce",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:54:19.879242+00:00",
+          "updated_at": "2026-09-30T15:54:43.98491+00:00",
+          "completed_at": "2026-09-30T15:54:43.98491+00:00",
+          "result": {
+            "rejection_reasons": [],
+            "candidates_created": 0,
+            "fragments_analyzed": 0,
+            "fragments_requeued": 7,
+            "fragments_without_candidates": 7,
+            "demand_irrelevant_candidates_ignored": 0
+          }
+        },
+        {
+          "id": "49670ecc-69de-4909-9d68-9a8c538519b4",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:59:23.56575+00:00",
+          "updated_at": "2026-09-30T16:00:41.503552+00:00",
+          "completed_at": "2026-09-30T16:00:41.503552+00:00",
+          "result": {
+            "rejection_reasons": [],
+            "candidates_created": 3,
+            "fragments_analyzed": 1,
+            "fragments_requeued": 1,
+            "fragments_without_candidates": 1,
+            "demand_irrelevant_candidates_ignored": 0
+          }
+        },
+        {
+          "id": "98e16b65-3be5-4a2b-b1e0-dc5b78971e76",
+          "knowledge_demand_id": "7534f229-3723-48ad-b5c0-fd2ee2754ebf",
+          "task_type": "source_conversion",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:59:23.56575+00:00",
+          "updated_at": "2026-09-30T16:00:08.898602+00:00",
+          "completed_at": "2026-09-30T16:00:08.898602+00:00",
+          "result": {
+            "converter": "deterministic_text",
+            "page_count": null,
+            "extracted_bytes": 43917
+          }
+        },
+        {
+          "id": "7e3052e7-ea64-4e39-b8dc-9c3b88217c8a",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "candidate_publication",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:59:23.56575+00:00",
+          "updated_at": "2026-09-30T16:00:27.146721+00:00",
+          "completed_at": "2026-09-30T16:00:27.146721+00:00",
+          "result": {
+            "release_id": "b9b06992-5ed2-4443-81bb-541b92eb2b49",
+            "records_reserved": 4,
+            "release_sequence": 19735,
+            "records_published": 4,
+            "records_excluded_malformed": 0,
+            "records_deferred_to_deep_review": 0
+          }
+        },
+        {
+          "id": "b70a3c3f-0276-45c1-bff3-51da1593c1c6",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:59:23.56575+00:00",
+          "updated_at": "2026-09-30T16:00:11.498769+00:00",
+          "completed_at": "2026-09-30T16:00:11.498769+00:00",
+          "result": {
+            "rejection_reasons": [],
+            "candidates_created": 0,
+            "fragments_analyzed": 0,
+            "fragments_requeued": 2,
+            "fragments_without_candidates": 2,
+            "demand_irrelevant_candidates_ignored": 0
+          }
+        },
+        {
+          "id": "d6535e0a-163c-4bad-9521-2fdb8a29126d",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:59:23.56575+00:00",
+          "updated_at": "2026-09-30T16:00:19.151322+00:00",
+          "completed_at": "2026-09-30T16:00:19.151322+00:00",
+          "result": {
+            "rejection_reasons": [],
+            "candidates_created": 0,
+            "fragments_analyzed": 0,
+            "fragments_requeued": 7,
+            "fragments_without_candidates": 7,
+            "demand_irrelevant_candidates_ignored": 0
+          }
+        },
+        {
+          "id": "041b7132-75ae-41ab-ab7b-4ebf8d9f7ca4",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:59:23.56575+00:00",
+          "updated_at": "2026-09-30T16:00:21.7083+00:00",
+          "completed_at": "2026-09-30T16:00:21.7083+00:00",
+          "result": {
+            "rejection_reasons": [],
+            "candidates_created": 1,
+            "fragments_analyzed": 0,
+            "fragments_requeued": 1,
+            "fragments_without_candidates": 1,
+            "demand_irrelevant_candidates_ignored": 0
+          }
+        },
+        {
+          "id": "c9150bab-2d25-4aab-a91f-8048cb07da91",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:59:23.56575+00:00",
+          "updated_at": "2026-09-30T16:00:33.463268+00:00",
+          "completed_at": "2026-09-30T16:00:33.463268+00:00",
+          "result": {
+            "rejection_reasons": [],
+            "candidates_created": 0,
+            "fragments_analyzed": 0,
+            "fragments_requeued": 16,
+            "fragments_without_candidates": 16,
+            "demand_irrelevant_candidates_ignored": 0
+          }
+        },
+        {
+          "id": "80681c2b-4d9e-43a4-a0f0-7250af1773b2",
+          "knowledge_demand_id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+          "task_type": "fragment_analysis",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T15:59:23.56575+00:00",
+          "updated_at": "2026-09-30T16:00:11.91175+00:00",
+          "completed_at": "2026-09-30T16:00:11.91175+00:00",
+          "result": {
+            "rejection_reasons": [],
+            "candidates_created": 0,
+            "fragments_analyzed": 0,
+            "fragments_requeued": 2,
+            "fragments_without_candidates": 2,
+            "demand_irrelevant_candidates_ignored": 0
+          }
+        },
+        {
+          "id": "aeae1103-f1f4-4ba7-9627-961fef3ae6a7",
+          "knowledge_demand_id": "7534f229-3723-48ad-b5c0-fd2ee2754ebf",
+          "task_type": "source_chunking",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T16:00:08.903502+00:00",
+          "updated_at": "2026-09-30T16:00:39.760238+00:00",
+          "completed_at": "2026-09-30T16:00:39.760238+00:00",
+          "result": {
+            "fragment_bytes": 43795,
+            "fragments_created": 11,
+            "deterministic_fragments_handled": 0,
+            "deterministic_candidates_created": 0
+          }
+        },
+        {
+          "id": "5ac441f0-4668-478b-83ab-eee9a65e3e05",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T16:00:11.92601+00:00",
+          "updated_at": "2026-09-30T16:00:25.541733+00:00",
+          "completed_at": "2026-09-30T16:00:25.541733+00:00",
+          "result": {
+            "rejection_reasons": [],
+            "candidates_created": 0,
+            "fragments_analyzed": 0,
+            "fragments_requeued": 2,
+            "fragments_without_candidates": 2,
+            "demand_irrelevant_candidates_ignored": 0
+          }
+        },
+        {
+          "id": "d9f54fe3-582c-4468-88b7-e3557c251fb6",
+          "knowledge_demand_id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+          "task_type": "fragment_analysis",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T16:00:19.003614+00:00",
+          "updated_at": "2026-09-30T16:00:32.391666+00:00",
+          "completed_at": "2026-09-30T16:00:32.391666+00:00",
+          "result": {
+            "rejection_reasons": [],
+            "candidates_created": 0,
+            "fragments_analyzed": 0,
+            "fragments_requeued": 2,
+            "fragments_without_candidates": 2,
+            "demand_irrelevant_candidates_ignored": 0
+          }
+        },
+        {
+          "id": "b0af0f18-ffd3-4397-8c0d-50ce5b5f5978",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T16:00:21.727939+00:00",
+          "updated_at": "2026-09-30T16:00:40.812509+00:00",
+          "completed_at": "2026-09-30T16:00:40.812509+00:00",
+          "result": {
+            "rejection_reasons": [],
+            "candidates_created": 0,
+            "fragments_analyzed": 0,
+            "fragments_requeued": 7,
+            "fragments_without_candidates": 7,
+            "demand_irrelevant_candidates_ignored": 0
+          }
+        },
+        {
+          "id": "f49152e4-3e1f-4af1-83d9-9d62573b4ebd",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T16:00:27.151816+00:00",
+          "updated_at": "2026-09-30T16:00:43.84913+00:00",
+          "completed_at": "2026-09-30T16:00:43.84913+00:00",
+          "result": {
+            "rejection_reasons": [],
+            "candidates_created": 0,
+            "fragments_analyzed": 0,
+            "fragments_requeued": 2,
+            "fragments_without_candidates": 2,
+            "demand_irrelevant_candidates_ignored": 0
+          }
+        },
+        {
+          "id": "1cfe5e9b-02a3-44b7-a673-80ec38f409b4",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T16:00:44.743088+00:00",
+          "updated_at": "2026-09-30T16:01:37.732517+00:00",
+          "completed_at": "2026-09-30T16:01:37.732517+00:00",
+          "result": {
+            "rejection_reasons": [],
+            "candidates_created": 0,
+            "fragments_analyzed": 0,
+            "fragments_requeued": 7,
+            "fragments_without_candidates": 7,
+            "demand_irrelevant_candidates_ignored": 0
+          }
+        },
+        {
+          "id": "8fab8d5e-0884-4fbe-9a7a-0f3add6841b2",
+          "knowledge_demand_id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+          "task_type": "fragment_analysis",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T16:00:44.743088+00:00",
+          "updated_at": "2026-09-30T16:03:20.735943+00:00",
+          "completed_at": "2026-09-30T16:03:20.735943+00:00",
+          "result": {
+            "rejection_reasons": [],
+            "candidates_created": 12,
+            "fragments_analyzed": 1,
+            "fragments_requeued": 1,
+            "fragments_without_candidates": 1,
+            "demand_irrelevant_candidates_ignored": 0
+          }
+        },
+        {
+          "id": "dd7a977c-aa06-433e-9b62-7246d22ece56",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T16:00:44.743088+00:00",
+          "updated_at": "2026-09-30T16:01:47.203899+00:00",
+          "completed_at": "2026-09-30T16:01:47.203899+00:00",
+          "result": {
+            "rejection_reasons": [],
+            "candidates_created": 0,
+            "fragments_analyzed": 0,
+            "fragments_requeued": 16,
+            "fragments_without_candidates": 16,
+            "demand_irrelevant_candidates_ignored": 0
+          }
+        },
+        {
+          "id": "c56ba2df-2f2f-4b1b-a6f3-278357095f88",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T16:00:44.743088+00:00",
+          "updated_at": "2026-09-30T16:01:32.318998+00:00",
+          "completed_at": "2026-09-30T16:01:32.318998+00:00",
+          "result": {
+            "rejection_reasons": [],
+            "candidates_created": 0,
+            "fragments_analyzed": 0,
+            "fragments_requeued": 1,
+            "fragments_without_candidates": 1,
+            "demand_irrelevant_candidates_ignored": 0
+          }
+        },
+        {
+          "id": "fbbacc8f-4840-49c3-801f-a43d4163c056",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T16:00:44.743088+00:00",
+          "updated_at": "2026-09-30T16:01:32.881446+00:00",
+          "completed_at": "2026-09-30T16:01:32.881446+00:00",
+          "result": {
+            "rejection_reasons": [],
+            "candidates_created": 0,
+            "fragments_analyzed": 0,
+            "fragments_requeued": 2,
+            "fragments_without_candidates": 2,
+            "demand_irrelevant_candidates_ignored": 0
+          }
+        },
+        {
+          "id": "b809e2ac-f9d1-4c32-a430-9e0e32b33782",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "candidate_publication",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T16:01:23.008878+00:00",
+          "updated_at": "2026-09-30T16:01:36.076822+00:00",
+          "completed_at": "2026-09-30T16:01:36.076822+00:00",
+          "result": {
+            "release_id": "334a46a3-fffe-47ad-bcee-21172c6e9d7c",
+            "records_reserved": 4,
+            "release_sequence": 19736,
+            "records_published": 3,
+            "records_excluded_malformed": 0,
+            "records_deferred_to_deep_review": 1
+          }
+        },
+        {
+          "id": "04fca403-2ef9-4f4f-bab3-824ac3145603",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T16:01:32.304794+00:00",
+          "updated_at": "2026-09-30T16:01:46.455368+00:00",
+          "completed_at": "2026-09-30T16:01:46.455368+00:00",
+          "result": {
+            "rejection_reasons": [],
+            "candidates_created": 0,
+            "fragments_analyzed": 0,
+            "fragments_requeued": 2,
+            "fragments_without_candidates": 2,
+            "demand_irrelevant_candidates_ignored": 0
+          }
+        },
+        {
+          "id": "048d73d4-c4b9-4be1-a02a-a36ec8cce777",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "candidate_deep_review",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T16:01:32.304794+00:00",
+          "updated_at": "2026-09-30T16:01:43.173951+00:00",
+          "completed_at": "2026-09-30T16:01:43.173951+00:00",
+          "result": {
+            "conflict": 0,
+            "rejected": 1,
+            "verified": 0,
+            "quarantined": 0,
+            "manual_exception": 0,
+            "escalated_to_medium": 0
+          }
+        },
+        {
+          "id": "9035d5fe-3407-4a6e-9be2-2fb9f48b2964",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T16:01:37.277039+00:00",
+          "updated_at": "2026-09-30T16:03:01.860573+00:00",
+          "completed_at": "2026-09-30T16:03:01.860573+00:00",
+          "result": {
+            "rejection_reasons": [],
+            "candidates_created": 8,
+            "fragments_analyzed": 1,
+            "fragments_requeued": 0,
+            "fragments_without_candidates": 0,
+            "demand_irrelevant_candidates_ignored": 0
+          }
+        },
+        {
+          "id": "0f572e2c-9190-48ec-84f8-fb231817d9fd",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T16:01:43.249275+00:00",
+          "updated_at": "2026-09-30T16:02:04.425317+00:00",
+          "completed_at": "2026-09-30T16:02:04.425317+00:00",
+          "result": {
+            "rejection_reasons": [],
+            "candidates_created": 0,
+            "fragments_analyzed": 0,
+            "fragments_requeued": 7,
+            "fragments_without_candidates": 7,
+            "demand_irrelevant_candidates_ignored": 0
+          }
+        },
+        {
+          "id": "12e345be-9550-4d1e-add1-99bc887b36db",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T16:05:01.776324+00:00",
+          "updated_at": "2026-09-30T16:05:49.168023+00:00",
+          "completed_at": "2026-09-30T16:05:49.168023+00:00",
+          "result": {
+            "rejection_reasons": [],
+            "candidates_created": 0,
+            "fragments_analyzed": 0,
+            "fragments_requeued": 1,
+            "fragments_without_candidates": 1,
+            "demand_irrelevant_candidates_ignored": 0
+          }
+        },
+        {
+          "id": "f5b0aec1-600d-40f3-97fe-256670dfcd9a",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T16:05:01.776324+00:00",
+          "updated_at": "2026-09-30T16:05:48.282384+00:00",
+          "completed_at": "2026-09-30T16:05:48.282384+00:00",
+          "result": {
+            "rejection_reasons": [],
+            "candidates_created": 0,
+            "fragments_analyzed": 0,
+            "fragments_requeued": 2,
+            "fragments_without_candidates": 2,
+            "demand_irrelevant_candidates_ignored": 0
+          }
+        },
+        {
+          "id": "085f8d83-4504-47ad-803c-e6a41c0c5504",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T16:05:01.776324+00:00",
+          "updated_at": "2026-09-30T16:05:58.496517+00:00",
+          "completed_at": "2026-09-30T16:05:58.496517+00:00",
+          "result": {
+            "rejection_reasons": [],
+            "candidates_created": 0,
+            "fragments_analyzed": 0,
+            "fragments_requeued": 7,
+            "fragments_without_candidates": 7,
+            "demand_irrelevant_candidates_ignored": 0
+          }
+        },
+        {
+          "id": "6dd896c2-e39a-47b9-b9d2-4ebc01203c9e",
+          "knowledge_demand_id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+          "task_type": "fragment_analysis",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T16:05:01.776324+00:00",
+          "updated_at": "2026-09-30T16:07:15.249291+00:00",
+          "completed_at": "2026-09-30T16:07:15.249291+00:00",
+          "result": {
+            "rejection_reasons": [],
+            "candidates_created": 10,
+            "fragments_analyzed": 1,
+            "fragments_requeued": 0,
+            "fragments_without_candidates": 0,
+            "demand_irrelevant_candidates_ignored": 0
+          }
+        },
+        {
+          "id": "9d78361d-8f02-48e3-ac5a-4849cda5d99b",
+          "knowledge_demand_id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+          "task_type": "fragment_analysis",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T16:05:01.776324+00:00",
+          "updated_at": "2026-09-30T16:07:06.608545+00:00",
+          "completed_at": "2026-09-30T16:07:06.608545+00:00",
+          "result": {
+            "rejection_reasons": [],
+            "candidates_created": 7,
+            "fragments_analyzed": 1,
+            "fragments_requeued": 0,
+            "fragments_without_candidates": 1,
+            "demand_irrelevant_candidates_ignored": 0
+          }
+        },
+        {
+          "id": "125deb30-f740-462f-9689-5e6417a90ad3",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T16:05:01.776324+00:00",
+          "updated_at": "2026-09-30T16:06:06.756354+00:00",
+          "completed_at": "2026-09-30T16:06:06.756354+00:00",
+          "result": {
+            "rejection_reasons": [],
+            "candidates_created": 0,
+            "fragments_analyzed": 0,
+            "fragments_requeued": 16,
+            "fragments_without_candidates": 16,
+            "demand_irrelevant_candidates_ignored": 0
+          }
+        },
+        {
+          "id": "bd770983-f9c9-47fe-bbd7-c9a4d3e29705",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T16:05:49.179498+00:00",
+          "updated_at": "2026-09-30T16:06:01.788549+00:00",
+          "completed_at": "2026-09-30T16:06:01.788549+00:00",
+          "result": {
+            "rejection_reasons": [],
+            "candidates_created": 0,
+            "fragments_analyzed": 0,
+            "fragments_requeued": 2,
+            "fragments_without_candidates": 2,
+            "demand_irrelevant_candidates_ignored": 0
+          }
+        },
+        {
+          "id": "1f3b2e27-e21e-42ba-8074-155ea88b9442",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "candidate_deep_review",
+          "status": "completed",
+          "failure_code": null,
+          "created_at": "2026-09-30T16:05:58.51728+00:00",
+          "updated_at": "2026-09-30T16:06:07.754276+00:00",
+          "completed_at": "2026-09-30T16:06:07.754276+00:00",
+          "result": {
+            "conflict": 0,
+            "rejected": 1,
+            "verified": 0,
+            "quarantined": 0,
+            "manual_exception": 0,
+            "escalated_to_medium": 0
+          }
+        },
+        {
+          "id": "688c5aeb-8655-4b3e-8e4d-693421d831c1",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "status": "queued",
+          "failure_code": null,
+          "created_at": "2026-09-30T16:06:01.858904+00:00",
+          "updated_at": "2026-09-30T16:06:01.858904+00:00",
+          "completed_at": null,
+          "result": null
+        }
+      ]
+    },
+    {
+      "section": "agent_runs",
+      "at": "2026-09-30T16:14:02.656083+00:00",
+      "rows": [
+        {
+          "id": "bb32f021-120c-45c5-ac3c-99beb9300eaf",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "demand_diagnosis",
+          "execution_profile": "luna_high",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "medium",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 12547,
+          "input_tokens": 11941,
+          "output_tokens": 282,
+          "started_at": "2026-09-30T15:50:49.362822+00:00",
+          "completed_at": "2026-09-30T15:51:06.597832+00:00"
+        },
+        {
+          "id": "1db9a3c8-66d8-494b-8f7a-679d05ed189d",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "candidate_deep_review",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 13682,
+          "input_tokens": 15038,
+          "output_tokens": 428,
+          "started_at": "2026-09-30T15:51:28.719476+00:00",
+          "completed_at": "2026-09-30T15:51:43.124056+00:00"
+        },
+        {
+          "id": "82268702-407a-411f-a147-daa6560a341d",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "candidate_deep_review",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 6992,
+          "input_tokens": 14312,
+          "output_tokens": 85,
+          "started_at": "2026-09-30T15:51:29.246187+00:00",
+          "completed_at": "2026-09-30T15:51:36.496165+00:00"
+        },
+        {
+          "id": "807c2067-50d4-4ecd-ae02-1400502031ee",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "candidate_deep_review",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 9090,
+          "input_tokens": 14870,
+          "output_tokens": 173,
+          "started_at": "2026-09-30T15:51:29.318169+00:00",
+          "completed_at": "2026-09-30T15:51:38.6752+00:00"
+        },
+        {
+          "id": "640ebbbf-74ba-4194-ba3c-dc91ae284362",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "candidate_deep_review",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 22090,
+          "input_tokens": 18488,
+          "output_tokens": 884,
+          "started_at": "2026-09-30T15:51:29.429355+00:00",
+          "completed_at": "2026-09-30T15:51:51.87965+00:00"
+        },
+        {
+          "id": "d7c40434-adb7-4e50-b6f4-5b3ea505295c",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "candidate_deep_review",
+          "execution_profile": "luna_high",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "medium",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 9024,
+          "input_tokens": 14348,
+          "output_tokens": 98,
+          "started_at": "2026-09-30T15:51:37.821333+00:00",
+          "completed_at": "2026-09-30T15:51:50.931077+00:00"
+        },
+        {
+          "id": "f5c937b9-5a3b-46c1-8822-8815e11dd4d6",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "candidate_deep_review",
+          "execution_profile": "luna_high",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "medium",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 8571,
+          "input_tokens": 14961,
+          "output_tokens": 147,
+          "started_at": "2026-09-30T15:51:38.973846+00:00",
+          "completed_at": "2026-09-30T15:51:47.857709+00:00"
+        },
+        {
+          "id": "57af690d-3266-4bf6-8162-f27fe83bace1",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "candidate_deep_review",
+          "execution_profile": "luna_high",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "medium",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 9268,
+          "input_tokens": 15173,
+          "output_tokens": 194,
+          "started_at": "2026-09-30T15:51:43.182544+00:00",
+          "completed_at": "2026-09-30T15:51:52.722951+00:00"
+        },
+        {
+          "id": "050d5a3c-cb7f-4df5-91ee-65013342fa5f",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 11332,
+          "input_tokens": 17636,
+          "output_tokens": 308,
+          "started_at": "2026-09-30T15:51:51.925672+00:00",
+          "completed_at": "2026-09-30T15:52:03.825593+00:00"
+        },
+        {
+          "id": "7b04997e-0ee3-4c68-9b7e-be3fba9e7c48",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 60848,
+          "input_tokens": 15025,
+          "output_tokens": 3132,
+          "started_at": "2026-09-30T15:51:54.960203+00:00",
+          "completed_at": "2026-09-30T15:52:56.36417+00:00"
+        },
+        {
+          "id": "2424f0ea-eeeb-4567-9e4e-1d10741142cd",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 9738,
+          "input_tokens": 17765,
+          "output_tokens": 309,
+          "started_at": "2026-09-30T15:51:56.135163+00:00",
+          "completed_at": "2026-09-30T15:52:06.336577+00:00"
+        },
+        {
+          "id": "52868d37-e7a4-471d-a18c-661531cb55b0",
+          "knowledge_demand_id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+          "task_type": "demand_diagnosis",
+          "execution_profile": "luna_high",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "medium",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 10043,
+          "input_tokens": 11941,
+          "output_tokens": 340,
+          "started_at": "2026-09-30T15:51:58.25651+00:00",
+          "completed_at": "2026-09-30T15:52:11.014227+00:00"
+        },
+        {
+          "id": "a022681f-4506-48b6-a6b2-8fe287fc5d8f",
+          "knowledge_demand_id": "b2df17d6-237a-47c6-aaa8-7e1340998acc",
+          "task_type": "demand_diagnosis",
+          "execution_profile": "luna_high",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "medium",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 10134,
+          "input_tokens": 11954,
+          "output_tokens": 281,
+          "started_at": "2026-09-30T15:52:13.209651+00:00",
+          "completed_at": "2026-09-30T15:52:25.570246+00:00"
+        },
+        {
+          "id": "f7c37b53-7354-404c-b9f9-3c38c9fd19f1",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "candidate_deep_review",
+          "execution_profile": "luna_high",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "medium",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 15409,
+          "input_tokens": 17088,
+          "output_tokens": 572,
+          "started_at": "2026-09-30T15:52:23.516636+00:00",
+          "completed_at": "2026-09-30T15:52:39.501881+00:00"
+        },
+        {
+          "id": "9bd6fe40-bde5-4e28-809e-9d341d4fa977",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "candidate_deep_review",
+          "execution_profile": "luna_high",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "medium",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 18889,
+          "input_tokens": 15392,
+          "output_tokens": 628,
+          "started_at": "2026-09-30T15:52:24.700629+00:00",
+          "completed_at": "2026-09-30T15:52:44.305204+00:00"
+        },
+        {
+          "id": "639a0807-fda8-43f3-bde5-f61343813386",
+          "knowledge_demand_id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+          "task_type": "candidate_deep_review",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 6840,
+          "input_tokens": 14257,
+          "output_tokens": 72,
+          "started_at": "2026-09-30T15:52:24.77273+00:00",
+          "completed_at": "2026-09-30T15:52:32.172232+00:00"
+        },
+        {
+          "id": "6da58e35-75c5-434f-af36-eb3ae3ad691a",
+          "knowledge_demand_id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+          "task_type": "candidate_deep_review",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 12834,
+          "input_tokens": 13680,
+          "output_tokens": 361,
+          "started_at": "2026-09-30T15:52:25.220523+00:00",
+          "completed_at": "2026-09-30T15:52:38.546147+00:00"
+        },
+        {
+          "id": "5a3a51d6-8d45-404c-ba3c-13a552349d8b",
+          "knowledge_demand_id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+          "task_type": "candidate_deep_review",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 8805,
+          "input_tokens": 14630,
+          "output_tokens": 96,
+          "started_at": "2026-09-30T15:52:25.576057+00:00",
+          "completed_at": "2026-09-30T15:52:35.053478+00:00"
+        },
+        {
+          "id": "ed81cd4a-684a-494e-90bf-32a3d3af2fb0",
+          "knowledge_demand_id": "01a7f35c-ee7e-4498-a027-e0a805aa9098",
+          "task_type": "demand_diagnosis",
+          "execution_profile": "luna_high",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "medium",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 10808,
+          "input_tokens": 11944,
+          "output_tokens": 314,
+          "started_at": "2026-09-30T15:52:40.762505+00:00",
+          "completed_at": "2026-09-30T15:52:59.841192+00:00"
+        },
+        {
+          "id": "94a4c490-220b-480b-add9-2803ae6e7cd1",
+          "knowledge_demand_id": "7534f229-3723-48ad-b5c0-fd2ee2754ebf",
+          "task_type": "demand_diagnosis",
+          "execution_profile": "luna_high",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "medium",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 10557,
+          "input_tokens": 11940,
+          "output_tokens": 332,
+          "started_at": "2026-09-30T15:53:04.271795+00:00",
+          "completed_at": "2026-09-30T15:53:19.898513+00:00"
+        },
+        {
+          "id": "4f50c945-7fa5-4b6f-b411-50f81dcee8fa",
+          "knowledge_demand_id": "01a7f35c-ee7e-4498-a027-e0a805aa9098",
+          "task_type": "source_discovery",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "failed",
+          "error_code": "LEASE_EXPIRED",
+          "duration_ms": null,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "started_at": "2026-09-30T15:54:03.599475+00:00",
+          "completed_at": "2026-09-30T15:59:23.56575+00:00"
+        },
+        {
+          "id": "52c222d4-1f5a-4208-9eed-7be77f418606",
+          "knowledge_demand_id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+          "task_type": "candidate_deep_review",
+          "execution_profile": "luna_high",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "medium",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 12936,
+          "input_tokens": 14280,
+          "output_tokens": 475,
+          "started_at": "2026-09-30T15:54:03.943332+00:00",
+          "completed_at": "2026-09-30T15:54:17.480594+00:00"
+        },
+        {
+          "id": "407cfc10-a830-48ac-b6bb-10c61cd3bfdb",
+          "knowledge_demand_id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+          "task_type": "candidate_deep_review",
+          "execution_profile": "luna_high",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "medium",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 8107,
+          "input_tokens": 14677,
+          "output_tokens": 120,
+          "started_at": "2026-09-30T15:54:03.989071+00:00",
+          "completed_at": "2026-09-30T15:54:12.405416+00:00"
+        },
+        {
+          "id": "38e1580f-8483-4591-86b6-7650f07de23f",
+          "knowledge_demand_id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+          "task_type": "candidate_deep_review",
+          "execution_profile": "luna_high",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "medium",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 18747,
+          "input_tokens": 13763,
+          "output_tokens": 606,
+          "started_at": "2026-09-30T15:54:04.537018+00:00",
+          "completed_at": "2026-09-30T15:54:23.672891+00:00"
+        },
+        {
+          "id": "31b32ce0-4ac1-4f16-9335-c281ebf6718e",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 8442,
+          "input_tokens": 16697,
+          "output_tokens": 197,
+          "started_at": "2026-09-30T15:54:04.603716+00:00",
+          "completed_at": "2026-09-30T15:54:16.395869+00:00"
+        },
+        {
+          "id": "5605d8a0-fe45-443f-b126-54de6b7d243c",
+          "knowledge_demand_id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+          "task_type": "fragment_analysis",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 8636,
+          "input_tokens": 17602,
+          "output_tokens": 222,
+          "started_at": "2026-09-30T15:54:04.60406+00:00",
+          "completed_at": "2026-09-30T15:54:13.610741+00:00"
+        },
+        {
+          "id": "6e23ae2b-c21e-4059-a6e4-8c55f4df70aa",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 10343,
+          "input_tokens": 17765,
+          "output_tokens": 357,
+          "started_at": "2026-09-30T15:54:04.99494+00:00",
+          "completed_at": "2026-09-30T15:54:15.658895+00:00"
+        },
+        {
+          "id": "91d16fec-4944-4080-a3dd-b818be64a53c",
+          "knowledge_demand_id": "7534f229-3723-48ad-b5c0-fd2ee2754ebf",
+          "task_type": "source_discovery",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 13400,
+          "input_tokens": 48112,
+          "output_tokens": 167,
+          "started_at": "2026-09-30T15:54:05.091827+00:00",
+          "completed_at": "2026-09-30T15:54:19.489814+00:00"
+        },
+        {
+          "id": "80563c1e-bcf3-41b3-b010-12f440ff8467",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 7939,
+          "input_tokens": 16710,
+          "output_tokens": 194,
+          "started_at": "2026-09-30T15:54:16.901085+00:00",
+          "completed_at": "2026-09-30T15:54:25.572566+00:00"
+        },
+        {
+          "id": "cffb16cf-01f9-453c-a904-1417cd9a4bf0",
+          "knowledge_demand_id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+          "task_type": "fragment_analysis",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 7657,
+          "input_tokens": 16613,
+          "output_tokens": 168,
+          "started_at": "2026-09-30T15:54:19.758738+00:00",
+          "completed_at": "2026-09-30T15:54:28.185302+00:00"
+        },
+        {
+          "id": "57c52245-9370-4c17-8045-b60f2ff7371a",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 43280,
+          "input_tokens": 16685,
+          "output_tokens": 2121,
+          "started_at": "2026-09-30T15:54:28.735606+00:00",
+          "completed_at": "2026-09-30T15:55:12.672408+00:00"
+        },
+        {
+          "id": "7a10fcd6-d7ec-403b-a61a-b5fe7ba0a3ab",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 12976,
+          "input_tokens": 21490,
+          "output_tokens": 514,
+          "started_at": "2026-09-30T15:54:30.402128+00:00",
+          "completed_at": "2026-09-30T15:54:44.17154+00:00"
+        },
+        {
+          "id": "024272ba-9e5f-4da0-a3ba-50c90d1a86fb",
+          "knowledge_demand_id": "01a7f35c-ee7e-4498-a027-e0a805aa9098",
+          "task_type": "source_discovery",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "failed",
+          "error_code": "LEASE_EXPIRED",
+          "duration_ms": null,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "started_at": "2026-09-30T16:00:02.886288+00:00",
+          "completed_at": "2026-09-30T16:05:01.776324+00:00"
+        },
+        {
+          "id": "879a0b3d-efac-4fbf-93f2-cc350625a968",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 7994,
+          "input_tokens": 16710,
+          "output_tokens": 175,
+          "started_at": "2026-09-30T16:00:03.296109+00:00",
+          "completed_at": "2026-09-30T16:00:11.975013+00:00"
+        },
+        {
+          "id": "fcda7afa-91e1-4edd-ae11-a696b3ed03ce",
+          "knowledge_demand_id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+          "task_type": "fragment_analysis",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 8282,
+          "input_tokens": 16613,
+          "output_tokens": 174,
+          "started_at": "2026-09-30T16:00:03.430823+00:00",
+          "completed_at": "2026-09-30T16:00:15.221904+00:00"
+        },
+        {
+          "id": "ea7e4e51-9bd7-403f-93fc-a1a81db100dd",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 37673,
+          "input_tokens": 15836,
+          "output_tokens": 1806,
+          "started_at": "2026-09-30T16:00:03.644136+00:00",
+          "completed_at": "2026-09-30T16:00:41.627796+00:00"
+        },
+        {
+          "id": "76c74630-268e-4871-8bde-04d82e2d74e5",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 14944,
+          "input_tokens": 21490,
+          "output_tokens": 511,
+          "started_at": "2026-09-30T16:00:03.81272+00:00",
+          "completed_at": "2026-09-30T16:00:19.244563+00:00"
+        },
+        {
+          "id": "40144b6f-11b8-4fea-8103-e84f22c8e0c5",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 28515,
+          "input_tokens": 29635,
+          "output_tokens": 1020,
+          "started_at": "2026-09-30T16:00:04.484796+00:00",
+          "completed_at": "2026-09-30T16:00:33.585534+00:00"
+        },
+        {
+          "id": "c55d1420-56f3-4f30-b4d3-9055c6ef808e",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 16774,
+          "input_tokens": 15184,
+          "output_tokens": 679,
+          "started_at": "2026-09-30T16:00:04.57989+00:00",
+          "completed_at": "2026-09-30T16:00:27.224265+00:00"
+        },
+        {
+          "id": "4ce90ef8-030e-4225-8ec0-9308b705de39",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 9947,
+          "input_tokens": 16710,
+          "output_tokens": 199,
+          "started_at": "2026-09-30T16:00:15.453292+00:00",
+          "completed_at": "2026-09-30T16:00:25.657898+00:00"
+        },
+        {
+          "id": "b8dd3ded-13e9-4287-a4f0-d4b8aa78c403",
+          "knowledge_demand_id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+          "task_type": "fragment_analysis",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 10517,
+          "input_tokens": 16613,
+          "output_tokens": 167,
+          "started_at": "2026-09-30T16:00:21.72424+00:00",
+          "completed_at": "2026-09-30T16:00:32.549059+00:00"
+        },
+        {
+          "id": "35893a29-ba17-40c1-a99d-6767dc940c92",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 13328,
+          "input_tokens": 21490,
+          "output_tokens": 506,
+          "started_at": "2026-09-30T16:00:27.256619+00:00",
+          "completed_at": "2026-09-30T16:00:40.952583+00:00"
+        },
+        {
+          "id": "9e758574-378b-4311-987f-b3123bab308a",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 13502,
+          "input_tokens": 16710,
+          "output_tokens": 175,
+          "started_at": "2026-09-30T16:00:30.147297+00:00",
+          "completed_at": "2026-09-30T16:00:43.938208+00:00"
+        },
+        {
+          "id": "49c96d65-70a7-405d-94de-5acae2e91aa5",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 9292,
+          "input_tokens": 16710,
+          "output_tokens": 168,
+          "started_at": "2026-09-30T16:01:23.055459+00:00",
+          "completed_at": "2026-09-30T16:01:33.163032+00:00"
+        },
+        {
+          "id": "d88db8b6-b1a7-4074-a5e9-dbeee4e806d2",
+          "knowledge_demand_id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+          "task_type": "fragment_analysis",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 117281,
+          "input_tokens": 16613,
+          "output_tokens": 6274,
+          "started_at": "2026-09-30T16:01:23.057882+00:00",
+          "completed_at": "2026-09-30T16:03:21.099317+00:00"
+        },
+        {
+          "id": "1767ade0-a972-4468-a438-282ccf931c6e",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 8691,
+          "input_tokens": 14881,
+          "output_tokens": 124,
+          "started_at": "2026-09-30T16:01:23.184684+00:00",
+          "completed_at": "2026-09-30T16:01:32.666149+00:00"
+        },
+        {
+          "id": "5a979cb5-da59-45ad-b9a5-23f881ebe025",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 13807,
+          "input_tokens": 21490,
+          "output_tokens": 479,
+          "started_at": "2026-09-30T16:01:23.548261+00:00",
+          "completed_at": "2026-09-30T16:01:37.990808+00:00"
+        },
+        {
+          "id": "d69a3d22-915a-422f-99cf-ed95ca105b98",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 23175,
+          "input_tokens": 29635,
+          "output_tokens": 987,
+          "started_at": "2026-09-30T16:01:23.574512+00:00",
+          "completed_at": "2026-09-30T16:01:47.383261+00:00"
+        },
+        {
+          "id": "024fe88e-dee9-4778-927d-ce4213d740c3",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "candidate_deep_review",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 6872,
+          "input_tokens": 14433,
+          "output_tokens": 93,
+          "started_at": "2026-09-30T16:01:36.042099+00:00",
+          "completed_at": "2026-09-30T16:01:49.190388+00:00"
+        },
+        {
+          "id": "c0402120-3f0a-435f-8ae8-23bf9ce9084a",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 8490,
+          "input_tokens": 16710,
+          "output_tokens": 172,
+          "started_at": "2026-09-30T16:01:37.657856+00:00",
+          "completed_at": "2026-09-30T16:01:46.820034+00:00"
+        },
+        {
+          "id": "b193b746-91eb-4b05-acdd-9f5feaaca1cb",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 80928,
+          "input_tokens": 14881,
+          "output_tokens": 3875,
+          "started_at": "2026-09-30T16:01:40.574169+00:00",
+          "completed_at": "2026-09-30T16:03:02.36539+00:00"
+        },
+        {
+          "id": "d0d7913d-7064-4f56-9e50-b2bf6ff371e5",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 14988,
+          "input_tokens": 21490,
+          "output_tokens": 554,
+          "started_at": "2026-09-30T16:01:49.229406+00:00",
+          "completed_at": "2026-09-30T16:02:04.547447+00:00"
+        },
+        {
+          "id": "86524585-5d89-466b-91e4-04b69e3b2736",
+          "knowledge_demand_id": "01a7f35c-ee7e-4498-a027-e0a805aa9098",
+          "task_type": "source_discovery",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "running",
+          "error_code": null,
+          "duration_ms": null,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "started_at": "2026-09-30T16:05:40.410784+00:00",
+          "completed_at": null
+        },
+        {
+          "id": "5ec26e87-ab18-4f89-bbf3-e7b851fe9c33",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 7639,
+          "input_tokens": 16710,
+          "output_tokens": 152,
+          "started_at": "2026-09-30T16:05:40.484537+00:00",
+          "completed_at": "2026-09-30T16:05:48.725367+00:00"
+        },
+        {
+          "id": "98c71573-b65e-405d-b04a-773f81b9b12f",
+          "knowledge_demand_id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+          "task_type": "fragment_analysis",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 94361,
+          "input_tokens": 15615,
+          "output_tokens": 4901,
+          "started_at": "2026-09-30T16:05:40.520285+00:00",
+          "completed_at": "2026-09-30T16:07:15.451803+00:00"
+        },
+        {
+          "id": "fc85cda9-7c33-4ddb-b91e-d9bf23b49510",
+          "knowledge_demand_id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+          "task_type": "fragment_analysis",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 85547,
+          "input_tokens": 15517,
+          "output_tokens": 4476,
+          "started_at": "2026-09-30T16:05:40.818734+00:00",
+          "completed_at": "2026-09-30T16:07:07.01145+00:00"
+        },
+        {
+          "id": "26940a48-dfda-4b6f-9af4-cf33bcfc7c66",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 17133,
+          "input_tokens": 21490,
+          "output_tokens": 481,
+          "started_at": "2026-09-30T16:05:41.159036+00:00",
+          "completed_at": "2026-09-30T16:05:58.998556+00:00"
+        },
+        {
+          "id": "8c1b9855-a4fb-43cb-b255-a5ef4eb1ff08",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 24912,
+          "input_tokens": 29635,
+          "output_tokens": 1007,
+          "started_at": "2026-09-30T16:05:41.488553+00:00",
+          "completed_at": "2026-09-30T16:06:06.874647+00:00"
+        },
+        {
+          "id": "62b873f0-809c-4cf2-9f20-07bc2e482b2f",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 7121,
+          "input_tokens": 15189,
+          "output_tokens": 99,
+          "started_at": "2026-09-30T16:05:41.941142+00:00",
+          "completed_at": "2026-09-30T16:05:51.821898+00:00"
+        },
+        {
+          "id": "5c7c3e53-609e-4b30-ba03-ec70dfd37616",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "fragment_analysis",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 9633,
+          "input_tokens": 16710,
+          "output_tokens": 171,
+          "started_at": "2026-09-30T16:05:51.876773+00:00",
+          "completed_at": "2026-09-30T16:06:05.021238+00:00"
+        },
+        {
+          "id": "ad62dec5-2459-4108-a59b-c773f144c45c",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "task_type": "candidate_deep_review",
+          "execution_profile": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "duration_ms": 8276,
+          "input_tokens": 14041,
+          "output_tokens": 90,
+          "started_at": "2026-09-30T16:05:59.338309+00:00",
+          "completed_at": "2026-09-30T16:06:07.834594+00:00"
+        }
+      ]
+    },
+    {
+      "section": "sources",
+      "at": "2026-09-30T16:14:02.656083+00:00",
+      "rows": [
+        {
+          "id": "1697da5e-a5d3-4976-a203-0729349b5ee6",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "canonical_url": "https://ubuntu.com/desktop/docs/en/26.04/tutorial/the-linux-command-line-for-beginners/",
+          "status": "verifying",
+          "failure_code": null,
+          "discovered_at": "2026-09-02T16:05:43.751271+00:00",
+          "completed_at": null
+        },
+        {
+          "id": "42a834a7-89b5-412d-ab43-d0e3ee1f5ea5",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "canonical_url": "https://docs.rockylinux.org/books/admin_guide/03-commands/",
+          "status": "analyzing",
+          "failure_code": null,
+          "discovered_at": "2026-09-03T16:04:56.164617+00:00",
+          "completed_at": null
+        },
+        {
+          "id": "ddf3b34f-9b73-432a-8cab-b58c8db008ab",
+          "knowledge_demand_id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+          "canonical_url": "https://ftp.gnu.org/old-gnu/Manuals/coreutils-4.5.4/html_node/coreutils_149.html",
+          "status": "analyzing",
+          "failure_code": null,
+          "discovered_at": "2026-09-06T10:53:03.615485+00:00",
+          "completed_at": null
+        },
+        {
+          "id": "3fc2dffc-535f-4a5c-8c96-0c6276c91ff2",
+          "knowledge_demand_id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+          "canonical_url": "https://fedoraproject.org/wiki/User_Guide_-_Managing_Software",
+          "status": "analyzing",
+          "failure_code": null,
+          "discovered_at": "2026-09-06T17:04:11.600657+00:00",
+          "completed_at": null
+        },
+        {
+          "id": "f4ce8b4d-3b88-4d14-8973-eb10f3c40fdd",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "canonical_url": "https://ubuntu.com/server/docs/tutorial/managing-software/",
+          "status": "completed_with_exceptions",
+          "failure_code": null,
+          "discovered_at": "2026-09-06T17:04:11.600657+00:00",
+          "completed_at": "2026-09-30T15:54:13.277658+00:00"
+        },
+        {
+          "id": "79406395-d666-43f2-8139-304eca3f8d05",
+          "knowledge_demand_id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+          "canonical_url": "https://www.dell.com/support/kbdoc/en-us/000123974/introduction-to-basic-troubleshooting-commands-within-ubuntu-linux",
+          "status": "analyzing",
+          "failure_code": null,
+          "discovered_at": "2026-09-07T09:42:05.052161+00:00",
+          "completed_at": null
+        },
+        {
+          "id": "c45eb098-3d0b-48c1-b73e-bed820e81b39",
+          "knowledge_demand_id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+          "canonical_url": "https://docs.kernel.org/5.10/driver-api/ioctl.html",
+          "status": "analyzing",
+          "failure_code": null,
+          "discovered_at": "2026-09-07T14:27:38.876608+00:00",
+          "completed_at": null
+        },
+        {
+          "id": "52374a34-dd36-4d47-999b-1e88fe28145d",
+          "knowledge_demand_id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+          "canonical_url": "https://access.redhat.com/articles/1189123",
+          "status": "prepared",
+          "failure_code": null,
+          "discovered_at": "2026-09-10T14:03:23.683846+00:00",
+          "completed_at": null
+        },
+        {
+          "id": "4dd4fd2b-6d83-4da9-8e8f-711ca90ab780",
+          "knowledge_demand_id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+          "canonical_url": "https://manpages.ubuntu.com/manpages/noble/man1/command.1posix.html",
+          "status": "prepared",
+          "failure_code": null,
+          "discovered_at": "2026-09-10T20:02:19.925057+00:00",
+          "completed_at": null
+        },
+        {
+          "id": "b841df38-90ea-4f7b-b167-ad8d3f53a247",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "canonical_url": "https://manpages.ubuntu.com/manpages/resolute/man1/bash.1.html",
+          "status": "analyzing",
+          "failure_code": null,
+          "discovered_at": "2026-09-10T20:02:19.925057+00:00",
+          "completed_at": null
+        },
+        {
+          "id": "27f64d59-8f2a-4a64-993c-c0227068124a",
+          "knowledge_demand_id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+          "canonical_url": "https://refspecs.linuxfoundation.org/LSB_2.1.0/LSB-generic/LSB-generic/command.html",
+          "status": "prepared",
+          "failure_code": null,
+          "discovered_at": "2026-09-11T21:58:07.865398+00:00",
+          "completed_at": null
+        },
+        {
+          "id": "9982a2ce-f3df-4676-ac6d-bdeb9918ce92",
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "canonical_url": "https://docs.oracle.com/cd/E88353_01/html/E37839/bash-1.html",
+          "status": "analyzing",
+          "failure_code": null,
+          "discovered_at": "2026-09-15T19:34:59.750399+00:00",
+          "completed_at": null
+        },
+        {
+          "id": "07809266-5372-4a74-b027-8ece39f6028a",
+          "knowledge_demand_id": "7534f229-3723-48ad-b5c0-fd2ee2754ebf",
+          "canonical_url": "https://www.man7.org/linux/man-pages/man8/bridge.8.html",
+          "status": "prepared",
+          "failure_code": null,
+          "discovered_at": "2026-09-30T15:54:19.1918+00:00",
+          "completed_at": null
+        }
+      ]
+    },
+    {
+      "section": "requests",
+      "at": "2026-09-30T16:14:02.656083+00:00",
+      "rows": [
+        {
+          "id": 2269,
+          "tool_name": "query_network_knowledge",
+          "outcome": "unknown",
+          "answer_status": "unknown",
+          "learning": {
+            "status": "diagnosing"
+          },
+          "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+          "duration_ms": 4436,
+          "error_code": null,
+          "occurred_at": "2026-09-30T15:50:49.179807+00:00"
+        },
+        {
+          "id": 2270,
+          "tool_name": "query_network_knowledge",
+          "outcome": "unknown",
+          "answer_status": "unknown",
+          "learning": {
+            "status": "diagnosing"
+          },
+          "knowledge_demand_id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+          "duration_ms": 2655,
+          "error_code": null,
+          "occurred_at": "2026-09-30T15:51:57.602511+00:00"
+        },
+        {
+          "id": 2271,
+          "tool_name": "query_network_knowledge",
+          "outcome": "unknown",
+          "answer_status": "unknown",
+          "learning": {
+            "status": "diagnosing"
+          },
+          "knowledge_demand_id": "d7cae6bf-99f0-4502-b08b-c50039f26c7f",
+          "duration_ms": 7736,
+          "error_code": null,
+          "occurred_at": "2026-09-30T15:52:05.64336+00:00"
+        },
+        {
+          "id": 2272,
+          "tool_name": "query_network_knowledge",
+          "outcome": "unknown",
+          "answer_status": "unknown",
+          "learning": {
+            "status": "diagnosing"
+          },
+          "knowledge_demand_id": "6ff0c421-5538-4d3c-9743-620b09dfaff6",
+          "duration_ms": 1930,
+          "error_code": null,
+          "occurred_at": "2026-09-30T15:52:07.92998+00:00"
+        },
+        {
+          "id": 2273,
+          "tool_name": "query_network_knowledge",
+          "outcome": "unknown",
+          "answer_status": "unknown",
+          "learning": {
+            "status": "diagnosing"
+          },
+          "knowledge_demand_id": "05961a92-ebd3-4566-b7de-3afc98f2f843",
+          "duration_ms": 430,
+          "error_code": null,
+          "occurred_at": "2026-09-30T15:52:08.645593+00:00"
+        },
+        {
+          "id": 2274,
+          "tool_name": "query_network_knowledge",
+          "outcome": "unknown",
+          "answer_status": "unknown",
+          "learning": {
+            "status": "diagnosing"
+          },
+          "knowledge_demand_id": "aa02154a-022a-49ce-a441-f6fa920bda86",
+          "duration_ms": 1579,
+          "error_code": null,
+          "occurred_at": "2026-09-30T15:52:10.555883+00:00"
+        },
+        {
+          "id": 2275,
+          "tool_name": "query_network_knowledge",
+          "outcome": "unknown",
+          "answer_status": "unknown",
+          "learning": {
+            "status": "diagnosing"
+          },
+          "knowledge_demand_id": "b2df17d6-237a-47c6-aaa8-7e1340998acc",
+          "duration_ms": 2243,
+          "error_code": null,
+          "occurred_at": "2026-09-30T15:52:13.088027+00:00"
+        },
+        {
+          "id": 2276,
+          "tool_name": "query_network_knowledge",
+          "outcome": "unknown",
+          "answer_status": "unknown",
+          "learning": {
+            "status": "diagnosing"
+          },
+          "knowledge_demand_id": "21da84ca-78d6-429e-8aa8-7862f6906ec9",
+          "duration_ms": 3651,
+          "error_code": null,
+          "occurred_at": "2026-09-30T15:52:17.011348+00:00"
+        },
+        {
+          "id": 2277,
+          "tool_name": "query_network_knowledge",
+          "outcome": "unknown",
+          "answer_status": "unknown",
+          "learning": {
+            "status": "diagnosing"
+          },
+          "knowledge_demand_id": "f9a16bc4-70e2-4f89-84b6-6f24408f5e5a",
+          "duration_ms": 3091,
+          "error_code": null,
+          "occurred_at": "2026-09-30T15:52:20.402019+00:00"
+        },
+        {
+          "id": 2278,
+          "tool_name": "query_network_knowledge",
+          "outcome": "unknown",
+          "answer_status": "unknown",
+          "learning": {
+            "status": "diagnosing"
+          },
+          "knowledge_demand_id": "01a7f35c-ee7e-4498-a027-e0a805aa9098",
+          "duration_ms": 19195,
+          "error_code": null,
+          "occurred_at": "2026-09-30T15:52:39.870285+00:00"
+        },
+        {
+          "id": 2279,
+          "tool_name": "query_network_knowledge",
+          "outcome": "unknown",
+          "answer_status": "unknown",
+          "learning": {
+            "status": "diagnosing"
+          },
+          "knowledge_demand_id": "dc360e74-1883-4f0b-836b-005b46626842",
+          "duration_ms": 3867,
+          "error_code": null,
+          "occurred_at": "2026-09-30T15:52:44.026411+00:00"
+        },
+        {
+          "id": 2280,
+          "tool_name": "query_network_knowledge",
+          "outcome": "unknown",
+          "answer_status": "unknown",
+          "learning": {
+            "status": "diagnosing"
+          },
+          "knowledge_demand_id": "afbd8f51-294a-4ae0-b04b-9c74015ae707",
+          "duration_ms": 3345,
+          "error_code": null,
+          "occurred_at": "2026-09-30T15:52:47.656702+00:00"
+        },
+        {
+          "id": 2281,
+          "tool_name": "query_network_knowledge",
+          "outcome": "unknown",
+          "answer_status": "unknown",
+          "learning": {
+            "status": "diagnosing"
+          },
+          "knowledge_demand_id": "064756d9-b732-4580-9e28-d8e0ec866394",
+          "duration_ms": 6409,
+          "error_code": null,
+          "occurred_at": "2026-09-30T15:52:54.45863+00:00"
+        },
+        {
+          "id": 2282,
+          "tool_name": "query_network_knowledge",
+          "outcome": "unknown",
+          "answer_status": "unknown",
+          "learning": {
+            "status": "diagnosing"
+          },
+          "knowledge_demand_id": "23d48bea-d205-4ab3-9502-553a0a6f420f",
+          "duration_ms": 2367,
+          "error_code": null,
+          "occurred_at": "2026-09-30T15:52:57.161355+00:00"
+        },
+        {
+          "id": 2283,
+          "tool_name": "query_network_knowledge",
+          "outcome": "unknown",
+          "answer_status": "unknown",
+          "learning": {
+            "status": "diagnosing"
+          },
+          "knowledge_demand_id": "1bef9ff6-29e1-4e87-a4f2-ee0f98639e27",
+          "duration_ms": 634,
+          "error_code": null,
+          "occurred_at": "2026-09-30T15:52:58.124212+00:00"
+        },
+        {
+          "id": 2284,
+          "tool_name": "query_network_knowledge",
+          "outcome": "unknown",
+          "answer_status": "unknown",
+          "learning": {
+            "status": "diagnosing"
+          },
+          "knowledge_demand_id": "7534f229-3723-48ad-b5c0-fd2ee2754ebf",
+          "duration_ms": 5545,
+          "error_code": null,
+          "occurred_at": "2026-09-30T15:53:03.979646+00:00"
+        },
+        {
+          "id": 2285,
+          "tool_name": "query_network_knowledge",
+          "outcome": "unknown",
+          "answer_status": "unknown",
+          "learning": {
+            "status": "diagnosing"
+          },
+          "knowledge_demand_id": "477eae13-7f97-42b0-a425-5ef08b7b811b",
+          "duration_ms": 995,
+          "error_code": null,
+          "occurred_at": "2026-09-30T15:53:05.225422+00:00"
+        },
+        {
+          "id": 2286,
+          "tool_name": "query_network_knowledge",
+          "outcome": "unknown",
+          "answer_status": "unknown",
+          "learning": {
+            "status": "diagnosing"
+          },
+          "knowledge_demand_id": "24ddd12f-c3bd-47a4-8f3b-d5a6d5fd6fcb",
+          "duration_ms": 3679,
+          "error_code": null,
+          "occurred_at": "2026-09-30T15:53:09.256465+00:00"
+        },
+        {
+          "id": 2287,
+          "tool_name": "query_network_knowledge",
+          "outcome": "unknown",
+          "answer_status": "unknown",
+          "learning": {
+            "status": "diagnosing"
+          },
+          "knowledge_demand_id": "5dfb632a-52bc-4d61-a190-b569a8bf1292",
+          "duration_ms": 1685,
+          "error_code": null,
+          "occurred_at": "2026-09-30T15:53:11.328842+00:00"
+        },
+        {
+          "id": 2288,
+          "tool_name": "query_network_knowledge",
+          "outcome": "unknown",
+          "answer_status": "unknown",
+          "learning": {
+            "status": "diagnosing"
+          },
+          "knowledge_demand_id": "5c828d23-db3f-4c36-8455-f7c2d620e47c",
+          "duration_ms": 920,
+          "error_code": null,
+          "occurred_at": "2026-09-30T15:53:12.544354+00:00"
+        }
+      ]
+    },
+    {
+      "section": "executors",
+      "at": "2026-09-30T16:14:02.656083+00:00",
+      "rows": [
+        {
+          "worker_name": "pipeline-executor-01",
+          "heartbeat_at": "2026-09-30T16:14:00.809683+00:00",
+          "status": "standby",
+          "reason": "deterministic_work_in_progress"
+        },
+        {
+          "worker_name": "pipeline-executor-02",
+          "heartbeat_at": "2026-09-30T16:14:02.0269+00:00",
+          "status": "standby",
+          "reason": "deterministic_work_in_progress"
+        },
+        {
+          "worker_name": "pipeline-executor-03",
+          "heartbeat_at": "2026-09-30T16:14:01.636582+00:00",
+          "status": "standby",
+          "reason": "deterministic_work_in_progress"
+        },
+        {
+          "worker_name": "pipeline-executor-04",
+          "heartbeat_at": "2026-09-30T16:14:02.50161+00:00",
+          "status": "standby",
+          "reason": "deterministic_work_in_progress"
+        },
+        {
+          "worker_name": "pipeline-executor-05",
+          "heartbeat_at": "2026-09-30T16:13:57.309284+00:00",
+          "status": "standby",
+          "reason": "deterministic_work_in_progress"
+        },
+        {
+          "worker_name": "pipeline-executor-06",
+          "heartbeat_at": "2026-09-30T16:14:01.812011+00:00",
+          "status": "standby",
+          "reason": "deterministic_work_in_progress"
+        },
+        {
+          "worker_name": "pipeline-executor-07",
+          "heartbeat_at": "2026-09-30T16:14:01.730383+00:00",
+          "status": "standby",
+          "reason": "deterministic_work_in_progress"
+        },
+        {
+          "worker_name": "pipeline-executor-08",
+          "heartbeat_at": "2026-09-30T16:13:21.401141+00:00",
+          "status": "standby",
+          "reason": "deterministic_work_in_progress"
+        }
+      ]
+    }
+  ]
+}

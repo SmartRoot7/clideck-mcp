@@ -1,0 +1,869 @@
+{
+  "seed": 20260930,
+  "baseline_at": "2026-09-30T15:45:03.231Z",
+  "selected": [
+    {
+      "candidate_id": 17,
+      "group": "linux",
+      "context": {
+        "operating_system": "Linux"
+      },
+      "question": "How do I display the Linux netfilter conntrack expectation table without deleting entries?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "unknown",
+        "answers": [],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "missing",
+            "answer_refs": []
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Not specified",
+        "vendor_slug": "not-specified",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "linux",
+        "operating_system_slug": "linux",
+        "software_family": "linux",
+        "software_family_slug": "linux",
+        "portable_operating_system": true,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": false,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.6,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      },
+      "experiment_id": 1
+    },
+    {
+      "candidate_id": 10,
+      "group": "linux",
+      "context": {
+        "operating_system": "Linux"
+      },
+      "question": "How can I inspect a Linux MACsec interface cipher suite and replay protection settings?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "unknown",
+        "answers": [],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "missing",
+            "answer_refs": []
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Not specified",
+        "vendor_slug": "not-specified",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "linux",
+        "operating_system_slug": "linux",
+        "software_family": "linux",
+        "software_family_slug": "linux",
+        "portable_operating_system": true,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": false,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.6,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      },
+      "experiment_id": 2
+    },
+    {
+      "candidate_id": 5,
+      "group": "linux",
+      "context": {
+        "operating_system": "Linux"
+      },
+      "question": "How can I identify packet drops caused by XDP redirect failures using Linux tracepoints?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "unknown",
+        "answers": [],
+        "coverage": [
+          {
+            "capability": "interface-counters",
+            "label": "Interface counters",
+            "status": "missing",
+            "answer_refs": []
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Not specified",
+        "vendor_slug": "not-specified",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "linux",
+        "operating_system_slug": "linux",
+        "software_family": "linux",
+        "software_family_slug": "linux",
+        "portable_operating_system": true,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": false,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.6,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      },
+      "experiment_id": 3
+    },
+    {
+      "candidate_id": 7,
+      "group": "linux",
+      "context": {
+        "operating_system": "Linux"
+      },
+      "question": "How can I inspect an SRv6 seg6local route and its End.DT6 behavior with iproute2?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "unknown",
+        "answers": [],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "missing",
+            "answer_refs": []
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Not specified",
+        "vendor_slug": "not-specified",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "linux",
+        "operating_system_slug": "linux",
+        "software_family": "linux",
+        "software_family_slug": "linux",
+        "portable_operating_system": true,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": false,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.6,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      },
+      "experiment_id": 4
+    },
+    {
+      "candidate_id": 21,
+      "group": "openwrt",
+      "context": {
+        "operating_system": "OpenWrt"
+      },
+      "question": "How do I diagnose DNS over HTTPS bootstrap lookup failures in an OpenWrt https-dns-proxy deployment?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "unknown",
+        "answers": [],
+        "coverage": [
+          {
+            "capability": "boot-behavior",
+            "label": "Boot behavior",
+            "status": "missing",
+            "answer_refs": []
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Not specified",
+        "vendor_slug": "not-specified",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "OpenWrt",
+        "operating_system_slug": "openwrt",
+        "software_family": "OpenWrt",
+        "software_family_slug": "openwrt",
+        "portable_operating_system": true,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": false,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.6,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      },
+      "experiment_id": 5
+    },
+    {
+      "candidate_id": 49,
+      "group": "junos",
+      "context": {
+        "vendor": "Juniper",
+        "operating_system": "Junos"
+      },
+      "question": "How can I inspect Junos SRv6 locator and local SID allocation state?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "unknown",
+        "answers": [],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "missing",
+            "answer_refs": []
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Juniper",
+        "vendor_slug": "juniper",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "Juniper Junos",
+        "operating_system_slug": "junos",
+        "software_family": "Juniper Junos",
+        "software_family_slug": "juniper-junos",
+        "portable_operating_system": false,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": true,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.7,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      },
+      "experiment_id": 6
+    },
+    {
+      "candidate_id": 39,
+      "group": "arista",
+      "context": {
+        "vendor": "Arista",
+        "operating_system": "EOS"
+      },
+      "question": "How can I inspect Arista EOS EVPN multihoming designated forwarder election state?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "unknown",
+        "answers": [],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "missing",
+            "answer_refs": []
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Arista",
+        "vendor_slug": "arista",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "Arista Arista EOS",
+        "operating_system_slug": "eos",
+        "software_family": "Arista Arista EOS",
+        "software_family_slug": "arista-eos",
+        "portable_operating_system": false,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": true,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.7,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      },
+      "experiment_id": 7
+    },
+    {
+      "candidate_id": 19,
+      "group": "linux",
+      "context": {
+        "operating_system": "Linux"
+      },
+      "question": "How do I identify whether Linux reverse path filtering uses strict or loose mode on an interface?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "unknown",
+        "answers": [],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "missing",
+            "answer_refs": []
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Not specified",
+        "vendor_slug": "not-specified",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "linux",
+        "operating_system_slug": "linux",
+        "software_family": "linux",
+        "software_family_slug": "linux",
+        "portable_operating_system": true,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": false,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.6,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      },
+      "experiment_id": 8
+    },
+    {
+      "candidate_id": 16,
+      "group": "linux",
+      "context": {
+        "operating_system": "Linux"
+      },
+      "question": "How can I inspect Linux network device RSS hash functions and indirection tables?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "unknown",
+        "answers": [],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "missing",
+            "answer_refs": []
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Not specified",
+        "vendor_slug": "not-specified",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "linux",
+        "operating_system_slug": "linux",
+        "software_family": "linux",
+        "software_family_slug": "linux",
+        "portable_operating_system": true,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": false,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.6,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      },
+      "experiment_id": 9
+    },
+    {
+      "candidate_id": 14,
+      "group": "linux",
+      "context": {
+        "operating_system": "Linux"
+      },
+      "question": "How can I inspect a tc cake qdisc flow isolation mode and packet drop counters?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "unknown",
+        "answers": [],
+        "coverage": [
+          {
+            "capability": "interface-counters",
+            "label": "Interface counters",
+            "status": "missing",
+            "answer_refs": []
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Not specified",
+        "vendor_slug": "not-specified",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "linux",
+        "operating_system_slug": "linux",
+        "software_family": "linux",
+        "software_family_slug": "linux",
+        "portable_operating_system": true,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": false,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.6,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      },
+      "experiment_id": 10
+    },
+    {
+      "candidate_id": 9,
+      "group": "linux",
+      "context": {
+        "operating_system": "Linux"
+      },
+      "question": "How do I inspect the per-network-namespace nftables flowtable offload configuration?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "unknown",
+        "answers": [],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "missing",
+            "answer_refs": []
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Not specified",
+        "vendor_slug": "not-specified",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "linux",
+        "operating_system_slug": "linux",
+        "software_family": "linux",
+        "software_family_slug": "linux",
+        "portable_operating_system": true,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": false,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.6,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      },
+      "experiment_id": 11
+    },
+    {
+      "candidate_id": 1,
+      "group": "linux",
+      "context": {
+        "operating_system": "Linux"
+      },
+      "question": "How can I inspect Multipath TCP endpoint flags and connection subflows with ip mptcp?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "unknown",
+        "answers": [],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "missing",
+            "answer_refs": []
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Not specified",
+        "vendor_slug": "not-specified",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "linux",
+        "operating_system_slug": "linux",
+        "software_family": "linux",
+        "software_family_slug": "linux",
+        "portable_operating_system": true,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": false,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.6,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      },
+      "experiment_id": 12
+    },
+    {
+      "candidate_id": 8,
+      "group": "linux",
+      "context": {
+        "operating_system": "Linux"
+      },
+      "question": "How can I compare Linux IPv6 route cache exceptions with the main IPv6 routing table?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "unknown",
+        "answers": [],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "missing",
+            "answer_refs": []
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Not specified",
+        "vendor_slug": "not-specified",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "linux",
+        "operating_system_slug": "linux",
+        "software_family": "linux",
+        "software_family_slug": "linux",
+        "portable_operating_system": true,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": false,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.6,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      },
+      "experiment_id": 13
+    },
+    {
+      "candidate_id": 24,
+      "group": "openwrt",
+      "context": {
+        "operating_system": "OpenWrt"
+      },
+      "question": "How do I verify OpenWrt mwan3 policy routing rules for an existing connection?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "unknown",
+        "answers": [],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "missing",
+            "answer_refs": []
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Not specified",
+        "vendor_slug": "not-specified",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "OpenWrt",
+        "operating_system_slug": "openwrt",
+        "software_family": "OpenWrt",
+        "software_family_slug": "openwrt",
+        "portable_operating_system": true,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": false,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.6,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      },
+      "experiment_id": 14
+    },
+    {
+      "candidate_id": 25,
+      "group": "openwrt",
+      "context": {
+        "operating_system": "OpenWrt"
+      },
+      "question": "How can I inspect the active OpenWrt SQM cake overhead compensation settings?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "unknown",
+        "answers": [],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "missing",
+            "answer_refs": []
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Not specified",
+        "vendor_slug": "not-specified",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "OpenWrt",
+        "operating_system_slug": "openwrt",
+        "software_family": "OpenWrt",
+        "software_family_slug": "openwrt",
+        "portable_operating_system": true,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": false,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.6,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      },
+      "experiment_id": 15
+    },
+    {
+      "candidate_id": 11,
+      "group": "linux",
+      "context": {
+        "operating_system": "Linux"
+      },
+      "question": "How can I inspect Linux bridge multicast database entries and their source-specific filters?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "unknown",
+        "answers": [],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "missing",
+            "answer_refs": []
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Not specified",
+        "vendor_slug": "not-specified",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "linux",
+        "operating_system_slug": "linux",
+        "software_family": "linux",
+        "software_family_slug": "linux",
+        "portable_operating_system": true,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": false,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.6,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      },
+      "experiment_id": 16
+    },
+    {
+      "candidate_id": 22,
+      "group": "openwrt",
+      "context": {
+        "operating_system": "OpenWrt"
+      },
+      "question": "How can I inspect OpenWrt firewall4 nftables flow offloading rules without restarting the firewall?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "unknown",
+        "answers": [],
+        "coverage": [
+          {
+            "capability": "system-reboot",
+            "label": "System reboot",
+            "status": "missing",
+            "answer_refs": []
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Not specified",
+        "vendor_slug": "not-specified",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "OpenWrt",
+        "operating_system_slug": "openwrt",
+        "software_family": "OpenWrt",
+        "software_family_slug": "openwrt",
+        "portable_operating_system": true,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": false,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.6,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      },
+      "experiment_id": 17
+    },
+    {
+      "candidate_id": 13,
+      "group": "linux",
+      "context": {
+        "operating_system": "Linux"
+      },
+      "question": "How do I identify whether a Linux UDP socket uses UDP_SEGMENT or UDP_GRO?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "unknown",
+        "answers": [],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "missing",
+            "answer_refs": []
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Not specified",
+        "vendor_slug": "not-specified",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "linux",
+        "operating_system_slug": "linux",
+        "software_family": "linux",
+        "software_family_slug": "linux",
+        "portable_operating_system": true,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": false,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.6,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      },
+      "experiment_id": 18
+    },
+    {
+      "candidate_id": 12,
+      "group": "linux",
+      "context": {
+        "operating_system": "Linux"
+      },
+      "question": "How can I inspect ethtool receive flow classification rules without modifying them?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "unknown",
+        "answers": [],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "missing",
+            "answer_refs": []
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Not specified",
+        "vendor_slug": "not-specified",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "linux",
+        "operating_system_slug": "linux",
+        "software_family": "linux",
+        "software_family_slug": "linux",
+        "portable_operating_system": true,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": false,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.6,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      },
+      "experiment_id": 19
+    },
+    {
+      "candidate_id": 38,
+      "group": "cisco",
+      "context": {
+        "vendor": "Cisco",
+        "operating_system": "IOS XE"
+      },
+      "question": "How do I verify IOS XE segment routing microloop avoidance state?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "unknown",
+        "answers": [],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "missing",
+            "answer_refs": []
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Cisco",
+        "vendor_slug": "cisco",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "Cisco IOS XE",
+        "operating_system_slug": "ios-xe",
+        "software_family": "Cisco IOS XE",
+        "software_family_slug": "cisco-ios-xe",
+        "portable_operating_system": false,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": true,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.7,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      },
+      "experiment_id": 20
+    }
+  ]
+}

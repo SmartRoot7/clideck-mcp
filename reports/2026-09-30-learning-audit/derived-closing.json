@@ -1,0 +1,71 @@
+{
+  "experiment": {
+    "seed": 20260930,
+    "questions": 20,
+    "groups": {
+      "linux": 13,
+      "openwrt": 4,
+      "junos": 1,
+      "arista": 1,
+      "cisco": 1
+    },
+    "recorded_requests": 20,
+    "completed_diagnoses": 5,
+    "without_diagnosis_task": 15,
+    "correct_new_answers_observed": 0,
+    "final_statuses": {
+      "unknown": 20
+    },
+    "observation_min_minutes": 42.427,
+    "observation_max_minutes": 43.855,
+    "demand_states": {
+      "processing": 3,
+      "diagnosing": 15,
+      "published": 1,
+      "acquiring": 1
+    },
+    "tasks": 118,
+    "task_states": {
+      "completed": 114,
+      "failed": 2,
+      "running": 2
+    },
+    "agent_runs": 109,
+    "agent_run_states": {
+      "completed": 102,
+      "failed": 5,
+      "running": 2
+    },
+    "sources_linked": 15,
+    "sources_newly_discovered": 3,
+    "sources_reused": 12
+  },
+  "quality": {
+    "active": 351110,
+    "public": 351094,
+    "no_provenance": 56747,
+    "no_provenance_pct": 16.1622,
+    "fidelity_candidate_backed": 294292,
+    "fidelity_passed": 3753,
+    "fidelity_passed_pct": 1.2753,
+    "historic_fidelity_checks": 5815,
+    "historic_fidelity_material_errors": 1519,
+    "historic_fidelity_material_error_pct": 26.1221,
+    "duplicate_extra_rows": 85904,
+    "duplicate_extra_pct_of_commands": 28.0601
+  },
+  "usage": {
+    "calls": 252,
+    "questions": 119,
+    "complete": 130,
+    "partial": 83,
+    "unknown": 39,
+    "complete_label_pct": 51.5873,
+    "active_items_served": 201,
+    "active_items_served_pct": 0.0572,
+    "smoke_fixture_matches": 33,
+    "historic_demands": 699,
+    "historic_replay_complete": 16,
+    "historic_replay_complete_pct": 2.289
+  }
+}

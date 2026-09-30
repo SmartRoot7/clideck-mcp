@@ -1,0 +1,166 @@
+[
+  {
+    "knowledge_demand_id": "81bad55e-c546-4ef2-9c1f-9e9ad132884a",
+    "question": "How do I display the Linux netfilter conntrack expectation table without deleting entries?",
+    "failure_class": "missing_knowledge",
+    "answer_status": "unknown",
+    "canonical_context": {
+      "model": null,
+      "vendor": null,
+      "version": null,
+      "runtime_mode": null,
+      "operating_system": "Linux",
+      "shell_environment": null
+    },
+    "recommended_action": "targeted_discovery",
+    "existing_coverage": {
+      "summary": "The leased coverage contains only one general requested-operation entry marked missing; there are no initial answers or answer references."
+    },
+    "replay_result": {
+      "coverage": [
+        {
+          "label": "Requested operation",
+          "status": "missing",
+          "capability": "general",
+          "answer_refs": []
+        }
+      ],
+      "answer_refs": [],
+      "answer_status": "unknown"
+    },
+    "replay_status": "unknown",
+    "status": "processing"
+  },
+  {
+    "knowledge_demand_id": "1869364c-8b9a-48bf-8130-f9c96679b203",
+    "question": "How can I inspect a Linux MACsec interface cipher suite and replay protection settings?",
+    "failure_class": "missing_knowledge",
+    "answer_status": "unknown",
+    "canonical_context": {
+      "model": null,
+      "vendor": null,
+      "version": null,
+      "runtime_mode": null,
+      "operating_system": "linux",
+      "shell_environment": null
+    },
+    "recommended_action": "targeted_discovery",
+    "existing_coverage": {
+      "summary": "Current leased coverage marks the requested operation as missing and contains no answers or answer references. No existing facts can be claimed."
+    },
+    "replay_result": {
+      "coverage": [
+        {
+          "label": "Requested operation",
+          "status": "missing",
+          "capability": "general",
+          "answer_refs": []
+        }
+      ],
+      "answer_refs": [],
+      "answer_status": "unknown"
+    },
+    "replay_status": "unknown",
+    "status": "processing"
+  },
+  {
+    "knowledge_demand_id": "b2df17d6-237a-47c6-aaa8-7e1340998acc",
+    "question": "How can I inspect Arista EOS EVPN multihoming designated forwarder election state?",
+    "failure_class": "missing_knowledge",
+    "answer_status": "unknown",
+    "canonical_context": {
+      "model": null,
+      "vendor": "Arista",
+      "version": null,
+      "runtime_mode": null,
+      "operating_system": "Arista EOS",
+      "shell_environment": null
+    },
+    "recommended_action": "targeted_discovery",
+    "existing_coverage": {
+      "summary": "No usable answer is present in current leased coverage; the only entry marks the requested operation missing."
+    },
+    "replay_result": {
+      "coverage": [
+        {
+          "label": "Requested operation",
+          "status": "covered",
+          "capability": "general",
+          "answer_refs": [
+            "805b01c1-a2de-4f70-baf3-f5b42080d129"
+          ]
+        }
+      ],
+      "answer_refs": [
+        "805b01c1-a2de-4f70-baf3-f5b42080d129"
+      ],
+      "answer_status": "complete"
+    },
+    "replay_status": "complete",
+    "status": "published"
+  },
+  {
+    "knowledge_demand_id": "01a7f35c-ee7e-4498-a027-e0a805aa9098",
+    "question": "How can I inspect a tc cake qdisc flow isolation mode and packet drop counters?",
+    "failure_class": "missing_knowledge",
+    "answer_status": "unknown",
+    "canonical_context": {
+      "model": null,
+      "vendor": "Not specified",
+      "version": null,
+      "runtime_mode": null,
+      "operating_system": "linux",
+      "shell_environment": null
+    },
+    "recommended_action": "targeted_discovery",
+    "existing_coverage": {
+      "summary": "Leased current coverage lists interface counters as missing and provides no initial answers. No claim about cake qdisc inspection is supported."
+    },
+    "replay_result": {
+      "coverage": [
+        {
+          "label": "Interface counters",
+          "status": "missing",
+          "capability": "interface-counters",
+          "answer_refs": []
+        }
+      ],
+      "answer_refs": [],
+      "answer_status": "unknown"
+    },
+    "replay_status": "unknown",
+    "status": "discovering"
+  },
+  {
+    "knowledge_demand_id": "7534f229-3723-48ad-b5c0-fd2ee2754ebf",
+    "question": "How can I inspect Linux bridge multicast database entries and their source-specific filters?",
+    "failure_class": "missing_knowledge",
+    "answer_status": "unknown",
+    "canonical_context": {
+      "model": null,
+      "vendor": null,
+      "version": null,
+      "runtime_mode": null,
+      "operating_system": "Linux",
+      "shell_environment": null
+    },
+    "recommended_action": "targeted_discovery",
+    "existing_coverage": {
+      "summary": "Current leased coverage marks the general requested operation missing and contains no initial answers or answer references. No claimed facts are supported by this coverage."
+    },
+    "replay_result": {
+      "coverage": [
+        {
+          "label": "Requested operation",
+          "status": "missing",
+          "capability": "general",
+          "answer_refs": []
+        }
+      ],
+      "answer_refs": [],
+      "answer_status": "unknown"
+    },
+    "replay_status": "unknown",
+    "status": "processing"
+  }
+]

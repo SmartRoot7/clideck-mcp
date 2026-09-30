@@ -1,0 +1,599 @@
+{
+  "sections": [
+    {
+      "section": "missing_provenance_segments",
+      "rows": [
+        {
+          "created_by": "legacy_import",
+          "domain_id": "network",
+          "first_at": "2026-07-01T11:02:27.016+00:00",
+          "last_at": "2026-07-18T03:23:44.613+00:00",
+          "n": 56747,
+          "recent": 0
+        }
+      ]
+    },
+    {
+      "section": "active_fidelity",
+      "metrics": {
+        "active": 351120,
+        "has_candidate": 294292,
+        "passed": 3753,
+        "repair": 1284,
+        "unavailable": 55129,
+        "checking": 6
+      }
+    },
+    {
+      "section": "qa_24h",
+      "rows": [
+        {
+          "stage": "normalize_deduplicate",
+          "status": "passed",
+          "material_error": false,
+          "n": 22,
+          "latest": "2026-09-30T16:00:19.264177+00:00"
+        },
+        {
+          "stage": "segment",
+          "status": "passed",
+          "material_error": false,
+          "n": 5,
+          "latest": "2026-09-30T14:23:02.216948+00:00"
+        },
+        {
+          "stage": "convert",
+          "status": "passed",
+          "material_error": false,
+          "n": 7,
+          "latest": "2026-09-30T16:00:08.890042+00:00"
+        }
+      ]
+    },
+    {
+      "section": "dangling_diagnoses_baseline",
+      "metrics": {
+        "diagnosing": 75,
+        "no_task_pointer": 74,
+        "no_live_task": 75,
+        "oldest": "2026-07-21T15:46:06.235578+00:00"
+      }
+    },
+    {
+      "section": "demand_before_experiment",
+      "metrics": {
+        "total": 699,
+        "published": 48,
+        "replay_complete": 16,
+        "unresolved": 571,
+        "partial": 29,
+        "first_seen": "2026-07-20T06:36:12.907398+00:00",
+        "last_seen": "2026-09-28T16:33:06.917927+00:00"
+      }
+    },
+    {
+      "section": "served_revisions30d",
+      "metrics": {
+        "references": 584,
+        "distinct_revisions": 201
+      }
+    },
+    {
+      "section": "snapshot_traffic",
+      "rows": [
+        {
+          "day": "2026-09-18",
+          "tool_name": "query_network_knowledge",
+          "n": 1
+        },
+        {
+          "day": "2026-09-19",
+          "tool_name": "query_network_knowledge",
+          "n": 1
+        },
+        {
+          "day": "2026-09-21",
+          "tool_name": "query_network_knowledge",
+          "n": 1
+        },
+        {
+          "day": "2026-09-23",
+          "tool_name": "query_network_knowledge",
+          "n": 1
+        },
+        {
+          "day": "2026-09-27",
+          "tool_name": "query_network_knowledge",
+          "n": 1
+        },
+        {
+          "day": "2026-09-28",
+          "tool_name": "query_network_knowledge",
+          "n": 2
+        },
+        {
+          "day": "2026-09-30",
+          "tool_name": "get_network_workflow",
+          "n": 2
+        },
+        {
+          "day": "2026-09-30",
+          "tool_name": "query_network_knowledge",
+          "n": 2
+        }
+      ]
+    },
+    {
+      "section": "quality_by_origin",
+      "rows": [
+        {
+          "created_by": "legacy_import",
+          "n": 56747,
+          "risk_unknown": 44138,
+          "dangerous": 56693,
+          "dangerous_without_verification": 0,
+          "dangerous_without_rollback": 56556,
+          "future_verified": 0
+        },
+        {
+          "created_by": "researcher",
+          "n": 294293,
+          "risk_unknown": 180830,
+          "dangerous": 255672,
+          "dangerous_without_verification": 143857,
+          "dangerous_without_rollback": 181361,
+          "future_verified": 1
+        },
+        {
+          "created_by": "seed",
+          "n": 58,
+          "risk_unknown": 58,
+          "dangerous": 24,
+          "dangerous_without_verification": 0,
+          "dangerous_without_rollback": 0,
+          "future_verified": 0
+        },
+        {
+          "created_by": "super_admin",
+          "n": 22,
+          "risk_unknown": 0,
+          "dangerous": 0,
+          "dangerous_without_verification": 0,
+          "dangerous_without_rollback": 0,
+          "future_verified": 0
+        }
+      ]
+    },
+    {
+      "section": "source_fidelity_sample",
+      "rows": [
+        {
+          "public_ref": "f0406ebc-25e9-4b96-b352-b094cf9df46b",
+          "title": "Fetch an NVOS image over SCP",
+          "summary": "From the NVOS command prompt, use nv action fetch system image with an SCP URL to retrieve an image onto the switch.",
+          "command_text": "nv action fetch system image scp://<username>:<password>@<ip-address>/var/www/html/<new_image>",
+          "procedure_steps": [
+            "Run the fetch command with the SCP credentials, server address, path, and image name."
+          ],
+          "risk_level": "credential_sensitive",
+          "canonical_url": "https://docs.nvidia.com/networking/display/NVIDIANVOSUserManualforInfiniBandSwitchesv25027002/Installing-a-New-NVOS-Image",
+          "content_hash": "sha256:f93002c990ec686f7934a483bdfbb243efe5bcd96f3446c6eba89a0b3f737601",
+          "evidence_fragment": "admin@nvos:~$ nv show system image files",
+          "evidence_role": "primary"
+        },
+        {
+          "public_ref": "7f5bd62b-cb20-4ec9-8e53-637512de2f78",
+          "title": "Restart and clear the IS-IS process",
+          "summary": "Restarts the IS-IS process and clears IS-IS data. The command supports optional VRF, tag, wildcard, database, and traffic selectors.",
+          "command_text": "clear isis [vrf vrf-name] [tag] {* | database | traffic}",
+          "procedure_steps": [
+            "Enter clear isis with the optional selector appropriate to the required scope.",
+            "Use * to clear all IS-IS information and restart the process."
+          ],
+          "risk_level": "service_disruptive",
+          "canonical_url": "https://dl.dell.com/Manuals/all-products/esuprt_networking_int/esuprt_networking_operating_systems/dell-emc-os-9_White-Papers23_en-us.pdf",
+          "content_hash": "sha256:9902e9ae300ca781007f53a462c806cc427169577faab2634e739fd046a619b5",
+          "evidence_fragment": "CAUTION: Use caution when you enter this command. Back up your configuration prior to using this command or your IS-IS configuration will be erased.",
+          "evidence_role": "primary"
+        },
+        {
+          "public_ref": "36e7c223-e291-47fc-bbc7-ddaebf97612c",
+          "title": "Set VRRP group priority",
+          "summary": "Assigns a priority from 1 through 254 for VRRP master election. The default is 100. Priority 255 guarantees ownership only when the virtual address equals the interface primary IP address.",
+          "command_text": "priority number",
+          "procedure_steps": [
+            "Enter the VRRP group in INTERFACE-VRRP mode.",
+            "Apply priority number."
+          ],
+          "risk_level": "unknown",
+          "canonical_url": "https://dl.dell.com/manuals/all-products/esuprt_networking_int/esuprt_networking_operating_systems/dell-emc-smartfabric-os10_Reference-Guide2_en-us.pdf",
+          "content_hash": "sha256:ed66bebdf78ae7266a031b7c044c023907d61cf70b9926ee13e898dc0dd65e67",
+          "evidence_fragment": "priority — Assigns a VRRP priority value... number 1 to 254. Default 100.",
+          "evidence_role": "primary"
+        },
+        {
+          "public_ref": "6ae5d3b1-4ee3-46e1-891c-3cef020a3f97",
+          "title": "Use no boot config-file",
+          "summary": "Note Stacking is supported only on Catalyst 2960-S switches.",
+          "command_text": "no boot config-file",
+          "procedure_steps": [],
+          "risk_level": "changes_config",
+          "canonical_url": "https://www.cisco.com/c/en/us/td/docs/switches/lan/catalyst2960/software/release/15-0_2_se/command/reference/cr2960/cli1.html",
+          "content_hash": "sha256:13bcfa4e7cdd1dd5072b83aa508ea7b95fcf512c1783b1bcc36c51fdd043dbd3",
+          "evidence_fragment": "boot config-file flash: / file-url no boot config-file Syntax Description flash:/ file-url The path (directory) and name of the configuration file. Defaults The default configuration file is flash:config.text.",
+          "evidence_role": "primary"
+        },
+        {
+          "public_ref": "05c0bb88-dae5-45f5-9924-1bf40b1fe167",
+          "title": "Identify the USB device node",
+          "summary": "Inspect /proc/partitions and use fdisk -l on a candidate device to determine which device represents the inserted USB drive.",
+          "command_text": "cat /proc/partitions\nsudo fdisk -l <device>",
+          "procedure_steps": [],
+          "risk_level": "data_loss",
+          "canonical_url": "https://www.dell.com/support/kbdoc/en-af/000376999/dell-networking-spectrum-x-installing-a-new-cumulus-linux-image-with-onie?lang=en",
+          "content_hash": "sha256:68741e4dd3018f84e1a5d821ab8a6df8e7c44de8557c92da2bf1ca5c7217a6ee",
+          "evidence_fragment": "sudo mkdir /mnt/usb\nsudo mount /dev/sdb1 /mnt/usb",
+          "evidence_role": "primary"
+        },
+        {
+          "public_ref": "c2c69ab0-1180-46d0-a92d-ea8ef985f904",
+          "title": "Inspect detailed IS-IS SR database output",
+          "summary": "The detailed IS-IS SR database diagnostic displays segment identifiers, labels, advertised system IDs, prefixes, route levels, metrics, next-hop counts, MTU values, LFA state, tunnel state, and SR error status. The documented example uses `tools dump router isis sr-database detail`.",
+          "command_text": "tools dump router isis sr-database detail",
+          "procedure_steps": [
+            "Run `tools dump router isis sr-database detail`.",
+            "Review each SID entry for label, advertised system ID, prefix, route level, metric, next-hop data, MTU, LFA status, tunnel state, and SR error status."
+          ],
+          "risk_level": "unknown",
+          "canonical_url": "https://documentation.nokia.com/sr/26-7/7750-sr/cli-books/clear-monitor-show-tools-commands/cmst-s-commands-sess-2.html",
+          "content_hash": "sha256:6071237871645f93e97ec73192c165c313610e5ae2d2a6ed68c6ad4f89190fa3",
+          "evidence_fragment": "Output Example\n*A:Dut-C# tools dump router isis sr-database detail\nRtr Base ISIS Instance 0 SR Database\nLabel : 20601 Adv System Id : 0010.0100.1001\nTunnel Active State : Reported/Ack\nSR Error : SR_ERR_OK",
+          "evidence_role": "primary"
+        },
+        {
+          "public_ref": "939513e7-a421-4099-be1a-4c10eb243937",
+          "title": "Enable applicable Software Blades",
+          "summary": "In SmartConsole, enable the applicable Software Blades. In Management High Availability, SmartEvent is supported only on the Active Management Server.",
+          "command_text": null,
+          "procedure_steps": [
+            "Enable the applicable Software Blades in SmartConsole."
+          ],
+          "risk_level": "unknown",
+          "canonical_url": "https://sc1.checkpoint.com/documents/R81.20/WebAdminGuides/EN/CP_R81.20_Installation_and_Upgrade_Guide/CP_R81.20_Installation_and_Upgrade_Guide.pdf",
+          "content_hash": "sha256:9410065d71ed0172aec786bb0e2d4e919ec13f6a3c82957ea2071f89f5498c06",
+          "evidence_fragment": "Enable the applicable Software Blades ... SmartEvent Software Blade is supported only on the Active Management Server",
+          "evidence_role": "primary"
+        },
+        {
+          "public_ref": "be0a0b1c-50a1-49ec-bbfc-531c21dc44f8",
+          "title": "Set the maximum number of event monitor backup files",
+          "summary": "Use event-monitor backup max-size to configure the quantity of event monitor backup files maintained by the switch. The documented range is 1 to 200 files and the default is 10. When the limit is exceeded, the oldest file is deleted.",
+          "command_text": "event-monitor backup max-size 4",
+          "procedure_steps": [
+            "Configure an event-monitor backup path.",
+            "Set the desired maximum file quantity."
+          ],
+          "risk_level": "data_loss",
+          "canonical_url": "https://www.arista.com/assets/data/docs/Manuals/EOS-4.17.1F-Manual.pdf",
+          "content_hash": "sha256:0b7c8b637c505e10cf46be94b6f3165dd6108638cdd48f217d8b5479a16bc37e",
+          "evidence_fragment": "event-monitor backup path sw-event.log",
+          "evidence_role": "primary"
+        },
+        {
+          "public_ref": "9526c416-185c-4988-8a9c-15a61a4c09af",
+          "title": "Use no spanning-tree mst pre-standard",
+          "summary": "form of this command.",
+          "command_text": "no spanning-tree mst pre-standard",
+          "procedure_steps": [],
+          "risk_level": "changes_config",
+          "canonical_url": "https://www.cisco.com/c/en/us/td/docs/switches/lan/catalyst9300/software/release/26-x/command_reference/b_26x_9300_cr.pdf",
+          "content_hash": "sha256:4cb85689401d93c63202a8f44db046c4e11ffbd6f7545e7bc520572d150f13f4",
+          "evidence_fragment": "spanning-tree mst max-age seconds no spanning-tree mst max-age Syntax Description seconds Number of seconds to set the max-age timer for all the instances on the device. The range is from 6 to 40 in seconds. Command Default 20 seconds Command Modes Global configuration (config) Command History Release Modification Cisco IOS XE Everest 16.5.1a This command was introduced. Examples This example shows how to set the max-age timer: Device(config)# spanning-tree mst max-age 40 Device(config)# Related Commands Command Description show spanning-tree mst Displays the information about the MST protocol",
+          "evidence_role": "primary"
+        },
+        {
+          "public_ref": "75bbf0f7-c6bd-479d-863a-b7dc4bdcdf63",
+          "title": "Use authentication authentication-type keychain keychain-name",
+          "summary": "Use authentication authentication-type keychain keychain-name in the documented command context.",
+          "command_text": "authentication authentication-type keychain keychain-name",
+          "procedure_steps": [],
+          "risk_level": "unknown",
+          "canonical_url": "https://www.cisco.com/c/en/us/td/docs/switches/lan/catalyst9300/software/release/17-14/command_reference/b_1714_9300_cr.pdf",
+          "content_hash": "sha256:0d1e69fe5effde7b0fa2425c26b07c87be2c43556756c1db03ab31c93cbfa12b",
+          "evidence_fragment": "single-hop sessions, use the no form of this command authentication authentication-type keychain keychain-name no authentication authentication-type keychain keychain-name Syntax Description authentication-type Authentication type. Valid values are md5, meticulous-md5, meticulous-sha1, and sha-1. keychain keychain-name Configures an authentication key chain with the specified name. The maximum number of characters allowed in the name is 32. Command Default Authentication in BFD template for single hop sessions is not enabled. Command Modes BFD configuration (config-bfd) Command History Release",
+          "evidence_role": "primary"
+        },
+        {
+          "public_ref": "07c636b4-d6e8-4c3a-8a54-51b914b93aa5",
+          "title": "Set the default VRF for the current session",
+          "summary": "Use set default-vrf to set the default VRF used by subsequent show commands in the current session. Setting it to none restores display of routes from the system default VRF.",
+          "command_text": "set default-vrf <vrf-name|none>",
+          "procedure_steps": [
+            "Enter set default-vrf followed by the VRF name, or use none for the system default VRF.",
+            "Run show default-afi-safi-vrf to display the session's default VRF setting."
+          ],
+          "risk_level": "unknown",
+          "canonical_url": "https://www.cisco.com/c/en/us/td/docs/iosxr/ncs5500/sysman/b-system-management-cr-ncs5500/b-system-management-cr-ncs5500_chapter_01021.html",
+          "content_hash": "sha256:a8f3022dc70a8ac51a9ea2e5fabae8519a5bfbb297ff7c156a13297265525cf5",
+          "evidence_fragment": "show command [ | begin regular-expression | | exclude regular-expression | | file filesystem: | | include regular-expression ]",
+          "evidence_role": "primary"
+        },
+        {
+          "public_ref": "13761882-8ca3-4c19-80c1-9e609e51b1cf",
+          "title": "Set the 802.1X reauthorization interval",
+          "summary": "Set the number of seconds between reauthorization attempts on an interface. The default is 3600 seconds and valid values range from 1 through 4294967295 seconds.",
+          "command_text": "dot1x timeout re-authperiod 25",
+          "procedure_steps": [
+            "Enter interface subtype configuration mode.",
+            "Set the seconds between reauthorization attempts."
+          ],
+          "risk_level": "service_disruptive",
+          "canonical_url": "https://documentation.extremenetworks.com/networkos/SW/74x/nos-740-command-reference.pdf",
+          "content_hash": "sha256:3b2b3ab1b2cb4a162dbda240bd292d5baeea327f2dccdecb6374c17d45c27e06",
+          "evidence_fragment": "Sets the number of seconds between reauthorization attempts on a specified interface. Command Default 3600 seconds.",
+          "evidence_role": "primary"
+        },
+        {
+          "public_ref": "ee1643ba-a295-4824-aa8c-943b8ce047cc",
+          "title": "Configure DHCP NetBIOS name servers",
+          "summary": "In DHCP pool configuration mode, netbios-name-server specifies one to eight IPv4 NetBIOS WINS name servers in preference order. The no form removes the list.",
+          "command_text": "netbios-name-server A.B.C.D ( A.B.C.D… A.B.C.D )",
+          "procedure_steps": [
+            "Enter configuration mode, select a DHCP pool, and specify the preferred NetBIOS WINS server addresses."
+          ],
+          "risk_level": "unknown",
+          "canonical_url": "https://resource.fs.com/mall/doc/20230602121505r8x1qk.pdf",
+          "content_hash": "sha256:918da13461e9c8b2380a948c22b1e80219429ae8bc490e3f34da94024baaf6ab",
+          "evidence_fragment": "You can specify up to eight NetBIOS WINS name servers in the list.",
+          "evidence_role": "primary"
+        },
+        {
+          "public_ref": "96d68232-2cd8-4f80-bf9b-e9527a45c944",
+          "title": "Generate a certificate signing request",
+          "summary": "The crypto certificate number request command enters Crypto Certificate Request mode and generates a Base64-encoded X.509 certificate request. A self-signed certificate must first be generated, and request fields must match the values used for that certificate. After receiving the CA certificate, import it with crypto certificate import; end exits without generating, while exit generates the request.",
+          "command_text": "crypto certificate number request",
+          "procedure_steps": [
+            "Generate a self-signed certificate first with crypto certificate generate.",
+            "Enter crypto certificate <number> request.",
+            "Re-enter identical certificate subject fields.",
+            "Use key-generate before exiting request mode when required.",
+            "Use exit to generate and display the request.",
+            "Send the Base64-encoded X.509 request to a CA.",
+            "Import the signed certificate with crypto certificate import."
+          ],
+          "risk_level": "credential_sensitive",
+          "canonical_url": "https://dl.dell.com/manuals/common/networking_nxxcli_en-us.pdf",
+          "content_hash": "sha256:3dd3c65b73f6fff04a7a08cddec0383dc569a40e697208a5c8455f390f279ff7",
+          "evidence_fragment": "Before generating a certificate request, you must first generate a self-signed certificate ... Make sure to reenter the identical values in the certificate request fields.",
+          "evidence_role": "primary"
+        },
+        {
+          "public_ref": "9e9beea3-8cd5-4e35-9d12-eaa0dde8023c",
+          "title": "Set the Tunnel origin TCP connection timeout",
+          "summary": "originRequest.connectTimeout controls the timeout for establishing a new TCP connection to the origin. It excludes TLS establishment time, which is controlled by tlsTimeout.",
+          "command_text": null,
+          "procedure_steps": [
+            "Set connectTimeout to the desired origin TCP connection timeout."
+          ],
+          "risk_level": "unknown",
+          "canonical_url": "https://developers.cloudflare.com/api/resources/zero_trust/subresources/tunnels/subresources/cloudflared/subresources/configurations/",
+          "content_hash": "sha256:dc7f5c7503386005647ffc3c12547a20c1f965f8b1e9de5da888a92f54fa5bd2",
+          "evidence_fragment": "tlsTimeout : optional number\nTimeout for completing a TLS handshake to your origin server, if you have chosen to connect Tunnel to an HTTPS server.",
+          "evidence_role": "primary"
+        },
+        {
+          "public_ref": "c56098c1-1f15-4419-ab70-5e9d1af7dc77",
+          "title": "Use [no] username <s1> ssh-cert-dn <s2> { dsa | rsa }",
+          "summary": "Update a user's SSH certificate distinguished name and select the DSA or RSA algorithm.",
+          "command_text": "[no] username <s1> ssh-cert-dn <s2> { dsa | rsa }",
+          "procedure_steps": [],
+          "risk_level": "credential_sensitive",
+          "canonical_url": "https://www.cisco.com/c/en/us/td/docs/switches/datacenter/nexus9000/sw/93x/command/reference/config/b_N9K_Config_Commands_93x.pdf",
+          "content_hash": "sha256:2f80a603d25d4a24f15dc85f0ded33bb4bb1391198d70b82f8e774379aad8d82",
+          "evidence_fragment": "username sshkey username sshkey { username <s0> sshkey { file <uri0> | <line> } | no username <s0> sshkey } Syntax Description username Configure user information. s0 user name sshkey Update ssh key for the user for ssh authentication file ssh key file uri0 file containing host public key for the user line ssh key for the user no Negate a command or set its defaults",
+          "evidence_role": "primary"
+        },
+        {
+          "public_ref": "4f38d1e0-066e-4489-a365-1b3684ee68af",
+          "title": "Use show hardware flow aging [ instance <inst> ] [ module <num> ]",
+          "summary": "Use show hardware flow aging [ instance <inst> ] [ module <num> ] to inspect the documented operational state without changing configuration.",
+          "command_text": "show hardware flow aging [ instance <inst> ] [ module <num> ]",
+          "procedure_steps": [],
+          "risk_level": "safe_read_only",
+          "canonical_url": "https://www.cisco.com/c/en/us/td/docs/dcn/nx-os/nexus9000/101x/command-reference/show/b_n9k_show_commands_101x.pdf",
+          "content_hash": "sha256:50b877e67099e9217aaea6525b13b0237f8e94f4ce2779924b79d31d12d1ef05",
+          "evidence_fragment": "power_given_mod (Optional) power_given_mod_percent (Optional) power_avail (Optional) power_avail_percent (Optional) power_out_actual_draw (Optional) Total Power Output, Actuals power_input_actual_draw (Optional) Total Power Input, Actuals Command Mode • /exec Cisco Nexus 9000 Series NX-OS Command Reference (Show Commands), Release 10.1(x) 776 All Show Commands show hardware fabricpath mac-learning module show hardware fabricpath mac-learning module show hardware fabricpath mac-learning module <module> [ __readonly__ { [ { TABLE_module <module_num> <port_group> <mac_learning> } ] } ] Syntax Des",
+          "evidence_role": "primary"
+        },
+        {
+          "public_ref": "83f863b7-bdea-4e6e-a629-a49be60961f6",
+          "title": "OSPF debug contexts",
+          "summary": "SR OS provides debug router string ospf contexts for RTM, sham-neighbor, SPF, tunnel-endpoint, and virtual-neighbor diagnostics. RTM, sham-neighbor, SPF, and tunnel endpoint selections support all or an address-specific target; SPF additionally supports intra-area, inter-area, and external types.",
+          "command_text": "debug router string ospf number",
+          "procedure_steps": [
+            "Enter the OSPF debug context with an OSPF instance number.",
+            "Select the relevant diagnostic context and either all or the documented address-specific selector.",
+            "For SPF debugging, optionally select intra-area, inter-area, or external type."
+          ],
+          "risk_level": "service_disruptive",
+          "canonical_url": "https://documentation.nokia.com/sr/26-7/7750-sr/books/md-cli-command-reference/debug-conf_0.html",
+          "content_hash": "sha256:8a13cd74b6fc3853f18441cdb9de218ff2b79d451642bc3351260836aa197bb8",
+          "evidence_fragment": "spf ... all ... destination-address ipv4-address ... type keyword ... Options intra-area, inter-area, external",
+          "evidence_role": "primary"
+        },
+        {
+          "public_ref": "5e945d2f-31a7-4c51-9771-734a12fe41f4",
+          "title": "Filter displayed BGP routes with show ip bgp",
+          "summary": "The show ip bgp route display supports filters for IPv4 multicast, IPv6 unicast, a network and mask, longer prefixes, cluster lists, communities, community lists, dampened paths, extended community lists, AS-path filter lists, flap statistics, neighbors, next hops, paths, peer groups, regular expressions, and summaries. The neighbors all received-routes option displays accepted and rejected routes received from all IPv4 or IPv6 neighbors.",
+          "command_text": "show ip bgp",
+          "procedure_steps": [
+            "Run show ip bgp in EXEC or EXEC Privilege mode.",
+            "Append the filter corresponding to the BGP route information required."
+          ],
+          "risk_level": "unknown",
+          "canonical_url": "https://dl.dell.com/Manuals/all-products/esuprt_networking_int/esuprt_networking_operating_systems/dell-emc-os-9_White-Papers21_en-us.pdf",
+          "content_hash": "sha256:6d1391efc7a581d75ab3ecd2278cc55ce3d67ec77b7a0e915c868185803d72d7",
+          "evidence_fragment": "show ip bgp optional parameters include ipv4 multicast, ipv6 unicast, network, longer-prefixes, cluster-list, community, neighbors, next-hop, paths, peer-group, regexp, and summary.",
+          "evidence_role": "primary"
+        },
+        {
+          "public_ref": "b3ab8f1a-57d5-4358-af3a-b41b9251109c",
+          "title": "Migrate Cisco IOS XE 17.12.x to release 17.15.1 or later",
+          "summary": "Cisco encourages customers using IOS XE 17.12.x to migrate to Cisco IOS XE Release 17.15.1 or above.",
+          "command_text": null,
+          "procedure_steps": [
+            "Evaluate migration from Cisco IOS XE 17.12.x to Cisco IOS XE Release 17.15.1 or a later release."
+          ],
+          "risk_level": "unknown",
+          "canonical_url": "https://www.cisco.com/c/en/us/products/collateral/ios-nx-os-software/ios-xe-17/ios-xe-17-12-x-eol.html",
+          "content_hash": "sha256:09c4530aa206062b660376cb8fbd94dae73c6bcc10b4e8e119adb6e0b87f7b6c",
+          "evidence_fragment": "Product migration options ... Customers are encouraged to migrate to Cisco IOS XE Release 17.15.1 or above.",
+          "evidence_role": "primary"
+        },
+        {
+          "public_ref": "7d508a2f-29ad-43b7-a7af-e88bde1d0f9d",
+          "title": "Interpret BGP neighbor capability and message fields",
+          "summary": "Neighbor field descriptions define local-AS no-prepend behavior, iBGP versus eBGP link labels, BGP version, router ID, FSM state, uptime, read and write times, hold and keepalive timers, capabilities, route refresh, MPLS label capability, graceful restart, address-family properties, queue depths, and sent or received message counts by type.",
+          "command_text": "show ip bgp neighbors neighbor-address",
+          "procedure_steps": [
+            "Run show ip bgp neighbors for the target peer.",
+            "Use the field descriptions to interpret link type, timers, capabilities, and message counters."
+          ],
+          "risk_level": "unknown",
+          "canonical_url": "https://www.cisco.com/c/en/us/td/docs/switches/lan/catalyst9300/software/release/26-x/command_reference/b_26x_9300_cr.pdf",
+          "content_hash": "sha256:cb2045479cf94328fea7ff5170839439d7aff4d14b59d55876555217fe396a0b",
+          "evidence_fragment": "The field descriptions define local AS no-prepend, internal or external link, BGP state, timers, capabilities, message queues, and sent and received message counts.",
+          "evidence_role": "primary"
+        },
+        {
+          "public_ref": "ac1aa461-7594-4195-87e0-f52afbae92ca",
+          "title": "Create a file or anonymous memory mapping",
+          "summary": "mmap() creates a virtual-memory mapping for a file, device, or anonymous memory. A null address lets the kernel choose a page-aligned location; a non-null address is a hint. File offsets must be page-size multiples, and the descriptor may be closed after mapping.",
+          "command_text": "mmap(addr, length, prot, flags, fd, offset)",
+          "procedure_steps": [
+            "Choose a positive length and protection flags.",
+            "Use a page-aligned file offset.",
+            "Call mmap and check for MAP_FAILED.",
+            "Close the descriptor if it is no longer needed; the mapping remains valid."
+          ],
+          "risk_level": "unknown",
+          "canonical_url": "https://www.kernel.org/pub/linux/docs/man-pages/book/man-pages-6.15.pdf",
+          "content_hash": "sha256:34887641baf6d9fbf92545145ff4eb273edea53548acb8caccf6827675cc0019",
+          "evidence_fragment": "mmap() creates a virtual-address mapping; NULL lets the kernel choose the address, offset must be page-size aligned, and the descriptor can be closed after return.",
+          "evidence_role": "primary"
+        },
+        {
+          "public_ref": "18dce091-1286-4f25-9d65-6e01cb794578",
+          "title": "3338 ExtremeXOS® Command Reference Guide for version 32.3",
+          "summary": "Use [Page 3339] Commands Syntax Description in the documented command context.",
+          "command_text": "[Page 3339] Commands Syntax Description",
+          "procedure_steps": [],
+          "risk_level": "unknown",
+          "canonical_url": "https://documentation.extremenetworks.com/exos_commands_32.3/downloads/EXOS_Command_Reference_32.3.pdf",
+          "content_hash": "sha256:e34386a93726f829426a58faae3757a6bb8544fe2cc77d60129d389b57c49526",
+          "evidence_fragment": "[Page 3339] Commands Syntax Description Syntax Description switch Designates showing information for the switch. bluetooth Designates showing information about Bluetooth devices. statistics Shows Bluetooth statistics. inventory Shows Bluetooth inventory (model number, serial number, etc.). Default N/A. Usage Guidelines Using this command without the statistics shows: • If Bluetooth is enabled on the switch. • Switch MAC address. • Switch name. • Is Bluetooth discovery enabled. • Is Bluetooth pairing enabled. • List of Bluetooth devices: ◦ Device MAC address. ◦ Device name. ◦ Device type (PC, p",
+          "evidence_role": "primary"
+        },
+        {
+          "public_ref": "9d43754e-5975-461e-819d-927f96e246fd",
+          "title": "Reset a card with hard resets for unsupported MDAs",
+          "summary": "Allows a reset when some MDAs cannot perform soft resets. MDAs supporting soft reset receive a soft reset, while unsupported MDAs receive a hard reset.",
+          "command_text": "reset card reference reinitialize hard-reset-unsupported-mdas",
+          "procedure_steps": [
+            "Specify the card reference.",
+            "Execute the hard-reset-unsupported-mdas reinitialize command."
+          ],
+          "risk_level": "service_disruptive",
+          "canonical_url": "https://documentation.nokia.com/sr/26-7/7750-sr/pdf/MD-CLI_Command_Reference_Guide_26.7.R1.pdf",
+          "content_hash": "sha256:463e102f98d54f578784a587451127f70d8f1b79c5f1321731106c05f0e4ae81",
+          "evidence_fragment": "reinitialize — Synopsis Reset the specified card; soft — Synopsis Perform a soft reset on the card — Context reset card reference reinitialize soft",
+          "evidence_role": "primary"
+        },
+        {
+          "public_ref": "901aca05-46f4-42ac-8d30-0cbc2ccd1ecf",
+          "title": "List or restore contents of an AIX volume-group backup",
+          "summary": "lsmksysb lists contents of a volume-group backup from tape, file, CD-ROM, or other media and can restore files from a valid backup source. It supports multi-volume backups such as multiple CDs, DVDs, USB disks, or tapes. lsmksysb -r and restorevgfiles perform identical operations.",
+          "command_text": "lsmksysb",
+          "procedure_steps": [
+            "Provide a backup source through the documented device or media options.",
+            "Use lsmksysb to list backup contents or restore files from a valid source.",
+            "Use lsmksysb -r or restorevgfiles for the identical restore operation."
+          ],
+          "risk_level": "data_loss",
+          "canonical_url": "https://public.dhe.ibm.com/systems/power/docs/aix/53/aixcmds3.pdf",
+          "content_hash": "sha256:159955c00aeaee40a40b28c541afa7afe4852086e8833e451b278882e1aa47bd",
+          "evidence_fragment": "The lsmksysb command lists the contents of a volume group backup from tape, file, CD-ROM, or other source and can be used to restore files from a valid backup source.",
+          "evidence_role": "primary"
+        },
+        {
+          "public_ref": "4b36812c-ceb7-498d-8b09-75892bbd304a",
+          "title": "Reload the netdevsim device",
+          "summary": "Reloads the netdevsim0 device through the devlink reload command after resource configuration.",
+          "command_text": "devlink dev reload netdevsim/netdevsim0",
+          "procedure_steps": [
+            "Run the devlink device reload command for netdevsim/netdevsim0."
+          ],
+          "risk_level": "service_disruptive",
+          "canonical_url": "https://docs.kernel.org/networking/devlink/netdevsim.html",
+          "content_hash": "sha256:92f5e4f5e86ea60d1bf0c9ff5cf16aad82d1a1d837aa3396c60f029a7572da9d",
+          "evidence_fragment": "$ devlink resource set netdevsim/netdevsim0 path /IPv4/fib size 96",
+          "evidence_role": "primary"
+        },
+        {
+          "public_ref": "f70d9bb8-4213-434f-a2d0-77d87ba59d62",
+          "title": "Fully reset FortiSwitch configuration and data",
+          "summary": "Removes all configurations, saved user and application data, and licenses, and resets the BIOS environment to defaults. Images saved to partitions are not removed.",
+          "command_text": "execute factoryresetfull",
+          "procedure_steps": [
+            "Run the command from the FortiSwitch CLI after confirming the destructive scope."
+          ],
+          "risk_level": "factory_reset",
+          "canonical_url": "https://docs.fortinet.com/document/fortiswitch/7.4.2/fortiswitchos-cli-reference/434023/execute",
+          "content_hash": "sha256:c0a079fe7de116ef089940a5182fa2af688b69fbbb657dacea3a389483b9eb81",
+          "evidence_fragment": "This procedure deletes all changes that you have made to the FortiSwitch configuration and reverts the system to its original configuration, including resetting interface addresses.",
+          "evidence_role": "primary"
+        },
+        {
+          "public_ref": "132efdc1-7b2a-469f-803f-63b60f57fdd0",
+          "title": "Export configuration policies",
+          "summary": "Exports selected configuration policies to an absolute-path file. The command requires the Network Automation Software Ultimate edition license.",
+          "command_text": "export policy -filename <export file name> -policies <policy IDs or names>",
+          "procedure_steps": [
+            "Specify an absolute accessible export path.",
+            "Specify policy IDs or names, or all.",
+            "Run the command."
+          ],
+          "risk_level": "unknown",
+          "canonical_url": "https://docs.microfocus.com/NA/2022.05/cli_reference.html",
+          "content_hash": "sha256:060936f6c77026146592b882eff8709189930647472745d3fea0d0f55c74f263",
+          "evidence_fragment": "exit. Exit the system.",
+          "evidence_role": "primary"
+        },
+        {
+          "public_ref": "ea08b0f5-8d6f-41cd-a66e-4fefa261c710",
+          "title": "Interpret detailed BGP EVPN route output",
+          "summary": "Detailed BGP EVPN output includes route prefixes, status and age, next hop, learned-from peer, local preference, MED, origin, weight, AS path, extended communities, route-target information, tunnel encapsulation, VNI, ESI, and administrative distance where present.",
+          "command_text": "show bgp evpn routes detail",
+          "procedure_steps": [],
+          "risk_level": "safe_read_only",
+          "canonical_url": "https://documentation.extremenetworks.com/networkos/SW/74x/nos-740-command-reference.pdf",
+          "content_hash": "sha256:e9cf33d2479de9d21302e356d4ca2b1879ee1f6877d5ee9fde8c761a9b26d5d9",
+          "evidence_fragment": "Prefix: IMR:[0][IPv4:57.0.0.57], Status: BE ... NEXT_HOP ... LOCAL_PREF ... AS_PATH ... Extended Community ... L2_vni: 22",
+          "evidence_role": "primary"
+        },
+        {
+          "public_ref": "b3c32e8d-9b42-44ec-bbd6-6d31ed3a8024",
+          "title": "Display switch forwarding modes",
+          "summary": "Displays the switch's current forwarding-plane hardware mode and available forwarding modes. The documented related configuration command is switch forwarding-mode.",
+          "command_text": "show switch forwarding-mode",
+          "procedure_steps": [],
+          "risk_level": "safe_read_only",
+          "canonical_url": "https://www.arista.com/assets/data/docs/Manuals/EOS-4.17.0F-Manual.pdf",
+          "content_hash": "sha256:e4f376bd4f2f2aff2c2a55a38d4dd25290ba3d094a64d3249c0d6fe7139c610a",
+          "evidence_fragment": "The show switch forwarding-mode command displays the switch’s current and available forwarding plane hardware modes.",
+          "evidence_role": "primary"
+        }
+      ]
+    }
+  ]
+}

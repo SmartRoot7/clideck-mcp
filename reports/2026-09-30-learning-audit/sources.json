@@ -1,0 +1,756 @@
+{
+  "schemaVersion": 1,
+  "items": [
+    {
+      "id": "learning-experiment",
+      "title": "20 неизвестных вопросов: результат через 42–44 минуты",
+      "queries": [
+        {
+          "id": "cohort-results",
+          "source": {
+            "label": "CliDeck production и журнал эксперимента",
+            "tables": [
+              {
+                "name": "knowledge_demands"
+              },
+              {
+                "name": "pipeline_tasks"
+              },
+              {
+                "name": "mcp_request_logs"
+              }
+            ],
+            "files": [
+              {
+                "label": "questions.json"
+              },
+              {
+                "label": "initial-responses.json"
+              },
+              {
+                "label": "recheck-closing.json"
+              },
+              {
+                "label": "experiment-results-closing.csv"
+              }
+            ],
+            "sql": "SELECT json_build_object('section','demands','at',now(),'rows',json_agg(row_to_json(t))) FROM (SELECT id,question,status,diagnosis_status,replay_status,last_error_code,demand_count,first_seen_at,last_seen_at,next_retry_at,completed_at,result_revision_id FROM knowledge_demands WHERE question IN ('How do I display the Linux netfilter conntrack expectation table without deleting entries?','How can I inspect a Linux MACsec interface cipher suite and replay protection settings?','How can I identify packet drops caused by XDP redirect failures using Linux tracepoints?','How can I inspect an SRv6 seg6local route and its End.DT6 behavior with iproute2?','How do I diagnose DNS over HTTPS bootstrap lookup failures in an OpenWrt https-dns-proxy deployment?','How can I inspect Junos SRv6 locator and local SID allocation state?','How can I inspect Arista EOS EVPN multihoming designated forwarder election state?','How do I identify whether Linux reverse path filtering uses strict or loose mode on an interface?','How can I inspect Linux network device RSS hash functions and indirection tables?','How can I inspect a tc cake qdisc flow isolation mode and packet drop counters?','How do I inspect the per-network-namespace nftables flowtable offload configuration?','How can I inspect Multipath TCP endpoint flags and connection subflows with ip mptcp?','How can I compare Linux IPv6 route cache exceptions with the main IPv6 routing table?','How do I verify OpenWrt mwan3 policy routing rules for an existing connection?','How can I inspect the active OpenWrt SQM cake overhead compensation settings?','How can I inspect Linux bridge multicast database entries and their source-specific filters?','How can I inspect OpenWrt firewall4 nftables flow offloading rules without restarting the firewall?','How do I identify whether a Linux UDP socket uses UDP_SEGMENT or UDP_GRO?','How can I inspect ethtool receive flow classification rules without modifying them?','How do I verify IOS XE segment routing microloop avoidance state?') ORDER BY first_seen_at) t;",
+            "metricDefinitions": [
+              {
+                "definition": "Результат — ответ на исходный вопрос в исходном контексте при повторном поиске без постановки новой задачи."
+              }
+            ],
+            "filters": [
+              "20 исходно unknown вопросов, случайный порядок с seed 20260930"
+            ],
+            "caveats": [
+              "Отбор выполнен из заранее неизвестных вопросов; 0/20 не является общей точностью системы.",
+              "Незавершённые процессы могли закончиться позже окна наблюдения; 15 demands не имеют задачи diagnosis."
+            ],
+            "evidenceFlow": [
+              {
+                "kind": "validation",
+                "title": "Публичное предъявление вопросов",
+                "detail": "Журнал приложения содержит ровно 20 вызовов query_network_knowledge; каждый вернул unknown и зарегистрировал demand."
+              },
+              {
+                "kind": "result",
+                "title": "Заключительный поиск",
+                "detail": "Все 20 исходных вопросов вернули unknown и пустой массив answers; окно каждого вопроса 42,427–43,855 минуты."
+              }
+            ]
+          },
+          "capturedAt": "2026-09-30T16:34:35.270147+00:00",
+          "reportingPeriod": "2026-09-30 15:50:49–16:35:38 UTC",
+          "rows": [
+            {
+              "question_number": 1,
+              "diagnosis_task_exists": true,
+              "process_state": "processing",
+              "answer_status": "unknown",
+              "observed_minutes": 43.855
+            },
+            {
+              "question_number": 2,
+              "diagnosis_task_exists": true,
+              "process_state": "processing",
+              "answer_status": "unknown",
+              "observed_minutes": 42.753
+            },
+            {
+              "question_number": 3,
+              "diagnosis_task_exists": false,
+              "process_state": "diagnosing",
+              "answer_status": "unknown",
+              "observed_minutes": 42.763
+            },
+            {
+              "question_number": 4,
+              "diagnosis_task_exists": false,
+              "process_state": "diagnosing",
+              "answer_status": "unknown",
+              "observed_minutes": 42.755
+            },
+            {
+              "question_number": 5,
+              "diagnosis_task_exists": false,
+              "process_state": "diagnosing",
+              "answer_status": "unknown",
+              "observed_minutes": 42.748
+            },
+            {
+              "question_number": 6,
+              "diagnosis_task_exists": false,
+              "process_state": "diagnosing",
+              "answer_status": "unknown",
+              "observed_minutes": 42.744
+            },
+            {
+              "question_number": 7,
+              "diagnosis_task_exists": true,
+              "process_state": "published",
+              "answer_status": "unknown",
+              "observed_minutes": 42.731
+            },
+            {
+              "question_number": 8,
+              "diagnosis_task_exists": false,
+              "process_state": "diagnosing",
+              "answer_status": "unknown",
+              "observed_minutes": 42.714
+            },
+            {
+              "question_number": 9,
+              "diagnosis_task_exists": false,
+              "process_state": "diagnosing",
+              "answer_status": "unknown",
+              "observed_minutes": 42.694
+            },
+            {
+              "question_number": 10,
+              "diagnosis_task_exists": true,
+              "process_state": "processing",
+              "answer_status": "unknown",
+              "observed_minutes": 42.502
+            },
+            {
+              "question_number": 11,
+              "diagnosis_task_exists": false,
+              "process_state": "diagnosing",
+              "answer_status": "unknown",
+              "observed_minutes": 42.491
+            },
+            {
+              "question_number": 12,
+              "diagnosis_task_exists": false,
+              "process_state": "diagnosing",
+              "answer_status": "unknown",
+              "observed_minutes": 42.491
+            },
+            {
+              "question_number": 13,
+              "diagnosis_task_exists": false,
+              "process_state": "diagnosing",
+              "answer_status": "unknown",
+              "observed_minutes": 42.485
+            },
+            {
+              "question_number": 14,
+              "diagnosis_task_exists": false,
+              "process_state": "diagnosing",
+              "answer_status": "unknown",
+              "observed_minutes": 42.477
+            },
+            {
+              "question_number": 15,
+              "diagnosis_task_exists": false,
+              "process_state": "diagnosing",
+              "answer_status": "unknown",
+              "observed_minutes": 42.478
+            },
+            {
+              "question_number": 16,
+              "diagnosis_task_exists": true,
+              "process_state": "acquiring",
+              "answer_status": "unknown",
+              "observed_minutes": 42.488
+            },
+            {
+              "question_number": 17,
+              "diagnosis_task_exists": false,
+              "process_state": "diagnosing",
+              "answer_status": "unknown",
+              "observed_minutes": 42.475
+            },
+            {
+              "question_number": 18,
+              "diagnosis_task_exists": false,
+              "process_state": "diagnosing",
+              "answer_status": "unknown",
+              "observed_minutes": 42.447
+            },
+            {
+              "question_number": 19,
+              "diagnosis_task_exists": false,
+              "process_state": "diagnosing",
+              "answer_status": "unknown",
+              "observed_minutes": 42.433
+            },
+            {
+              "question_number": 20,
+              "diagnosis_task_exists": false,
+              "process_state": "diagnosing",
+              "answer_status": "unknown",
+              "observed_minutes": 42.427
+            }
+          ],
+          "columns": [
+            "question_number",
+            "diagnosis_task_exists",
+            "process_state",
+            "answer_status",
+            "observed_minutes"
+          ],
+          "preview": {
+            "kind": "sample",
+            "note": "Полная экспериментальная партия из 20 вопросов; отбор неизвестных не представляет весь пользовательский поток.",
+            "totalRows": 20
+          }
+        }
+      ]
+    },
+    {
+      "id": "learning-failure-causes",
+      "title": "Почему вопросы зависают или ошибочно закрываются",
+      "queries": [
+        {
+          "id": "live-trigger",
+          "source": {
+            "label": "CliDeck production PostgreSQL и код",
+            "tables": [
+              {
+                "name": "pg_trigger"
+              },
+              {
+                "name": "pipeline_tasks"
+              }
+            ],
+            "files": [
+              {
+                "label": "migrations/029_pipeline_stability.sql"
+              },
+              {
+                "label": "src/domain/pipeline.ts"
+              },
+              {
+                "label": "live-demand-queue-function.txt"
+              }
+            ],
+            "sql": "SELECT json_build_object('section','live_diagnosis_trigger','at',now(),'rows',json_agg(row_to_json(t))) FROM (SELECT tgname,tgenabled,pg_get_triggerdef(oid) definition,pg_get_functiondef(tgfoid) function_definition FROM pg_trigger WHERE tgname='pipeline_tasks_single_diagnosis') t;",
+            "metricDefinitions": [
+              {
+                "definition": "Живой глобальный триггер возвращает NULL при второй diagnosis; фоновый селектор выбирает pending/failed и пропускает queued без задачи."
+              }
+            ],
+            "caveats": [
+              "Это подтверждённый дефект очереди; исправление и деплой в ходе измерения не выполнялись."
+            ],
+            "evidenceFlow": [
+              {
+                "kind": "validation",
+                "title": "Причина потери задач",
+                "detail": "Триггер tgenabled=O; в closing срезе 15 demands имеют queued diagnosis и не имеют созданной задачи. queue_network_knowledge_demand записывает queued до вставки задачи."
+              }
+            ]
+          },
+          "rows": [
+            {
+              "tgname": "pipeline_tasks_single_diagnosis",
+              "tgenabled": "O",
+              "function_definition": "CREATE OR REPLACE FUNCTION public.enforce_single_active_demand_diagnosis()\n RETURNS trigger\n LANGUAGE plpgsql\n SET search_path TO 'public', 'pg_temp'\nAS $function$\nBEGIN\n  IF NEW.task_type = 'demand_diagnosis'\n     AND NEW.status IN ('queued', 'claimed', 'running') THEN\n    PERFORM pg_advisory_xact_lock(1129074037);\n    IF EXISTS (\n       SELECT 1\n       FROM pipeline_tasks active\n       WHERE active.task_type = 'demand_diagnosis'\n         AND active.status IN ('queued', 'claimed', 'running')\n         AND active.id IS DISTINCT FROM NEW.id\n     ) THEN\n      RETURN NULL;\n    END IF;\n  END IF;\n  RETURN NEW;\nEND;\n$function$\n"
+            }
+          ],
+          "columns": [
+            "tgname",
+            "tgenabled",
+            "function_definition"
+          ],
+          "capturedAt": "2026-09-30T16:23:29.03668+00:00"
+        },
+        {
+          "id": "wrong-replay",
+          "source": {
+            "label": "CliDeck production PostgreSQL",
+            "tables": [
+              {
+                "name": "knowledge_revisions"
+              },
+              {
+                "name": "public_active_knowledge"
+              },
+              {
+                "name": "knowledge_demand_diagnostics"
+              }
+            ],
+            "files": [
+              {
+                "label": "diagnostics.json"
+              }
+            ],
+            "sql": "SELECT json_build_object('section','false_answer_revision','at',now(),'rows',json_agg(row_to_json(t))) FROM (SELECT kr.public_ref,kr.title,kr.summary,kr.command_text,kr.created_at,kp.vendor_slug,kp.operating_system_slug FROM knowledge_revisions kr LEFT JOIN public_active_knowledge kp ON kp.revision_id=kr.id WHERE kr.public_ref='805b01c1-a2de-4f70-baf3-f5b42080d129') t;",
+            "metricDefinitions": [
+              {
+                "definition": "Внутренний complete на вопрос EVPN DF использует старую запись OSPFv3 priority; это другой протокол и операция."
+              }
+            ],
+            "caveats": [
+              "Повторный поиск в исходном EOS-контексте остаётся unknown; эта отметка published не доказывает обучения."
+            ]
+          },
+          "rows": [
+            {
+              "public_ref": "805b01c1-a2de-4f70-baf3-f5b42080d129",
+              "title": "Set OSPFv3 router priority",
+              "summary": "The ipv6 ospf priority command configures interface router priority used in designated-router and backup-designated-router elections. Higher values are preferred, while priority zero prevents election. The documented default priority is 1.",
+              "command_text": "ipv6 ospf priority priority",
+              "created_at": "2026-09-04T19:02:49.744905+00:00",
+              "vendor_slug": "arista",
+              "operating_system_slug": "eos"
+            }
+          ],
+          "columns": [
+            "public_ref",
+            "title",
+            "summary",
+            "command_text",
+            "created_at",
+            "vendor_slug",
+            "operating_system_slug"
+          ],
+          "capturedAt": "2026-09-30T16:23:29.03668+00:00"
+        }
+      ]
+    },
+    {
+      "id": "knowledge-quality",
+      "title": "Проверка качества знаний",
+      "queries": [
+        {
+          "id": "active-fidelity",
+          "source": {
+            "label": "CliDeck production PostgreSQL",
+            "tables": [
+              {
+                "name": "active_knowledge_state"
+              },
+              {
+                "name": "knowledge_candidates"
+              }
+            ],
+            "metricDefinitions": [
+              {
+                "definition": "Покрытие Fidelity — активные ревизии с passed среди активных ревизий, связанных с кандидатами."
+              }
+            ],
+            "caveats": [
+              "Passed не измеряет общую точность базы; confidence модели не является экспериментальной точностью."
+            ],
+            "sql": "WITH quality AS MATERIALIZED (SELECT revision_id,bool_or(fidelity_status='passed') passed,bool_or(fidelity_status='repair') repair,bool_or(fidelity_status='unavailable') unavailable,bool_or(fidelity_status='checking') checking FROM knowledge_candidates WHERE revision_id IS NOT NULL GROUP BY revision_id) SELECT json_build_object('section','active_fidelity','metrics',row_to_json(t)) FROM (SELECT count(*) active,count(q.revision_id) has_candidate,count(*) FILTER(WHERE q.passed) passed,count(*) FILTER(WHERE q.repair) repair,count(*) FILTER(WHERE q.unavailable) unavailable,count(*) FILTER(WHERE q.checking) checking FROM active_knowledge_state aks LEFT JOIN quality q ON q.revision_id=aks.revision_id) t;"
+          },
+          "rows": [
+            {
+              "active": 351120,
+              "has_candidate": 294292,
+              "passed": 3753,
+              "repair": 1284,
+              "unavailable": 55129,
+              "checking": 6
+            }
+          ],
+          "columns": [
+            "active",
+            "has_candidate",
+            "passed",
+            "repair",
+            "unavailable",
+            "checking"
+          ],
+          "preview": {
+            "kind": "aggregate",
+            "note": "Сохранённые агрегаты аудита, без персональных данных."
+          }
+        },
+        {
+          "id": "historic-checks",
+          "source": {
+            "label": "CliDeck production PostgreSQL",
+            "tables": [
+              {
+                "name": "pipeline_quality_checks"
+              }
+            ],
+            "metricDefinitions": [
+              {
+                "definition": "Material error rate относится только к историческому проверенному набору 30 августа–7 сентября."
+              }
+            ],
+            "caveats": [
+              "Историческая выборка не оценивает текущую модель и может быть прицельной."
+            ],
+            "sql": "SELECT json_build_object('section','qa','rows',json_agg(row_to_json(t))) FROM (SELECT stage,status,material_error,count(*) n,sum(coverage_count) coverage,sum(input_tokens) input_tokens,sum(output_tokens) output_tokens,min(created_at) first_at,max(created_at) last_at FROM pipeline_quality_checks GROUP BY 1,2,3 ORDER BY 4 DESC) t;"
+          },
+          "rows": [
+            {
+              "stage": "extract_fidelity",
+              "status": "passed",
+              "material_error": false,
+              "n": 4296,
+              "coverage": 4296,
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "first_at": "2026-08-30T23:42:06.656393+00:00",
+              "last_at": "2026-09-07T22:42:00.321106+00:00"
+            },
+            {
+              "stage": "extract_fidelity",
+              "status": "repair",
+              "material_error": true,
+              "n": 1519,
+              "coverage": 1519,
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "first_at": "2026-08-30T23:42:06.656393+00:00",
+              "last_at": "2026-09-07T22:13:38.796778+00:00"
+            }
+          ],
+          "columns": [
+            "stage",
+            "status",
+            "material_error",
+            "n",
+            "coverage",
+            "input_tokens",
+            "output_tokens",
+            "first_at",
+            "last_at"
+          ],
+          "preview": {
+            "kind": "aggregate",
+            "note": "Сохранённые агрегаты аудита, без персональных данных."
+          },
+          "capturedAt": "2026-09-30T15:51:56.393174+00:00"
+        },
+        {
+          "id": "sample-defects",
+          "source": {
+            "label": "Выборка активных researcher-записей",
+            "tables": [],
+            "metricDefinitions": [
+              {
+                "definition": "Три конкретных дефекта найдены при просмотре случайной выборки из 30 записей и связанных окон."
+              }
+            ],
+            "caveats": [
+              "Это примеры дефектов, а не оценка доли ошибок всего корпуса; лабораторное исполнение команд не проводилось."
+            ],
+            "files": [
+              {
+                "label": "sample-checks.json"
+              },
+              {
+                "label": "sample-windows.json"
+              }
+            ]
+          },
+          "rows": [
+            {
+              "sample_number": 4,
+              "title": "Use no boot config-file",
+              "manual_defect": "Описание про stacking Catalyst 2960-S не объясняет no boot config-file."
+            },
+            {
+              "sample_number": 9,
+              "title": "Use no spanning-tree mst pre-standard",
+              "manual_defect": "Описание обрезано до 'form of this command.' и не объясняет команду."
+            },
+            {
+              "sample_number": 23,
+              "title": "3338 ExtremeXOS® Command Reference Guide for version 32.3",
+              "manual_defect": "Заголовок страницы и таблицы опубликован как команда; окно содержит show switch bluetooth."
+            }
+          ],
+          "columns": [
+            "sample_number",
+            "title",
+            "manual_defect"
+          ],
+          "preview": {
+            "kind": "aggregate",
+            "note": "Сохранённые агрегаты аудита, без персональных данных."
+          }
+        }
+      ]
+    },
+    {
+      "id": "observed-demand",
+      "title": "Наблюдаемый спрос и использование",
+      "queries": [
+        {
+          "id": "questions-30d",
+          "source": {
+            "label": "CliDeck production PostgreSQL",
+            "tables": [
+              {
+                "name": "mcp_request_logs"
+              }
+            ],
+            "metricDefinitions": [
+              {
+                "definition": "Complete — формальная отметка retrieval, не проверенная экспертом правильность ответа."
+              }
+            ],
+            "caveats": [
+              "Анонимные логи не отделяют пользователей от проверочного трафика."
+            ],
+            "sql": "SELECT json_build_object('section','network_questions','at',now(),'metrics',row_to_json(t)) FROM (SELECT count(*) calls,count(DISTINCT question_preview) questions,count(*) FILTER(WHERE response_payload->>'answer_status'='complete') complete,count(*) FILTER(WHERE response_payload->>'answer_status'='partial') partial,count(*) FILTER(WHERE response_payload->>'answer_status'='unknown') unknown FROM mcp_request_logs WHERE tool_name='query_network_knowledge' AND occurred_at >= '2026-08-31 15:50:49+00' AND occurred_at < '2026-09-30 15:50:49+00') t;"
+          },
+          "rows": [
+            {
+              "calls": 252,
+              "questions": 119,
+              "complete": 130,
+              "partial": 83,
+              "unknown": 39
+            }
+          ],
+          "columns": [
+            "calls",
+            "questions",
+            "complete",
+            "partial",
+            "unknown"
+          ],
+          "preview": {
+            "kind": "aggregate",
+            "note": "Сохранённые агрегаты аудита, без персональных данных."
+          },
+          "capturedAt": "2026-09-30T16:13:21.028419+00:00",
+          "reportingPeriod": "2026-08-31 15:50:49 UTC — 2026-09-30 15:50:49 UTC, конец не включён; эксперимент исключён."
+        },
+        {
+          "id": "served-items",
+          "source": {
+            "label": "CliDeck production PostgreSQL",
+            "tables": [
+              {
+                "name": "mcp_request_logs"
+              },
+              {
+                "name": "knowledge_revisions"
+              },
+              {
+                "name": "active_knowledge_state"
+              }
+            ],
+            "metricDefinitions": [
+              {
+                "definition": "Использованные items — различные активные knowledge items, на исторические ревизии которых ссылались question/workflow/domain tools."
+              }
+            ],
+            "caveats": [
+              "201 item — использование около 0,057% текущего корпуса; это не доказательство коммерческого спроса."
+            ],
+            "sql": "WITH served AS (SELECT DISTINCT answer->>'revision_ref' ref FROM mcp_request_logs ml CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(ml.response_payload->'answers')='array' THEN ml.response_payload->'answers' ELSE '[]'::jsonb END) answer WHERE ml.occurred_at>='2026-08-31 15:50:49+00' AND ml.occurred_at<'2026-09-30 15:50:49+00' AND ml.tool_name IN ('query_network_knowledge','get_network_workflow','query_domain_knowledge')) SELECT json_build_object('section','served_active_items','at',now(),'metrics',row_to_json(t)) FROM (SELECT count(DISTINCT kr.knowledge_item_id) active_items_served,count(DISTINCT kr.id) historical_revisions_served FROM served s JOIN knowledge_revisions kr ON kr.public_ref::text=s.ref JOIN active_knowledge_state aks ON aks.knowledge_item_id=kr.knowledge_item_id) t;"
+          },
+          "rows": [
+            {
+              "active_items_served": 201,
+              "historical_revisions_served": 201
+            }
+          ],
+          "columns": [
+            "active_items_served",
+            "historical_revisions_served"
+          ],
+          "preview": {
+            "kind": "aggregate",
+            "note": "Сохранённые агрегаты аудита, без персональных данных."
+          },
+          "capturedAt": "2026-09-30T16:13:21.028419+00:00",
+          "reportingPeriod": "2026-08-31 15:50:49 UTC — 2026-09-30 15:50:49 UTC, конец не включён; эксперимент исключён."
+        },
+        {
+          "id": "smoke-question",
+          "source": {
+            "label": "CliDeck production PostgreSQL",
+            "tables": [
+              {
+                "name": "mcp_request_logs"
+              }
+            ],
+            "metricDefinitions": [
+              {
+                "definition": "33 вызова совпадают со smoke-вопросом configure remote syslog server."
+              }
+            ],
+            "caveats": [
+              "Совпадение с fixture само по себе не доказывает, что каждый такой вызов был тестом."
+            ],
+            "sql": "SELECT json_build_object('section','smoke_fixture_matches','at',now(),'metrics',row_to_json(t)) FROM (SELECT count(*) calls_matching_syslog_smoke FROM mcp_request_logs WHERE tool_name='query_network_knowledge' AND lower(question_preview)='configure remote syslog server' AND occurred_at >= '2026-08-31 15:50:49+00' AND occurred_at < '2026-09-30 15:50:49+00') t;"
+          },
+          "rows": [
+            {
+              "calls_matching_syslog_smoke": 33
+            }
+          ],
+          "columns": [
+            "calls_matching_syslog_smoke"
+          ],
+          "preview": {
+            "kind": "aggregate",
+            "note": "Сохранённые агрегаты аудита, без персональных данных."
+          },
+          "capturedAt": "2026-09-30T16:13:21.028419+00:00"
+        }
+      ]
+    },
+    {
+      "id": "legacy-provenance",
+      "title": "Происхождение записей без источника",
+      "queries": [
+        {
+          "id": "legacy-gaps",
+          "source": {
+            "label": "CliDeck production PostgreSQL",
+            "tables": [
+              {
+                "name": "active_knowledge_state"
+              },
+              {
+                "name": "knowledge_revisions"
+              },
+              {
+                "name": "revision_sources"
+              }
+            ],
+            "metricDefinitions": [
+              {
+                "definition": "56747 записей без source provenance относятся к legacy_import 1–18 июля."
+              }
+            ],
+            "caveats": [
+              "Отсутствие provenance в legacy не является измеренным отказом текущего сбора."
+            ],
+            "sql": "SELECT json_build_object('section','missing_provenance_segments','rows',json_agg(row_to_json(t))) FROM (SELECT kr.created_by,kr.domain_id,min(kr.created_at) first_at,max(kr.created_at) last_at,count(*) n,count(*) FILTER(WHERE kr.created_at>now()-interval '30 days') recent FROM active_knowledge_state aks JOIN knowledge_revisions kr ON kr.id=aks.revision_id WHERE NOT EXISTS(SELECT 1 FROM revision_sources rs WHERE rs.revision_id=aks.revision_id) GROUP BY 1,2) t;"
+          },
+          "rows": [
+            {
+              "created_by": "legacy_import",
+              "domain_id": "network",
+              "first_at": "2026-07-01T11:02:27.016+00:00",
+              "last_at": "2026-07-18T03:23:44.613+00:00",
+              "n": 56747,
+              "recent": 0
+            }
+          ],
+          "columns": [
+            "created_by",
+            "domain_id",
+            "first_at",
+            "last_at",
+            "n",
+            "recent"
+          ],
+          "preview": {
+            "kind": "aggregate",
+            "note": "Сохранённые агрегаты аудита, без персональных данных."
+          }
+        }
+      ]
+    },
+    {
+      "id": "stale-public-metrics",
+      "title": "Устаревшие публичные показатели",
+      "queries": [
+        {
+          "id": "cache-state",
+          "source": {
+            "label": "CliDeck production PostgreSQL",
+            "tables": [
+              {
+                "name": "public_stats_cache"
+              },
+              {
+                "name": "active_knowledge_state"
+              }
+            ],
+            "metricDefinitions": [
+              {
+                "definition": "Публичный cache сгенерирован 30 августа, при аудите 30 сентября active knowledge составляет 351110."
+              }
+            ],
+            "caveats": [
+              "Публичные оценки 18 июля и no_ai_answer_rate не измеряют качество сегодняшних ответов."
+            ],
+            "sql": "SELECT json_build_object('section','snapshot','at',now(),'database',current_database(),'active_release',(SELECT row_to_json(t) FROM (SELECT ar.release_id,r.sequence,r.created_at FROM active_release ar LEFT JOIN releases r ON r.id=ar.release_id) t),'stats_cache',(SELECT row_to_json(t) FROM (SELECT refreshed_at,refresh_error_code,payload->>'generated_at' generated_at,payload->'coverage'->>'published_knowledge' reported_knowledge FROM public_stats_cache) t),'pipeline',(SELECT row_to_json(t) FROM (SELECT enabled,max_concurrent_ai_runs,settings_version,paused_reason FROM pipeline_settings) t),'profiles',(SELECT json_agg(row_to_json(t)) FROM pipeline_execution_profiles t));\nSELECT json_build_object('section','volume','active',(SELECT count(*) FROM active_knowledge_state),'public_rows',(SELECT count(*) FROM public_active_knowledge),'public_distinct_revisions',(SELECT count(DISTINCT revision_id) FROM public_active_knowledge),'items',(SELECT count(*) FROM knowledge_items),'revisions',(SELECT count(*) FROM knowledge_revisions),'candidates',(SELECT count(*) FROM knowledge_candidates),'sources',(SELECT count(*) FROM source_candidates),'fragments',(SELECT count(*) FROM source_fragments),'last_revision',(SELECT max(created_at) FROM knowledge_revisions),'last_release',(SELECT max(created_at) FROM releases WHERE status='published'));"
+          },
+          "rows": [
+            {
+              "cache_generated_at": "2026-08-30T00:03:36.177Z",
+              "cache_refresh_error": "Query read timeout",
+              "cached_knowledge": 110151,
+              "active_knowledge": 351110
+            }
+          ],
+          "columns": [
+            "cache_generated_at",
+            "cache_refresh_error",
+            "cached_knowledge",
+            "active_knowledge"
+          ],
+          "preview": {
+            "kind": "aggregate",
+            "note": "Сохранённые агрегаты аудита, без персональных данных."
+          },
+          "capturedAt": "2026-09-30T15:51:56.393174+00:00"
+        },
+        {
+          "id": "public-cache",
+          "source": {
+            "label": "CliDeck public stats",
+            "tables": [],
+            "metricDefinitions": [
+              {
+                "definition": "Страница stats сама сообщает stale=true."
+              }
+            ],
+            "caveats": [
+              "Stale cache не означает остановку публикации."
+            ],
+            "files": [
+              {
+                "label": "public-stats.json"
+              }
+            ]
+          },
+          "rows": [
+            {
+              "generated_at": "2026-08-30T00:03:36.177Z",
+              "stale": true,
+              "evaluation_at": "2026-07-18T16:29:35.602Z"
+            }
+          ],
+          "columns": [
+            "generated_at",
+            "stale",
+            "evaluation_at"
+          ],
+          "preview": {
+            "kind": "aggregate",
+            "note": "Сохранённые агрегаты аудита, без персональных данных."
+          }
+        }
+      ]
+    }
+  ]
+}

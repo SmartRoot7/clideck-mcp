@@ -1,0 +1,2186 @@
+{
+  "sections": [
+    {
+      "section": "snapshot",
+      "at": "2026-09-30T15:51:56.393174+00:00",
+      "database": "clideck_mcp",
+      "active_release": {
+        "release_id": "740f7b00-a3f5-4963-9597-60b4298c1b4b",
+        "sequence": 19733,
+        "created_at": "2026-09-30T15:48:51.543102+00:00"
+      },
+      "stats_cache": {
+        "refreshed_at": "2026-08-30T00:03:36.178284+00:00",
+        "refresh_error_code": "Query read timeout",
+        "generated_at": "2026-08-30T00:03:36.177Z",
+        "reported_knowledge": "110151"
+      },
+      "pipeline": {
+        "enabled": true,
+        "max_concurrent_ai_runs": 8,
+        "settings_version": 8,
+        "paused_reason": null
+      },
+      "profiles": [
+        {
+          "profile_id": "luna",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "fallback_model": null,
+          "fallback_reasoning_effort": null
+        },
+        {
+          "profile_id": "luna_high",
+          "model": "gpt-6-luna",
+          "reasoning_effort": "medium",
+          "fallback_model": "gpt-5.6-terra",
+          "fallback_reasoning_effort": "medium"
+        }
+      ]
+    },
+    {
+      "section": "volume",
+      "active": 351110,
+      "public_rows": 351094,
+      "public_distinct_revisions": 351094,
+      "items": 351167,
+      "revisions": 370558,
+      "candidates": 507623,
+      "sources": 15716,
+      "fragments": 619468,
+      "last_revision": "2026-09-30T15:48:51.530276+00:00",
+      "last_release": "2026-09-30T15:48:51.543102+00:00"
+    },
+    {
+      "section": "public_quality",
+      "metrics": {
+        "records": 351094,
+        "empty_text": 0,
+        "commands": 306143,
+        "procedures": 247645,
+        "missing_patterns": 0,
+        "missing_verification": 150348,
+        "dangerous": 312379,
+        "dangerous_without_verification": 143848,
+        "dangerous_without_rollback": 237907,
+        "risk_unknown": 225019,
+        "lab_validated": 0,
+        "documentation_reviewed": 294345,
+        "overdue": 162,
+        "no_os": 54757,
+        "no_vendor": 30809,
+        "future_verified": 1,
+        "confidence_quantiles": [
+          0.9,
+          0.98,
+          0.99
+        ]
+      }
+    },
+    {
+      "section": "provenance",
+      "metrics": {
+        "active": 351110,
+        "no_source": 56747,
+        "no_valid_primary": 56747,
+        "no_applicability": 30825
+      }
+    },
+    {
+      "section": "duplicates",
+      "groups": 39527,
+      "rows_in_groups": 125431,
+      "extra_rows": 85904
+    },
+    {
+      "section": "os_distribution",
+      "rows": [
+        {
+          "operating_system_slug": "ios-xe",
+          "n": 57775
+        },
+        {
+          "operating_system_slug": null,
+          "n": 54757
+        },
+        {
+          "operating_system_slug": "os9",
+          "n": 29738
+        },
+        {
+          "operating_system_slug": "cisco-nx-os",
+          "n": 16940
+        },
+        {
+          "operating_system_slug": "sros",
+          "n": 16787
+        },
+        {
+          "operating_system_slug": "linux",
+          "n": 15869
+        },
+        {
+          "operating_system_slug": "fsos",
+          "n": 15520
+        },
+        {
+          "operating_system_slug": "cisco-nx-os-cisco-aci-switch-image",
+          "n": 12547
+        },
+        {
+          "operating_system_slug": "eos",
+          "n": 8505
+        },
+        {
+          "operating_system_slug": "os10",
+          "n": 8213
+        },
+        {
+          "operating_system_slug": "dell-networking-os9",
+          "n": 7252
+        },
+        {
+          "operating_system_slug": "nx-os",
+          "n": 6541
+        },
+        {
+          "operating_system_slug": "tmos",
+          "n": 5831
+        },
+        {
+          "operating_system_slug": "arista-eos",
+          "n": 5741
+        },
+        {
+          "operating_system_slug": "cisco-ios-xe",
+          "n": 5695
+        },
+        {
+          "operating_system_slug": "arubaos",
+          "n": 5198
+        },
+        {
+          "operating_system_slug": "network-device-cli",
+          "n": 4352
+        },
+        {
+          "operating_system_slug": "cisco-asa",
+          "n": 4317
+        },
+        {
+          "operating_system_slug": "ocnos",
+          "n": 4123
+        },
+        {
+          "operating_system_slug": "exos",
+          "n": 4052
+        },
+        {
+          "operating_system_slug": "dell-smartfabric-os10",
+          "n": 3772
+        },
+        {
+          "operating_system_slug": "linux-userspace",
+          "n": 3731
+        },
+        {
+          "operating_system_slug": "extremexos",
+          "n": 3725
+        },
+        {
+          "operating_system_slug": "gaia",
+          "n": 3681
+        },
+        {
+          "operating_system_slug": "cisco-ios",
+          "n": 3605
+        },
+        {
+          "operating_system_slug": "sonic",
+          "n": 3256
+        },
+        {
+          "operating_system_slug": "arubaos-switch",
+          "n": 2401
+        },
+        {
+          "operating_system_slug": "cumulus-linux",
+          "n": 2316
+        },
+        {
+          "operating_system_slug": "ios-xr",
+          "n": 2159
+        },
+        {
+          "operating_system_slug": "smartfabric-os10",
+          "n": 1950
+        },
+        {
+          "operating_system_slug": "cisco-ios-ios-xe",
+          "n": 1787
+        },
+        {
+          "operating_system_slug": "fortios",
+          "n": 1747
+        },
+        {
+          "operating_system_slug": "proxmox-ve",
+          "n": 1453
+        },
+        {
+          "operating_system_slug": "cisco-asa-software",
+          "n": 1248
+        },
+        {
+          "operating_system_slug": "jetstream",
+          "n": 1141
+        }
+      ]
+    },
+    {
+      "section": "source_status",
+      "rows": [
+        {
+          "status": "failed",
+          "source_kind": "official_web",
+          "failure_code": "SOURCE_HTTP_404",
+          "n": 6862
+        },
+        {
+          "status": "completed_with_exceptions",
+          "source_kind": "official_web",
+          "failure_code": null,
+          "n": 4901
+        },
+        {
+          "status": "completed",
+          "source_kind": "official_web",
+          "failure_code": null,
+          "n": 2078
+        },
+        {
+          "status": "duplicate",
+          "source_kind": "official_web",
+          "failure_code": null,
+          "n": 870
+        },
+        {
+          "status": "failed",
+          "source_kind": "official_web",
+          "failure_code": "SOURCE_HTTP_403",
+          "n": 393
+        },
+        {
+          "status": "failed",
+          "source_kind": "official_web",
+          "failure_code": "SOURCE_MIME_NOT_ALLOWED",
+          "n": 274
+        },
+        {
+          "status": "completed_with_exceptions",
+          "source_kind": "admin_web",
+          "failure_code": null,
+          "n": 182
+        },
+        {
+          "status": "completed",
+          "source_kind": "admin_web",
+          "failure_code": null,
+          "n": 76
+        },
+        {
+          "status": "failed",
+          "source_kind": "official_web",
+          "failure_code": "PIPELINE_MECHANICAL_FAILURE",
+          "n": 35
+        },
+        {
+          "status": "failed",
+          "source_kind": "official_web",
+          "failure_code": "SOURCE_CONVERSION_EMPTY",
+          "n": 21
+        },
+        {
+          "status": "analyzing",
+          "source_kind": "official_web",
+          "failure_code": null,
+          "n": 6
+        },
+        {
+          "status": "failed",
+          "source_kind": "official_web",
+          "failure_code": "SOURCE_HTTP_500",
+          "n": 6
+        },
+        {
+          "status": "failed",
+          "source_kind": "official_web",
+          "failure_code": "SOURCE_HTTP_400",
+          "n": 3
+        },
+        {
+          "status": "failed",
+          "source_kind": "official_web",
+          "failure_code": "UNSAFE_PROVENANCE_URL",
+          "n": 2
+        },
+        {
+          "status": "failed",
+          "source_kind": "official_web",
+          "failure_code": "SOURCE_HTTP_401",
+          "n": 2
+        },
+        {
+          "status": "failed",
+          "source_kind": "official_web",
+          "failure_code": "SOURCE_REDIRECT_INVALID",
+          "n": 1
+        },
+        {
+          "status": "failed",
+          "source_kind": "official_web",
+          "failure_code": "SOURCE_CHUNKING_EMPTY",
+          "n": 1
+        },
+        {
+          "status": "completed",
+          "source_kind": "official_web",
+          "failure_code": "AGENT_LAUNCH_FAILED",
+          "n": 1
+        },
+        {
+          "status": "verifying",
+          "source_kind": "official_web",
+          "failure_code": "AGENT_ARTIFACT_REJECTED",
+          "n": 1
+        },
+        {
+          "status": "failed",
+          "source_kind": "official_web",
+          "failure_code": "SOURCE_HTTP_429",
+          "n": 1
+        }
+      ]
+    },
+    {
+      "section": "run_status",
+      "rows": [
+        {
+          "status": "failed",
+          "failure_code": null,
+          "n": 7368
+        },
+        {
+          "status": "completed",
+          "failure_code": null,
+          "n": 7194
+        },
+        {
+          "status": "failed",
+          "failure_code": "FRAGMENT_ATTEMPTS_EXHAUSTED",
+          "n": 508
+        },
+        {
+          "status": "failed",
+          "failure_code": "SOURCE_CONVERSION_EMPTY",
+          "n": 17
+        },
+        {
+          "status": "failed",
+          "failure_code": "LEASE_ATTEMPTS_EXHAUSTED",
+          "n": 16
+        },
+        {
+          "status": "cancelled",
+          "failure_code": "PIPELINE_MECHANICAL_FAILURE",
+          "n": 16
+        },
+        {
+          "status": "failed",
+          "failure_code": "CODEX_PROCESS_FAILED",
+          "n": 13
+        },
+        {
+          "status": "failed",
+          "failure_code": "AGENT_ARTIFACT_REJECTED",
+          "n": 10
+        },
+        {
+          "status": "failed",
+          "failure_code": "EXECUTOR_STOPPED",
+          "n": 8
+        },
+        {
+          "status": "failed",
+          "failure_code": "PIPELINE_MECHANICAL_FAILURE",
+          "n": 7
+        },
+        {
+          "status": "failed",
+          "failure_code": "CODEX_MODEL_UNAVAILABLE",
+          "n": 2
+        },
+        {
+          "status": "failed",
+          "failure_code": "SOURCE_CHUNKING_EMPTY",
+          "n": 1
+        },
+        {
+          "status": "completed",
+          "failure_code": "FRAGMENT_ATTEMPTS_EXHAUSTED",
+          "n": 1
+        },
+        {
+          "status": "failed",
+          "failure_code": "AGENT_RUN_TIMEOUT",
+          "n": 1
+        },
+        {
+          "status": "extracting",
+          "failure_code": null,
+          "n": 1
+        }
+      ]
+    },
+    {
+      "section": "fragments",
+      "rows": [
+        {
+          "status": "failed",
+          "disposition": null,
+          "disposition_reason": null,
+          "n": 316448
+        },
+        {
+          "status": "published",
+          "disposition": "knowledge_extracted",
+          "disposition_reason": "knowledge_extracted",
+          "n": 84420
+        },
+        {
+          "status": "analyzed",
+          "disposition": null,
+          "disposition_reason": null,
+          "n": 53248
+        },
+        {
+          "status": "rejected",
+          "disposition": null,
+          "disposition_reason": null,
+          "n": 49522
+        },
+        {
+          "status": "published",
+          "disposition": null,
+          "disposition_reason": null,
+          "n": 47126
+        },
+        {
+          "status": "analyzed",
+          "disposition": "knowledge_extracted",
+          "disposition_reason": "knowledge_extracted",
+          "n": 19898
+        },
+        {
+          "status": "published",
+          "disposition": "continuation_required",
+          "disposition_reason": "boundary_continuation",
+          "n": 14800
+        },
+        {
+          "status": "analyzed",
+          "disposition": "non_knowledge",
+          "disposition_reason": "navigation_or_toc",
+          "n": 12114
+        },
+        {
+          "status": "analyzed",
+          "disposition": "non_knowledge",
+          "disposition_reason": "other_non_operational",
+          "n": 7293
+        },
+        {
+          "status": "analyzed",
+          "disposition": "non_knowledge",
+          "disposition_reason": "part_inventory",
+          "n": 4838
+        },
+        {
+          "status": "failed",
+          "disposition": "targeted_retry",
+          "disposition_reason": "targeted_retry",
+          "n": 3912
+        },
+        {
+          "status": "published",
+          "disposition": "targeted_retry",
+          "disposition_reason": "targeted_retry",
+          "n": 2060
+        },
+        {
+          "status": "analyzed",
+          "disposition": "non_knowledge",
+          "disposition_reason": "legal_or_copyright",
+          "n": 1492
+        },
+        {
+          "status": "failed",
+          "disposition": "continuation_required",
+          "disposition_reason": "boundary_continuation",
+          "n": 1062
+        },
+        {
+          "status": "analyzed",
+          "disposition": "non_knowledge",
+          "disposition_reason": "general_safety",
+          "n": 408
+        },
+        {
+          "status": "analyzed",
+          "disposition": "non_knowledge",
+          "disposition_reason": "boundary_continuation",
+          "n": 253
+        },
+        {
+          "status": "analyzed",
+          "disposition": "non_knowledge",
+          "disposition_reason": "physical_installation",
+          "n": 250
+        },
+        {
+          "status": "verified",
+          "disposition": null,
+          "disposition_reason": null,
+          "n": 176
+        },
+        {
+          "status": "published",
+          "disposition": "non_knowledge",
+          "disposition_reason": "other_non_operational",
+          "n": 28
+        },
+        {
+          "status": "published",
+          "disposition": "non_knowledge",
+          "disposition_reason": "part_inventory",
+          "n": 24
+        },
+        {
+          "status": "queued",
+          "disposition": "knowledge_extracted",
+          "disposition_reason": "knowledge_extracted",
+          "n": 19
+        },
+        {
+          "status": "analyzing",
+          "disposition": "continuation_required",
+          "disposition_reason": "boundary_continuation",
+          "n": 17
+        },
+        {
+          "status": "queued",
+          "disposition": "continuation_required",
+          "disposition_reason": "boundary_continuation",
+          "n": 16
+        },
+        {
+          "status": "published",
+          "disposition": "non_knowledge",
+          "disposition_reason": "navigation_or_toc",
+          "n": 16
+        },
+        {
+          "status": "published",
+          "disposition": "targeted_retry",
+          "disposition_reason": "other_non_operational",
+          "n": 8
+        },
+        {
+          "status": "analyzing",
+          "disposition": "knowledge_extracted",
+          "disposition_reason": "knowledge_extracted",
+          "n": 5
+        },
+        {
+          "status": "queued",
+          "disposition": "targeted_retry",
+          "disposition_reason": "targeted_retry",
+          "n": 5
+        },
+        {
+          "status": "published",
+          "disposition": "non_knowledge",
+          "disposition_reason": "general_safety",
+          "n": 4
+        },
+        {
+          "status": "published",
+          "disposition": "targeted_retry",
+          "disposition_reason": "boundary_continuation",
+          "n": 3
+        },
+        {
+          "status": "analyzing",
+          "disposition": "non_knowledge",
+          "disposition_reason": "navigation_or_toc",
+          "n": 1
+        },
+        {
+          "status": "published",
+          "disposition": "non_knowledge",
+          "disposition_reason": "legal_or_copyright",
+          "n": 1
+        },
+        {
+          "status": "published",
+          "disposition": "non_knowledge",
+          "disposition_reason": "physical_installation",
+          "n": 1
+        }
+      ]
+    },
+    {
+      "section": "candidate_status",
+      "rows": [
+        {
+          "status": "published",
+          "fidelity_status": "pending",
+          "n": 250948
+        },
+        {
+          "status": "rejected",
+          "fidelity_status": "pending",
+          "n": 189689
+        },
+        {
+          "status": "published",
+          "fidelity_status": "unavailable",
+          "n": 57349
+        },
+        {
+          "status": "published",
+          "fidelity_status": "passed",
+          "n": 4034
+        },
+        {
+          "status": "conflict",
+          "fidelity_status": "pending",
+          "n": 3776
+        },
+        {
+          "status": "published",
+          "fidelity_status": "repair",
+          "n": 1254
+        },
+        {
+          "status": "rejected",
+          "fidelity_status": "passed",
+          "n": 255
+        },
+        {
+          "status": "rejected",
+          "fidelity_status": "repair",
+          "n": 188
+        },
+        {
+          "status": "conflict",
+          "fidelity_status": "repair",
+          "n": 77
+        },
+        {
+          "status": "deep_review",
+          "fidelity_status": "pending",
+          "n": 31
+        },
+        {
+          "status": "published",
+          "fidelity_status": "checking",
+          "n": 9
+        },
+        {
+          "status": "conflict",
+          "fidelity_status": "passed",
+          "n": 7
+        },
+        {
+          "status": "manual_exception",
+          "fidelity_status": "pending",
+          "n": 6
+        }
+      ]
+    },
+    {
+      "section": "qa",
+      "rows": [
+        {
+          "stage": "normalize_deduplicate",
+          "status": "passed",
+          "material_error": false,
+          "n": 16945,
+          "coverage": 257382,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "first_at": "2026-08-30T23:42:48.917847+00:00",
+          "last_at": "2026-09-30T15:48:51.543102+00:00"
+        },
+        {
+          "stage": "extract_fidelity",
+          "status": "passed",
+          "material_error": false,
+          "n": 4296,
+          "coverage": 4296,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "first_at": "2026-08-30T23:42:06.656393+00:00",
+          "last_at": "2026-09-07T22:42:00.321106+00:00"
+        },
+        {
+          "stage": "convert",
+          "status": "passed",
+          "material_error": false,
+          "n": 3700,
+          "coverage": 317380,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "first_at": "2026-08-31T02:25:04.239242+00:00",
+          "last_at": "2026-09-30T14:25:57.836056+00:00"
+        },
+        {
+          "stage": "segment",
+          "status": "passed",
+          "material_error": false,
+          "n": 3696,
+          "coverage": 509464,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "first_at": "2026-08-31T03:44:57.556578+00:00",
+          "last_at": "2026-09-30T14:23:02.216948+00:00"
+        },
+        {
+          "stage": "extract_fidelity",
+          "status": "repair",
+          "material_error": true,
+          "n": 1519,
+          "coverage": 1519,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "first_at": "2026-08-30T23:42:06.656393+00:00",
+          "last_at": "2026-09-07T22:13:38.796778+00:00"
+        }
+      ]
+    },
+    {
+      "section": "agent_24h",
+      "rows": [
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "low",
+          "status": "failed",
+          "error_code": "AGENT_LAUNCH_FAILED",
+          "n": 1496,
+          "avg_ms": 0,
+          "input_tokens": 0,
+          "cached_input_tokens": 0,
+          "output_tokens": 0
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "n": 407,
+          "avg_ms": 37418,
+          "input_tokens": 21957886,
+          "cached_input_tokens": 14205440,
+          "output_tokens": 543018
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "low",
+          "status": "failed",
+          "error_code": "LEASE_EXPIRED",
+          "n": 184,
+          "avg_ms": null,
+          "input_tokens": 0,
+          "cached_input_tokens": 0,
+          "output_tokens": 0
+        },
+        {
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "completed",
+          "error_code": null,
+          "n": 31,
+          "avg_ms": 23264,
+          "input_tokens": 1753986,
+          "cached_input_tokens": 975104,
+          "output_tokens": 15460
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "medium",
+          "status": "completed",
+          "error_code": null,
+          "n": 16,
+          "avg_ms": 20582,
+          "input_tokens": 215989,
+          "cached_input_tokens": 15872,
+          "output_tokens": 12816
+        },
+        {
+          "model": "gpt-6-luna",
+          "reasoning_effort": "medium",
+          "status": "completed",
+          "error_code": null,
+          "n": 8,
+          "avg_ms": 10618,
+          "input_tokens": 118227,
+          "cached_input_tokens": 0,
+          "output_tokens": 1923
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "low",
+          "status": "cancelled",
+          "error_code": "EXECUTOR_STOPPED",
+          "n": 8,
+          "avg_ms": 9925,
+          "input_tokens": 43210,
+          "cached_input_tokens": 28928,
+          "output_tokens": 577
+        },
+        {
+          "model": "gpt-6-luna",
+          "reasoning_effort": "low",
+          "status": "running",
+          "error_code": null,
+          "n": 5,
+          "avg_ms": null,
+          "input_tokens": 0,
+          "cached_input_tokens": 0,
+          "output_tokens": 0
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "low",
+          "status": "cancelled",
+          "error_code": "PIPELINE_PAUSED",
+          "n": 2,
+          "avg_ms": 40248,
+          "input_tokens": 0,
+          "cached_input_tokens": 0,
+          "output_tokens": 0
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "low",
+          "status": "failed",
+          "error_code": "ORPHANED_AGENT_RUN",
+          "n": 2,
+          "avg_ms": null,
+          "input_tokens": 0,
+          "cached_input_tokens": 0,
+          "output_tokens": 0
+        },
+        {
+          "model": "gpt-6-luna",
+          "reasoning_effort": "medium",
+          "status": "failed",
+          "error_code": "LEASE_EXPIRED",
+          "n": 1,
+          "avg_ms": null,
+          "input_tokens": 0,
+          "cached_input_tokens": 0,
+          "output_tokens": 0
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "medium",
+          "status": "failed",
+          "error_code": "LEASE_EXPIRED",
+          "n": 1,
+          "avg_ms": null,
+          "input_tokens": 0,
+          "cached_input_tokens": 0,
+          "output_tokens": 0
+        },
+        {
+          "model": "gpt-6-luna",
+          "reasoning_effort": "medium",
+          "status": "running",
+          "error_code": null,
+          "n": 1,
+          "avg_ms": null,
+          "input_tokens": 0,
+          "cached_input_tokens": 0,
+          "output_tokens": 0
+        }
+      ]
+    },
+    {
+      "section": "agent_days",
+      "rows": [
+        {
+          "day": "2026-09-16",
+          "status": "completed",
+          "n": 2073,
+          "input_tokens": 113966065,
+          "output_tokens": 2488273
+        },
+        {
+          "day": "2026-09-16",
+          "status": "failed",
+          "n": 17,
+          "input_tokens": 293523,
+          "output_tokens": 3716
+        },
+        {
+          "day": "2026-09-17",
+          "status": "completed",
+          "n": 1386,
+          "input_tokens": 71837527,
+          "output_tokens": 2522845
+        },
+        {
+          "day": "2026-09-17",
+          "status": "failed",
+          "n": 136,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        {
+          "day": "2026-09-18",
+          "status": "completed",
+          "n": 2185,
+          "input_tokens": 118469387,
+          "output_tokens": 2648548
+        },
+        {
+          "day": "2026-09-18",
+          "status": "failed",
+          "n": 82,
+          "input_tokens": 734727,
+          "output_tokens": 9737
+        },
+        {
+          "day": "2026-09-19",
+          "status": "completed",
+          "n": 2618,
+          "input_tokens": 150060637,
+          "output_tokens": 2375843
+        },
+        {
+          "day": "2026-09-19",
+          "status": "failed",
+          "n": 84,
+          "input_tokens": 534899,
+          "output_tokens": 7658
+        },
+        {
+          "day": "2026-09-19",
+          "status": "timed_out",
+          "n": 1,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        {
+          "day": "2026-09-20",
+          "status": "completed",
+          "n": 3162,
+          "input_tokens": 201267344,
+          "output_tokens": 2286561
+        },
+        {
+          "day": "2026-09-20",
+          "status": "failed",
+          "n": 65,
+          "input_tokens": 594477,
+          "output_tokens": 7380
+        },
+        {
+          "day": "2026-09-21",
+          "status": "completed",
+          "n": 2722,
+          "input_tokens": 113276078,
+          "output_tokens": 4101766
+        },
+        {
+          "day": "2026-09-21",
+          "status": "failed",
+          "n": 44,
+          "input_tokens": 434372,
+          "output_tokens": 48678
+        },
+        {
+          "day": "2026-09-22",
+          "status": "completed",
+          "n": 1755,
+          "input_tokens": 90530627,
+          "output_tokens": 2364810
+        },
+        {
+          "day": "2026-09-22",
+          "status": "failed",
+          "n": 57,
+          "input_tokens": 202169,
+          "output_tokens": 3866
+        },
+        {
+          "day": "2026-09-22",
+          "status": "timed_out",
+          "n": 1,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        {
+          "day": "2026-09-23",
+          "status": "completed",
+          "n": 2633,
+          "input_tokens": 152426604,
+          "output_tokens": 2916374
+        },
+        {
+          "day": "2026-09-23",
+          "status": "failed",
+          "n": 70,
+          "input_tokens": 405056,
+          "output_tokens": 6200
+        },
+        {
+          "day": "2026-09-24",
+          "status": "completed",
+          "n": 446,
+          "input_tokens": 25245723,
+          "output_tokens": 551219
+        },
+        {
+          "day": "2026-09-24",
+          "status": "failed",
+          "n": 91,
+          "input_tokens": 44121,
+          "output_tokens": 771
+        },
+        {
+          "day": "2026-09-25",
+          "status": "completed",
+          "n": 3595,
+          "input_tokens": 226920664,
+          "output_tokens": 2847435
+        },
+        {
+          "day": "2026-09-25",
+          "status": "failed",
+          "n": 794,
+          "input_tokens": 328465,
+          "output_tokens": 4834
+        },
+        {
+          "day": "2026-09-26",
+          "status": "failed",
+          "n": 2412,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        {
+          "day": "2026-09-27",
+          "status": "failed",
+          "n": 2671,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        {
+          "day": "2026-09-28",
+          "status": "failed",
+          "n": 2506,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        {
+          "day": "2026-09-29",
+          "status": "failed",
+          "n": 1924,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        {
+          "day": "2026-09-30",
+          "status": "cancelled",
+          "n": 10,
+          "input_tokens": 43210,
+          "output_tokens": 577
+        },
+        {
+          "day": "2026-09-30",
+          "status": "completed",
+          "n": 462,
+          "input_tokens": 24046088,
+          "output_tokens": 573217
+        },
+        {
+          "day": "2026-09-30",
+          "status": "failed",
+          "n": 192,
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        {
+          "day": "2026-09-30",
+          "status": "running",
+          "n": 6,
+          "input_tokens": 0,
+          "output_tokens": 0
+        }
+      ]
+    },
+    {
+      "section": "demands",
+      "rows": [
+        {
+          "status": "unresolved",
+          "diagnosis_status": "completed",
+          "replay_status": "unknown",
+          "last_error_code": "OFFICIAL_SOURCE_NOT_FOUND",
+          "n": 503,
+          "requests": 515,
+          "first_seen": "2026-07-21T15:46:07.680701+00:00",
+          "last_seen": "2026-09-22T04:06:09.285811+00:00"
+        },
+        {
+          "status": "diagnosing",
+          "diagnosis_status": "queued",
+          "replay_status": null,
+          "last_error_code": null,
+          "n": 73,
+          "requests": 111,
+          "first_seen": "2026-07-21T15:46:06.235578+00:00",
+          "last_seen": "2026-09-07T17:31:25.344057+00:00"
+        },
+        {
+          "status": "unresolved",
+          "diagnosis_status": "completed",
+          "replay_status": "unknown",
+          "last_error_code": "KNOWLEDGE_STILL_UNKNOWN",
+          "n": 41,
+          "requests": 41,
+          "first_seen": "2026-07-24T19:03:07.893272+00:00",
+          "last_seen": "2026-08-27T08:22:56.385537+00:00"
+        },
+        {
+          "status": "unresolved",
+          "diagnosis_status": "completed",
+          "replay_status": "partial",
+          "last_error_code": "OFFICIAL_SOURCE_NOT_FOUND",
+          "n": 22,
+          "requests": 25,
+          "first_seen": "2026-07-26T23:26:51.20847+00:00",
+          "last_seen": "2026-09-15T16:37:14.10178+00:00"
+        },
+        {
+          "status": "published",
+          "diagnosis_status": "pending",
+          "replay_status": null,
+          "last_error_code": null,
+          "n": 17,
+          "requests": 40,
+          "first_seen": "2026-07-20T06:36:12.907398+00:00",
+          "last_seen": "2026-07-21T22:55:34.427962+00:00"
+        },
+        {
+          "status": "published",
+          "diagnosis_status": "completed",
+          "replay_status": "complete",
+          "last_error_code": null,
+          "n": 16,
+          "requests": 83,
+          "first_seen": "2026-07-31T02:03:42.867021+00:00",
+          "last_seen": "2026-09-30T05:37:36.915224+00:00"
+        },
+        {
+          "status": "published",
+          "diagnosis_status": "queued",
+          "replay_status": null,
+          "last_error_code": null,
+          "n": 11,
+          "requests": 56,
+          "first_seen": "2026-08-26T04:15:31.620268+00:00",
+          "last_seen": "2026-09-30T05:36:43.786308+00:00"
+        },
+        {
+          "status": "published",
+          "diagnosis_status": "completed",
+          "replay_status": "partial",
+          "last_error_code": null,
+          "n": 4,
+          "requests": 7,
+          "first_seen": "2026-08-31T23:11:51.9307+00:00",
+          "last_seen": "2026-09-02T22:29:56.26242+00:00"
+        },
+        {
+          "status": "unresolved",
+          "diagnosis_status": "completed",
+          "replay_status": "failed",
+          "last_error_code": "OFFICIAL_SOURCE_NOT_FOUND",
+          "n": 3,
+          "requests": 6,
+          "first_seen": "2026-07-21T15:46:07.519291+00:00",
+          "last_seen": "2026-08-22T00:13:13.87333+00:00"
+        },
+        {
+          "status": "queued",
+          "diagnosis_status": "completed",
+          "replay_status": "partial",
+          "last_error_code": null,
+          "n": 2,
+          "requests": 7,
+          "first_seen": "2026-09-01T19:29:35.364195+00:00",
+          "last_seen": "2026-09-02T01:26:32.181499+00:00"
+        },
+        {
+          "status": "unresolved",
+          "diagnosis_status": "completed",
+          "replay_status": "failed",
+          "last_error_code": "KNOWLEDGE_STILL_UNKNOWN",
+          "n": 2,
+          "requests": 2,
+          "first_seen": "2026-07-25T21:38:29.084875+00:00",
+          "last_seen": "2026-08-27T09:00:22.721943+00:00"
+        },
+        {
+          "status": "queued",
+          "diagnosis_status": "completed",
+          "replay_status": "unknown",
+          "last_error_code": null,
+          "n": 2,
+          "requests": 6,
+          "first_seen": "2026-09-07T04:04:44.460442+00:00",
+          "last_seen": "2026-09-07T17:31:21.978902+00:00"
+        },
+        {
+          "status": "diagnosing",
+          "diagnosis_status": "running",
+          "replay_status": null,
+          "last_error_code": "AGENT_LAUNCH_FAILED",
+          "n": 1,
+          "requests": 1,
+          "first_seen": "2026-09-28T16:33:06.917927+00:00",
+          "last_seen": "2026-09-29T12:31:53.167377+00:00"
+        },
+        {
+          "status": "discovering",
+          "diagnosis_status": "completed",
+          "replay_status": "unknown",
+          "last_error_code": "CODEX_PROCESS_FAILED",
+          "n": 1,
+          "requests": 1,
+          "first_seen": "2026-08-21T15:33:12.016678+00:00",
+          "last_seen": "2026-08-26T17:37:31.317537+00:00"
+        },
+        {
+          "status": "diagnosing",
+          "diagnosis_status": "queued",
+          "replay_status": "partial",
+          "last_error_code": null,
+          "n": 1,
+          "requests": 5,
+          "first_seen": "2026-09-01T23:25:35.794805+00:00",
+          "last_seen": "2026-09-02T01:26:38.822982+00:00"
+        },
+        {
+          "status": "processing",
+          "diagnosis_status": "completed",
+          "replay_status": "unknown",
+          "last_error_code": null,
+          "n": 1,
+          "requests": 1,
+          "first_seen": "2026-09-30T15:50:49.130519+00:00",
+          "last_seen": "2026-09-30T15:51:50.970721+00:00"
+        }
+      ]
+    },
+    {
+      "section": "usage30d",
+      "rows": [
+        {
+          "tool_name": "query_network_knowledge",
+          "outcome": "success",
+          "answer_status": "complete",
+          "actor_kind": "anonymous",
+          "n": 130,
+          "unique_questions": 58,
+          "linked_demands": 69,
+          "avg_ms": 1770
+        },
+        {
+          "tool_name": "query_network_knowledge",
+          "outcome": "unknown",
+          "answer_status": "partial",
+          "actor_kind": "anonymous",
+          "n": 83,
+          "unique_questions": 40,
+          "linked_demands": 83,
+          "avg_ms": 1995
+        },
+        {
+          "tool_name": "list_knowledge_domains",
+          "outcome": "success",
+          "answer_status": null,
+          "actor_kind": "anonymous",
+          "n": 65,
+          "unique_questions": 1,
+          "linked_demands": 0,
+          "avg_ms": 22
+        },
+        {
+          "tool_name": "analyze_device_snapshot",
+          "outcome": "success",
+          "answer_status": null,
+          "actor_kind": "anonymous",
+          "n": 60,
+          "unique_questions": 13,
+          "linked_demands": 0,
+          "avg_ms": 11
+        },
+        {
+          "tool_name": "verify_network_change",
+          "outcome": "success",
+          "answer_status": null,
+          "actor_kind": "anonymous",
+          "n": 58,
+          "unique_questions": 1,
+          "linked_demands": 0,
+          "avg_ms": 15
+        },
+        {
+          "tool_name": "query_network_knowledge",
+          "outcome": "unknown",
+          "answer_status": "unknown",
+          "actor_kind": "anonymous",
+          "n": 40,
+          "unique_questions": 31,
+          "linked_demands": 40,
+          "avg_ms": 3104
+        },
+        {
+          "tool_name": "get_network_workflow",
+          "outcome": "success",
+          "answer_status": "complete",
+          "actor_kind": "anonymous",
+          "n": 34,
+          "unique_questions": 6,
+          "linked_demands": 31,
+          "avg_ms": 875
+        },
+        {
+          "tool_name": "review_network_change",
+          "outcome": "success",
+          "answer_status": null,
+          "actor_kind": "anonymous",
+          "n": 30,
+          "unique_questions": 2,
+          "linked_demands": 0,
+          "avg_ms": 53
+        },
+        {
+          "tool_name": "advise_network_upgrade",
+          "outcome": "success",
+          "answer_status": null,
+          "actor_kind": "anonymous",
+          "n": 29,
+          "unique_questions": 1,
+          "linked_demands": 0,
+          "avg_ms": 9
+        },
+        {
+          "tool_name": "get_knowledge_provenance",
+          "outcome": "success",
+          "answer_status": null,
+          "actor_kind": "anonymous",
+          "n": 25,
+          "unique_questions": 11,
+          "linked_demands": 0,
+          "avg_ms": 8
+        },
+        {
+          "tool_name": "resolve_network_context",
+          "outcome": "success",
+          "answer_status": null,
+          "actor_kind": "anonymous",
+          "n": 8,
+          "unique_questions": 4,
+          "linked_demands": 0,
+          "avg_ms": 36
+        },
+        {
+          "tool_name": "get_network_workflow",
+          "outcome": "unknown",
+          "answer_status": "partial",
+          "actor_kind": "anonymous",
+          "n": 4,
+          "unique_questions": 3,
+          "linked_demands": 4,
+          "avg_ms": 1570
+        },
+        {
+          "tool_name": "describe_knowledge_domain",
+          "outcome": "error",
+          "answer_status": null,
+          "actor_kind": "anonymous",
+          "n": 2,
+          "unique_questions": 1,
+          "linked_demands": 0,
+          "avg_ms": 9
+        },
+        {
+          "tool_name": "query_domain_knowledge",
+          "outcome": "success",
+          "answer_status": "complete",
+          "actor_kind": "anonymous",
+          "n": 2,
+          "unique_questions": 2,
+          "linked_demands": 0,
+          "avg_ms": 1097
+        },
+        {
+          "tool_name": "query_domain_knowledge",
+          "outcome": "unknown",
+          "answer_status": "partial",
+          "actor_kind": "anonymous",
+          "n": 1,
+          "unique_questions": 1,
+          "linked_demands": 1,
+          "avg_ms": 3300
+        },
+        {
+          "tool_name": "get_network_workflow",
+          "outcome": "unknown",
+          "answer_status": "unknown",
+          "actor_kind": "anonymous",
+          "n": 1,
+          "unique_questions": 1,
+          "linked_demands": 1,
+          "avg_ms": 394
+        },
+        {
+          "tool_name": "query_domain_knowledge",
+          "outcome": "error",
+          "answer_status": null,
+          "actor_kind": "anonymous",
+          "n": 1,
+          "unique_questions": 1,
+          "linked_demands": 0,
+          "avg_ms": 7
+        },
+        {
+          "tool_name": "describe_knowledge_domain",
+          "outcome": "success",
+          "answer_status": null,
+          "actor_kind": "anonymous",
+          "n": 1,
+          "unique_questions": 1,
+          "linked_demands": 0,
+          "avg_ms": 9
+        },
+        {
+          "tool_name": "analyze_network_path",
+          "outcome": "success",
+          "answer_status": null,
+          "actor_kind": "anonymous",
+          "n": 1,
+          "unique_questions": 1,
+          "linked_demands": 0,
+          "avg_ms": 15
+        },
+        {
+          "tool_name": "advise_network_upgrade",
+          "outcome": "unknown",
+          "answer_status": null,
+          "actor_kind": "anonymous",
+          "n": 1,
+          "unique_questions": 1,
+          "linked_demands": 1,
+          "avg_ms": 89
+        },
+        {
+          "tool_name": "verify_network_change",
+          "outcome": "error",
+          "answer_status": null,
+          "actor_kind": "anonymous",
+          "n": 1,
+          "unique_questions": 1,
+          "linked_demands": 0,
+          "avg_ms": 6
+        }
+      ]
+    },
+    {
+      "section": "usage_daily30d",
+      "rows": [
+        {
+          "day": "2026-08-31",
+          "operation": "advise_network_upgrade",
+          "outcome": "success",
+          "n": 29
+        },
+        {
+          "day": "2026-08-31",
+          "operation": "analyze_device_snapshot",
+          "outcome": "success",
+          "n": 37
+        },
+        {
+          "day": "2026-08-31",
+          "operation": "get_knowledge_provenance",
+          "outcome": "success",
+          "n": 6
+        },
+        {
+          "day": "2026-08-31",
+          "operation": "get_network_workflow",
+          "outcome": "success",
+          "n": 34
+        },
+        {
+          "day": "2026-08-31",
+          "operation": "get_network_workflow",
+          "outcome": "unknown",
+          "n": 1
+        },
+        {
+          "day": "2026-08-31",
+          "operation": "query_network_knowledge",
+          "outcome": "success",
+          "n": 78
+        },
+        {
+          "day": "2026-08-31",
+          "operation": "query_network_knowledge",
+          "outcome": "unknown",
+          "n": 21
+        },
+        {
+          "day": "2026-08-31",
+          "operation": "review_network_change",
+          "outcome": "success",
+          "n": 29
+        },
+        {
+          "day": "2026-08-31",
+          "operation": "verify_network_change",
+          "outcome": "success",
+          "n": 58
+        },
+        {
+          "day": "2026-09-01",
+          "operation": "advise_network_upgrade",
+          "outcome": "success",
+          "n": 15
+        },
+        {
+          "day": "2026-09-01",
+          "operation": "analyze_device_snapshot",
+          "outcome": "success",
+          "n": 19
+        },
+        {
+          "day": "2026-09-01",
+          "operation": "get_knowledge_provenance",
+          "outcome": "success",
+          "n": 6
+        },
+        {
+          "day": "2026-09-01",
+          "operation": "get_network_workflow",
+          "outcome": "success",
+          "n": 15
+        },
+        {
+          "day": "2026-09-01",
+          "operation": "get_network_workflow",
+          "outcome": "unknown",
+          "n": 4
+        },
+        {
+          "day": "2026-09-01",
+          "operation": "query_network_knowledge",
+          "outcome": "success",
+          "n": 25
+        },
+        {
+          "day": "2026-09-01",
+          "operation": "query_network_knowledge",
+          "outcome": "unknown",
+          "n": 30
+        },
+        {
+          "day": "2026-09-01",
+          "operation": "resolve_network_context",
+          "outcome": "success",
+          "n": 5
+        },
+        {
+          "day": "2026-09-01",
+          "operation": "review_network_change",
+          "outcome": "success",
+          "n": 15
+        },
+        {
+          "day": "2026-09-01",
+          "operation": "verify_network_change",
+          "outcome": "success",
+          "n": 30
+        },
+        {
+          "day": "2026-09-02",
+          "operation": "advise_network_upgrade",
+          "outcome": "success",
+          "n": 4
+        },
+        {
+          "day": "2026-09-02",
+          "operation": "advise_network_upgrade",
+          "outcome": "unknown",
+          "n": 1
+        },
+        {
+          "day": "2026-09-02",
+          "operation": "analyze_device_snapshot",
+          "outcome": "success",
+          "n": 17
+        },
+        {
+          "day": "2026-09-02",
+          "operation": "analyze_network_path",
+          "outcome": "success",
+          "n": 1
+        },
+        {
+          "day": "2026-09-02",
+          "operation": "get_knowledge_provenance",
+          "outcome": "success",
+          "n": 13
+        },
+        {
+          "day": "2026-09-02",
+          "operation": "get_network_workflow",
+          "outcome": "success",
+          "n": 4
+        },
+        {
+          "day": "2026-09-02",
+          "operation": "query_network_knowledge",
+          "outcome": "success",
+          "n": 21
+        },
+        {
+          "day": "2026-09-02",
+          "operation": "query_network_knowledge",
+          "outcome": "unknown",
+          "n": 23
+        },
+        {
+          "day": "2026-09-02",
+          "operation": "resolve_network_context",
+          "outcome": "success",
+          "n": 2
+        },
+        {
+          "day": "2026-09-02",
+          "operation": "review_network_change",
+          "outcome": "success",
+          "n": 5
+        },
+        {
+          "day": "2026-09-02",
+          "operation": "verify_network_change",
+          "outcome": "success",
+          "n": 8
+        },
+        {
+          "day": "2026-09-03",
+          "operation": "advise_network_upgrade",
+          "outcome": "success",
+          "n": 1
+        },
+        {
+          "day": "2026-09-03",
+          "operation": "analyze_device_snapshot",
+          "outcome": "success",
+          "n": 1
+        },
+        {
+          "day": "2026-09-03",
+          "operation": "get_network_workflow",
+          "outcome": "success",
+          "n": 1
+        },
+        {
+          "day": "2026-09-03",
+          "operation": "list_knowledge_domains",
+          "outcome": "success",
+          "n": 2
+        },
+        {
+          "day": "2026-09-03",
+          "operation": "query_network_knowledge",
+          "outcome": "success",
+          "n": 1
+        },
+        {
+          "day": "2026-09-03",
+          "operation": "review_network_change",
+          "outcome": "success",
+          "n": 1
+        },
+        {
+          "day": "2026-09-03",
+          "operation": "verify_network_change",
+          "outcome": "success",
+          "n": 2
+        },
+        {
+          "day": "2026-09-04",
+          "operation": "advise_network_upgrade",
+          "outcome": "success",
+          "n": 1
+        },
+        {
+          "day": "2026-09-04",
+          "operation": "analyze_device_snapshot",
+          "outcome": "success",
+          "n": 1
+        },
+        {
+          "day": "2026-09-04",
+          "operation": "get_network_workflow",
+          "outcome": "success",
+          "n": 1
+        },
+        {
+          "day": "2026-09-04",
+          "operation": "list_knowledge_domains",
+          "outcome": "success",
+          "n": 2
+        },
+        {
+          "day": "2026-09-04",
+          "operation": "query_network_knowledge",
+          "outcome": "success",
+          "n": 1
+        },
+        {
+          "day": "2026-09-04",
+          "operation": "review_network_change",
+          "outcome": "success",
+          "n": 1
+        },
+        {
+          "day": "2026-09-04",
+          "operation": "verify_network_change",
+          "outcome": "success",
+          "n": 2
+        },
+        {
+          "day": "2026-09-05",
+          "operation": "list_knowledge_domains",
+          "outcome": "success",
+          "n": 2
+        },
+        {
+          "day": "2026-09-05",
+          "operation": "query_network_knowledge",
+          "outcome": "success",
+          "n": 6
+        },
+        {
+          "day": "2026-09-05",
+          "operation": "query_network_knowledge",
+          "outcome": "unknown",
+          "n": 6
+        },
+        {
+          "day": "2026-09-06",
+          "operation": "list_knowledge_domains",
+          "outcome": "success",
+          "n": 1
+        },
+        {
+          "day": "2026-09-06",
+          "operation": "query_network_knowledge",
+          "outcome": "success",
+          "n": 8
+        },
+        {
+          "day": "2026-09-06",
+          "operation": "query_network_knowledge",
+          "outcome": "unknown",
+          "n": 17
+        },
+        {
+          "day": "2026-09-07",
+          "operation": "list_knowledge_domains",
+          "outcome": "success",
+          "n": 1
+        },
+        {
+          "day": "2026-09-07",
+          "operation": "query_network_knowledge",
+          "outcome": "success",
+          "n": 8
+        },
+        {
+          "day": "2026-09-07",
+          "operation": "query_network_knowledge",
+          "outcome": "unknown",
+          "n": 17
+        },
+        {
+          "day": "2026-09-08",
+          "operation": "list_knowledge_domains",
+          "outcome": "success",
+          "n": 1
+        },
+        {
+          "day": "2026-09-09",
+          "operation": "list_knowledge_domains",
+          "outcome": "success",
+          "n": 1
+        },
+        {
+          "day": "2026-09-09",
+          "operation": "query_network_knowledge",
+          "outcome": "unknown",
+          "n": 1
+        },
+        {
+          "day": "2026-09-10",
+          "operation": "describe_knowledge_domain",
+          "outcome": "success",
+          "n": 1
+        },
+        {
+          "day": "2026-09-10",
+          "operation": "list_knowledge_domains",
+          "outcome": "success",
+          "n": 2
+        },
+        {
+          "day": "2026-09-10",
+          "operation": "query_domain_knowledge",
+          "outcome": "error",
+          "n": 1
+        },
+        {
+          "day": "2026-09-10",
+          "operation": "query_domain_knowledge",
+          "outcome": "success",
+          "n": 2
+        },
+        {
+          "day": "2026-09-10",
+          "operation": "query_domain_knowledge",
+          "outcome": "unknown",
+          "n": 1
+        },
+        {
+          "day": "2026-09-11",
+          "operation": "list_knowledge_domains",
+          "outcome": "success",
+          "n": 1
+        },
+        {
+          "day": "2026-09-12",
+          "operation": "list_knowledge_domains",
+          "outcome": "success",
+          "n": 1
+        },
+        {
+          "day": "2026-09-13",
+          "operation": "list_knowledge_domains",
+          "outcome": "success",
+          "n": 1
+        },
+        {
+          "day": "2026-09-14",
+          "operation": "list_knowledge_domains",
+          "outcome": "success",
+          "n": 1
+        },
+        {
+          "day": "2026-09-14",
+          "operation": "resolve_network_context",
+          "outcome": "success",
+          "n": 1
+        },
+        {
+          "day": "2026-09-15",
+          "operation": "analyze_device_snapshot",
+          "outcome": "success",
+          "n": 5
+        },
+        {
+          "day": "2026-09-15",
+          "operation": "list_knowledge_domains",
+          "outcome": "success",
+          "n": 1
+        },
+        {
+          "day": "2026-09-15",
+          "operation": "query_network_knowledge",
+          "outcome": "unknown",
+          "n": 3
+        },
+        {
+          "day": "2026-09-15",
+          "operation": "verify_network_change",
+          "outcome": "error",
+          "n": 1
+        },
+        {
+          "day": "2026-09-16",
+          "operation": "list_knowledge_domains",
+          "outcome": "success",
+          "n": 2
+        },
+        {
+          "day": "2026-09-17",
+          "operation": "describe_knowledge_domain",
+          "outcome": "error",
+          "n": 2
+        },
+        {
+          "day": "2026-09-17",
+          "operation": "list_knowledge_domains",
+          "outcome": "success",
+          "n": 16
+        },
+        {
+          "day": "2026-09-18",
+          "operation": "list_knowledge_domains",
+          "outcome": "success",
+          "n": 1
+        },
+        {
+          "day": "2026-09-18",
+          "operation": "query_network_knowledge",
+          "outcome": "unknown",
+          "n": 1
+        },
+        {
+          "day": "2026-09-19",
+          "operation": "list_knowledge_domains",
+          "outcome": "success",
+          "n": 1
+        },
+        {
+          "day": "2026-09-19",
+          "operation": "query_network_knowledge",
+          "outcome": "unknown",
+          "n": 1
+        },
+        {
+          "day": "2026-09-20",
+          "operation": "list_knowledge_domains",
+          "outcome": "success",
+          "n": 2
+        },
+        {
+          "day": "2026-09-21",
+          "operation": "list_knowledge_domains",
+          "outcome": "success",
+          "n": 2
+        },
+        {
+          "day": "2026-09-22",
+          "operation": "list_knowledge_domains",
+          "outcome": "success",
+          "n": 1
+        },
+        {
+          "day": "2026-09-22",
+          "operation": "query_network_knowledge",
+          "outcome": "unknown",
+          "n": 1
+        },
+        {
+          "day": "2026-09-23",
+          "operation": "list_knowledge_domains",
+          "outcome": "success",
+          "n": 3
+        },
+        {
+          "day": "2026-09-23",
+          "operation": "query_network_knowledge",
+          "outcome": "success",
+          "n": 1
+        },
+        {
+          "day": "2026-09-24",
+          "operation": "list_knowledge_domains",
+          "outcome": "success",
+          "n": 1
+        },
+        {
+          "day": "2026-09-25",
+          "operation": "list_knowledge_domains",
+          "outcome": "success",
+          "n": 2
+        },
+        {
+          "day": "2026-09-26",
+          "operation": "list_knowledge_domains",
+          "outcome": "success",
+          "n": 6
+        },
+        {
+          "day": "2026-09-27",
+          "operation": "list_knowledge_domains",
+          "outcome": "success",
+          "n": 7
+        },
+        {
+          "day": "2026-09-27",
+          "operation": "query_network_knowledge",
+          "outcome": "success",
+          "n": 1
+        },
+        {
+          "day": "2026-09-28",
+          "operation": "analyze_device_snapshot",
+          "outcome": "success",
+          "n": 1
+        },
+        {
+          "day": "2026-09-28",
+          "operation": "list_knowledge_domains",
+          "outcome": "success",
+          "n": 2
+        },
+        {
+          "day": "2026-09-28",
+          "operation": "query_network_knowledge",
+          "outcome": "success",
+          "n": 1
+        },
+        {
+          "day": "2026-09-28",
+          "operation": "query_network_knowledge",
+          "outcome": "unknown",
+          "n": 1
+        },
+        {
+          "day": "2026-09-29",
+          "operation": "list_knowledge_domains",
+          "outcome": "success",
+          "n": 2
+        },
+        {
+          "day": "2026-09-30",
+          "operation": "advise_network_upgrade",
+          "outcome": "success",
+          "n": 2
+        },
+        {
+          "day": "2026-09-30",
+          "operation": "analyze_device_snapshot",
+          "outcome": "success",
+          "n": 2
+        },
+        {
+          "day": "2026-09-30",
+          "operation": "get_network_workflow",
+          "outcome": "success",
+          "n": 2
+        },
+        {
+          "day": "2026-09-30",
+          "operation": "query_network_knowledge",
+          "outcome": "success",
+          "n": 2
+        },
+        {
+          "day": "2026-09-30",
+          "operation": "query_network_knowledge",
+          "outcome": "unknown",
+          "n": 1
+        },
+        {
+          "day": "2026-09-30",
+          "operation": "review_network_change",
+          "outcome": "success",
+          "n": 2
+        },
+        {
+          "day": "2026-09-30",
+          "operation": "verify_network_change",
+          "outcome": "success",
+          "n": 4
+        }
+      ]
+    },
+    {
+      "section": "revisions_daily14d",
+      "rows": [
+        {
+          "day": "2026-09-16",
+          "created_by": "researcher",
+          "n": 1519
+        },
+        {
+          "day": "2026-09-17",
+          "created_by": "researcher",
+          "n": 2159
+        },
+        {
+          "day": "2026-09-18",
+          "created_by": "researcher",
+          "n": 1581
+        },
+        {
+          "day": "2026-09-19",
+          "created_by": "researcher",
+          "n": 728
+        },
+        {
+          "day": "2026-09-20",
+          "created_by": "researcher",
+          "n": 95
+        },
+        {
+          "day": "2026-09-21",
+          "created_by": "researcher",
+          "n": 2925
+        },
+        {
+          "day": "2026-09-22",
+          "created_by": "researcher",
+          "n": 1679
+        },
+        {
+          "day": "2026-09-23",
+          "created_by": "researcher",
+          "n": 1666
+        },
+        {
+          "day": "2026-09-24",
+          "created_by": "researcher",
+          "n": 384
+        },
+        {
+          "day": "2026-09-25",
+          "created_by": "researcher",
+          "n": 558
+        },
+        {
+          "day": "2026-09-30",
+          "created_by": "researcher",
+          "n": 462
+        },
+        {
+          "day": "2026-09-30",
+          "created_by": "super_admin",
+          "n": 3
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,3249 @@
+{
+  "at": {
+    "at": "2026-09-30T15:45:03.231Z",
+    "database": "clideck_mcp"
+  },
+  "seed": 20260930,
+  "results": [
+    {
+      "candidate_id": 17,
+      "group": "linux",
+      "context": {
+        "operating_system": "Linux"
+      },
+      "question": "How do I display the Linux netfilter conntrack expectation table without deleting entries?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "unknown",
+        "answers": [],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "missing",
+            "answer_refs": []
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Not specified",
+        "vendor_slug": "not-specified",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "linux",
+        "operating_system_slug": "linux",
+        "software_family": "linux",
+        "software_family_slug": "linux",
+        "portable_operating_system": true,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": false,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.6,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      }
+    },
+    {
+      "candidate_id": 23,
+      "group": "openwrt",
+      "context": {
+        "operating_system": "OpenWrt"
+      },
+      "question": "How can I inspect OpenWrt ubus DHCPv6 prefix delegation status for a wan6 interface?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "complete",
+        "answers": [
+          {
+            "revision_ref": "5da967da-a01c-4114-bbfa-a132616d06e0",
+            "title": "ifstatus",
+            "command": "ifstatus",
+            "applicability": {
+              "vendor": "Not specified",
+              "model": null,
+              "operating_system": "OpenWrt",
+              "versions": {
+                "minimum": null,
+                "maximum": null,
+                "requested": null
+              },
+              "match_level": "os_family",
+              "context_relation": "portable",
+              "version_match": "unbounded",
+              "documented_version_relation": "unspecified",
+              "assurance_level": "generic",
+              "requires_platform_confirmation": true
+            }
+          }
+        ],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "covered",
+            "answer_refs": [
+              "5da967da-a01c-4114-bbfa-a132616d06e0"
+            ]
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Not specified",
+        "vendor_slug": "not-specified",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "OpenWrt",
+        "operating_system_slug": "openwrt",
+        "software_family": "OpenWrt",
+        "software_family_slug": "openwrt",
+        "portable_operating_system": true,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": false,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.6,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      }
+    },
+    {
+      "candidate_id": 29,
+      "group": "sonic",
+      "context": {
+        "operating_system": "SONiC"
+      },
+      "question": "How can I verify SONiC dynamic buffer headroom pool configuration without applying changes?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "complete",
+        "answers": [
+          {
+            "revision_ref": "27c0cf08-28f1-418b-aadf-9103d2df8163",
+            "title": "config buffer shared-headroom-pool size",
+            "command": "config buffer shared-headroom-pool size",
+            "applicability": {
+              "vendor": "Not specified",
+              "model": null,
+              "operating_system": "SONiC",
+              "versions": {
+                "minimum": null,
+                "maximum": null,
+                "requested": null
+              },
+              "match_level": "os_family",
+              "context_relation": "portable",
+              "version_match": "unbounded",
+              "documented_version_relation": "unspecified",
+              "assurance_level": "generic",
+              "requires_platform_confirmation": true
+            }
+          },
+          {
+            "revision_ref": "51e77695-8824-44f9-8ba8-fe4b48feab17",
+            "title": "config buffer shared-headroom-pool over-subscribe-ratio",
+            "command": "config buffer shared-headroom-pool over-subscribe-ratio",
+            "applicability": {
+              "vendor": "Not specified",
+              "model": null,
+              "operating_system": "SONiC",
+              "versions": {
+                "minimum": null,
+                "maximum": null,
+                "requested": null
+              },
+              "match_level": "os_family",
+              "context_relation": "portable",
+              "version_match": "unbounded",
+              "documented_version_relation": "unspecified",
+              "assurance_level": "generic",
+              "requires_platform_confirmation": true
+            }
+          },
+          {
+            "revision_ref": "f9c9c325-de25-4a59-91c8-f372ec5a0994",
+            "title": "SONiC dynamic port configuration processing flow",
+            "command": null,
+            "applicability": {
+              "vendor": "Not specified",
+              "model": null,
+              "operating_system": "SONiC",
+              "versions": {
+                "minimum": null,
+                "maximum": null,
+                "requested": null
+              },
+              "match_level": "os_family",
+              "context_relation": "portable",
+              "version_match": "unbounded",
+              "documented_version_relation": "unspecified",
+              "assurance_level": "generic",
+              "requires_platform_confirmation": true
+            }
+          }
+        ],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "covered",
+            "answer_refs": [
+              "27c0cf08-28f1-418b-aadf-9103d2df8163",
+              "51e77695-8824-44f9-8ba8-fe4b48feab17",
+              "f9c9c325-de25-4a59-91c8-f372ec5a0994"
+            ]
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Not specified",
+        "vendor_slug": "not-specified",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "SONiC",
+        "operating_system_slug": "sonic",
+        "software_family": "SONiC",
+        "software_family_slug": "sonic",
+        "portable_operating_system": true,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": false,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.6,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      }
+    },
+    {
+      "candidate_id": 10,
+      "group": "linux",
+      "context": {
+        "operating_system": "Linux"
+      },
+      "question": "How can I inspect a Linux MACsec interface cipher suite and replay protection settings?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "unknown",
+        "answers": [],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "missing",
+            "answer_refs": []
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Not specified",
+        "vendor_slug": "not-specified",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "linux",
+        "operating_system_slug": "linux",
+        "software_family": "linux",
+        "software_family_slug": "linux",
+        "portable_operating_system": true,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": false,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.6,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      }
+    },
+    {
+      "candidate_id": 5,
+      "group": "linux",
+      "context": {
+        "operating_system": "Linux"
+      },
+      "question": "How can I identify packet drops caused by XDP redirect failures using Linux tracepoints?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "unknown",
+        "answers": [],
+        "coverage": [
+          {
+            "capability": "interface-counters",
+            "label": "Interface counters",
+            "status": "missing",
+            "answer_refs": []
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Not specified",
+        "vendor_slug": "not-specified",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "linux",
+        "operating_system_slug": "linux",
+        "software_family": "linux",
+        "software_family_slug": "linux",
+        "portable_operating_system": true,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": false,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.6,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      }
+    },
+    {
+      "candidate_id": 7,
+      "group": "linux",
+      "context": {
+        "operating_system": "Linux"
+      },
+      "question": "How can I inspect an SRv6 seg6local route and its End.DT6 behavior with iproute2?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "unknown",
+        "answers": [],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "missing",
+            "answer_refs": []
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Not specified",
+        "vendor_slug": "not-specified",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "linux",
+        "operating_system_slug": "linux",
+        "software_family": "linux",
+        "software_family_slug": "linux",
+        "portable_operating_system": true,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": false,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.6,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      }
+    },
+    {
+      "candidate_id": 46,
+      "group": "junos",
+      "context": {
+        "vendor": "Juniper",
+        "operating_system": "Junos"
+      },
+      "question": "How do I inspect Junos BGP RPKI origin validation state for one advertised prefix?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "complete",
+        "answers": [
+          {
+            "revision_ref": "e7d13a8d-5864-4786-a439-d76670c2c0c3",
+            "title": "Inspect RPKI validation statistics with Junos operational commands",
+            "command": "show route [extensive|detail]; show bgp neighbor validation statistics <peer>; show route validation-statistics; show validation statistics",
+            "applicability": {
+              "vendor": "Juniper",
+              "model": null,
+              "operating_system": "Junos",
+              "versions": {
+                "minimum": "23.4R1",
+                "maximum": null,
+                "requested": null
+              },
+              "match_level": "vendor_os",
+              "context_relation": "same_software_family",
+              "version_match": "branch",
+              "documented_version_relation": "unspecified",
+              "assurance_level": "compatible",
+              "requires_platform_confirmation": false
+            }
+          },
+          {
+            "revision_ref": "3f4a4b5c-594f-4d64-995a-8cacd27d66fb",
+            "title": "Inspect RPKI route-validation statistics",
+            "command": "show route [extensive|detail]; show bgp neighbor validation statistics <peer>; show route validation-statistics; show validation statistics",
+            "applicability": {
+              "vendor": "Juniper",
+              "model": null,
+              "operating_system": "Junos",
+              "versions": {
+                "minimum": "23.4R1",
+                "maximum": null,
+                "requested": null
+              },
+              "match_level": "vendor_os",
+              "context_relation": "same_software_family",
+              "version_match": "branch",
+              "documented_version_relation": "unspecified",
+              "assurance_level": "compatible",
+              "requires_platform_confirmation": false
+            }
+          },
+          {
+            "revision_ref": "d0c36fe7-11bc-47aa-9087-1ad55314b4d8",
+            "title": "Display per-prefix BGP multipath state",
+            "command": "show route extensive",
+            "applicability": {
+              "vendor": "Juniper",
+              "model": null,
+              "operating_system": "Junos",
+              "versions": {
+                "minimum": "23.4R1",
+                "maximum": null,
+                "requested": null
+              },
+              "match_level": "vendor_os",
+              "context_relation": "same_software_family",
+              "version_match": "branch",
+              "documented_version_relation": "unspecified",
+              "assurance_level": "compatible",
+              "requires_platform_confirmation": false
+            }
+          }
+        ],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "covered",
+            "answer_refs": [
+              "e7d13a8d-5864-4786-a439-d76670c2c0c3",
+              "3f4a4b5c-594f-4d64-995a-8cacd27d66fb",
+              "d0c36fe7-11bc-47aa-9087-1ad55314b4d8"
+            ]
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Juniper",
+        "vendor_slug": "juniper",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "Juniper Junos",
+        "operating_system_slug": "junos",
+        "software_family": "Juniper Junos",
+        "software_family_slug": "juniper-junos",
+        "portable_operating_system": false,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": true,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.7,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      }
+    },
+    {
+      "candidate_id": 21,
+      "group": "openwrt",
+      "context": {
+        "operating_system": "OpenWrt"
+      },
+      "question": "How do I diagnose DNS over HTTPS bootstrap lookup failures in an OpenWrt https-dns-proxy deployment?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "unknown",
+        "answers": [],
+        "coverage": [
+          {
+            "capability": "boot-behavior",
+            "label": "Boot behavior",
+            "status": "missing",
+            "answer_refs": []
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Not specified",
+        "vendor_slug": "not-specified",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "OpenWrt",
+        "operating_system_slug": "openwrt",
+        "software_family": "OpenWrt",
+        "software_family_slug": "openwrt",
+        "portable_operating_system": true,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": false,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.6,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      }
+    },
+    {
+      "candidate_id": 49,
+      "group": "junos",
+      "context": {
+        "vendor": "Juniper",
+        "operating_system": "Junos"
+      },
+      "question": "How can I inspect Junos SRv6 locator and local SID allocation state?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "unknown",
+        "answers": [],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "missing",
+            "answer_refs": []
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Juniper",
+        "vendor_slug": "juniper",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "Juniper Junos",
+        "operating_system_slug": "junos",
+        "software_family": "Juniper Junos",
+        "software_family_slug": "juniper-junos",
+        "portable_operating_system": false,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": true,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.7,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      }
+    },
+    {
+      "candidate_id": 39,
+      "group": "arista",
+      "context": {
+        "vendor": "Arista",
+        "operating_system": "EOS"
+      },
+      "question": "How can I inspect Arista EOS EVPN multihoming designated forwarder election state?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "unknown",
+        "answers": [],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "missing",
+            "answer_refs": []
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Arista",
+        "vendor_slug": "arista",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "Arista Arista EOS",
+        "operating_system_slug": "eos",
+        "software_family": "Arista Arista EOS",
+        "software_family_slug": "arista-eos",
+        "portable_operating_system": false,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": true,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.7,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      }
+    },
+    {
+      "candidate_id": 19,
+      "group": "linux",
+      "context": {
+        "operating_system": "Linux"
+      },
+      "question": "How do I identify whether Linux reverse path filtering uses strict or loose mode on an interface?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "unknown",
+        "answers": [],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "missing",
+            "answer_refs": []
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Not specified",
+        "vendor_slug": "not-specified",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "linux",
+        "operating_system_slug": "linux",
+        "software_family": "linux",
+        "software_family_slug": "linux",
+        "portable_operating_system": true,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": false,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.6,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      }
+    },
+    {
+      "candidate_id": 31,
+      "group": "sonic",
+      "context": {
+        "operating_system": "SONiC"
+      },
+      "question": "How can I inspect SONiC fine grained ECMP next-hop group state?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "complete",
+        "answers": [
+          {
+            "revision_ref": "eea02761-9d29-41fd-8438-d692542c1ec3",
+            "title": "show fgnhg active-hops",
+            "command": "show fgnhg active-hops",
+            "applicability": {
+              "vendor": "Not specified",
+              "model": null,
+              "operating_system": "SONiC",
+              "versions": {
+                "minimum": null,
+                "maximum": null,
+                "requested": null
+              },
+              "match_level": "os_family",
+              "context_relation": "portable",
+              "version_match": "unbounded",
+              "documented_version_relation": "unspecified",
+              "assurance_level": "generic",
+              "requires_platform_confirmation": false
+            }
+          }
+        ],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "covered",
+            "answer_refs": [
+              "eea02761-9d29-41fd-8438-d692542c1ec3"
+            ]
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Not specified",
+        "vendor_slug": "not-specified",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "SONiC",
+        "operating_system_slug": "sonic",
+        "software_family": "SONiC",
+        "software_family_slug": "sonic",
+        "portable_operating_system": true,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": false,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.6,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      }
+    },
+    {
+      "candidate_id": 16,
+      "group": "linux",
+      "context": {
+        "operating_system": "Linux"
+      },
+      "question": "How can I inspect Linux network device RSS hash functions and indirection tables?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "unknown",
+        "answers": [],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "missing",
+            "answer_refs": []
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Not specified",
+        "vendor_slug": "not-specified",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "linux",
+        "operating_system_slug": "linux",
+        "software_family": "linux",
+        "software_family_slug": "linux",
+        "portable_operating_system": true,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": false,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.6,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      }
+    },
+    {
+      "candidate_id": 14,
+      "group": "linux",
+      "context": {
+        "operating_system": "Linux"
+      },
+      "question": "How can I inspect a tc cake qdisc flow isolation mode and packet drop counters?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "unknown",
+        "answers": [],
+        "coverage": [
+          {
+            "capability": "interface-counters",
+            "label": "Interface counters",
+            "status": "missing",
+            "answer_refs": []
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Not specified",
+        "vendor_slug": "not-specified",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "linux",
+        "operating_system_slug": "linux",
+        "software_family": "linux",
+        "software_family_slug": "linux",
+        "portable_operating_system": true,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": false,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.6,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      }
+    },
+    {
+      "candidate_id": 43,
+      "group": "arista",
+      "context": {
+        "vendor": "Arista",
+        "operating_system": "EOS"
+      },
+      "question": "How can I inspect Arista EOS VXLAN routing VNI to VRF mapping?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "complete",
+        "answers": [
+          {
+            "revision_ref": "73bb16dc-7974-4599-bfcc-87750963a4cd",
+            "title": "Display VXLAN VNI values in dotted notation",
+            "command": "vxlan vni notation dotted",
+            "applicability": {
+              "vendor": "Arista",
+              "model": null,
+              "operating_system": "Not specified",
+              "versions": {
+                "minimum": "4.17.1F",
+                "maximum": "4.17.1F",
+                "requested": null
+              },
+              "match_level": "vendor_os",
+              "context_relation": "same_software_family",
+              "version_match": "branch",
+              "documented_version_relation": "unspecified",
+              "assurance_level": "compatible",
+              "requires_platform_confirmation": true
+            }
+          }
+        ],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "covered",
+            "answer_refs": [
+              "73bb16dc-7974-4599-bfcc-87750963a4cd"
+            ]
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Arista",
+        "vendor_slug": "arista",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "Arista Arista EOS",
+        "operating_system_slug": "eos",
+        "software_family": "Arista Arista EOS",
+        "software_family_slug": "arista-eos",
+        "portable_operating_system": false,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": true,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.7,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      }
+    },
+    {
+      "candidate_id": 9,
+      "group": "linux",
+      "context": {
+        "operating_system": "Linux"
+      },
+      "question": "How do I inspect the per-network-namespace nftables flowtable offload configuration?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "unknown",
+        "answers": [],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "missing",
+            "answer_refs": []
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Not specified",
+        "vendor_slug": "not-specified",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "linux",
+        "operating_system_slug": "linux",
+        "software_family": "linux",
+        "software_family_slug": "linux",
+        "portable_operating_system": true,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": false,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.6,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      }
+    },
+    {
+      "candidate_id": 1,
+      "group": "linux",
+      "context": {
+        "operating_system": "Linux"
+      },
+      "question": "How can I inspect Multipath TCP endpoint flags and connection subflows with ip mptcp?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "unknown",
+        "answers": [],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "missing",
+            "answer_refs": []
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Not specified",
+        "vendor_slug": "not-specified",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "linux",
+        "operating_system_slug": "linux",
+        "software_family": "linux",
+        "software_family_slug": "linux",
+        "portable_operating_system": true,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": false,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.6,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      }
+    },
+    {
+      "candidate_id": 8,
+      "group": "linux",
+      "context": {
+        "operating_system": "Linux"
+      },
+      "question": "How can I compare Linux IPv6 route cache exceptions with the main IPv6 routing table?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "unknown",
+        "answers": [],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "missing",
+            "answer_refs": []
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Not specified",
+        "vendor_slug": "not-specified",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "linux",
+        "operating_system_slug": "linux",
+        "software_family": "linux",
+        "software_family_slug": "linux",
+        "portable_operating_system": true,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": false,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.6,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      }
+    },
+    {
+      "candidate_id": 34,
+      "group": "cisco",
+      "context": {
+        "vendor": "Cisco",
+        "operating_system": "IOS XE"
+      },
+      "question": "How do I verify Cisco IOS XE BFD echo mode session failure diagnostics?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "complete",
+        "answers": [
+          {
+            "revision_ref": "dfd24c05-5d78-477d-9b04-30008cb3c20e",
+            "title": "Verify Cisco IOS XE health-monitoring diagnostics",
+            "command": "show diagnostic {content | post | result | schedule | status | switch}",
+            "applicability": {
+              "vendor": "Cisco",
+              "model": null,
+              "operating_system": "Cisco IOS-XE",
+              "versions": {
+                "minimum": null,
+                "maximum": null,
+                "requested": null
+              },
+              "match_level": "vendor_os",
+              "context_relation": "same_software_family",
+              "version_match": "unbounded",
+              "documented_version_relation": "unspecified",
+              "assurance_level": "compatible",
+              "requires_platform_confirmation": false
+            }
+          },
+          {
+            "revision_ref": "33e2518e-7744-4384-a182-4125a6d0bfd0",
+            "title": "Verify Cisco IOS XE BGP peer-session templates",
+            "command": "show ip bgp template peer-session [ session-template-name ]",
+            "applicability": {
+              "vendor": "Cisco",
+              "model": null,
+              "operating_system": "Cisco IOS XE",
+              "versions": {
+                "minimum": "17.15",
+                "maximum": "17.15",
+                "requested": null
+              },
+              "match_level": "vendor_os",
+              "context_relation": "same_software_family",
+              "version_match": "branch",
+              "documented_version_relation": "unspecified",
+              "assurance_level": "compatible",
+              "requires_platform_confirmation": false
+            }
+          },
+          {
+            "revision_ref": "d276f01a-339e-4038-9314-ab9c24c38bce",
+            "title": "Verify Cisco IOS XE console session timeout",
+            "command": "show line console 0",
+            "applicability": {
+              "vendor": "Cisco",
+              "model": null,
+              "operating_system": "Cisco IOS XE",
+              "versions": {
+                "minimum": null,
+                "maximum": null,
+                "requested": null
+              },
+              "match_level": "vendor_os",
+              "context_relation": "same_software_family",
+              "version_match": "unbounded",
+              "documented_version_relation": "unspecified",
+              "assurance_level": "compatible",
+              "requires_platform_confirmation": false
+            }
+          }
+        ],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "covered",
+            "answer_refs": [
+              "dfd24c05-5d78-477d-9b04-30008cb3c20e",
+              "33e2518e-7744-4384-a182-4125a6d0bfd0",
+              "d276f01a-339e-4038-9314-ab9c24c38bce"
+            ]
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Cisco",
+        "vendor_slug": "cisco",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "Cisco IOS XE",
+        "operating_system_slug": "ios-xe",
+        "software_family": "Cisco IOS XE",
+        "software_family_slug": "cisco-ios-xe",
+        "portable_operating_system": false,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": true,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.7,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      }
+    },
+    {
+      "candidate_id": 24,
+      "group": "openwrt",
+      "context": {
+        "operating_system": "OpenWrt"
+      },
+      "question": "How do I verify OpenWrt mwan3 policy routing rules for an existing connection?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "unknown",
+        "answers": [],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "missing",
+            "answer_refs": []
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Not specified",
+        "vendor_slug": "not-specified",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "OpenWrt",
+        "operating_system_slug": "openwrt",
+        "software_family": "OpenWrt",
+        "software_family_slug": "openwrt",
+        "portable_operating_system": true,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": false,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.6,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      }
+    },
+    {
+      "candidate_id": 25,
+      "group": "openwrt",
+      "context": {
+        "operating_system": "OpenWrt"
+      },
+      "question": "How can I inspect the active OpenWrt SQM cake overhead compensation settings?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "unknown",
+        "answers": [],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "missing",
+            "answer_refs": []
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Not specified",
+        "vendor_slug": "not-specified",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "OpenWrt",
+        "operating_system_slug": "openwrt",
+        "software_family": "OpenWrt",
+        "software_family_slug": "openwrt",
+        "portable_operating_system": true,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": false,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.6,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      }
+    },
+    {
+      "candidate_id": 11,
+      "group": "linux",
+      "context": {
+        "operating_system": "Linux"
+      },
+      "question": "How can I inspect Linux bridge multicast database entries and their source-specific filters?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "unknown",
+        "answers": [],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "missing",
+            "answer_refs": []
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Not specified",
+        "vendor_slug": "not-specified",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "linux",
+        "operating_system_slug": "linux",
+        "software_family": "linux",
+        "software_family_slug": "linux",
+        "portable_operating_system": true,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": false,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.6,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      }
+    },
+    {
+      "candidate_id": 22,
+      "group": "openwrt",
+      "context": {
+        "operating_system": "OpenWrt"
+      },
+      "question": "How can I inspect OpenWrt firewall4 nftables flow offloading rules without restarting the firewall?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "unknown",
+        "answers": [],
+        "coverage": [
+          {
+            "capability": "system-reboot",
+            "label": "System reboot",
+            "status": "missing",
+            "answer_refs": []
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Not specified",
+        "vendor_slug": "not-specified",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "OpenWrt",
+        "operating_system_slug": "openwrt",
+        "software_family": "OpenWrt",
+        "software_family_slug": "openwrt",
+        "portable_operating_system": true,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": false,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.6,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      }
+    },
+    {
+      "candidate_id": 13,
+      "group": "linux",
+      "context": {
+        "operating_system": "Linux"
+      },
+      "question": "How do I identify whether a Linux UDP socket uses UDP_SEGMENT or UDP_GRO?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "unknown",
+        "answers": [],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "missing",
+            "answer_refs": []
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Not specified",
+        "vendor_slug": "not-specified",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "linux",
+        "operating_system_slug": "linux",
+        "software_family": "linux",
+        "software_family_slug": "linux",
+        "portable_operating_system": true,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": false,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.6,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      }
+    },
+    {
+      "candidate_id": 36,
+      "group": "cisco",
+      "context": {
+        "vendor": "Cisco",
+        "operating_system": "IOS XE"
+      },
+      "question": "How do I verify IOS XE Flexible NetFlow observation domain identifiers?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "complete",
+        "answers": [
+          {
+            "revision_ref": "18b511c3-d267-4147-9019-a6abbbe991fa",
+            "title": "Configure IOS XE Flexible NetFlow flow counters",
+            "command": "collect counter { bytes | packets } long",
+            "applicability": {
+              "vendor": "Cisco",
+              "model": null,
+              "operating_system": "Cisco IOS XE",
+              "versions": {
+                "minimum": null,
+                "maximum": null,
+                "requested": null
+              },
+              "match_level": "vendor_os",
+              "context_relation": "same_software_family",
+              "version_match": "unbounded",
+              "documented_version_relation": "unspecified",
+              "assurance_level": "compatible",
+              "requires_platform_confirmation": true
+            }
+          },
+          {
+            "revision_ref": "92ab93db-c3e8-4ca6-9757-345266c7c77d",
+            "title": "Verify Flexible NetFlow monitor cache on Catalyst 9300",
+            "command": "show running-config interface g1/0/11\nshow running-config interface g1/0/36\nshow running-config interface g3/0/11\nshow flow monitor fm-1 cache format table",
+            "applicability": {
+              "vendor": "Cisco",
+              "model": null,
+              "operating_system": "Cisco IOS XE",
+              "versions": {
+                "minimum": "17.15",
+                "maximum": "17.15",
+                "requested": null
+              },
+              "match_level": "vendor_os",
+              "context_relation": "same_software_family",
+              "version_match": "branch",
+              "documented_version_relation": "unspecified",
+              "assurance_level": "compatible",
+              "requires_platform_confirmation": false
+            }
+          },
+          {
+            "revision_ref": "530f5376-03b0-401f-876a-e30edd719872",
+            "title": "Create and verify a Flexible NetFlow flow monitor",
+            "command": "flow monitor monitor-name",
+            "applicability": {
+              "vendor": "Cisco",
+              "model": null,
+              "operating_system": "Cisco IOS XE",
+              "versions": {
+                "minimum": "16.12",
+                "maximum": "16.12",
+                "requested": null
+              },
+              "match_level": "vendor_os",
+              "context_relation": "same_software_family",
+              "version_match": "branch",
+              "documented_version_relation": "unspecified",
+              "assurance_level": "compatible",
+              "requires_platform_confirmation": true
+            }
+          }
+        ],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "covered",
+            "answer_refs": [
+              "18b511c3-d267-4147-9019-a6abbbe991fa",
+              "92ab93db-c3e8-4ca6-9757-345266c7c77d",
+              "530f5376-03b0-401f-876a-e30edd719872"
+            ]
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Cisco",
+        "vendor_slug": "cisco",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "Cisco IOS XE",
+        "operating_system_slug": "ios-xe",
+        "software_family": "Cisco IOS XE",
+        "software_family_slug": "cisco-ios-xe",
+        "portable_operating_system": false,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": true,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.7,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      }
+    },
+    {
+      "candidate_id": 12,
+      "group": "linux",
+      "context": {
+        "operating_system": "Linux"
+      },
+      "question": "How can I inspect ethtool receive flow classification rules without modifying them?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "unknown",
+        "answers": [],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "missing",
+            "answer_refs": []
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Not specified",
+        "vendor_slug": "not-specified",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "linux",
+        "operating_system_slug": "linux",
+        "software_family": "linux",
+        "software_family_slug": "linux",
+        "portable_operating_system": true,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": false,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.6,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      }
+    },
+    {
+      "candidate_id": 38,
+      "group": "cisco",
+      "context": {
+        "vendor": "Cisco",
+        "operating_system": "IOS XE"
+      },
+      "question": "How do I verify IOS XE segment routing microloop avoidance state?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "unknown",
+        "answers": [],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "missing",
+            "answer_refs": []
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Cisco",
+        "vendor_slug": "cisco",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "Cisco IOS XE",
+        "operating_system_slug": "ios-xe",
+        "software_family": "Cisco IOS XE",
+        "software_family_slug": "cisco-ios-xe",
+        "portable_operating_system": false,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": true,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.7,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      }
+    },
+    {
+      "candidate_id": 45,
+      "group": "junos",
+      "context": {
+        "vendor": "Juniper",
+        "operating_system": "Junos"
+      },
+      "question": "How can I inspect Junos EVPN ESI label advertisements for an all-active Ethernet segment?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "complete",
+        "answers": [
+          {
+            "revision_ref": "63785909-4b29-4a10-9cfd-b19a7b7a1db4",
+            "title": "Show route summary statistics on Junos",
+            "command": "show route summary [logical-system (all | logical-system-name)] [table routing-table-name] [rib-sharding (main | rib-shard-name)]",
+            "applicability": {
+              "vendor": "Juniper",
+              "model": null,
+              "operating_system": "Junos",
+              "versions": {
+                "minimum": null,
+                "maximum": null,
+                "requested": null
+              },
+              "match_level": "vendor_os",
+              "context_relation": "same_software_family",
+              "version_match": "unbounded",
+              "documented_version_relation": "unspecified",
+              "assurance_level": "compatible",
+              "requires_platform_confirmation": false
+            }
+          }
+        ],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "covered",
+            "answer_refs": [
+              "63785909-4b29-4a10-9cfd-b19a7b7a1db4"
+            ]
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Juniper",
+        "vendor_slug": "juniper",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "Juniper Junos",
+        "operating_system_slug": "junos",
+        "software_family": "Juniper Junos",
+        "software_family_slug": "juniper-junos",
+        "portable_operating_system": false,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": true,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.7,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      }
+    },
+    {
+      "candidate_id": 6,
+      "group": "linux",
+      "context": {
+        "operating_system": "Linux"
+      },
+      "question": "How do I verify that a Linux network interface supports hardware transmit timestamping?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "unknown",
+        "answers": [],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "missing",
+            "answer_refs": []
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Not specified",
+        "vendor_slug": "not-specified",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "linux",
+        "operating_system_slug": "linux",
+        "software_family": "linux",
+        "software_family_slug": "linux",
+        "portable_operating_system": true,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": false,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.6,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      }
+    },
+    {
+      "candidate_id": 42,
+      "group": "arista",
+      "context": {
+        "vendor": "Arista",
+        "operating_system": "EOS"
+      },
+      "question": "How do I inspect Arista EOS dynamic VLAN assignment for an 802.1X authenticated port?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "complete",
+        "answers": [
+          {
+            "revision_ref": "dbaff694-3a7f-438b-9cb6-d6f34a6ffb57",
+            "title": "Configure a trunk port, allowed VLANs, and native VLAN",
+            "command": "switchport mode trunk",
+            "applicability": {
+              "vendor": "Arista",
+              "model": null,
+              "operating_system": "Arista EOS",
+              "versions": {
+                "minimum": "4.18.3F",
+                "maximum": "4.18.3F",
+                "requested": null
+              },
+              "match_level": "vendor_os",
+              "context_relation": "same_software_family",
+              "version_match": "branch",
+              "documented_version_relation": "unspecified",
+              "assurance_level": "compatible",
+              "requires_platform_confirmation": true
+            }
+          },
+          {
+            "revision_ref": "14ad0f25-f5a3-4e8b-83d4-5de3309dd4e2",
+            "title": "Configure a trunk native VLAN and tagging",
+            "command": "switchport trunk native vlan",
+            "applicability": {
+              "vendor": "Arista",
+              "model": null,
+              "operating_system": "Not specified",
+              "versions": {
+                "minimum": "4.15.0F",
+                "maximum": "4.15.0F",
+                "requested": null
+              },
+              "match_level": "vendor_os",
+              "context_relation": "same_software_family",
+              "version_match": "branch",
+              "documented_version_relation": "unspecified",
+              "assurance_level": "compatible",
+              "requires_platform_confirmation": true
+            }
+          },
+          {
+            "revision_ref": "4a3512ab-e990-4736-bb10-38f512ce247f",
+            "title": "Configure a trunk native VLAN",
+            "command": "switchport trunk native vlan VLAN_ID",
+            "applicability": {
+              "vendor": "Arista",
+              "model": null,
+              "operating_system": "Arista EOS",
+              "versions": {
+                "minimum": "4.15.0F",
+                "maximum": "4.15.0F",
+                "requested": null
+              },
+              "match_level": "vendor_os",
+              "context_relation": "same_software_family",
+              "version_match": "branch",
+              "documented_version_relation": "unspecified",
+              "assurance_level": "compatible",
+              "requires_platform_confirmation": true
+            }
+          }
+        ],
+        "coverage": [
+          {
+            "capability": "vlan-trunk",
+            "label": "VLAN trunk",
+            "status": "covered",
+            "answer_refs": [
+              "dbaff694-3a7f-438b-9cb6-d6f34a6ffb57",
+              "14ad0f25-f5a3-4e8b-83d4-5de3309dd4e2",
+              "4a3512ab-e990-4736-bb10-38f512ce247f"
+            ]
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Arista",
+        "vendor_slug": "arista",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "Arista Arista EOS",
+        "operating_system_slug": "eos",
+        "software_family": "Arista Arista EOS",
+        "software_family_slug": "arista-eos",
+        "portable_operating_system": false,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": true,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.7,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      }
+    },
+    {
+      "candidate_id": 35,
+      "group": "cisco",
+      "context": {
+        "vendor": "Cisco",
+        "operating_system": "IOS XE"
+      },
+      "question": "How can I inspect Cisco IOS XE MPLS entropy label capability on a label switched path?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "complete",
+        "answers": [
+          {
+            "revision_ref": "2117857f-5a9a-4463-a8f4-7ccb9846f315",
+            "title": "Inspect MPLS forwarding entries with show mpls forwarding-table detail",
+            "command": "show mpls forwarding-table detail",
+            "applicability": {
+              "vendor": "Cisco",
+              "model": null,
+              "operating_system": "Cisco IOS XE",
+              "versions": {
+                "minimum": null,
+                "maximum": null,
+                "requested": null
+              },
+              "match_level": "vendor_os",
+              "context_relation": "same_software_family",
+              "version_match": "unbounded",
+              "documented_version_relation": "unspecified",
+              "assurance_level": "compatible",
+              "requires_platform_confirmation": false
+            }
+          },
+          {
+            "revision_ref": "d285c6c2-7114-429a-8112-c27dbd3c2247",
+            "title": "Inspect FP MPLS label objects and their adjacencies",
+            "command": "show platform software mpls switch active f0 label index <label_handle>",
+            "applicability": {
+              "vendor": "Cisco",
+              "model": null,
+              "operating_system": "Cisco IOS XE",
+              "versions": {
+                "minimum": null,
+                "maximum": null,
+                "requested": null
+              },
+              "match_level": "vendor_os",
+              "context_relation": "same_software_family",
+              "version_match": "unbounded",
+              "documented_version_relation": "unspecified",
+              "assurance_level": "compatible",
+              "requires_platform_confirmation": false
+            }
+          }
+        ],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "covered",
+            "answer_refs": [
+              "2117857f-5a9a-4463-a8f4-7ccb9846f315",
+              "d285c6c2-7114-429a-8112-c27dbd3c2247"
+            ]
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Cisco",
+        "vendor_slug": "cisco",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "Cisco IOS XE",
+        "operating_system_slug": "ios-xe",
+        "software_family": "Cisco IOS XE",
+        "software_family_slug": "cisco-ios-xe",
+        "portable_operating_system": false,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": true,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.7,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      }
+    },
+    {
+      "candidate_id": 32,
+      "group": "sonic",
+      "context": {
+        "operating_system": "SONiC"
+      },
+      "question": "How do I diagnose SONiC BGP graceful restart stale route retention?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "complete",
+        "answers": [
+          {
+            "revision_ref": "d802844d-c932-4752-98b2-0a2a586f6981",
+            "title": "Collect and retrieve a SONiC bootchart after reboot",
+            "command": "sudo sonic-bootchart show",
+            "applicability": {
+              "vendor": "Not specified",
+              "model": null,
+              "operating_system": "SONiC",
+              "versions": {
+                "minimum": null,
+                "maximum": null,
+                "requested": null
+              },
+              "match_level": "os_family",
+              "context_relation": "portable",
+              "version_match": "unbounded",
+              "documented_version_relation": "unspecified",
+              "assurance_level": "generic",
+              "requires_platform_confirmation": true
+            }
+          },
+          {
+            "revision_ref": "8e94ba09-2ebb-4570-81dd-e3f1393fcf66",
+            "title": "config warm_restart enable",
+            "command": "config warm_restart [-s|--redis-unix-socket-path <socket_path>] enable [<module_name>]",
+            "applicability": {
+              "vendor": "Not specified",
+              "model": null,
+              "operating_system": "SONiC",
+              "versions": {
+                "minimum": null,
+                "maximum": null,
+                "requested": null
+              },
+              "match_level": "os_family",
+              "context_relation": "portable",
+              "version_match": "unbounded",
+              "documented_version_relation": "unspecified",
+              "assurance_level": "generic",
+              "requires_platform_confirmation": true
+            }
+          },
+          {
+            "revision_ref": "5f79f88f-616a-4f66-bfdb-05157894679a",
+            "title": "reboot",
+            "command": "sudo reboot -f",
+            "applicability": {
+              "vendor": "Not specified",
+              "model": null,
+              "operating_system": "SONiC",
+              "versions": {
+                "minimum": null,
+                "maximum": null,
+                "requested": null
+              },
+              "match_level": "os_family",
+              "context_relation": "portable",
+              "version_match": "unbounded",
+              "documented_version_relation": "unspecified",
+              "assurance_level": "generic",
+              "requires_platform_confirmation": true
+            }
+          }
+        ],
+        "coverage": [
+          {
+            "capability": "system-reboot",
+            "label": "System reboot",
+            "status": "covered",
+            "answer_refs": [
+              "d802844d-c932-4752-98b2-0a2a586f6981",
+              "8e94ba09-2ebb-4570-81dd-e3f1393fcf66",
+              "5f79f88f-616a-4f66-bfdb-05157894679a"
+            ]
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Not specified",
+        "vendor_slug": "not-specified",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "SONiC",
+        "operating_system_slug": "sonic",
+        "software_family": "SONiC",
+        "software_family_slug": "sonic",
+        "portable_operating_system": true,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": false,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.6,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      }
+    },
+    {
+      "candidate_id": 3,
+      "group": "linux",
+      "context": {
+        "operating_system": "Linux"
+      },
+      "question": "How can I inspect Linux TCP authentication option key identifiers using ss without printing secret keys?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "unknown",
+        "answers": [],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "missing",
+            "answer_refs": []
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Not specified",
+        "vendor_slug": "not-specified",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "linux",
+        "operating_system_slug": "linux",
+        "software_family": "linux",
+        "software_family_slug": "linux",
+        "portable_operating_system": true,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": false,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.6,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      }
+    },
+    {
+      "candidate_id": 40,
+      "group": "arista",
+      "context": {
+        "vendor": "Arista",
+        "operating_system": "EOS"
+      },
+      "question": "How do I inspect Arista EOS BGP large community propagation for a received route?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "complete",
+        "answers": [
+          {
+            "revision_ref": "0d48fd2f-41f0-438f-a188-29e9d0be58ef",
+            "title": "Inspect BGP neighbor routes by direction or community",
+            "command": "show ip bgp neighbors neighbor_addr [ROUTE_TYPE] HOPDIRECT [FILTER] [VRF_INSTANCE]",
+            "applicability": {
+              "vendor": "Arista",
+              "model": null,
+              "operating_system": "Arista EOS",
+              "versions": {
+                "minimum": "4.17.2F",
+                "maximum": "4.17.2F",
+                "requested": null
+              },
+              "match_level": "vendor_os",
+              "context_relation": "same_software_family",
+              "version_match": "branch",
+              "documented_version_relation": "unspecified",
+              "assurance_level": "compatible",
+              "requires_platform_confirmation": false
+            }
+          },
+          {
+            "revision_ref": "ac44a5b2-2e2a-455b-9778-afed1eabe883",
+            "title": "Filter IPv6 BGP neighbor routes by route type and community",
+            "command": "show ipv6 bgp neighbors adr RTE community CM_1 [CM_2..CM_n][MATCH][INFO][VRF_INST]",
+            "applicability": {
+              "vendor": "Arista",
+              "model": null,
+              "operating_system": "Arista EOS",
+              "versions": {
+                "minimum": "4.19.0F",
+                "maximum": "4.19.0F",
+                "requested": null
+              },
+              "match_level": "vendor_os",
+              "context_relation": "same_software_family",
+              "version_match": "branch",
+              "documented_version_relation": "unspecified",
+              "assurance_level": "compatible",
+              "requires_platform_confirmation": false
+            }
+          }
+        ],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "covered",
+            "answer_refs": [
+              "0d48fd2f-41f0-438f-a188-29e9d0be58ef",
+              "ac44a5b2-2e2a-455b-9778-afed1eabe883"
+            ]
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Arista",
+        "vendor_slug": "arista",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "Arista Arista EOS",
+        "operating_system_slug": "eos",
+        "software_family": "Arista Arista EOS",
+        "software_family_slug": "arista-eos",
+        "portable_operating_system": false,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": true,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.7,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      }
+    },
+    {
+      "candidate_id": 28,
+      "group": "sonic",
+      "context": {
+        "operating_system": "SONiC"
+      },
+      "question": "How do I inspect SONiC CRM resource utilization thresholds for ACL entries?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "complete",
+        "answers": [
+          {
+            "revision_ref": "0502dce8-f02c-4e9b-9f21-8b094c4a7761",
+            "title": "Show ACL resource thresholds",
+            "command": null,
+            "applicability": {
+              "vendor": "Not specified",
+              "model": null,
+              "operating_system": "SONiC",
+              "versions": {
+                "minimum": null,
+                "maximum": null,
+                "requested": null
+              },
+              "match_level": "os_family",
+              "context_relation": "portable",
+              "version_match": "unbounded",
+              "documented_version_relation": "unspecified",
+              "assurance_level": "generic",
+              "requires_platform_confirmation": true
+            }
+          },
+          {
+            "revision_ref": "ad9ff04e-41a2-4f03-b7f1-9e8e39c21d4d",
+            "title": "Show CRM resource thresholds",
+            "command": null,
+            "applicability": {
+              "vendor": "Not specified",
+              "model": null,
+              "operating_system": "SONiC",
+              "versions": {
+                "minimum": null,
+                "maximum": null,
+                "requested": null
+              },
+              "match_level": "os_family",
+              "context_relation": "portable",
+              "version_match": "unbounded",
+              "documented_version_relation": "unspecified",
+              "assurance_level": "generic",
+              "requires_platform_confirmation": true
+            }
+          }
+        ],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "covered",
+            "answer_refs": [
+              "0502dce8-f02c-4e9b-9f21-8b094c4a7761",
+              "ad9ff04e-41a2-4f03-b7f1-9e8e39c21d4d"
+            ]
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Not specified",
+        "vendor_slug": "not-specified",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "SONiC",
+        "operating_system_slug": "sonic",
+        "software_family": "SONiC",
+        "software_family_slug": "sonic",
+        "portable_operating_system": true,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": false,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.6,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      }
+    },
+    {
+      "candidate_id": 50,
+      "group": "junos",
+      "context": {
+        "vendor": "Juniper",
+        "operating_system": "Junos"
+      },
+      "question": "How do I inspect Junos LLDP MED advertised network policy details?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "complete",
+        "answers": [
+          {
+            "revision_ref": "08f0db18-b4a8-462f-bf88-173756fe494e",
+            "title": "Inspect negated addresses, global policies, and tenant policy details",
+            "command": "show security policies detail tenant <tenant-name>",
+            "applicability": {
+              "vendor": "Juniper",
+              "model": null,
+              "operating_system": "Junos",
+              "versions": {
+                "minimum": null,
+                "maximum": null,
+                "requested": null
+              },
+              "match_level": "vendor_os",
+              "context_relation": "same_software_family",
+              "version_match": "unbounded",
+              "documented_version_relation": "unspecified",
+              "assurance_level": "compatible",
+              "requires_platform_confirmation": false
+            }
+          },
+          {
+            "revision_ref": "7e7f92c8-7061-4897-9df3-ac4e29bffcfd",
+            "title": "Inspect security policy identity feeds and threat-feed actions",
+            "command": "show security policies policy-name <policy-name> detail",
+            "applicability": {
+              "vendor": "Juniper",
+              "model": null,
+              "operating_system": "Junos",
+              "versions": {
+                "minimum": null,
+                "maximum": null,
+                "requested": null
+              },
+              "match_level": "vendor_os",
+              "context_relation": "same_software_family",
+              "version_match": "unbounded",
+              "documented_version_relation": "unspecified",
+              "assurance_level": "compatible",
+              "requires_platform_confirmation": false
+            }
+          }
+        ],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "covered",
+            "answer_refs": [
+              "08f0db18-b4a8-462f-bf88-173756fe494e",
+              "7e7f92c8-7061-4897-9df3-ac4e29bffcfd"
+            ]
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Juniper",
+        "vendor_slug": "juniper",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "Juniper Junos",
+        "operating_system_slug": "junos",
+        "software_family": "Juniper Junos",
+        "software_family_slug": "juniper-junos",
+        "portable_operating_system": false,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": true,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.7,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      }
+    },
+    {
+      "candidate_id": 18,
+      "group": "linux",
+      "context": {
+        "operating_system": "Linux"
+      },
+      "question": "How can I inspect an existing WireGuard interface latest handshake times without disclosing private keys?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "unknown",
+        "answers": [],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "missing",
+            "answer_refs": []
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Not specified",
+        "vendor_slug": "not-specified",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "linux",
+        "operating_system_slug": "linux",
+        "software_family": "linux",
+        "software_family_slug": "linux",
+        "portable_operating_system": true,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": false,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.6,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      }
+    },
+    {
+      "candidate_id": 37,
+      "group": "cisco",
+      "context": {
+        "vendor": "Cisco",
+        "operating_system": "IOS XE"
+      },
+      "question": "How can I inspect Cisco IOS XE IPv6 source guard binding state?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "complete",
+        "answers": [
+          {
+            "revision_ref": "1734731f-5f97-48c3-b7cf-75c650761313",
+            "title": "Use show ipv6 source-guard policy[source-guard-policy]",
+            "command": "show ipv6 source-guard policy[source-guard-policy]",
+            "applicability": {
+              "vendor": "Cisco",
+              "model": null,
+              "operating_system": "Cisco IOS XE",
+              "versions": {
+                "minimum": null,
+                "maximum": null,
+                "requested": null
+              },
+              "match_level": "vendor_os",
+              "context_relation": "same_software_family",
+              "version_match": "unbounded",
+              "documented_version_relation": "unspecified",
+              "assurance_level": "compatible",
+              "requires_platform_confirmation": false
+            }
+          },
+          {
+            "revision_ref": "13240270-86da-4641-85f5-0bf8f9c75ee0",
+            "title": "Display IPv6 source-guard policy configuration",
+            "command": "show ipv6 source-guard policy [source-guard-policy]",
+            "applicability": {
+              "vendor": "Cisco",
+              "model": null,
+              "operating_system": "Cisco IOS-XE",
+              "versions": {
+                "minimum": "16.9.2",
+                "maximum": null,
+                "requested": null
+              },
+              "match_level": "vendor_os",
+              "context_relation": "same_software_family",
+              "version_match": "branch",
+              "documented_version_relation": "unspecified",
+              "assurance_level": "compatible",
+              "requires_platform_confirmation": false
+            }
+          }
+        ],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "covered",
+            "answer_refs": [
+              "1734731f-5f97-48c3-b7cf-75c650761313",
+              "13240270-86da-4641-85f5-0bf8f9c75ee0"
+            ]
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Cisco",
+        "vendor_slug": "cisco",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "Cisco IOS XE",
+        "operating_system_slug": "ios-xe",
+        "software_family": "Cisco IOS XE",
+        "software_family_slug": "cisco-ios-xe",
+        "portable_operating_system": false,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": true,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.7,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      }
+    },
+    {
+      "candidate_id": 4,
+      "group": "linux",
+      "context": {
+        "operating_system": "Linux"
+      },
+      "question": "Which read-only command shows the active tc taprio traffic class schedule on an Ethernet interface?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "unknown",
+        "answers": [],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "missing",
+            "answer_refs": []
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Not specified",
+        "vendor_slug": "not-specified",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "linux",
+        "operating_system_slug": "linux",
+        "software_family": "linux",
+        "software_family_slug": "linux",
+        "portable_operating_system": true,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": false,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.6,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      }
+    },
+    {
+      "candidate_id": 2,
+      "group": "linux",
+      "context": {
+        "operating_system": "Linux"
+      },
+      "question": "How do I display devlink hardware trap groups and policer counters without changing device settings?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "unknown",
+        "answers": [],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "missing",
+            "answer_refs": []
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Not specified",
+        "vendor_slug": "not-specified",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "linux",
+        "operating_system_slug": "linux",
+        "software_family": "linux",
+        "software_family_slug": "linux",
+        "portable_operating_system": true,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": false,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.6,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      }
+    },
+    {
+      "candidate_id": 27,
+      "group": "sonic",
+      "context": {
+        "operating_system": "SONiC"
+      },
+      "question": "How can I inspect SONiC priority flow control watchdog storm counters on an Ethernet port?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "complete",
+        "answers": [
+          {
+            "revision_ref": "0c9f7d18-7fea-4f75-99b1-ebadd28b0fe9",
+            "title": "show pfc counters",
+            "command": "show pfc counters",
+            "applicability": {
+              "vendor": "Not specified",
+              "model": null,
+              "operating_system": "SONiC",
+              "versions": {
+                "minimum": null,
+                "maximum": null,
+                "requested": null
+              },
+              "match_level": "os_family",
+              "context_relation": "portable",
+              "version_match": "unbounded",
+              "documented_version_relation": "unspecified",
+              "assurance_level": "generic",
+              "requires_platform_confirmation": false
+            }
+          },
+          {
+            "revision_ref": "0e040403-902a-43ae-a869-e94fb9c2b034",
+            "title": "Display SONiC interface traffic counters",
+            "command": "show interfaces counters",
+            "applicability": {
+              "vendor": "Not specified",
+              "model": null,
+              "operating_system": "SONiC",
+              "versions": {
+                "minimum": null,
+                "maximum": null,
+                "requested": null
+              },
+              "match_level": "os_family",
+              "context_relation": "portable",
+              "version_match": "unbounded",
+              "documented_version_relation": "unspecified",
+              "assurance_level": "generic",
+              "requires_platform_confirmation": false
+            }
+          }
+        ],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "covered",
+            "answer_refs": [
+              "0c9f7d18-7fea-4f75-99b1-ebadd28b0fe9",
+              "0e040403-902a-43ae-a869-e94fb9c2b034"
+            ]
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Not specified",
+        "vendor_slug": "not-specified",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "SONiC",
+        "operating_system_slug": "sonic",
+        "software_family": "SONiC",
+        "software_family_slug": "sonic",
+        "portable_operating_system": true,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": false,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.6,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      }
+    },
+    {
+      "candidate_id": 33,
+      "group": "cisco",
+      "context": {
+        "vendor": "Cisco",
+        "operating_system": "IOS XE"
+      },
+      "question": "How can I inspect IOS XE IOAM IPv6 encapsulation statistics without changing configuration?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "complete",
+        "answers": [
+          {
+            "revision_ref": "42a1a1f0-0603-4131-a88f-241674e8de2f",
+            "title": "11000 The ephemeral source port number for the outgoing connection.",
+            "command": "show ipv6 ospf statistics",
+            "applicability": {
+              "vendor": "Cisco",
+              "model": null,
+              "operating_system": "Cisco IOS XE",
+              "versions": {
+                "minimum": "16.8.1a",
+                "maximum": "16.8.1a",
+                "requested": null
+              },
+              "match_level": "vendor_os",
+              "context_relation": "same_software_family",
+              "version_match": "branch",
+              "documented_version_relation": "unspecified",
+              "assurance_level": "compatible",
+              "requires_platform_confirmation": false
+            }
+          },
+          {
+            "revision_ref": "c02a8d02-d247-444e-9cb2-08f637fabdfa",
+            "title": "ADV RTR",
+            "command": "show ipv6 ospf statistics [ detail ]",
+            "applicability": {
+              "vendor": "Cisco",
+              "model": null,
+              "operating_system": "Cisco IOS XE",
+              "versions": {
+                "minimum": "16.12.12",
+                "maximum": "16.12.12",
+                "requested": null
+              },
+              "match_level": "vendor_os",
+              "context_relation": "same_software_family",
+              "version_match": "branch",
+              "documented_version_relation": "unspecified",
+              "assurance_level": "compatible",
+              "requires_platform_confirmation": false
+            }
+          },
+          {
+            "revision_ref": "f9959e87-d934-4ae7-bf5e-3dc8b8795b3e",
+            "title": "Use show ipv6 ospf statistics [detail]",
+            "command": "show ipv6 ospf statistics [detail]",
+            "applicability": {
+              "vendor": "Cisco",
+              "model": null,
+              "operating_system": "Cisco IOS XE",
+              "versions": {
+                "minimum": null,
+                "maximum": null,
+                "requested": null
+              },
+              "match_level": "vendor_os",
+              "context_relation": "same_software_family",
+              "version_match": "unbounded",
+              "documented_version_relation": "unspecified",
+              "assurance_level": "compatible",
+              "requires_platform_confirmation": false
+            }
+          }
+        ],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "covered",
+            "answer_refs": [
+              "42a1a1f0-0603-4131-a88f-241674e8de2f",
+              "c02a8d02-d247-444e-9cb2-08f637fabdfa",
+              "f9959e87-d934-4ae7-bf5e-3dc8b8795b3e"
+            ]
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Cisco",
+        "vendor_slug": "cisco",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "Cisco IOS XE",
+        "operating_system_slug": "ios-xe",
+        "software_family": "Cisco IOS XE",
+        "software_family_slug": "cisco-ios-xe",
+        "portable_operating_system": false,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": true,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.7,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      }
+    },
+    {
+      "candidate_id": 48,
+      "group": "junos",
+      "context": {
+        "vendor": "Juniper",
+        "operating_system": "Junos"
+      },
+      "question": "How do I inspect Junos LDP targeted neighbor hold times without changing configuration?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "complete",
+        "answers": [
+          {
+            "revision_ref": "87446925-725a-448b-917c-b2d531b39773",
+            "title": "Inspect interface hold-times, damping, and flap history",
+            "command": "show interfaces extensive",
+            "applicability": {
+              "vendor": "Juniper",
+              "model": null,
+              "operating_system": "Junos",
+              "versions": {
+                "minimum": null,
+                "maximum": null,
+                "requested": null
+              },
+              "match_level": "vendor_os",
+              "context_relation": "same_software_family",
+              "version_match": "unbounded",
+              "documented_version_relation": "unspecified",
+              "assurance_level": "compatible",
+              "requires_platform_confirmation": false
+            }
+          },
+          {
+            "revision_ref": "bd0a1751-3163-4620-93e9-6151dcfc89dd",
+            "title": "Read-only verification for Junos system reboot requests",
+            "command": "show log <log-file>; show system processes",
+            "applicability": {
+              "vendor": "Juniper",
+              "model": null,
+              "operating_system": "Junos",
+              "versions": {
+                "minimum": null,
+                "maximum": null,
+                "requested": null
+              },
+              "match_level": "vendor_os",
+              "context_relation": "same_software_family",
+              "version_match": "unbounded",
+              "documented_version_relation": "unspecified",
+              "assurance_level": "compatible",
+              "requires_platform_confirmation": false
+            }
+          }
+        ],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "covered",
+            "answer_refs": [
+              "87446925-725a-448b-917c-b2d531b39773",
+              "bd0a1751-3163-4620-93e9-6151dcfc89dd"
+            ]
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Juniper",
+        "vendor_slug": "juniper",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "Juniper Junos",
+        "operating_system_slug": "junos",
+        "software_family": "Juniper Junos",
+        "software_family_slug": "juniper-junos",
+        "portable_operating_system": false,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": true,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.7,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      }
+    },
+    {
+      "candidate_id": 20,
+      "group": "linux",
+      "context": {
+        "operating_system": "Linux"
+      },
+      "question": "How can I inspect Linux IPv6 neighbor cache reachable timers without changing sysctl values?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "unknown",
+        "answers": [],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "missing",
+            "answer_refs": []
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Not specified",
+        "vendor_slug": "not-specified",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "linux",
+        "operating_system_slug": "linux",
+        "software_family": "linux",
+        "software_family_slug": "linux",
+        "portable_operating_system": true,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": false,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.6,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      }
+    },
+    {
+      "candidate_id": 44,
+      "group": "arista",
+      "context": {
+        "vendor": "Arista",
+        "operating_system": "EOS"
+      },
+      "question": "How do I verify Arista EOS ECN marking counters for a specific egress queue?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "complete",
+        "answers": [
+          {
+            "revision_ref": "4b288719-82f6-46fb-9a9a-8be8064916a9",
+            "title": "Enable ECN marking on an egress queue",
+            "command": "random-detect ecn minimum-threshold <size> maximum-threshold <size>",
+            "applicability": {
+              "vendor": "Arista",
+              "model": null,
+              "operating_system": "Arista EOS",
+              "versions": {
+                "minimum": "4.19.0F",
+                "maximum": "4.19.0F",
+                "requested": null
+              },
+              "match_level": "vendor_os",
+              "context_relation": "same_software_family",
+              "version_match": "branch",
+              "documented_version_relation": "unspecified",
+              "assurance_level": "compatible",
+              "requires_platform_confirmation": true
+            }
+          },
+          {
+            "revision_ref": "38fd99d5-cb15-40bf-9022-6918bcbb41d5",
+            "title": "Verify EOS PFC interface status and counters",
+            "command": "show interfaces priority-flow-control",
+            "applicability": {
+              "vendor": "Arista",
+              "model": null,
+              "operating_system": "Arista EOS",
+              "versions": {
+                "minimum": null,
+                "maximum": null,
+                "requested": null
+              },
+              "match_level": "vendor_os",
+              "context_relation": "same_software_family",
+              "version_match": "unbounded",
+              "documented_version_relation": "unspecified",
+              "assurance_level": "compatible",
+              "requires_platform_confirmation": false
+            }
+          },
+          {
+            "revision_ref": "54cf8590-7112-473a-87c6-1a49d2514271",
+            "title": "Configure ECN marking for the Trident global buffer",
+            "command": "qos random-detect ecn global-buffer minimum-threshold MIN segments maximum-threshold MAX segments",
+            "applicability": {
+              "vendor": "Arista",
+              "model": null,
+              "operating_system": "Not specified",
+              "versions": {
+                "minimum": "4.17.1F",
+                "maximum": "4.17.1F",
+                "requested": null
+              },
+              "match_level": "vendor_os",
+              "context_relation": "same_software_family",
+              "version_match": "branch",
+              "documented_version_relation": "unspecified",
+              "assurance_level": "compatible",
+              "requires_platform_confirmation": true
+            }
+          }
+        ],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "covered",
+            "answer_refs": [
+              "4b288719-82f6-46fb-9a9a-8be8064916a9",
+              "38fd99d5-cb15-40bf-9022-6918bcbb41d5",
+              "54cf8590-7112-473a-87c6-1a49d2514271"
+            ]
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Arista",
+        "vendor_slug": "arista",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "Arista Arista EOS",
+        "operating_system_slug": "eos",
+        "software_family": "Arista Arista EOS",
+        "software_family_slug": "arista-eos",
+        "portable_operating_system": false,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": true,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.7,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      }
+    },
+    {
+      "candidate_id": 15,
+      "group": "linux",
+      "context": {
+        "operating_system": "Linux"
+      },
+      "question": "How do I inspect Linux VRF interfaces and their associated routing table numbers?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "unknown",
+        "answers": [],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "missing",
+            "answer_refs": []
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Not specified",
+        "vendor_slug": "not-specified",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "linux",
+        "operating_system_slug": "linux",
+        "software_family": "linux",
+        "software_family_slug": "linux",
+        "portable_operating_system": true,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": false,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.6,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      }
+    },
+    {
+      "candidate_id": 47,
+      "group": "junos",
+      "context": {
+        "vendor": "Juniper",
+        "operating_system": "Junos"
+      },
+      "question": "How can I verify Junos adaptive load balancing flowlet counters?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "complete",
+        "answers": [
+          {
+            "revision_ref": "e5eab514-8542-44be-96c8-ab539ac657f2",
+            "title": "Interpret Junos forwarding-table route and next-hop fields",
+            "command": "show route forwarding-table detail",
+            "applicability": {
+              "vendor": "Juniper",
+              "model": null,
+              "operating_system": "Junos",
+              "versions": {
+                "minimum": null,
+                "maximum": null,
+                "requested": null
+              },
+              "match_level": "vendor_os",
+              "context_relation": "same_software_family",
+              "version_match": "unbounded",
+              "documented_version_relation": "unspecified",
+              "assurance_level": "compatible",
+              "requires_platform_confirmation": false
+            }
+          },
+          {
+            "revision_ref": "b8304de3-5c6b-4ca7-843f-5af37e9fe085",
+            "title": "Discard uncommitted Junos configuration changes",
+            "command": "rollback",
+            "applicability": {
+              "vendor": "Juniper",
+              "model": null,
+              "operating_system": "Junos",
+              "versions": {
+                "minimum": null,
+                "maximum": null,
+                "requested": null
+              },
+              "match_level": "vendor_os",
+              "context_relation": "same_software_family",
+              "version_match": "unbounded",
+              "documented_version_relation": "unspecified",
+              "assurance_level": "compatible",
+              "requires_platform_confirmation": true
+            }
+          },
+          {
+            "revision_ref": "96dcd664-8c65-476f-b431-b974115c8e74",
+            "title": "Enable ELCv2 compatibility for BGP labeled-unicast entropy labels",
+            "command": "set protocols bgp family inet labeled-unicast entropy-label elc-v2-compatible",
+            "applicability": {
+              "vendor": "Juniper",
+              "model": null,
+              "operating_system": "Junos",
+              "versions": {
+                "minimum": "23.4R1",
+                "maximum": null,
+                "requested": null
+              },
+              "match_level": "vendor_os",
+              "context_relation": "same_software_family",
+              "version_match": "branch",
+              "documented_version_relation": "unspecified",
+              "assurance_level": "compatible",
+              "requires_platform_confirmation": true
+            }
+          }
+        ],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "covered",
+            "answer_refs": [
+              "e5eab514-8542-44be-96c8-ab539ac657f2",
+              "b8304de3-5c6b-4ca7-843f-5af37e9fe085",
+              "96dcd664-8c65-476f-b431-b974115c8e74"
+            ]
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Juniper",
+        "vendor_slug": "juniper",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "Juniper Junos",
+        "operating_system_slug": "junos",
+        "software_family": "Juniper Junos",
+        "software_family_slug": "juniper-junos",
+        "portable_operating_system": false,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": true,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.7,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      }
+    },
+    {
+      "candidate_id": 41,
+      "group": "arista",
+      "context": {
+        "vendor": "Arista",
+        "operating_system": "EOS"
+      },
+      "question": "How can I verify Arista EOS PTP boundary clock offset and peer delay statistics?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "complete",
+        "answers": [
+          {
+            "revision_ref": "57c6e289-c9fb-4943-9f14-63dfddaf87ba",
+            "title": "Verify an active Arista EOS MLAG peer relationship",
+            "command": "show mlag",
+            "applicability": {
+              "vendor": "Arista",
+              "model": null,
+              "operating_system": "Arista EOS",
+              "versions": {
+                "minimum": null,
+                "maximum": null,
+                "requested": null
+              },
+              "match_level": "vendor_os",
+              "context_relation": "same_software_family",
+              "version_match": "unbounded",
+              "documented_version_relation": "unspecified",
+              "assurance_level": "compatible",
+              "requires_platform_confirmation": false
+            }
+          },
+          {
+            "revision_ref": "f4932d4c-fe6e-4849-b357-400586d62eef",
+            "title": "Verify Arista EOS MLAG operational status",
+            "command": "show mlag\nshow mlag interfaces",
+            "applicability": {
+              "vendor": "Arista",
+              "model": null,
+              "operating_system": "Arista EOS",
+              "versions": {
+                "minimum": null,
+                "maximum": null,
+                "requested": null
+              },
+              "match_level": "vendor_os",
+              "context_relation": "same_software_family",
+              "version_match": "unbounded",
+              "documented_version_relation": "unspecified",
+              "assurance_level": "compatible",
+              "requires_platform_confirmation": false
+            }
+          },
+          {
+            "revision_ref": "f5fdb0b5-a7e9-4f26-9eb6-71cc88da2d29",
+            "title": "Display the Local PTP Clock and Offset",
+            "command": "show ptp clock",
+            "applicability": {
+              "vendor": "Arista",
+              "model": null,
+              "operating_system": "Arista EOS",
+              "versions": {
+                "minimum": "4.17.0F",
+                "maximum": "4.17.0F",
+                "requested": null
+              },
+              "match_level": "vendor_os",
+              "context_relation": "same_software_family",
+              "version_match": "branch",
+              "documented_version_relation": "unspecified",
+              "assurance_level": "compatible",
+              "requires_platform_confirmation": false
+            }
+          }
+        ],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "covered",
+            "answer_refs": [
+              "57c6e289-c9fb-4943-9f14-63dfddaf87ba",
+              "f4932d4c-fe6e-4849-b357-400586d62eef",
+              "f5fdb0b5-a7e9-4f26-9eb6-71cc88da2d29"
+            ]
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Arista",
+        "vendor_slug": "arista",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "Arista Arista EOS",
+        "operating_system_slug": "eos",
+        "software_family": "Arista Arista EOS",
+        "software_family_slug": "arista-eos",
+        "portable_operating_system": false,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": true,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.7,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      }
+    },
+    {
+      "candidate_id": 26,
+      "group": "openwrt",
+      "context": {
+        "operating_system": "OpenWrt"
+      },
+      "question": "How do I inspect OpenWrt odhcpd router advertisement lifetimes without changing configuration?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "unknown",
+        "answers": [],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "missing",
+            "answer_refs": []
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Not specified",
+        "vendor_slug": "not-specified",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "OpenWrt",
+        "operating_system_slug": "openwrt",
+        "software_family": "OpenWrt",
+        "software_family_slug": "openwrt",
+        "portable_operating_system": true,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": false,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.6,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      }
+    },
+    {
+      "candidate_id": 30,
+      "group": "sonic",
+      "context": {
+        "operating_system": "SONiC"
+      },
+      "question": "How do I inspect SONiC EVPN remote VTEP state and the VXLAN tunnel map?",
+      "context_resolved": true,
+      "baseline": {
+        "answer_status": "complete",
+        "answers": [
+          {
+            "revision_ref": "659f6cdf-8316-4096-be0a-ba1ad2290e48",
+            "title": "Show SONiC VXLAN tunnel information",
+            "command": "show vxlan <vxlan_name>",
+            "applicability": {
+              "vendor": "Not specified",
+              "model": null,
+              "operating_system": "SONiC",
+              "versions": {
+                "minimum": null,
+                "maximum": null,
+                "requested": null
+              },
+              "match_level": "os_family",
+              "context_relation": "portable",
+              "version_match": "unbounded",
+              "documented_version_relation": "unspecified",
+              "assurance_level": "generic",
+              "requires_platform_confirmation": false
+            }
+          }
+        ],
+        "coverage": [
+          {
+            "capability": "general",
+            "label": "Requested operation",
+            "status": "covered",
+            "answer_refs": [
+              "659f6cdf-8316-4096-be0a-ba1ad2290e48"
+            ]
+          }
+        ]
+      },
+      "resolved_context": {
+        "vendor": "Not specified",
+        "vendor_slug": "not-specified",
+        "model": null,
+        "platform_slug": null,
+        "operating_system": "SONiC",
+        "operating_system_slug": "sonic",
+        "software_family": "SONiC",
+        "software_family_slug": "sonic",
+        "portable_operating_system": true,
+        "runtime_mode": null,
+        "shell_environment": null,
+        "vendor_resolved": false,
+        "model_resolved": false,
+        "version": null,
+        "applicable_version": "Version not supplied",
+        "resolution_confidence": 0.6,
+        "ambiguities": [
+          "No software version was supplied; verify version applicability"
+        ]
+      }
+    }
+  ]
+}

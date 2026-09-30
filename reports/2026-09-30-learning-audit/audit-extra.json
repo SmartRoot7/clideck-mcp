@@ -1,0 +1,313 @@
+{
+  "sections": [
+    {
+      "section": "discovery_payloads",
+      "at": "2026-09-30T16:23:29.03668+00:00",
+      "rows": [
+        {
+          "question": "How can I inspect a tc cake qdisc flow isolation mode and packet drop counters?",
+          "id": "9d0abd2e-c7c5-442c-92e1-0dfceec43087",
+          "status": "completed",
+          "created_at": "2026-09-30T15:53:37.439978+00:00",
+          "payload": {
+            "requirements": {
+              "public_https_only": true,
+              "no_authenticated_sources": true,
+              "source_urls_are_internal": true,
+              "official_vendor_sources_only": true
+            },
+            "coverage_target": {
+              "id": "99870e9a-2523-4850-b741-e7b63b54b644",
+              "model": null,
+              "priority": 100,
+              "vendor_slug": "not-specified",
+              "document_role": "commands",
+              "product_family": null,
+              "version_branch": null,
+              "operating_system_slug": "linux"
+            },
+            "knowledge_demand": {
+              "context": {
+                "model": null,
+                "vendor": "Not specified",
+                "version": null,
+                "vendor_slug": "not-specified",
+                "runtime_mode": null,
+                "platform_slug": null,
+                "initial_answers": [],
+                "software_family": "linux",
+                "initial_coverage": [
+                  {
+                    "label": "Interface counters",
+                    "status": "missing",
+                    "capability": "interface-counters",
+                    "answer_refs": []
+                  }
+                ],
+                "operating_system": "linux",
+                "shell_environment": null,
+                "applicable_version": "Version not supplied",
+                "software_family_slug": "linux",
+                "initial_answer_status": "unknown",
+                "operating_system_slug": "linux"
+              },
+              "question": "How can I inspect a tc cake qdisc flow isolation mode and packet drop counters?",
+              "diagnosis": {
+                "subquestions": [
+                  {
+                    "label": "Inspect tc cake flow isolation mode",
+                    "status": "missing",
+                    "capability": "inspect-cake-flow-isolation-mode",
+                    "explanation": "The leased coverage contains no answer for inspecting cake flow isolation mode.",
+                    "search_terms": [
+                      "tc cake flow isolation mode",
+                      "tc qdisc cake help flows"
+                    ]
+                  },
+                  {
+                    "label": "Inspect tc cake packet drop counters",
+                    "status": "missing",
+                    "capability": "inspect-cake-packet-drop-counters",
+                    "explanation": "The only leased coverage entry is interface counters, marked missing; no cake packet drop counter information is present.",
+                    "search_terms": [
+                      "tc cake packet drop counters",
+                      "tc -s qdisc cake drops"
+                    ]
+                  }
+                ],
+                "document_roles": [
+                  "commands",
+                  "diagnostics"
+                ],
+                "canonical_context": {
+                  "model": null,
+                  "vendor": "Not specified",
+                  "version": null,
+                  "runtime_mode": null,
+                  "operating_system": "linux",
+                  "shell_environment": null
+                },
+                "reasoning_summary": "The Linux software family is resolved, but the leased coverage contains no relevant answer. The request combines two separately testable capabilities: identifying cake flow isolation mode and inspecting packet drop statistics. Discovery is needed for both.",
+                "search_expansions": [
+                  "tc cake flow isolation mode",
+                  "tc cake qdisc statistics drops"
+                ],
+                "missing_capabilities": [
+                  "inspect-cake-flow-isolation-mode",
+                  "inspect-cake-packet-drop-counters"
+                ]
+              },
+              "tool_name": "query_network_knowledge"
+            }
+          },
+          "result": {
+            "reused_sources": 0,
+            "active_source_id": "07809266-5372-4a74-b027-8ece39f6028a",
+            "inserted_sources": 1,
+            "rejection_reason": null,
+            "reused_fragments": 0,
+            "duplicate_sources": 0,
+            "preflight_failures": {},
+            "reopened_candidates": 0,
+            "preflight_rejected_sources": 0
+          }
+        },
+        {
+          "question": "How can I inspect Linux bridge multicast database entries and their source-specific filters?",
+          "id": "2a693404-010b-4970-af59-58cace9637bf",
+          "status": "completed",
+          "created_at": "2026-09-30T15:54:03.789032+00:00",
+          "payload": {
+            "requirements": {
+              "public_https_only": true,
+              "no_authenticated_sources": true,
+              "source_urls_are_internal": true,
+              "official_vendor_sources_only": true
+            },
+            "coverage_target": {
+              "id": "99870e9a-2523-4850-b741-e7b63b54b644",
+              "model": null,
+              "priority": 100,
+              "vendor_slug": "not-specified",
+              "document_role": "commands",
+              "product_family": null,
+              "version_branch": null,
+              "operating_system_slug": "linux"
+            },
+            "knowledge_demand": {
+              "context": {
+                "model": null,
+                "vendor": "Not specified",
+                "version": null,
+                "vendor_slug": "not-specified",
+                "runtime_mode": null,
+                "platform_slug": null,
+                "initial_answers": [],
+                "software_family": "linux",
+                "initial_coverage": [
+                  {
+                    "label": "Requested operation",
+                    "status": "missing",
+                    "capability": "general",
+                    "answer_refs": []
+                  }
+                ],
+                "operating_system": "linux",
+                "shell_environment": null,
+                "applicable_version": "Version not supplied",
+                "software_family_slug": "linux",
+                "initial_answer_status": "unknown",
+                "operating_system_slug": "linux"
+              },
+              "question": "How can I inspect Linux bridge multicast database entries and their source-specific filters?",
+              "diagnosis": {
+                "subquestions": [
+                  {
+                    "label": "Bridge multicast database inspection",
+                    "status": "missing",
+                    "capability": "inspect-linux-bridge-multicast-database-entries",
+                    "explanation": "Leased current coverage contains only a missing general requested operation and no answers or references.",
+                    "search_terms": [
+                      "Linux bridge multicast database show",
+                      "bridge mdb show"
+                    ]
+                  },
+                  {
+                    "label": "Source-specific filter inspection",
+                    "status": "missing",
+                    "capability": "inspect-source-specific-multicast-filters-for-bridge-entries",
+                    "explanation": "No leased coverage addresses source-specific filters or provides an answer reference.",
+                    "search_terms": [
+                      "Linux bridge MDB source-specific filters",
+                      "bridge mdb show source list"
+                    ]
+                  }
+                ],
+                "document_roles": [
+                  "commands"
+                ],
+                "canonical_context": {
+                  "model": null,
+                  "vendor": null,
+                  "version": null,
+                  "runtime_mode": null,
+                  "operating_system": "Linux",
+                  "shell_environment": null
+                },
+                "reasoning_summary": "The request comprises two independently testable capabilities: listing bridge multicast database entries and examining their source-specific filters. Both are absent from the leased coverage, so this is missing knowledge rather than a context, version, or retrieval issue. The context resolves to Linux with unspecified vendor, model, version, runtime mode, and shell.",
+                "search_expansions": [
+                  "Linux bridge mdb show",
+                  "bridge multicast database source-specific filters"
+                ],
+                "missing_capabilities": [
+                  "commands-or-procedures-to-display-bridge-multicast-database-ent",
+                  "commands-or-procedures-to-inspect-per-entry-source-specific-fil"
+                ]
+              },
+              "tool_name": "query_network_knowledge"
+            }
+          },
+          "result": {
+            "reused_sources": 0,
+            "active_source_id": "baea395f-d902-4c7b-989a-364fd2a7136a",
+            "inserted_sources": 1,
+            "rejection_reason": null,
+            "reused_fragments": 0,
+            "duplicate_sources": 0,
+            "preflight_failures": {},
+            "reopened_candidates": 0,
+            "preflight_rejected_sources": 0
+          }
+        }
+      ]
+    },
+    {
+      "section": "published_fidelity_source_states",
+      "at": "2026-09-30T16:23:29.03668+00:00",
+      "rows": [
+        {
+          "source_status": "completed_with_exceptions",
+          "fidelity_status": "pending",
+          "n": 238334
+        },
+        {
+          "source_status": "completed_with_exceptions",
+          "fidelity_status": "unavailable",
+          "n": 55945
+        },
+        {
+          "source_status": "completed",
+          "fidelity_status": "pending",
+          "n": 12239
+        },
+        {
+          "source_status": "completed_with_exceptions",
+          "fidelity_status": "passed",
+          "n": 4031
+        },
+        {
+          "source_status": "completed_with_exceptions",
+          "fidelity_status": "repair",
+          "n": 1254
+        },
+        {
+          "source_status": "completed",
+          "fidelity_status": "unavailable",
+          "n": 1120
+        },
+        {
+          "source_status": "analyzing",
+          "fidelity_status": "pending",
+          "n": 422
+        },
+        {
+          "source_status": "verifying",
+          "fidelity_status": "unavailable",
+          "n": 284
+        },
+        {
+          "source_status": "verifying",
+          "fidelity_status": "pending",
+          "n": 12
+        },
+        {
+          "source_status": "completed_with_exceptions",
+          "fidelity_status": "checking",
+          "n": 9
+        },
+        {
+          "source_status": "completed",
+          "fidelity_status": "passed",
+          "n": 3
+        }
+      ]
+    },
+    {
+      "section": "false_answer_revision",
+      "at": "2026-09-30T16:23:29.03668+00:00",
+      "rows": [
+        {
+          "public_ref": "805b01c1-a2de-4f70-baf3-f5b42080d129",
+          "title": "Set OSPFv3 router priority",
+          "summary": "The ipv6 ospf priority command configures interface router priority used in designated-router and backup-designated-router elections. Higher values are preferred, while priority zero prevents election. The documented default priority is 1.",
+          "command_text": "ipv6 ospf priority priority",
+          "created_at": "2026-09-04T19:02:49.744905+00:00",
+          "vendor_slug": "arista",
+          "operating_system_slug": "eos"
+        }
+      ]
+    },
+    {
+      "section": "live_diagnosis_trigger",
+      "at": "2026-09-30T16:23:29.03668+00:00",
+      "rows": [
+        {
+          "tgname": "pipeline_tasks_single_diagnosis",
+          "tgenabled": "O",
+          "definition": "CREATE TRIGGER pipeline_tasks_single_diagnosis BEFORE INSERT OR UPDATE OF task_type, status ON public.pipeline_tasks FOR EACH ROW EXECUTE FUNCTION enforce_single_active_demand_diagnosis()",
+          "function_definition": "CREATE OR REPLACE FUNCTION public.enforce_single_active_demand_diagnosis()\n RETURNS trigger\n LANGUAGE plpgsql\n SET search_path TO 'public', 'pg_temp'\nAS $function$\nBEGIN\n  IF NEW.task_type = 'demand_diagnosis'\n     AND NEW.status IN ('queued', 'claimed', 'running') THEN\n    PERFORM pg_advisory_xact_lock(1129074037);\n    IF EXISTS (\n       SELECT 1\n       FROM pipeline_tasks active\n       WHERE active.task_type = 'demand_diagnosis'\n         AND active.status IN ('queued', 'claimed', 'running')\n         AND active.id IS DISTINCT FROM NEW.id\n     ) THEN\n      RETURN NULL;\n    END IF;\n  END IF;\n  RETURN NEW;\nEND;\n$function$\n"
+        }
+      ]
+    }
+  ]
+}

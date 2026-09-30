@@ -1,0 +1,423 @@
+{
+  "seed": 20260930,
+  "candidates": [
+    {
+      "candidate_id": 17,
+      "group": "linux",
+      "context": {
+        "operating_system": "Linux"
+      },
+      "question": "How do I display the Linux netfilter conntrack expectation table without deleting entries?"
+    },
+    {
+      "candidate_id": 23,
+      "group": "openwrt",
+      "context": {
+        "operating_system": "OpenWrt"
+      },
+      "question": "How can I inspect OpenWrt ubus DHCPv6 prefix delegation status for a wan6 interface?"
+    },
+    {
+      "candidate_id": 29,
+      "group": "sonic",
+      "context": {
+        "operating_system": "SONiC"
+      },
+      "question": "How can I verify SONiC dynamic buffer headroom pool configuration without applying changes?"
+    },
+    {
+      "candidate_id": 10,
+      "group": "linux",
+      "context": {
+        "operating_system": "Linux"
+      },
+      "question": "How can I inspect a Linux MACsec interface cipher suite and replay protection settings?"
+    },
+    {
+      "candidate_id": 5,
+      "group": "linux",
+      "context": {
+        "operating_system": "Linux"
+      },
+      "question": "How can I identify packet drops caused by XDP redirect failures using Linux tracepoints?"
+    },
+    {
+      "candidate_id": 7,
+      "group": "linux",
+      "context": {
+        "operating_system": "Linux"
+      },
+      "question": "How can I inspect an SRv6 seg6local route and its End.DT6 behavior with iproute2?"
+    },
+    {
+      "candidate_id": 46,
+      "group": "junos",
+      "context": {
+        "vendor": "Juniper",
+        "operating_system": "Junos"
+      },
+      "question": "How do I inspect Junos BGP RPKI origin validation state for one advertised prefix?"
+    },
+    {
+      "candidate_id": 21,
+      "group": "openwrt",
+      "context": {
+        "operating_system": "OpenWrt"
+      },
+      "question": "How do I diagnose DNS over HTTPS bootstrap lookup failures in an OpenWrt https-dns-proxy deployment?"
+    },
+    {
+      "candidate_id": 49,
+      "group": "junos",
+      "context": {
+        "vendor": "Juniper",
+        "operating_system": "Junos"
+      },
+      "question": "How can I inspect Junos SRv6 locator and local SID allocation state?"
+    },
+    {
+      "candidate_id": 39,
+      "group": "arista",
+      "context": {
+        "vendor": "Arista",
+        "operating_system": "EOS"
+      },
+      "question": "How can I inspect Arista EOS EVPN multihoming designated forwarder election state?"
+    },
+    {
+      "candidate_id": 19,
+      "group": "linux",
+      "context": {
+        "operating_system": "Linux"
+      },
+      "question": "How do I identify whether Linux reverse path filtering uses strict or loose mode on an interface?"
+    },
+    {
+      "candidate_id": 31,
+      "group": "sonic",
+      "context": {
+        "operating_system": "SONiC"
+      },
+      "question": "How can I inspect SONiC fine grained ECMP next-hop group state?"
+    },
+    {
+      "candidate_id": 16,
+      "group": "linux",
+      "context": {
+        "operating_system": "Linux"
+      },
+      "question": "How can I inspect Linux network device RSS hash functions and indirection tables?"
+    },
+    {
+      "candidate_id": 14,
+      "group": "linux",
+      "context": {
+        "operating_system": "Linux"
+      },
+      "question": "How can I inspect a tc cake qdisc flow isolation mode and packet drop counters?"
+    },
+    {
+      "candidate_id": 43,
+      "group": "arista",
+      "context": {
+        "vendor": "Arista",
+        "operating_system": "EOS"
+      },
+      "question": "How can I inspect Arista EOS VXLAN routing VNI to VRF mapping?"
+    },
+    {
+      "candidate_id": 9,
+      "group": "linux",
+      "context": {
+        "operating_system": "Linux"
+      },
+      "question": "How do I inspect the per-network-namespace nftables flowtable offload configuration?"
+    },
+    {
+      "candidate_id": 1,
+      "group": "linux",
+      "context": {
+        "operating_system": "Linux"
+      },
+      "question": "How can I inspect Multipath TCP endpoint flags and connection subflows with ip mptcp?"
+    },
+    {
+      "candidate_id": 8,
+      "group": "linux",
+      "context": {
+        "operating_system": "Linux"
+      },
+      "question": "How can I compare Linux IPv6 route cache exceptions with the main IPv6 routing table?"
+    },
+    {
+      "candidate_id": 34,
+      "group": "cisco",
+      "context": {
+        "vendor": "Cisco",
+        "operating_system": "IOS XE"
+      },
+      "question": "How do I verify Cisco IOS XE BFD echo mode session failure diagnostics?"
+    },
+    {
+      "candidate_id": 24,
+      "group": "openwrt",
+      "context": {
+        "operating_system": "OpenWrt"
+      },
+      "question": "How do I verify OpenWrt mwan3 policy routing rules for an existing connection?"
+    },
+    {
+      "candidate_id": 25,
+      "group": "openwrt",
+      "context": {
+        "operating_system": "OpenWrt"
+      },
+      "question": "How can I inspect the active OpenWrt SQM cake overhead compensation settings?"
+    },
+    {
+      "candidate_id": 11,
+      "group": "linux",
+      "context": {
+        "operating_system": "Linux"
+      },
+      "question": "How can I inspect Linux bridge multicast database entries and their source-specific filters?"
+    },
+    {
+      "candidate_id": 22,
+      "group": "openwrt",
+      "context": {
+        "operating_system": "OpenWrt"
+      },
+      "question": "How can I inspect OpenWrt firewall4 nftables flow offloading rules without restarting the firewall?"
+    },
+    {
+      "candidate_id": 13,
+      "group": "linux",
+      "context": {
+        "operating_system": "Linux"
+      },
+      "question": "How do I identify whether a Linux UDP socket uses UDP_SEGMENT or UDP_GRO?"
+    },
+    {
+      "candidate_id": 36,
+      "group": "cisco",
+      "context": {
+        "vendor": "Cisco",
+        "operating_system": "IOS XE"
+      },
+      "question": "How do I verify IOS XE Flexible NetFlow observation domain identifiers?"
+    },
+    {
+      "candidate_id": 12,
+      "group": "linux",
+      "context": {
+        "operating_system": "Linux"
+      },
+      "question": "How can I inspect ethtool receive flow classification rules without modifying them?"
+    },
+    {
+      "candidate_id": 38,
+      "group": "cisco",
+      "context": {
+        "vendor": "Cisco",
+        "operating_system": "IOS XE"
+      },
+      "question": "How do I verify IOS XE segment routing microloop avoidance state?"
+    },
+    {
+      "candidate_id": 45,
+      "group": "junos",
+      "context": {
+        "vendor": "Juniper",
+        "operating_system": "Junos"
+      },
+      "question": "How can I inspect Junos EVPN ESI label advertisements for an all-active Ethernet segment?"
+    },
+    {
+      "candidate_id": 6,
+      "group": "linux",
+      "context": {
+        "operating_system": "Linux"
+      },
+      "question": "How do I verify that a Linux network interface supports hardware transmit timestamping?"
+    },
+    {
+      "candidate_id": 42,
+      "group": "arista",
+      "context": {
+        "vendor": "Arista",
+        "operating_system": "EOS"
+      },
+      "question": "How do I inspect Arista EOS dynamic VLAN assignment for an 802.1X authenticated port?"
+    },
+    {
+      "candidate_id": 35,
+      "group": "cisco",
+      "context": {
+        "vendor": "Cisco",
+        "operating_system": "IOS XE"
+      },
+      "question": "How can I inspect Cisco IOS XE MPLS entropy label capability on a label switched path?"
+    },
+    {
+      "candidate_id": 32,
+      "group": "sonic",
+      "context": {
+        "operating_system": "SONiC"
+      },
+      "question": "How do I diagnose SONiC BGP graceful restart stale route retention?"
+    },
+    {
+      "candidate_id": 3,
+      "group": "linux",
+      "context": {
+        "operating_system": "Linux"
+      },
+      "question": "How can I inspect Linux TCP authentication option key identifiers using ss without printing secret keys?"
+    },
+    {
+      "candidate_id": 40,
+      "group": "arista",
+      "context": {
+        "vendor": "Arista",
+        "operating_system": "EOS"
+      },
+      "question": "How do I inspect Arista EOS BGP large community propagation for a received route?"
+    },
+    {
+      "candidate_id": 28,
+      "group": "sonic",
+      "context": {
+        "operating_system": "SONiC"
+      },
+      "question": "How do I inspect SONiC CRM resource utilization thresholds for ACL entries?"
+    },
+    {
+      "candidate_id": 50,
+      "group": "junos",
+      "context": {
+        "vendor": "Juniper",
+        "operating_system": "Junos"
+      },
+      "question": "How do I inspect Junos LLDP MED advertised network policy details?"
+    },
+    {
+      "candidate_id": 18,
+      "group": "linux",
+      "context": {
+        "operating_system": "Linux"
+      },
+      "question": "How can I inspect an existing WireGuard interface latest handshake times without disclosing private keys?"
+    },
+    {
+      "candidate_id": 37,
+      "group": "cisco",
+      "context": {
+        "vendor": "Cisco",
+        "operating_system": "IOS XE"
+      },
+      "question": "How can I inspect Cisco IOS XE IPv6 source guard binding state?"
+    },
+    {
+      "candidate_id": 4,
+      "group": "linux",
+      "context": {
+        "operating_system": "Linux"
+      },
+      "question": "Which read-only command shows the active tc taprio traffic class schedule on an Ethernet interface?"
+    },
+    {
+      "candidate_id": 2,
+      "group": "linux",
+      "context": {
+        "operating_system": "Linux"
+      },
+      "question": "How do I display devlink hardware trap groups and policer counters without changing device settings?"
+    },
+    {
+      "candidate_id": 27,
+      "group": "sonic",
+      "context": {
+        "operating_system": "SONiC"
+      },
+      "question": "How can I inspect SONiC priority flow control watchdog storm counters on an Ethernet port?"
+    },
+    {
+      "candidate_id": 33,
+      "group": "cisco",
+      "context": {
+        "vendor": "Cisco",
+        "operating_system": "IOS XE"
+      },
+      "question": "How can I inspect IOS XE IOAM IPv6 encapsulation statistics without changing configuration?"
+    },
+    {
+      "candidate_id": 48,
+      "group": "junos",
+      "context": {
+        "vendor": "Juniper",
+        "operating_system": "Junos"
+      },
+      "question": "How do I inspect Junos LDP targeted neighbor hold times without changing configuration?"
+    },
+    {
+      "candidate_id": 20,
+      "group": "linux",
+      "context": {
+        "operating_system": "Linux"
+      },
+      "question": "How can I inspect Linux IPv6 neighbor cache reachable timers without changing sysctl values?"
+    },
+    {
+      "candidate_id": 44,
+      "group": "arista",
+      "context": {
+        "vendor": "Arista",
+        "operating_system": "EOS"
+      },
+      "question": "How do I verify Arista EOS ECN marking counters for a specific egress queue?"
+    },
+    {
+      "candidate_id": 15,
+      "group": "linux",
+      "context": {
+        "operating_system": "Linux"
+      },
+      "question": "How do I inspect Linux VRF interfaces and their associated routing table numbers?"
+    },
+    {
+      "candidate_id": 47,
+      "group": "junos",
+      "context": {
+        "vendor": "Juniper",
+        "operating_system": "Junos"
+      },
+      "question": "How can I verify Junos adaptive load balancing flowlet counters?"
+    },
+    {
+      "candidate_id": 41,
+      "group": "arista",
+      "context": {
+        "vendor": "Arista",
+        "operating_system": "EOS"
+      },
+      "question": "How can I verify Arista EOS PTP boundary clock offset and peer delay statistics?"
+    },
+    {
+      "candidate_id": 26,
+      "group": "openwrt",
+      "context": {
+        "operating_system": "OpenWrt"
+      },
+      "question": "How do I inspect OpenWrt odhcpd router advertisement lifetimes without changing configuration?"
+    },
+    {
+      "candidate_id": 30,
+      "group": "sonic",
+      "context": {
+        "operating_system": "SONiC"
+      },
+      "question": "How do I inspect SONiC EVPN remote VTEP state and the VXLAN tunnel map?"
+    }
+  ]
+}

@@ -10,11 +10,15 @@ soak. A clean baseline is not a completed extended observation window.
 
 Live application: `04ddae1ea2de7e935e452cdd38bfbd500dd9e873` on
 `100.116.82.78`, deployed through `ops/scripts/deploy-production.sh`.
-Pipeline enabled, capacity 8; original Luna-low/Luna-medium/Terra fallback
-restored after acceptance checks. Settings version 5; nine fresh runtime models.
+Pipeline enabled, capacity 8. At the later learning audit, operator settings
+version 8 used `gpt-6-luna` low/medium, High fallback `gpt-5.6-terra` medium.
 
 - **Open:** Cisco/Akamai 403 blocks intake; September 21 restored Linux downloads
   only. End-to-end publication and an extended soak are not established.
+- **Learning audit:** 15/20 unknown questions lost diagnosis tasks; a global
+  migration-029 trigger silently blocks concurrent inserts while reconciliation
+  omits orphan `queued` demands. EVPN falsely closed with OSPF; terminal sources
+  strand Fidelity backlog; public stats remain stale since August 30. No fix yet.
 - **Grants:** September 21 narrow `source_collections` admin grants are now
   codified in `ops/sql/grants.sql`; preserve the exact columns below.
 - **Configuration:** September 8 cluster `jit=off` resolved Overview timeouts;
@@ -28,6 +32,28 @@ restored after acceptance checks. Settings version 5; nine fresh runtime models.
 
 Resolved incidents are condensed below. Full evidence/test counts and previous
 soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.md`.
+
+## 2026-09-30 — Knowledge quality and 20-question learning audit
+
+- Evidence/report: [learning audit](../reports/2026-09-30-learning-audit/REPORT.md),
+  with SQL, raw receipts, per-question CSV and executed notebook. Baseline active
+  knowledge 351110; 3753/294292 candidate-backed active revisions Fidelity-passed;
+  no new extract-fidelity checks after September 7. Missing provenance is legacy.
+- Experiment 15:50:49–16:35:38 UTC: 20 genuine unknown MCP requests; five completed
+  diagnoses, 15 demands with no diagnosis task; all 20 still unknown after
+  42.427–43.855 minutes (also unknown at the 22-minute checkpoint). First diagnosis
+  13.102 s. One internal published replay
+  reused OSPFv3 priority for an EVPN DF question, so it is not a learned answer.
+- Causes: live `pipeline_tasks_single_diagnosis` returns NULL globally;
+  `queueDemandDiagnosisWork` excludes orphan queued demands. Source reuse selects
+  same-target documents without positive relevance. `queueSourceWork` exits on
+  terminal sources before Fidelity; stale stats refresh reports query timeout.
+- Required correction: normal migration plus orphan reconciliation, semantic
+  replay/relevant source reuse, source-independent Fidelity audit, stats refresh
+  optimization. Preserve per-item leases/deduplication and selected 1–8 capacity.
+- Deployment/correction: none; live application remains `04ddae1`. Settings and
+  services unchanged. This measured failure is not a clean soak baseline; apply
+  root-cause fixes, then repeat the experiment and start a fresh read-only soak.
 
 ## 2026-09-30 — Configurable execution and obsolete local runtime
 
