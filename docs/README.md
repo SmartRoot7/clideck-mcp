@@ -12,6 +12,7 @@ repository code; dated production observations are not live status checks.
 | Deploy, backup, recovery | [Operations](OPERATIONS.md) |
 | Pipeline work or monitoring | [Corrective log](PIPELINE_CORRECTIVE_ACTION_LOG.md), then [Pipeline 2.0](KNOWLEDGE_PIPELINE_2.md) |
 | Executors, model policy, Pause/Resume | [Researcher automation](RESEARCHER_AUTOMATION.md) |
+| Planned admin capacity and model selection | [Execution settings plan](PIPELINE_EXECUTION_SETTINGS_PLAN.md) |
 | Scheduler capacity rationale | [Capacity audit](PIPELINE_CAPACITY_AUDIT.md) |
 | Auth, public projections, retention | [Security](SECURITY.md) |
 | Domain Pack or fork | [Authoring](DOMAIN_PACK_AUTHORING.md), [fork guide](FORKING_WITH_CODEX.md) |
