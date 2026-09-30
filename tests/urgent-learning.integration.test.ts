@@ -1,0 +1,140 @@
+import { randomUUID } from 'node:crypto'
+import pg from 'pg'
+import { executionProtocolVersion } from '@clideck/admin-contracts'
+import type { Database } from '../src/db.js'
+import { sha256Label } from '../src/crypto.js'
+import {
+  getKnowledgeLearningProgress, queueUnknownKnowledgeDemand,
+  recoverUnqueuedKnowledgeDemands, reportKnowledgeGap
+} from '../src/domain/mcp-observability.js'
+import { claimPipelineTask, ensurePipelineWork } from '../src/domain/pipeline.js'
+import { createTestConfig, integrationDatabaseUrl } from './helpers.js'
+
+const suite = integrationDatabaseUrl ? describe : describe.skip
+suite('urgent learning reliability', () => {
+  const pool = new pg.Pool({ connectionString: integrationDatabaseUrl, max: 24 })
+  const config = createTestConfig()
+  afterAll(() => pool.end())
+  const context = { vendor: 'Cisco', operating_system: 'IOS XE' }
+  const question = () => `Inspect MACsec learning fixture ${randomUUID()}`
+  async function transaction(run: (db: Database, client: pg.PoolClient) => Promise<void>) {
+    const client = await pool.connect()
+    await client.query('BEGIN')
+    const db = {
+      query: client.query.bind(client),
+      connect: async () => ({ query: (sql: string | pg.QueryConfig, values?: unknown[]) =>
+        typeof sql === 'string' && /^(BEGIN|COMMIT|ROLLBACK)$/.test(sql.trim())
+          ? Promise.resolve({ rows: [] }) : client.query(sql, values), release: () => undefined })
+    } as unknown as Database
+    try { await run(db,client) } finally { await client.query('ROLLBACK'); client.release() }
+  }
+  it('records 20 simultaneous questions without dropping tasks and collapses duplicate submissions', async () => {
+    const requests = Array.from({ length: 20 }, () => {
+      const vendor = `learning-fixture-${randomUUID()}`
+      return { question: question(), context: { vendor, operating_system: 'IOS XE' },
+        output: { unknown: true, context: { vendor, vendor_slug: vendor,
+          operating_system: 'IOS XE', operating_system_slug: 'ios-xe' } } }
+    })
+    const ids = (await Promise.all(requests.map((input) => queueUnknownKnowledgeDemand(pool,
+      'query_network_knowledge',input,input.output)))).filter((id): id is string => !!id)
+    try {
+      expect(ids).toHaveLength(20)
+      expect(new Set(ids).size).toBe(20)
+      const repeated = await Promise.all(Array.from({ length: 20 }, () =>
+        queueUnknownKnowledgeDemand(pool,'query_network_knowledge',requests[0],requests[0]!.output)))
+      expect(new Set(repeated)).toEqual(new Set([ids[0]]))
+      const active = await pool.query(`SELECT count(*)::int AS count FROM pipeline_tasks
+        WHERE knowledge_demand_id=ANY($1::uuid[]) AND task_type='demand_diagnosis'
+          AND status IN ('queued','claimed','running')`,[ids])
+      expect(active.rows[0]!.count).toBe(20)
+    } finally {
+      await pool.query("UPDATE pipeline_tasks SET status='cancelled' WHERE knowledge_demand_id=ANY($1::uuid[])",[ids])
+      await pool.query("UPDATE coverage_targets SET status='paused' WHERE id IN (SELECT coverage_target_id FROM knowledge_demands WHERE id=ANY($1::uuid[]))",[ids])
+      await pool.query("UPDATE knowledge_demands SET status='unresolved',last_error_code='CONTEXT_REQUIRED',diagnosis_status='completed' WHERE id=ANY($1::uuid[])",[ids])
+    }
+  })
+  it('keeps unknown questions with missing context visible without inventing a device', async () => {
+    await transaction(async (db,client) => {
+      const id = await queueUnknownKnowledgeDemand(db,'query_network_knowledge', { question: question(), context: {} }, { unknown: true })
+      expect(id).toBeTruthy()
+      await client.query('SET LOCAL ROLE clideck_mcp_api')
+      const progress = await getKnowledgeLearningProgress(db,id!)
+      expect(progress).toMatchObject({ status: 'unresolved', needs_context: true, queued_tasks: 0, active_tasks: 0 })
+    })
+  })
+  it('recovers a durable intake failure with the actual researcher permissions', async () => {
+    await transaction(async (db,client) => {
+      const request = { question: question(), context }
+      const log = await client.query(`INSERT INTO mcp_request_logs
+        (request_id,actor_kind,tool_name,request_payload,response_payload,question_preview,response_preview,outcome,duration_ms)
+        VALUES ($1,'anonymous','query_network_knowledge',$2,'{"unknown":true}', $3,'unknown','unknown',1) RETURNING id`,
+      [randomUUID(),request,request.question])
+      await client.query('SET LOCAL ROLE clideck_mcp_researcher')
+      await recoverUnqueuedKnowledgeDemands(client)
+      const stored = await client.query('SELECT knowledge_demand_id,learning_recovery_checked_at FROM mcp_request_logs WHERE id=$1',[log.rows[0]!.id])
+      expect(stored.rows[0]?.knowledge_demand_id).toBeTruthy()
+      expect(stored.rows[0]?.learning_recovery_checked_at).toBeTruthy()
+    })
+  })
+  it('repairs queued diagnosis without a task and chooses it before background work', async () => {
+    await transaction(async (db,client) => {
+      await client.query("UPDATE pipeline_tasks SET status='cancelled' WHERE status IN ('queued','claimed','running')")
+      await client.query("UPDATE agent_runs SET status='cancelled',completed_at=now() WHERE status='running'")
+      await client.query('DELETE FROM pipeline_model_circuits')
+      await client.query('UPDATE pipeline_settings SET enabled=true,max_concurrent_ai_runs=8 WHERE singleton')
+      const id = await queueUnknownKnowledgeDemand(db,'query_network_knowledge', { question: question(), context }, { unknown: true })
+      await client.query("UPDATE pipeline_tasks SET status='cancelled' WHERE knowledge_demand_id=$1",[id])
+      const background = await client.query(`INSERT INTO pipeline_tasks(task_type,stage,priority,dedupe_key,payload)
+        VALUES ('fragment_analysis','analyze',200,$1,'{}') RETURNING id`,[randomUUID()])
+      await ensurePipelineWork(db)
+      const repaired = await client.query("SELECT id FROM pipeline_tasks WHERE knowledge_demand_id=$1 AND task_type='demand_diagnosis' AND status='queued'",[id])
+      expect(repaired.rows).toHaveLength(1)
+      await client.query('UPDATE pipeline_tasks SET priority=200 WHERE id=$1',[background.rows[0]!.id])
+      // Hold the scheduler lock only through this isolated transaction.
+      const claim = await claimPipelineTask(db,config,'luna-1','test:urgent',executionProtocolVersion)
+      expect(claim['pipeline_task_id']).toBe(repaired.rows[0]!.id)
+      expect((await client.query('SELECT status FROM pipeline_tasks WHERE id=$1',[background.rows[0]!.id])).rows[0]!.status).toBe('queued')
+    })
+  })
+  it('reopens feedback without quarantining knowledge and deduplicates repeated reports', async () => {
+    await transaction(async (db,client) => {
+      const input = { question: question(), context, reason: 'The answer covers a different protocol.', revision_refs: [randomUUID()] }
+      await client.query('SET LOCAL ROLE clideck_mcp_api')
+      const first = await reportKnowledgeGap(db,input)
+      const second = await reportKnowledgeGap(db,input)
+      expect(first?.id).toBe(second?.id)
+      expect(second?.status).toBe('diagnosing')
+      const stored = await client.query('SELECT context FROM knowledge_demands WHERE id=$1',[first!.id])
+      expect(stored.rows[0]!.context.reported_revision_refs).toEqual(input.revision_refs)
+      const tasks = await client.query("SELECT status FROM pipeline_tasks WHERE knowledge_demand_id=$1 AND task_type='demand_diagnosis' AND status IN ('queued','claimed','running')",[first!.id])
+      expect(tasks.rows).toHaveLength(1)
+    })
+  })
+  it('audits terminal sources using the original run even when a newer run exists', async () => {
+    await transaction(async (db,client) => {
+      await client.query("UPDATE pipeline_tasks SET status='cancelled' WHERE status IN ('queued','claimed','running')")
+      await client.query("UPDATE knowledge_demands SET status='published'")
+      await client.query('DELETE FROM pipeline_model_circuits')
+      await client.query('UPDATE pipeline_settings SET enabled=true,max_concurrent_ai_runs=8 WHERE singleton')
+      const target = (await client.query(`INSERT INTO coverage_targets(vendor_slug,operating_system_slug,document_role,status)
+        VALUES ('cisco','ios-xe','commands','paused') ON CONFLICT DO NOTHING RETURNING id`)).rows[0]
+        ?? (await client.query("SELECT id FROM coverage_targets WHERE vendor_slug='cisco' AND operating_system_slug='ios-xe' LIMIT 1")).rows[0]
+      const source = (await client.query(`INSERT INTO source_candidates(coverage_target_id,canonical_url,document_type,title,status,discovered_by)
+        VALUES ($1,$2,'command_reference','Terminal fidelity fixture','completed','test') RETURNING id`,[target.id,`https://www.cisco.com/${randomUUID()}`])).rows[0]
+      const run = (await client.query(`INSERT INTO source_processing_runs(source_candidate_id,processing_version,status)
+        VALUES ($1,'test-v1','completed') RETURNING id`,[source.id])).rows[0]
+      await client.query(`INSERT INTO source_processing_runs(source_candidate_id,processing_version,status)
+        VALUES ($1,'test-v2','extracting')`,[source.id])
+      const task = (await client.query(`INSERT INTO pipeline_tasks(task_type,stage,dedupe_key,payload,status,source_candidate_id,processing_run_id)
+        VALUES ('fragment_analysis','analyze',$1,'{}','completed',$2,$3) RETURNING id`,[randomUUID(),source.id,run.id])).rows[0]
+      const candidate = (await client.query(`INSERT INTO knowledge_candidates(pipeline_task_id,stable_key,payload,content_hash,status,dangerous,confidence,quality_score,processing_run_id)
+        VALUES ($1,$2,'{}',$3,'verified',false,.98,.98,$4) RETURNING id`,[task.id,`test.${randomUUID()}`,sha256Label(randomUUID()),run.id])).rows[0]
+      await ensurePipelineWork(db)
+      const queued = await client.query(`SELECT task.payload,task.processing_run_id FROM pipeline_tasks task
+        JOIN knowledge_candidates candidate ON candidate.fidelity_task_id=task.id WHERE candidate.id=$1`,[candidate.id])
+      expect(queued.rows[0]?.processing_run_id).toBe(run.id)
+      expect(queued.rows[0]?.payload.audit_mode).toBe('fidelity')
+      expect((await client.query('SELECT status FROM source_candidates WHERE id=$1',[source.id])).rows[0]!.status).toBe('completed')
+    })
+  })
+})

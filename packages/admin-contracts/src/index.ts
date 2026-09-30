@@ -326,6 +326,20 @@ const learningDiagnosisSchema = z.object({
   completed_at: nullableStringSchema
 })
 
+export const knowledgeLearningProgressSchema = z.object({
+  id: z.string().uuid(),
+  status: z.string(),
+  stage: nullableStringSchema,
+  message: z.string(),
+  needs_context: z.boolean(),
+  elapsed_seconds: scalarNumberSchema,
+  last_progress_at: nullableStringSchema,
+  last_error_code: nullableStringSchema,
+  queued_tasks: scalarNumberSchema,
+  active_tasks: scalarNumberSchema,
+  revision_ref: nullableStringSchema
+})
+
 export const mcpRequestLogDetailSchema = mcpRequestLogRowSchema
   .omit({ result_release_id: true })
   .extend({
@@ -334,7 +348,8 @@ export const mcpRequestLogDetailSchema = mcpRequestLogRowSchema
     first_seen_at: nullableStringSchema,
     last_seen_at: nullableStringSchema,
     result_release_sequence: nullableScalarNumberSchema,
-    learning_diagnosis: learningDiagnosisSchema.nullable().optional()
+    learning_diagnosis: learningDiagnosisSchema.nullable().optional(),
+    learning_progress: knowledgeLearningProgressSchema.nullable().optional()
   })
 
 export const coverageTargetSchema = z.object({

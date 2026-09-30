@@ -326,7 +326,7 @@ code { font-size: .78rem; color: #344054; }
   -webkit-line-clamp: 3; word-break: break-word;
 }
 .request-preview--response { color: #475467; }
-.request-detail { width: min(1040px, 100%); max-height: min(840px, 92vh); overflow: auto; }
+.dialog.request-detail { width: min(1040px, 100%); max-height: min(840px, 92vh); overflow: auto; }
 .request-detail__body { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .request-detail__meta {
   grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0,1fr));
@@ -336,6 +336,13 @@ code { font-size: .78rem; color: #344054; }
 .request-detail__meta span { display: flex; flex-direction: column; gap: 3px; color: #475467; font-size: .7rem; }
 .request-detail__meta b { color: #98a2b3; font-size: .58rem; letter-spacing: .06em; text-transform: uppercase; }
 .request-detail h3 { margin: 0 0 8px; font-size: .75rem; }
+.request-detail label { display: grid; gap: 6px; font-size: .75rem; min-width: 0; }
+.request-detail input, .request-detail textarea {
+  width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: 6px;
+  color: var(--ink); background: white;
+}
+.request-detail textarea { min-height: 90px; resize: vertical; margin-bottom: 12px; }
+.request-detail__context { grid-template-columns: repeat(2, minmax(0,1fr)); margin: 12px 0; }
 .request-detail pre {
   min-height: 260px; max-height: 430px; overflow: auto; margin: 0; padding: 14px;
   border: 1px solid #1d2939; border-radius: 9px; background: #0b1220; color: #d9e4f7;

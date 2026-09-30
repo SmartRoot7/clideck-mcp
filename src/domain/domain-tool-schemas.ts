@@ -44,6 +44,9 @@ export const queryDomainKnowledgeOutputSchema = z.strictObject({
     answer_refs: z.array(z.string())
   })).optional(),
   learning: z.strictObject({
+    id: z.string().uuid().optional(),
+    message: z.string().optional(),
+    needs_context: z.boolean().optional(),
     status: z.enum([
       'diagnosing', 'discovering', 'processing', 'rechecking',
       'queued', 'not_required', 'unavailable'

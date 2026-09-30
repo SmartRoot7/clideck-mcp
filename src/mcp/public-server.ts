@@ -1,4 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import { z } from 'zod'
+import { networkLearningFeedbackSchema } from '@clideck/domain-network'
+import { knowledgeLearningProgressSchema } from '@clideck/admin-contracts'
 import { CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js'
 import type {
   CreateTaskRequestHandlerExtra,
@@ -40,6 +43,8 @@ import { searchKnowledgeWithCoverage } from '../domain/demand-intelligence.js'
 import {
   classifyMcpOutcome,
   getKnowledgeDemandLearningStatus,
+  getKnowledgeLearningProgress,
+  reportKnowledgeGap,
   queueApproximateKnowledgeDemand,
   queueUnknownKnowledgeDemand,
   reconcileKnownKnowledgeDemand,
@@ -139,7 +144,8 @@ function wrapTool<TInput, TOutput>(
         'review_network_change',
         'verify_network_change',
         'advise_network_upgrade',
-        'analyze_network_path'
+        'analyze_network_path',
+        'report_knowledge_gap'
       ].includes(toolName)) {
         const rate = await consumeRateLimit(
           dependencies.database,
@@ -167,7 +173,9 @@ function wrapTool<TInput, TOutput>(
       stopTimer({ outcome: 'success' })
       const publicOutput = output as Record<string, unknown>
       const usageOutcome = classifyMcpOutcome(publicOutput)
-      const knowledgeDemandId = usageOutcome === 'unknown'
+      const knowledgeDemandId = ['report_knowledge_gap','get_learning_status'].includes(toolName)
+        ? (publicOutput['learning'] as { id?: string } | null)?.id ?? null
+        : usageOutcome === 'unknown'
         ? await queueUnknownKnowledgeDemand(
             dependencies.database,
             toolName,
@@ -230,6 +238,13 @@ function wrapTool<TInput, TOutput>(
               ).catch(() => 'unavailable' as const)
             : 'not_required'
         }
+      }
+      if (knowledgeDemandId && publicOutput['learning']) {
+        const progress = await getKnowledgeLearningProgress(dependencies.database, knowledgeDemandId).catch(() => null)
+        Object.assign(publicOutput['learning'] as object, {
+          id: knowledgeDemandId,
+          ...(progress ? { message: progress.message, needs_context: progress.needs_context } : {})
+        })
       }
       await recordPublicUsage(
         dependencies.database,
@@ -305,7 +320,9 @@ export function createPublicMcpServer(
       title: 'CliDeck MCP — Network Knowledge',
       websiteUrl: 'https://clideck.com/software/mcp'
     },
-    dependencies.taskStore
+    {
+      instructions: 'Treat unknown and partial results as incomplete. Such questions are automatically recorded for priority learning. If a returned answer does not address the original question, call report_knowledge_gap with the same question, context, reason and revision_refs. Use get_learning_status to check progress. Ask the user for missing context when learning.needs_context is true. Never claim that research or model training has completed unless status is published; this system learns verified knowledge, not model weights.',
+      ...(dependencies.taskStore
       ? {
           taskStore: dependencies.taskStore,
           defaultTaskPollInterval: 3_000,
@@ -319,8 +336,29 @@ export function createPublicMcpServer(
             }
           }
         }
-      : undefined,
+      : {})
+    },
   )
+
+  server.registerTool('report_knowledge_gap', {
+    title: 'Report an Incomplete or Incorrect Answer',
+    description: 'Record the original network question for priority research. Provide missing context or explain why an answer was not useful. Feedback alone does not change or quarantine published knowledge.',
+    inputSchema: networkLearningFeedbackSchema,
+    outputSchema: z.object({ learning: knowledgeLearningProgressSchema.nullable() }),
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false }
+  }, wrapTool(dependencies, 'report_knowledge_gap', async (input) => ({
+    learning: await reportKnowledgeGap(dependencies.database, input)
+  })))
+
+  server.registerTool('get_learning_status', {
+    title: 'Get Learning Progress',
+    description: 'Check a learning ID returned by a knowledge query or report_knowledge_gap. Published means the original question has a complete answer; repeat the original query to read it.',
+    inputSchema: z.object({ learning_id: z.string().uuid() }),
+    outputSchema: z.object({ learning: knowledgeLearningProgressSchema.nullable() }),
+    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false }
+  }, wrapTool(dependencies, 'get_learning_status', async (input) => ({
+    learning: await getKnowledgeLearningProgress(dependencies.database, input.learning_id)
+  })))
 
   server.registerTool(
     'list_knowledge_domains',

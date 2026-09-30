@@ -95,7 +95,8 @@ export function useMcpRequest(
       `${apiPrefix}/mcp-requests/${encodeURIComponent(requestLogId ?? '')}`,
       mcpRequestLogDetailSchema,
     ),
-    enabled: Boolean(requestLogId)
+    enabled: Boolean(requestLogId),
+    refetchInterval: requestLogId ? 5_000 : false
   })
 }
 

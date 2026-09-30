@@ -117,9 +117,10 @@ async function reconcilePublishedKnowledgeDemands(
     id: string
     question: string
     tool_name: string
+    context: Record<string, unknown>
     diagnosis: unknown
   }>(
-    `SELECT demand.id, demand.question, demand.tool_name,
+    `SELECT demand.id, demand.question, demand.tool_name, demand.context,
             jsonb_build_object(
               'failure_class', diagnostic.failure_class,
               'answer_status', diagnostic.answer_status,

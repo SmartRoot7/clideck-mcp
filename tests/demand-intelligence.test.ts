@@ -284,6 +284,22 @@ describe('Demand Intelligence', () => {
   })
 
   it('keeps read and destructive configuration intent aligned with evidence', () => {
+    expect(answerSupportsRequestedAction('Display the EVPN designated forwarder election state', {
+      title: 'OSPFv3 interface priority', summary: 'Show interface election configuration.',
+      command: 'show ipv6 ospf interface', procedure: []
+    })).toBe(false)
+    expect(answerSupportsRequestedAction('Display the EVPN designated forwarder election state', {
+      title: 'EVPN Ethernet segment designated forwarder', summary: 'Inspect the active election.',
+      command: 'show bgp evpn instance', procedure: []
+    })).toBe(true)
+    expect(answerSupportsRequestedAction('Display CAKE qdisc counters', {
+      title: 'CAKE statistics', summary: 'Inspect packet and drop counters.',
+      command: 'tc -s qdisc show dev eth0', procedure: []
+    })).toBe(true)
+    expect(answerSupportsRequestedAction('Display conntrack state', {
+      title: 'conntrack table', summary: 'Inspect tracked connections.',
+      command: 'conntrack -L', procedure: []
+    })).toBe(true)
     expect(answerSupportsRequestedAction(
       'Display the active configuration',
       {

@@ -18,7 +18,8 @@ version 8 used `gpt-6-luna` low/medium, High fallback `gpt-5.6-terra` medium.
 - **Learning audit:** 15/20 unknown questions lost diagnosis tasks; a global
   migration-029 trigger silently blocks concurrent inserts while reconciliation
   omits orphan `queued` demands. EVPN falsely closed with OSPF; terminal sources
-  strand Fidelity backlog; public stats remain stale since August 30. No fix yet.
+  strand Fidelity backlog; public stats remain stale since August 30. Corrections
+  are implemented below; production verification is pending.
 - **Grants:** September 21 narrow `source_collections` admin grants are now
   codified in `ops/sql/grants.sql`; preserve the exact columns below.
 - **Configuration:** September 8 cluster `jit=off` resolved Overview timeouts;
@@ -32,6 +33,31 @@ version 8 used `gpt-6-luna` low/medium, High fallback `gpt-5.6-terra` medium.
 
 Resolved incidents are condensed below. Full evidence/test counts and previous
 soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.md`.
+
+## 2026-09-30 — Urgent learning correction
+
+- Evidence/cause: the audit above measured 15 lost diagnoses, unrelated EVPN
+  replay and no Fidelity progress. The global trigger dropped durable inserts;
+  orphan reconciliation and terminal-source audit selection were incomplete.
+- Minimal correction: migration 044 replaces the global diagnosis cap with
+  per-demand uniqueness and repairs orphans. Durable request recovery, urgent
+  scheduling at each stage and immediate publication retain leases, selected
+  capacity, circuits and operator pause. Replay preserves original context,
+  feature and action; source reuse requires relevance. Fidelity retains its
+  original processing run and extractor/verifier identity on terminal sources.
+- Operator visibility: Requests & Learning shows progress and waiting reasons;
+  optional MCP feedback/status tools and authenticated admin feedback re-open
+  gaps without quarantining knowledge on an unverified user complaint. Missing
+  context remains visible and requires clarification.
+- Statistics correction: materialize the projected active-knowledge coverage
+  once per refresh instead of repeating the expensive public-view scan four
+  times. Public response contracts and visibility rules remain unchanged.
+- Validation before deployment: 331 tests and 250 evaluation fixtures passed
+  on a fresh disposable PostgreSQL database; network pack validation passed.
+  Added parallel-20, duplicate, orphan/recovery, role-grant, urgent-claim,
+  terminal/original-run and EVPN/OSPF regression checks.
+- Deployment SHA, live experiment and read-only soak: pending normal deployment
+  and post-deploy measurement. A successful preflight is not a completed soak.
 
 ## 2026-09-30 — Knowledge quality and 20-question learning audit
 

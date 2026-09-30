@@ -65,7 +65,7 @@ const GROUPS: Array<{
     label: 'Monitor',
     items: [
       { id: 'overview', label: 'Overview', icon: CircleGauge },
-      { id: 'mcp-requests', label: 'MCP Requests', icon: ScrollText },
+      { id: 'mcp-requests', label: 'Requests & Learning', icon: ScrollText },
       { id: 'pipeline', label: 'Pipeline', icon: Network },
       { id: 'active-source', label: 'Active Sources', icon: FileCheck2 },
       { id: 'agent-runs', label: 'Agent Runs', icon: BrainCircuit }
@@ -252,7 +252,7 @@ const SECTION_COPY: Record<SectionId, string> = {
 }
 
 const SECTION_TITLES: Partial<Record<SectionId, string>> = {
-  'mcp-requests': 'MCP Requests'
+  'mcp-requests': 'Requests & Learning'
 }
 
 export const NAVIGATION_GROUPS = GROUPS

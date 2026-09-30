@@ -39,6 +39,8 @@ import {
   useMcpRequests
 } from '../lib/queries'
 import { useOperationsRuntime } from '../lib/runtime'
+import { postJson } from '../lib/api'
+import { mutationAckSchema } from '@clideck/admin-contracts'
 
 const EMPTY_FILTERS: McpRequestFilters = {
   q: '',
@@ -57,6 +59,8 @@ const TOOL_OPTIONS = [
   'continue_expert_task',
   'cancel_expert_task',
   'submit_feedback',
+  'report_knowledge_gap',
+  'get_learning_status',
   'analyze_device_snapshot',
   'review_network_change',
   'verify_network_change',
@@ -323,6 +327,31 @@ function RequestDetailDialog({
   onClose: () => void
 }) {
   const runtime = useOperationsRuntime()
+  const [learningPending, setLearningPending] = useState(false)
+  const [learningMessage, setLearningMessage] = useState('')
+  const [reason, setReason] = useState('The answer did not address the original question.')
+  const [operatingSystem, setOperatingSystem] = useState('')
+  const [version, setVersion] = useState('')
+  const requestLearning = async () => {
+    if (!data || learningPending) return
+    setLearningPending(true)
+    setLearningMessage('')
+    try {
+      await postJson(`${runtime.apiPrefix}/mcp-requests/${data.id}/learn`, {
+        reason,
+        context: {
+          ...(operatingSystem.trim() ? { operating_system: operatingSystem.trim() } : {}),
+          ...(version.trim() ? { version: version.trim() } : {})
+        }
+      }, mutationAckSchema)
+      setLearningMessage('Priority learning requested. Progress updates automatically.')
+      onRetry()
+    } catch (error) {
+      setLearningMessage(error instanceof Error ? error.message : 'Learning request failed. Try again.')
+    } finally {
+      setLearningPending(false)
+    }
+  }
   const exportDiagnosis = (format: 'json' | 'markdown') => {
     if (!data?.learning_diagnosis || runtime.role !== 'super_admin') return
     const diagnosis = data.learning_diagnosis
@@ -403,6 +432,18 @@ function RequestDetailDialog({
             </section>
             <section>
               <h3>Learning diagnosis</h3>
+              {data.learning_progress && (
+                <>
+                  <p>{data.learning_progress.message}</p>
+                  <div className="request-detail__meta">
+                    <span><b>Stage</b>{titleCase(data.learning_progress.stage ?? data.learning_progress.status)}</span>
+                    <span><b>Elapsed</b>{formatNumber(numberOf(data.learning_progress.elapsed_seconds) / 60, 1)} min</span>
+                    <span><b>Active / queued</b>{data.learning_progress.active_tasks} / {data.learning_progress.queued_tasks}</span>
+                    <span><b>Last activity</b>{formatDate(data.learning_progress.last_progress_at)}</span>
+                    {data.learning_progress.last_error_code && <span><b>Waiting reason</b>{titleCase(data.learning_progress.last_error_code)}</span>}
+                  </div>
+                </>
+              )}
               {data.learning_diagnosis ? (
                 <>
                   <div className="request-detail__meta">
@@ -434,6 +475,28 @@ function RequestDetailDialog({
                 <p>No diagnosis was required or it has not started yet.</p>
               )}
             </section>
+            {runtime.role === 'super_admin' && [
+              'query_network_knowledge','query_domain_knowledge','get_network_workflow','review_network_change','advise_network_upgrade'
+            ].includes(data.tool_name) && (
+              <section>
+                <h3>Request priority learning</h3>
+                <p>Explain what is missing. Add the operating system and version if more context is needed.</p>
+                <label>What should be improved?
+                  <textarea aria-label="Learning feedback" value={reason} maxLength={1000}
+                    onChange={(event) => setReason(event.target.value)} />
+                </label>
+                <div className="request-detail__meta request-detail__context">
+                  <label>Operating system<input aria-label="Learning operating system" value={operatingSystem}
+                    onChange={(event) => setOperatingSystem(event.target.value)} maxLength={240} /></label>
+                  <label>Version<input aria-label="Learning version" value={version}
+                    onChange={(event) => setVersion(event.target.value)} maxLength={64} /></label>
+                </div>
+                <Button disabled={learningPending || reason.trim().length < 3} onClick={() => void requestLearning()}>
+                  {learningPending ? 'Submitting…' : 'Answer not helpful · start learning'}
+                </Button>
+                {learningMessage && <p role="status">{learningMessage}</p>}
+              </section>
+            )}
           </div>
         )}
         <footer>

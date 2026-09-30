@@ -80,6 +80,8 @@ import {
   reviewNetworkChange,
   verifyNetworkChange
 } from '../domain/change.js'
+import { networkLearningFeedbackSchema } from '@clideck/domain-network'
+import { extractMcpQuestion, reportKnowledgeGap } from '../domain/mcp-observability.js'
 import {
   publicNetworkContext,
   resolveNetworkContext
@@ -1055,6 +1057,40 @@ export function createApiApp(dependencies: ApiDependencies) {
     return detail
       ? context.json(parseHttpContract(mcpRequestLogDetailSchema, detail))
       : context.json({ error: 'not_found' }, 404)
+  })
+
+  app.post('/admin/v1/mcp-requests/:requestLogId/learn', async (context) => {
+    const actor = context.get('adminActor')
+    if (actor.role !== 'super_admin') return context.json({ error: 'forbidden' }, 403)
+    const id = context.req.param('requestLogId')
+    if (!/^\d{1,19}$/.test(id)) return context.json({ error: 'invalid_request_log_id' }, 400)
+    const parsed = networkLearningFeedbackSchema.omit({ question: true, revision_refs: true })
+      .safeParse(await context.req.json<unknown>())
+    if (!parsed.success) return context.json({ error: 'invalid_input' }, 400)
+    const detail = await getMcpRequestLog(adminDatabase, id)
+    if (!detail) return context.json({ error: 'not_found' }, 404)
+    const request = detail['request_payload'] as Record<string, unknown>
+    const response = detail['response_payload'] as Record<string, unknown>
+    if (!['query_network_knowledge','get_network_workflow','review_network_change','advise_network_upgrade','query_domain_knowledge'].includes(String(detail['tool_name'])) ||
+        (detail['tool_name'] === 'query_domain_knowledge' && request['domain_id'] !== 'network')) {
+      return context.json({ error: 'unsupported_learning_domain' }, 400)
+    }
+    const original = detail['knowledge_demand_id'] ? (await adminDatabase.query<{ question: string; context: Record<string, unknown> }>(
+      'SELECT question,context FROM knowledge_demands WHERE id=$1', [detail['knowledge_demand_id']])).rows[0] : null
+    const rawContext = original?.context['raw_context'] ?? request['context'] ?? original?.context ?? {}
+    const progress = await reportKnowledgeGap(adminDatabase, {
+      question: original?.question ?? String(request['question'] ?? request['goal'] ?? request['intent'] ?? extractMcpQuestion(String(detail['tool_name']), request)),
+      context: { ...(rawContext as Record<string, unknown>), ...parsed.data.context },
+      reason: parsed.data.reason,
+      revision_refs: Array.isArray(response['answers']) ? response['answers'].flatMap((answer) => {
+        const ref = (answer as Record<string, unknown>)['revision_ref']
+        return typeof ref === 'string' ? [ref] : []
+      }).slice(0,5) : []
+    })
+    if (!progress) return context.json({ error: 'learning_unavailable' }, 503)
+    await adminDatabase.query('UPDATE mcp_request_logs SET knowledge_demand_id=$2 WHERE id=$1', [id,progress.id])
+    await recordAdminAudit(adminDatabase, actor, 'knowledge.learning_requested', 'knowledge_demand', progress.id, { request_log_id: id })
+    return context.json({ ok: true, learning: progress })
   })
 
   app.get('/admin/v1/pipeline/transitions', async (context) => {

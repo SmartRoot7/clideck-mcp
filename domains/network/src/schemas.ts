@@ -6,6 +6,20 @@ const versionSchema = z.string().trim().min(1).max(64).regex(
 )
 const boundedLine = z.string().trim().min(1).max(1_000)
 
+export const networkLearningFeedbackSchema = z.strictObject({
+  question: z.string().trim().min(3).max(2_000),
+  reason: z.string().trim().min(3).max(1_000),
+  context: z.strictObject({
+    vendor: z.string().trim().min(1).max(240).optional(),
+    model: z.string().trim().min(1).max(240).optional(),
+    operating_system: z.string().trim().min(1).max(240).optional(),
+    version: versionSchema.optional(),
+    runtime_mode: z.string().trim().min(1).max(120).optional(),
+    shell_environment: z.string().trim().min(1).max(120).optional()
+  }).default({}),
+  revision_refs: z.array(z.string().uuid()).max(5).default([])
+})
+
 export const networkContextSchema = z.strictObject({
   vendor: slugSchema.optional(),
   model: slugSchema.optional(),

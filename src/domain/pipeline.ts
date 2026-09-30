@@ -42,6 +42,7 @@ import {
   replayDemandCoverage
 } from './demand-intelligence.js'
 import { decomposeNetworkQuestion, normalizeTopicSlug } from './network-intent.js'
+import { recoverUnqueuedKnowledgeDemands } from './mcp-observability.js'
 import {
   candidateKnowledgeSchema,
   deactivatePublishedCandidates
@@ -928,7 +929,9 @@ async function queueDemandDiagnosisWork(
             diagnosis_version
        FROM knowledge_demands demand
       WHERE demand.status <> 'published'
-        AND demand.diagnosis_status IN ('pending', 'failed')
+        AND demand.diagnosis_status IN ('pending', 'failed', 'queued', 'running')
+        AND demand.coverage_target_id IS NOT NULL
+        AND demand.last_error_code IS DISTINCT FROM 'CONTEXT_REQUIRED'
         AND demand.next_retry_at <= now()
         AND NOT EXISTS (
           SELECT 1 FROM pipeline_tasks active
@@ -978,8 +981,8 @@ const fallbackPipelineModel = 'gpt-5.6-terra'
 const requiredPipelineReasoning = 'low'
 const aiPriorities = {
   expert: 100,
-  demandDiagnosis: 110,
-  demand: 105,
+  demandDiagnosis: 170,
+  demand: 160,
   deepMedium: 96,
   deepLow: 92,
   verify: 88,
@@ -1571,6 +1574,7 @@ function deepReviewModeFromTask(task: Pick<
 async function queueDeepReviewWork(
   client: DatabaseClient,
   reviewMode: DeepReviewMode,
+  demandOnly = false,
 ): Promise<boolean> {
   const seed = await client.query<{
     id: string
@@ -1601,6 +1605,8 @@ async function queueDeepReviewWork(
      LEFT JOIN source_candidates source
        ON source.id = pt.source_candidate_id
      WHERE kc.status IN ('deep_review', 'quarantined')
+       AND (NOT $2::boolean OR EXISTS (SELECT 1 FROM knowledge_demands demand
+         WHERE demand.id=source.knowledge_demand_id AND demand.status<>'published'))
        AND kc.deep_review_task_id IS NULL
        AND (
          kc.status = 'deep_review'
@@ -1621,7 +1627,7 @@ async function queueDeepReviewWork(
        kc.created_at
      LIMIT 1
      FOR UPDATE OF kc SKIP LOCKED`,
-    [reviewMode],
+    [reviewMode, demandOnly],
   )
   const first = seed.rows[0]
   if (!first) return false
@@ -1855,12 +1861,13 @@ async function queueSourceWork(
     return false
   }
 
-  if ([
+  const terminalSource = [
     'completed',
     'completed_with_exceptions',
     'duplicate',
     'rejected'
-  ].includes(source.status)) {
+  ].includes(source.status)
+  if (terminalSource && mode !== 'verification') {
     await client.query(
       `DELETE FROM active_source_slots
        WHERE source_candidate_id = $1`,
@@ -1984,8 +1991,9 @@ async function queueSourceWork(
       evidence_window: number | null
       extraction_model: string
       extraction_reasoning_effort: string
+      processing_run_id: string | null
     }>(
-      `SELECT kc.id, kc.stable_key, kc.payload, kc.dangerous,
+      `SELECT kc.id, kc.stable_key, kc.payload, kc.dangerous, kc.processing_run_id,
               kc.confidence, kc.quality_score,
               coalesce(extraction.model, 'legacy-unknown') AS extraction_model,
               coalesce(extraction.reasoning_effort, 'unknown') AS extraction_reasoning_effort,
@@ -1999,19 +2007,20 @@ async function queueSourceWork(
            WHERE run.pipeline_task_id = kc.pipeline_task_id AND run.started_at <= kc.created_at
            ORDER BY run.started_at DESC LIMIT 1) extraction ON true
         WHERE origin.source_candidate_id = $1
-          AND kc.processing_run_id IS NOT DISTINCT FROM $2::uuid
           AND kc.status IN ('verified', 'published')
           AND kc.fidelity_status = 'pending'
           AND kc.fidelity_task_id IS NULL
         ORDER BY kc.created_at
         LIMIT 80
         FOR UPDATE OF kc SKIP LOCKED`,
-      [source.id, source.processing_run_id],
+      [source.id],
     )
     if (fidelityCandidates.rows.length > 0) {
       const first = fidelityCandidates.rows[0]!
       fidelityCandidates.rows = fidelityCandidates.rows.filter((candidate) =>
+        candidate.processing_run_id === first.processing_run_id &&
         candidate.extraction_model === first.extraction_model && candidate.extraction_reasoning_effort === first.extraction_reasoning_effort)
+      const fidelityScope = first.processing_run_id ? `processing-run:${first.processing_run_id}` : `source:${source.id}`
       const qualityProfileKey = fidelityExecutionProfileKey(first.extraction_model, first.extraction_reasoning_effort, verifier.model, verifier.reasoning_effort)
       const quality = await ensureFidelityExecutionProfile(client, qualityProfileKey, first.extraction_model)
       const sampled = fidelityCandidates.rows.filter((candidate) =>
@@ -2042,7 +2051,7 @@ async function queueSourceWork(
             JSON.stringify(candidate.payload).length +
             (candidate.evidence_content?.length ?? 0)
           ) / 4),
-          evidenceWindow: `${source.processing_run_id ?? source.id}:${candidate.evidence_window ?? 'legacy'}`
+          evidenceWindow: `${first.processing_run_id ?? source.id}:${candidate.evidence_window ?? 'legacy'}`
         })),
         { maximumRecords: 8, targetTokens: 32_000, hardTokens: 40_000 },
       )[0] ?? []
@@ -2054,13 +2063,14 @@ async function queueSourceWork(
         type: 'candidate_verification',
         stage: 'verify',
         priority: taskPriority ?? aiPriorities.verify,
-        dedupeKey: `${sourceWorkScope}:fidelity:${sha256Label(ids.join(','))}`,
+        dedupeKey: `${fidelityScope}:fidelity:${sha256Label(ids.join(','))}`,
         coverageTargetId: source.coverage_target_id,
         sourceId: source.id,
         knowledgeDemandId: source.knowledge_demand_id,
-        processingRunId: source.processing_run_id,
+        processingRunId: first.processing_run_id,
         payload: {
           ...basePayload,
+          processing_run_id: first.processing_run_id,
           audit_mode: 'fidelity',
           quality_profile_key: qualityProfileKey,
           quality_extraction_model: first.extraction_model,
@@ -2091,6 +2101,7 @@ async function queueSourceWork(
       )
       return true
     }
+    if (terminalSource) return false
     const verificationReadiness = await client.query<{
       ready: boolean
     }>(
@@ -2553,6 +2564,10 @@ async function queueDemandDiscoveryWork(
         )
         AND fragment.reservation_task_id IS NULL
       GROUP BY source.id
+      HAVING cardinality($3::text[])=0 OR sum(COALESCE((
+        SELECT sum(CASE WHEN fragment.content ~* demand_pattern THEN 1 ELSE 0 END)
+        FROM unnest($3::text[]) AS terms(demand_pattern)
+      ),0)) > 0
       ORDER BY sum(COALESCE((
         SELECT sum(
           CASE
@@ -2658,10 +2673,17 @@ async function queueCandidatePublication(
 ): Promise<boolean> {
   const readiness = await client.query<{
     count: number
+    urgent_count: number
     oldest_waiting_at: string | Date | null
   }>(
     `SELECT
        count(*)::int AS count,
+       count(*) FILTER (WHERE EXISTS (
+         SELECT 1 FROM pipeline_tasks origin
+         JOIN source_candidates source ON source.id=origin.source_candidate_id
+         JOIN knowledge_demands demand ON demand.id=source.knowledge_demand_id
+         WHERE origin.id=knowledge_candidates.pipeline_task_id AND demand.status<>'published'
+       ))::int AS urgent_count,
        min(updated_at) AS oldest_waiting_at
      FROM knowledge_candidates
      WHERE status = 'verified'
@@ -2672,7 +2694,7 @@ async function queueCandidatePublication(
   if (
     count === 0 ||
     (
-      count < 50 &&
+      count < 50 && (readiness.rows[0]?.urgent_count ?? 0) === 0 &&
       (
         !oldest ||
         new Date(oldest).getTime() > Date.now() - 30_000
@@ -2733,6 +2755,7 @@ async function queueCandidatePublication(
     dedupeKey: `records:publish:${sha256Label(candidateIds.join(','))}`,
     sourceId: sourceIds.length === 1 ? sourceIds[0]! : null,
     knowledgeDemandId: demandIds.length === 1 ? demandIds[0]! : null,
+    queueClass: demandIds.length > 0 ? 'demand' : 'baseline',
     payload: {
       candidate_ids: candidateIds,
       source_ids: sourceIds,
@@ -2808,8 +2831,8 @@ async function maintainPreparedSourceBuffer(
            )
            AND task.status IN ('queued', 'claimed', 'running')
       )
-     ORDER BY ranked.class_rank,
-       CASE WHEN ranked.is_demand THEN 0 ELSE 1 END,
+    ORDER BY CASE WHEN ranked.is_demand THEN 0 ELSE 1 END,
+       ranked.class_rank,
        ranked.discovered_at
      LIMIT $1`,
     [preparationLimit],
@@ -3248,11 +3271,12 @@ async function queueVerificationFromAnySource(
          CASE WHEN source.knowledge_demand_id IS NOT NULL THEN 0 ELSE 1 END
        ),
        min(candidate.created_at)
-     LIMIT 1`,
+     LIMIT 16`,
   )
-  return source.rows[0]
-    ? queueSourceWork(client, source.rows[0].id, 'verification')
-    : false
+  for (const row of source.rows) {
+    if (await queueSourceWork(client, row.id, 'verification')) return true
+  }
+  return false
 }
 
 async function queueAnalysisFromLanes(
@@ -3598,6 +3622,41 @@ async function ensureLegacyWorkInTransaction(
   }
 }
 
+async function prepareUrgentDemandSources(client: DatabaseClient, capacity: number): Promise<void> {
+  const sources = await client.query<{ id: string }>(
+    `SELECT source.id FROM source_candidates source JOIN knowledge_demands demand ON demand.id=source.knowledge_demand_id
+      WHERE demand.status<>'published' AND source.status IN ('discovered','approved','acquiring','acquired','converting','converted','chunking')
+        AND NOT EXISTS (SELECT 1 FROM pipeline_tasks task WHERE task.source_candidate_id=source.id
+          AND task.task_type IN ('source_acquisition','source_conversion','source_chunking') AND task.status IN ('queued','claimed','running'))
+      ORDER BY demand.priority DESC,source.discovered_at LIMIT $1 FOR NO KEY UPDATE OF source SKIP LOCKED`, [capacity])
+  for (const source of sources.rows) await queueSourceWork(client, source.id, 'mechanical')
+}
+
+/** Materialize urgent work before counting the existing background queue.
+ * A queued plan must not occupy the opportunity to start a real user request. */
+async function queueUrgentDemandWork(client: DatabaseClient, capacity: number): Promise<void> {
+  const ready = await client.query<{ count: number }>(
+    `SELECT count(*)::int count FROM pipeline_tasks task JOIN knowledge_demands demand ON demand.id=task.knowledge_demand_id
+      WHERE demand.status<>'published' AND task.status IN ('queued','claimed','running')
+        AND task.task_type=ANY($1::text[]) AND ${claimableExecutionSql('task')}`, [aiTaskTypes])
+  for (let count = ready.rows[0]?.count ?? 0; count < capacity; count++) {
+    if (await queueDeepReviewWork(client, 'medium', true) || await queueDeepReviewWork(client, 'low', true)) continue
+    const sources = await client.query<{ id: string }>(
+      `SELECT source.id FROM source_candidates source JOIN knowledge_demands demand ON demand.id=source.knowledge_demand_id
+        WHERE demand.status<>'published' AND source.status IN ('prepared','analyzing','verifying')
+        ORDER BY (SELECT count(*) FROM pipeline_tasks task WHERE task.source_candidate_id=source.id AND task.status IN ('queued','claimed','running')),
+          demand.priority DESC,demand.first_seen_at LIMIT 16`)
+    let queued = false
+    for (const source of sources.rows) {
+      if (await queueSourceWork(client, source.id, 'analysis') || await queueSourceWork(client, source.id, 'verification')) {
+        queued = true
+        break
+      }
+    }
+    if (!queued) break
+  }
+}
+
 async function ensureStreamingWorkInTransaction(
   client: DatabaseClient,
 ): Promise<void> {
@@ -3634,8 +3693,11 @@ async function ensureStreamingWorkInTransaction(
   const pipeline = settings.rows[0]
   if (!pipeline?.enabled) return
 
+  await recoverUnqueuedKnowledgeDemands(client)
+
   await reconcileCompletedSources(client)
   await reconcileTechnicalDemandFailures(client)
+  await prepareUrgentDemandSources(client, pipeline.max_concurrent_ai_runs)
   // Reprocess Convert/Chunk work is mechanical and must not compete for an
   // AI source lane. A lane becomes useful only after chunking has produced
   // fragments; coupling the two stranded converted runs indefinitely.
@@ -3661,8 +3723,13 @@ async function ensureStreamingWorkInTransaction(
 
   // Diagnose an unanswered request before spending discovery capacity. The
   // diagnosis may resolve a retrieval/context miss using existing knowledge.
-  await queueDemandDiagnosisWork(client)
-  await queueDemandDiscoveryWork(client)
+  for (let index = 0; index < pipeline.max_concurrent_ai_runs; index++) {
+    if (!(await queueDemandDiagnosisWork(client))) break
+  }
+  for (let index = 0; index < pipeline.max_concurrent_ai_runs; index++) {
+    if (!(await queueDemandDiscoveryWork(client))) break
+  }
+  await queueUrgentDemandWork(client, pipeline.max_concurrent_ai_runs)
 
   await queueExpertWork(client)
   // Older releases could queue a Luna-low fallback after repeated Medium
@@ -3965,7 +4032,10 @@ export async function claimPipelineTask(
            )
          )
          AND ${claimableExecutionSql('pipeline_tasks')}
-       ORDER BY priority DESC, created_at
+       ORDER BY CASE WHEN queue_class='demand' AND (knowledge_demand_id IS NULL OR EXISTS (
+         SELECT 1 FROM knowledge_demands demand WHERE demand.id=pipeline_tasks.knowledge_demand_id
+           AND demand.status<>'published' AND demand.last_error_code IS DISTINCT FROM 'CONTEXT_REQUIRED'
+       )) THEN 0 ELSE 1 END, priority DESC, created_at
        FOR UPDATE SKIP LOCKED
        LIMIT 1`,
       [aiTaskTypes],
@@ -4290,12 +4360,18 @@ export async function claimMechanicalPipelineTask(
          payload,
          coverage_target_id,
          source_candidate_id,
-         expert_task_id
+         expert_task_id,
+         knowledge_demand_id,
+         processing_run_id,
+         queue_class
        FROM pipeline_tasks
        WHERE status = 'queued'
          AND available_at <= now()
          AND task_type = ANY($1::text[])
-       ORDER BY priority DESC, created_at
+       ORDER BY CASE WHEN queue_class='demand' AND (knowledge_demand_id IS NULL OR EXISTS (
+         SELECT 1 FROM knowledge_demands demand WHERE demand.id=pipeline_tasks.knowledge_demand_id
+           AND demand.status<>'published' AND demand.last_error_code IS DISTINCT FROM 'CONTEXT_REQUIRED'
+       )) THEN 0 ELSE 1 END, priority DESC, created_at
        FOR UPDATE SKIP LOCKED
        LIMIT 1`,
       [mechanicalTaskTypes],
@@ -5539,6 +5615,8 @@ export async function submitDemandDiagnosis(
     await client.query('RELEASE SAVEPOINT demand_coverage_replay')
     const firstRevisionRef = replay.answers[0]?.revision_ref ?? null
     const acceptedExisting =
+      diagnosis.answer_status === 'complete' && diagnosis.missing_capabilities.length === 0 &&
+      diagnosis.subquestions.every((part) => part.status === 'covered') &&
       replay.answerStatus === 'complete' && firstRevisionRef !== null
 
     await client.query(

@@ -45,10 +45,14 @@ export async function computePublicStats(database: QueryableDatabase) {
       workflows: number
       lab_validated_revisions: number
     }>(
-      `SELECT
+      `WITH active_coverage AS MATERIALIZED (
+         SELECT operating_system_slug, version_min, version_max, kind
+         FROM public_active_knowledge
+       )
+       SELECT
          r.sequence::int AS release_sequence,
          r.published_at AS release_published_at,
-         (SELECT count(*)::int FROM public_active_knowledge) AS published_knowledge,
+         (SELECT count(*)::int FROM active_coverage) AS published_knowledge,
          (
            SELECT count(DISTINCT p.vendor_id)::int
            FROM device_models dm
@@ -63,17 +67,17 @@ export async function computePublicStats(database: QueryableDatabase) {
          (SELECT count(*)::int FROM device_models) AS device_models,
          (
            SELECT count(DISTINCT operating_system_slug)::int
-           FROM public_active_knowledge
+           FROM active_coverage
          ) AS operating_systems,
          (
            SELECT count(DISTINCT concat_ws(
              ':', operating_system_slug, version_min, version_max
            ))::int
-           FROM public_active_knowledge
+           FROM active_coverage
          ) AS version_scopes,
          (
            SELECT count(*)::int
-           FROM public_active_knowledge
+           FROM active_coverage
            WHERE kind IN ('workflow', 'change', 'upgrade')
          ) AS workflows,
          (

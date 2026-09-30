@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
+import { networkLearningFeedbackSchema } from '@clideck/domain-network'
 
 import { serveStatic } from '@hono/node-server/serve-static'
 import {
@@ -592,6 +593,15 @@ export function createAdminUiApp(dependencies: AdminUiDependencies) {
       `/admin/v1/mcp-requests/${id}`,
       mcpRequestLogDetailSchema,
     )
+  })
+  app.post('/admin/api/v1/mcp-requests/:requestLogId/learn', async (context) => {
+    const id = context.req.param('requestLogId')
+    if (!/^\d{1,19}$/.test(id)) return context.json({ error: 'invalid_request_log_id' }, 400)
+    const parsed = networkLearningFeedbackSchema.omit({ question: true, revision_refs: true })
+      .safeParse(await context.req.json<unknown>())
+    if (!parsed.success) return context.json({ error: 'invalid_input' }, 400)
+    return mutationEndpoint(context, `/admin/v1/mcp-requests/${id}/learn`, parsed.data,
+      'Priority learning requested.', id)
   })
   app.get('/admin/api/v1/pipeline/transitions', async (context) => {
     const after = context.req.query('after')

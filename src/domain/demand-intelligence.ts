@@ -15,6 +15,7 @@ import {
   type NetworkQuestionPart
 } from './network-intent.js'
 import type { PublicKnowledge } from './schemas.js'
+import { networkAnswerMatchesFeatures } from '@clideck/domain-network'
 
 export const answerStatusSchema = z.enum(['complete', 'partial', 'unknown'])
 
@@ -274,7 +275,7 @@ function evidenceText(answer: CapabilityEvidence): string {
 const readIntentPattern =
   /\b(?:show|display|list|inspect|view|read|get\s+(?:the\s+)?current)\b/i
 const readEvidencePattern =
-  /(?:^|[\s`])(?:cat|dir|display|ls|more|show|view)(?:[\s`]|$)/i
+  /(?:^|[\s`])(?:cat|dir|display|ls|more|show|view)(?:[\s`]|$)|\b(?:tc\s+(?:-\S+\s+)*qdisc\s+(?:show|list)|conntrack\s+-(?:L|S)|ethtool\s+(?:-[Sxnu]|--show-\S+)|sysctl\s+(?:-a|[a-z][\w.]+\s*$)|ip\s+-(?:s|d)\s+link)\b/i
 const destructiveConfigurationIntentPattern =
   /\b(?:delete|erase|remove|reset|wipe)\b[^.]{0,80}\bconfig(?:uration)?\b/i
 const destructiveConfigurationEvidencePattern =
@@ -285,6 +286,7 @@ export function answerSupportsRequestedAction(
   answer: CapabilityEvidence,
 ): boolean {
   const text = evidenceText(answer)
+  if (!networkAnswerMatchesFeatures(question, text)) return false
   if (destructiveConfigurationIntentPattern.test(question)) {
     return destructiveConfigurationEvidencePattern.test(text)
   }
@@ -344,7 +346,7 @@ export function answerSupportsCapability(
       return /(?:^|[\s`])(?:arp(?:\s+-[anv])?|ip\s+neigh(?:bour)?)(?:[\s`]|$)/i
         .test(text)
     case 'interface-counters':
-      return /\b(?:ip\s+-s\s+link|ethtool\s+-S|ifconfig\s+\S+|show\s+interfaces?\s+counters?|\/proc\/net\/dev)\b/i
+      return /\b(?:ip\s+-s\s+link|ethtool\s+-S|tc\s+(?:-\S+\s+)*qdisc\s+show|ifconfig\s+\S+|show\s+interfaces?\s+counters?|\/proc\/net\/dev)\b/i
         .test(text)
     case 'tftp-transfer':
       return /(?:^|[\s`])tftp(?:[\s`]|$)/i.test(command)
@@ -363,6 +365,7 @@ export async function searchKnowledgeWithCoverage(input: {
   limit: number
   kind?: PublicKnowledge['kind'] | PublicKnowledge['kind'][]
   requireAction?: boolean
+  excludedRevisionRefs?: readonly string[]
 }): Promise<KnowledgeCoverage> {
   const parts = decomposeNetworkQuestion(input.question)
   const result = await Promise.all(parts.map(async (part) => {
@@ -387,7 +390,7 @@ export async function searchKnowledgeWithCoverage(input: {
     ].includes(part.capability)
     const actionable = filterActionableKnowledge(
       part.query,
-      raw,
+      raw.filter((answer) => !input.excludedRevisionRefs?.includes(answer.revision_ref)),
       { requireAction: partRequiresAction },
     )
     const eligibleAnswers = actionable.filter((answer) =>
@@ -472,9 +475,10 @@ export function diagnosticTopicIdentity(
 
 export async function replayDemandCoverage(
   client: Database | DatabaseClient,
-  demand: { question: string; tool_name: string },
+  demand: { question: string; tool_name: string; context?: Record<string, unknown> },
   artifact: DemandDiagnosisArtifact,
 ): Promise<KnowledgeCoverage & { context: InternalResolvedContext }> {
+  const original = demand.context ?? {}
   const context = await resolveNetworkContext(client as unknown as Database, {
     ...(artifact.canonical_context.vendor
       ? { vendor: artifact.canonical_context.vendor }
@@ -482,7 +486,8 @@ export async function replayDemandCoverage(
     ...(artifact.canonical_context.model
       ? { model: artifact.canonical_context.model }
       : {}),
-    operating_system: artifact.canonical_context.operating_system,
+    operating_system: typeof original['operating_system'] === 'string'
+      ? original['operating_system'] : artifact.canonical_context.operating_system,
     ...(artifact.canonical_context.version
       ? { version: artifact.canonical_context.version }
       : {}),
@@ -491,7 +496,9 @@ export async function replayDemandCoverage(
       : {}),
     ...(artifact.canonical_context.shell_environment
       ? { shell_environment: artifact.canonical_context.shell_environment }
-      : {})
+      : {}),
+    ...Object.fromEntries(['vendor', 'model', 'version', 'runtime_mode', 'shell_environment']
+      .flatMap((key) => typeof original[key] === 'string' ? [[key, original[key]]] : []))
   })
   const workflow = demand.tool_name === 'get_network_workflow'
   return {
@@ -501,6 +508,8 @@ export async function replayDemandCoverage(
       question: demand.question,
       context,
       limit: workflow ? 3 : 5,
+      excludedRevisionRefs: Array.isArray(original['reported_revision_refs'])
+        ? original['reported_revision_refs'].filter((ref): ref is string => typeof ref === 'string') : [],
       ...(workflow
         ? {
             kind: ['workflow', 'change', 'diagnostic'] as PublicKnowledge['kind'][],

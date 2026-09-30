@@ -1011,7 +1011,7 @@ describeIntegration('PostgreSQL integration', () => {
     })
   }
 
-  it('keeps a single active demand diagnosis across all demands', async () => {
+  it('retains parallel demand diagnoses and one live task per demand', async () => {
     const client = await database.connect()
     try {
       await client.query('BEGIN')
@@ -1022,24 +1022,16 @@ describeIntegration('PostgreSQL integration', () => {
             AND status IN ('queued', 'claimed', 'running')`,
       )
       const transactional = client as unknown as Database
-      await queueUnknownKnowledgeDemand(
-        transactional,
-        'query_network_knowledge',
-        {
-          question: `How do I validate global diagnosis A ${randomUUID()}?`,
-          context: { vendor: 'Cisco', operating_system: 'IOS XE' }
-        },
-        { unknown: true, context: { vendor: 'Cisco', operating_system: 'IOS XE' } },
-      )
-      await queueUnknownKnowledgeDemand(
-        transactional,
-        'query_network_knowledge',
-        {
-          question: `How do I validate global diagnosis B ${randomUUID()}?`,
-          context: { vendor: 'Cisco', operating_system: 'IOS XE' }
-        },
-        { unknown: true, context: { vendor: 'Cisco', operating_system: 'IOS XE' } },
-      )
+      const demandIds: string[] = []
+      for (let index = 0; index < 20; index++) {
+        const input = { question: `How do I validate diagnosis ${index} ${randomUUID()}?`,
+          context: { vendor: 'Cisco', operating_system: 'IOS XE' } }
+        const output = { unknown: true, context: input.context }
+        const id = await queueUnknownKnowledgeDemand(transactional, 'query_network_knowledge', input, output)
+        expect(id).toBeTruthy()
+        demandIds.push(id!)
+        expect(await queueUnknownKnowledgeDemand(transactional, 'query_network_knowledge', input, output)).toBe(id)
+      }
       const transactionDatabase = {
         connect: async () => ({
           query: (
@@ -1058,12 +1050,10 @@ describeIntegration('PostgreSQL integration', () => {
       } as unknown as Database
       await ensurePipelineWork(transactionDatabase)
       const active = await client.query<{ count: number }>(
-        `SELECT count(*)::int AS count
-           FROM pipeline_tasks
-          WHERE task_type = 'demand_diagnosis'
-            AND status IN ('queued', 'claimed', 'running')`,
-      )
-      expect(active.rows[0]?.count).toBe(1)
+        `SELECT count(*)::int AS count FROM pipeline_tasks
+          WHERE task_type='demand_diagnosis' AND status IN ('queued','claimed','running')
+            AND knowledge_demand_id=ANY($1::uuid[])`, [demandIds])
+      expect(active.rows[0]?.count).toBe(20)
     } finally {
       await client.query('ROLLBACK')
       client.release()
@@ -1238,6 +1228,10 @@ describeIntegration('PostgreSQL integration', () => {
           learning: { status: 'diagnosing' },
           next_action: 'request_expert_answer'
         })
+        const learningId = (result.structuredContent as { learning: { id: string } }).learning.id
+        const progress = await mcpClient.callTool({ name: 'get_learning_status', arguments: { learning_id: learningId } })
+        expect(progress.isError).not.toBe(true)
+        expect(progress.structuredContent).toMatchObject({ learning: { id: learningId, status: 'diagnosing', needs_context: false } })
       } finally {
         await mcpClient.close()
         await mcpServer.close()
@@ -1267,8 +1261,8 @@ describeIntegration('PostgreSQL integration', () => {
       expect(demand.rows).toEqual([
         expect.objectContaining({
           status: 'diagnosing',
-          priority: 120,
-          task_priority: 110,
+          priority: 160,
+          task_priority: 170,
           task_type: 'demand_diagnosis'
         })
       ])
@@ -1327,7 +1321,7 @@ describeIntegration('PostgreSQL integration', () => {
            outcome,
            knowledge_demand_id
          FROM mcp_request_logs
-         WHERE request_id = $1`,
+         WHERE request_id = $1 AND tool_name='query_network_knowledge'`,
         [requestId],
       )
       expect(log.rows).toEqual([
@@ -1374,7 +1368,7 @@ describeIntegration('PostgreSQL integration', () => {
       expect(upgradeDemand.rows[0]).toMatchObject({
         tool_name: 'advise_network_upgrade',
         question: 'Upgrade C9300 IOS XE from 17.6.5 to 17.15.5',
-        priority: 120
+        priority: 160
       })
 
       const demoApp = createApiApp({
@@ -2845,7 +2839,7 @@ describeIntegration('PostgreSQL integration', () => {
             'query_domain_knowledge'
           ]),
         )
-        expect(tools.tools).toHaveLength(17)
+        expect(tools.tools).toHaveLength(19)
 
         const listed = await mcpClient.callTool({
           name: 'list_knowledge_domains',

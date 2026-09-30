@@ -1,6 +1,6 @@
 import { isIP } from 'node:net'
 
-import type { Database } from '../db.js'
+import type { Database, DatabaseClient } from '../db.js'
 import { sha256, sha256Label } from '../crypto.js'
 import type { PublicActor } from './auth.js'
 import { resolveNetworkContext } from './context.js'
@@ -256,8 +256,13 @@ async function prepareKnowledgeDemand(
         ...(typeof rawContext['version'] === 'string'
           ? { version: rawContext['version'] }
           : {})
+      }).catch((error: unknown) => {
+        if (error instanceof Error && [
+          'NETWORK_CONTEXT_OS_NOT_RESOLVED', 'NETWORK_CONTEXT_VENDOR_NOT_RESOLVED'
+        ].includes(error.message)) return null
+        throw error
       })
-      contextValue = {
+      if (resolved) contextValue = {
         vendor: resolved.vendor,
         vendor_slug: resolved.vendor_slug,
         model: resolved.model,
@@ -271,14 +276,11 @@ async function prepareKnowledgeDemand(
       }
     }
   }
-  if (
-    typeof questionValue !== 'string' ||
-    !contextValue ||
-    typeof contextValue['vendor_slug'] !== 'string' ||
-    typeof contextValue['operating_system_slug'] !== 'string'
-  ) {
-    return null
-  }
+  if (typeof questionValue !== 'string') return null
+  const requiresContext = !contextValue ||
+    typeof contextValue['operating_system_slug'] !== 'string' ||
+    contextValue['operating_system_slug'] === 'not-specified'
+  contextValue ??= recordOf(inputRecord?.['context']) ?? {}
   contextValue = {
     vendor: contextValue['vendor'],
     vendor_slug: contextValue['vendor_slug'],
@@ -311,7 +313,16 @@ async function prepareKnowledgeDemand(
               }
             : null
         }).filter(Boolean)
-      : []
+      : [],
+    ...(requiresContext ? {
+      learning_context_required: true,
+      raw_context: recordOf(inputRecord?.['context']) ?? {}
+    } : {}),
+    ...(typeof outputRecord['feedback_reason'] === 'string' ? {
+      feedback_reason: sanitizeScalarString(outputRecord['feedback_reason']).slice(0, 1000),
+      reported_revision_refs: Array.isArray(outputRecord['reported_revision_refs'])
+        ? outputRecord['reported_revision_refs'].filter((ref) => typeof ref === 'string' && /^[0-9a-f-]{36}$/.test(ref)).slice(0, 5) : []
+    } : {})
   }
   const question = sanitizeScalarString(questionValue).slice(0, 2_000)
   if (question.length < 3) return null
@@ -321,6 +332,8 @@ async function prepareKnowledgeDemand(
     initial_answer_status: _initialAnswerStatus,
     initial_coverage: _initialCoverage,
     initial_answers: _initialAnswers,
+    feedback_reason: _feedbackReason,
+    reported_revision_refs: _reportedRefs,
     ...canonicalDemandContext
   } = context
   return {
@@ -382,6 +395,71 @@ export async function getKnowledgeDemandLearningStatus(
     case 'processing': return 'processing'
     case 'published': return 'rechecking'
     default: return 'unavailable'
+  }
+}
+
+export async function getKnowledgeLearningProgress(database: Database, demandId: string) {
+  const result = await database.query<{
+    id: string; status: string; needs_context: boolean; last_error_code: string | null;
+    stage: string | null; elapsed_seconds: number; last_progress_at: string | Date | null;
+    queued_tasks: number; active_tasks: number; revision_ref: string | null
+  }>(
+    `SELECT demand.id, demand.status,
+            demand.last_error_code = 'CONTEXT_REQUIRED' AS needs_context,
+            demand.last_error_code,
+            activity.stage, activity.queued_tasks, activity.active_tasks,
+            activity.last_progress_at,
+            greatest(0, extract(epoch FROM coalesce(demand.completed_at, now()) - demand.first_seen_at))::int AS elapsed_seconds,
+            revision.public_ref AS revision_ref
+       FROM knowledge_demands demand
+       LEFT JOIN knowledge_revisions revision ON revision.id=demand.result_revision_id
+       LEFT JOIN LATERAL (
+         SELECT count(*) FILTER (WHERE task.status='queued')::int AS queued_tasks,
+                count(*) FILTER (WHERE task.status IN ('claimed','running'))::int AS active_tasks,
+                max(coalesce(task.completed_at,task.heartbeat_at,task.created_at)) AS last_progress_at,
+                (array_agg(task.stage ORDER BY
+                  CASE WHEN task.status IN ('claimed','running') THEN 0 WHEN task.status='queued' THEN 1 ELSE 2 END,
+                  task.created_at DESC))[1] AS stage
+           FROM pipeline_tasks task
+          WHERE task.knowledge_demand_id=demand.id
+             OR task.source_candidate_id IN (
+               SELECT id FROM source_candidates WHERE knowledge_demand_id=demand.id
+             )
+       ) activity ON true
+      WHERE demand.id=$1`, [demandId])
+  const row = result.rows[0]
+  if (!row) return null
+  return { ...row, last_progress_at: row.last_progress_at instanceof Date ? row.last_progress_at.toISOString() : row.last_progress_at,
+    needs_context: row.needs_context === true,
+    message: row.needs_context ? 'Specify the operating system, device and version to continue learning.'
+      : row.status === 'published' ? 'The original question now has a complete answer. Repeat the knowledge query.'
+      : row.status === 'unresolved' ? 'Research has not found a complete verified answer yet.'
+      : row.last_error_code ? 'Learning is waiting for recovery. The original question is retained.'
+      : 'Priority learning is in progress. Only verified knowledge will be returned.' }
+}
+
+export async function reportKnowledgeGap(database: Database, input: {
+  question: string; context: Record<string, unknown>; reason: string; revision_refs?: string[]
+}) {
+  const id = await queueUnknownKnowledgeDemand(database, 'query_network_knowledge', input, {
+    unknown: true, answer_status: 'unknown', feedback_reason: input.reason,
+    reported_revision_refs: input.revision_refs ?? []
+  })
+  return id ? getKnowledgeLearningProgress(database, id) : null
+}
+
+/** Recover durable requests after an intake failure; never lose a gap because
+ * the public request happened to race a deploy or a transient DB failure. */
+export async function recoverUnqueuedKnowledgeDemands(client: DatabaseClient): Promise<void> {
+  const logs = await client.query<{ id: string; tool_name: string; request_payload: unknown; response_payload: unknown }>(
+    `SELECT id,tool_name,request_payload,response_payload FROM mcp_request_logs
+      WHERE outcome='unknown' AND knowledge_demand_id IS NULL
+        AND learning_recovery_checked_at IS NULL
+        AND tool_name IN ('query_network_knowledge','get_network_workflow','query_domain_knowledge','review_network_change','advise_network_upgrade')
+      ORDER BY occurred_at DESC LIMIT 16 FOR UPDATE SKIP LOCKED`)
+  for (const log of logs.rows) {
+    const id = await queueUnknownKnowledgeDemand(client as unknown as Database, log.tool_name, log.request_payload, log.response_payload)
+    await client.query(`UPDATE mcp_request_logs SET knowledge_demand_id=$2,learning_recovery_checked_at=now() WHERE id=$1`, [log.id,id])
   }
 }
 
@@ -462,23 +540,16 @@ export async function reconcileKnownKnowledgeDemand(
             last_seen_at = now()
        FROM knowledge_revisions revision
        CROSS JOIN active_release active
-      WHERE (
-          demand.demand_key = $1
-          OR (
-            demand.tool_name = $3
-            AND lower(demand.question) = lower($4)
-          )
-        )
+      WHERE demand.demand_key = $1
         AND revision.public_ref = $2
+        AND NOT (coalesce(demand.context->'reported_revision_refs', '[]'::jsonb) ? revision.public_ref::text)
         AND demand.status <> 'published'
       RETURNING demand.id
      )
      SELECT id FROM resolved`,
     [
       prepared.demandKey,
-      revisionRef,
-      toolName,
-      prepared.question
+      revisionRef
     ],
   )
   if (result.rows.length > 0) {
@@ -744,7 +815,9 @@ export async function getMcpRequestLog(
      WHERE log.id = $1::bigint`,
     [id],
   )
-  return result.rows[0] ?? null
+  const detail = result.rows[0]
+  return detail ? { ...detail, learning_progress: detail['knowledge_demand_id']
+    ? await getKnowledgeLearningProgress(database, String(detail['knowledge_demand_id'])) : null } : null
 }
 
 export async function getMcpRequestAnalytics(

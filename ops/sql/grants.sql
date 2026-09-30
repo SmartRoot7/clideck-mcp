@@ -53,6 +53,7 @@ GRANT SELECT, INSERT ON task_public_events TO clideck_mcp_api;
 GRANT INSERT ON feedback TO clideck_mcp_api;
 GRANT SELECT, INSERT, UPDATE ON public_usage_daily TO clideck_mcp_api;
 GRANT INSERT ON mcp_request_logs TO clideck_mcp_api;
+GRANT UPDATE (knowledge_demand_id) ON mcp_request_logs TO clideck_mcp_admin;
 GRANT SELECT, INSERT, UPDATE, DELETE ON rate_limit_buckets TO clideck_mcp_api;
 GRANT SELECT, INSERT, UPDATE ON mcp_protocol_tasks TO clideck_mcp_api;
 GRANT UPDATE (
@@ -66,8 +67,14 @@ GRANT UPDATE (
 GRANT SELECT (
   knowledge_demand_id,
   task_type,
-  status
+  status,
+  source_candidate_id,
+  stage,
+  created_at,
+  completed_at,
+  heartbeat_at
 ) ON pipeline_tasks TO clideck_mcp_api;
+GRANT SELECT (id,knowledge_demand_id) ON source_candidates TO clideck_mcp_api;
 GRANT UPDATE (
   status,
   completed_at,
@@ -314,6 +321,13 @@ GRANT EXECUTE ON FUNCTION queue_network_knowledge_gap(
   jsonb,
   bytea
 ) TO clideck_mcp_api;
+GRANT EXECUTE ON FUNCTION queue_network_knowledge_demand(text,text,jsonb,bytea)
+  TO clideck_mcp_admin, clideck_mcp_researcher;
+GRANT SELECT (id,tool_name,request_payload,response_payload,outcome,
+  knowledge_demand_id,occurred_at,learning_recovery_checked_at) ON mcp_request_logs
+  TO clideck_mcp_researcher;
+GRANT UPDATE (knowledge_demand_id,learning_recovery_checked_at) ON mcp_request_logs
+  TO clideck_mcp_researcher;
 
 GRANT SELECT, UPDATE ON expert_tasks TO clideck_mcp_researcher;
 GRANT SELECT, INSERT ON task_messages TO clideck_mcp_researcher;
