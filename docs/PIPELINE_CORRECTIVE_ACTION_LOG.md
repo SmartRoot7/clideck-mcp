@@ -8,7 +8,7 @@ soak. A clean baseline is not a completed extended observation window.
 
 ## Handoff as of production verification, 2026-09-30
 
-Live application: `7bc91258c9f14b5bd75c04ecb1534978da04fce0` on
+Live application: `56fb9fe722caeb4a00fc9e470b39a74e8fbec04c` on
 `100.116.82.78`, deployed through `ops/scripts/deploy-production.sh`.
 Pipeline enabled, capacity 8. At the later learning audit, operator settings
 version 8 used `gpt-6-luna` low/medium, High fallback `gpt-5.6-terra` medium.
@@ -97,6 +97,28 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
   local executor pool; the application remained on `7bc9125`.
   Final corrective deployment and live answer result pending.
   The short acceptance window is not a completed extended soak.
+
+## 2026-09-30 — Search backlog delayed prepared demand evidence
+
+- `56fb9fe722caeb4a00fc9e470b39a74e8fbec04c` deployed through the production
+  script. Worker recovery grants verified, service restart count zero, all
+  eight selected-model executors running. Conversion and segmentation resumed
+  (15 and 10 passed checks after 21:56:30 UTC); no lost diagnosis tasks.
+- At 22:00 UTC the cohort had 12 prepared sources and 160 queued fragments,
+  while 95 queued discovery tasks took precedence over newer source work.
+  Queue reservation counted searches as source progress; equal task priority
+  plus creation time also picked an older search even with analysis ready.
+  Topic fairness ordering preceded the explicit user-demand priority.
+- Correction: reserve ready analysis/verification/review independently from
+  searches; prefer active source windows before historical terminal audits;
+  use source progress to break equal-priority lease ties. Demand priority
+  precedes topic fairness. Keep diagnostics first, physical capacity, leases,
+  retry dates, circuits, publication policy and operator pause unchanged.
+- Regression reproduced the search-before-analysis lease on the previous
+  release; coverage also includes simultaneously full background and urgent
+  search queues. All 337 tests and 250 evaluation fixtures passed on a fresh
+  database; type checks passed. The revised read-only production source
+  selection took 829 ms. Corrective deployment and live result pending.
 
 ## 2026-09-30 — Knowledge quality and 20-question learning audit
 

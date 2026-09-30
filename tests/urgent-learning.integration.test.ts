@@ -110,7 +110,7 @@ suite('urgent learning reliability', () => {
       expect(tasks.rows).toHaveLength(1)
     })
   })
-  it('materializes urgent analysis despite future retries and an already full background queue', async () => {
+  it.each(['background','urgent_discovery'])('materializes and claims urgent analysis despite future retries and a full %s queue', async (queuedKind) => {
     await transaction(async (db,client) => {
       await client.query("UPDATE pipeline_tasks SET status='cancelled' WHERE status IN ('queued','claimed','running')")
       await client.query("UPDATE knowledge_demands SET status='published'")
@@ -119,6 +119,10 @@ suite('urgent learning reliability', () => {
       for (let i=0;i<8;i++) {
         const retryId = await queueUnknownKnowledgeDemand(db,'query_network_knowledge',{ question: question(), context },{unknown:true})
         await client.query("UPDATE pipeline_tasks SET available_at=now()+interval '1 hour' WHERE knowledge_demand_id=$1",[retryId])
+        if (queuedKind === 'urgent_discovery') {
+          await client.query(`INSERT INTO pipeline_tasks(task_type,stage,dedupe_key,payload,knowledge_demand_id,queue_class)
+            VALUES ('source_discovery','discover',$1,'{}',$2,'demand')`,[randomUUID(),retryId])
+        }
         await client.query(`INSERT INTO pipeline_tasks(task_type,stage,dedupe_key,payload)
           VALUES ('fragment_analysis','analyze',$1,'{}')`,[randomUUID()])
       }
@@ -136,6 +140,9 @@ suite('urgent learning reliability', () => {
       await ensurePipelineWork(db)
       const tasks=await client.query("SELECT task_type FROM pipeline_tasks WHERE knowledge_demand_id=$1 AND status='queued'",[id])
       expect(tasks.rows).toContainEqual({task_type:'fragment_analysis'})
+      const claim=await claimPipelineTask(db,config,'luna-1',`test:${queuedKind}`,executionProtocolVersion)
+      expect(claim['task_type']).toBe('fragment_analysis')
+      expect((await client.query('SELECT knowledge_demand_id FROM pipeline_tasks WHERE id=$1',[claim['pipeline_task_id']])).rows[0]!.knowledge_demand_id).toBe(id)
     })
   })
   it('starts a ready user question despite an exhausted topic with a future eligibility date', async () => {

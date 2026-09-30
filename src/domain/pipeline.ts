@@ -2494,9 +2494,9 @@ async function queueDemandDiscoveryWork(
          WHERE active.knowledge_demand_id = demand.id
            AND active.status IN ('queued', 'claimed', 'running')
        )
-     ORDER BY topic.last_served_at NULLS FIRST,
+     ORDER BY demand.priority DESC, topic.last_served_at NULLS FIRST,
               topic.priority_score DESC NULLS LAST,
-              demand.priority DESC, demand.first_seen_at
+              demand.first_seen_at
      LIMIT 1
      FOR UPDATE OF demand SKIP LOCKED`,
   )
@@ -3632,12 +3632,14 @@ async function prepareUrgentDemandSources(client: DatabaseClient, capacity: numb
 /** Materialize urgent work before counting the existing background queue.
  * A queued plan must not occupy the opportunity to start a real user request. */
 async function queueUrgentDemandWork(client: DatabaseClient, capacity: number): Promise<void> {
+  // Reserve source progress independently of queued searches. Physical leases
+  // still enforce operator capacity; a search backlog must not strand evidence.
   const ready = await client.query<{ count: number }>(
     `SELECT count(*)::int count FROM pipeline_tasks task JOIN knowledge_demands demand ON demand.id=task.knowledge_demand_id
       WHERE demand.status<>'published'
         AND (task.status IN ('claimed','running') OR
           (task.status='queued' AND task.available_at<=now() AND ${claimableExecutionSql('task')}))
-        AND task.task_type=ANY($1::text[])`, [aiTaskTypes])
+        AND task.task_type IN ('fragment_analysis','candidate_verification','candidate_deep_review')`)
   for (let count = ready.rows[0]?.count ?? 0; count < capacity; count++) {
     if (await queueDeepReviewWork(client, 'medium', true) || await queueDeepReviewWork(client, 'low', true)) continue
     const sources = await client.query<{ id: string }>(
@@ -3654,7 +3656,8 @@ async function queueUrgentDemandWork(client: DatabaseClient, capacity: number): 
             )
           )
         )
-        ORDER BY (SELECT count(*) FROM pipeline_tasks task WHERE task.source_candidate_id=source.id AND task.status IN ('queued','claimed','running')),
+        ORDER BY CASE WHEN source.status IN ('prepared','analyzing','verifying') THEN 0 ELSE 1 END,
+          (SELECT count(*) FROM pipeline_tasks task WHERE task.source_candidate_id=source.id AND task.status IN ('queued','claimed','running')),
           demand.priority DESC,demand.first_seen_at LIMIT 16`)
     let queued = false
     for (const source of sources.rows) {
@@ -4045,7 +4048,9 @@ export async function claimPipelineTask(
        ORDER BY CASE WHEN queue_class='demand' AND (knowledge_demand_id IS NULL OR EXISTS (
          SELECT 1 FROM knowledge_demands demand WHERE demand.id=pipeline_tasks.knowledge_demand_id
            AND demand.status<>'published' AND demand.last_error_code IS DISTINCT FROM 'CONTEXT_REQUIRED'
-       )) THEN 0 ELSE 1 END, priority DESC, created_at
+       )) THEN 0 ELSE 1 END, priority DESC,
+         CASE WHEN knowledge_demand_id IS NOT NULL AND source_candidate_id IS NOT NULL THEN 0 ELSE 1 END,
+         created_at
        FOR UPDATE SKIP LOCKED
        LIMIT 1`,
       [aiTaskTypes],
