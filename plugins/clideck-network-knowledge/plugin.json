@@ -103,7 +103,7 @@
         },
         "commerce": false,
         "commerce_description": "The plugin does not sell products, process payments, or execute network changes.",
-        "demo_recording_url": "https://clideck.com/review/clideck-network-knowledge-2026-10/"
+        "demo_recording_url": "https://clideck.com/review/clideck-network-knowledge-2026-10/index.html"
       },
       "publication": {
         "release_notes": "Initial public directory package for the existing CliDeck Network Knowledge service, with platform-aware retrieval, advisory diagnostics, change review and explicit coverage limitations."
