@@ -355,7 +355,7 @@ export function createPublicMcpServer(
     description: 'Check a learning ID returned by a knowledge query or report_knowledge_gap. Published means the original question has a complete answer; repeat the original query to read it.',
     inputSchema: z.object({ learning_id: z.string().uuid() }),
     outputSchema: z.object({ learning: knowledgeLearningProgressSchema.nullable() }),
-    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false }
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
   }, wrapTool(dependencies, 'get_learning_status', async (input) => ({
     learning: await getKnowledgeLearningProgress(dependencies.database, input.learning_id)
   })))
@@ -370,6 +370,7 @@ export function createPublicMcpServer(
       outputSchema: listKnowledgeDomainsOutputSchema,
       annotations: {
         readOnlyHint: true,
+        destructiveHint: false,
         idempotentHint: true,
         openWorldHint: false
       }
@@ -389,6 +390,7 @@ export function createPublicMcpServer(
       outputSchema: describeKnowledgeDomainOutputSchema,
       annotations: {
         readOnlyHint: true,
+        destructiveHint: false,
         idempotentHint: true,
         openWorldHint: false
       }
@@ -403,11 +405,12 @@ export function createPublicMcpServer(
     {
       title: 'Query Domain Knowledge',
       description:
-        'Run deterministic search in one domain using that pack’s validated context and public-record schema.',
+        'Run deterministic search in one domain using that pack’s validated context and public-record schema. Network queries may create or update a tracked research demand for missing or incomplete knowledge.',
       inputSchema: queryDomainKnowledgeInputSchema,
       outputSchema: queryDomainKnowledgeOutputSchema,
       annotations: {
-        readOnlyHint: true,
+        readOnlyHint: false,
+        destructiveHint: false,
         idempotentHint: true,
         openWorldHint: false
       }
@@ -479,6 +482,7 @@ export function createPublicMcpServer(
       outputSchema: resolvedNetworkContextSchema,
       annotations: {
         readOnlyHint: true,
+        destructiveHint: false,
         idempotentHint: true,
         openWorldHint: false
       }
@@ -494,11 +498,12 @@ export function createPublicMcpServer(
     {
       title: 'Query Network Knowledge',
       description:
-        'Return deterministic, version-scoped commands, diagnostics, and concepts for a network question.',
+        'Return deterministic, version-scoped commands, diagnostics, and concepts for a network question. Missing or incomplete knowledge may create or update a tracked research demand. No device commands are executed.',
       inputSchema: queryKnowledgeInputSchema,
       outputSchema: knowledgeSearchResultSchema,
       annotations: {
-        readOnlyHint: true,
+        readOnlyHint: false,
+        destructiveHint: false,
         idempotentHint: true,
         openWorldHint: false
       }
@@ -546,6 +551,7 @@ export function createPublicMcpServer(
       outputSchema: knowledgeProvenanceOutputSchema,
       annotations: {
         readOnlyHint: true,
+        destructiveHint: false,
         idempotentHint: true,
         openWorldHint: false
       }
@@ -564,11 +570,12 @@ export function createPublicMcpServer(
     {
       title: 'Get Network Workflow',
       description:
-        'Return a deterministic, ordered workflow including safety, verification, and rollback.',
+        'Return a deterministic, ordered workflow including safety, verification, and rollback. Missing or incomplete knowledge may create or update a tracked research demand. No device commands are executed.',
       inputSchema: getWorkflowInputSchema,
       outputSchema: knowledgeSearchResultSchema,
       annotations: {
-        readOnlyHint: true,
+        readOnlyHint: false,
+        destructiveHint: false,
         idempotentHint: true,
         openWorldHint: false
       }
@@ -754,6 +761,7 @@ export function createPublicMcpServer(
       outputSchema: taskStatusSchema,
       annotations: {
         readOnlyHint: true,
+        destructiveHint: false,
         idempotentHint: true,
         openWorldHint: false
       }
@@ -863,6 +871,7 @@ export function createPublicMcpServer(
       outputSchema: snapshotAnalysisOutputSchema,
       annotations: {
         readOnlyHint: true,
+        destructiveHint: false,
         idempotentHint: true,
         openWorldHint: false
       }
@@ -877,11 +886,12 @@ export function createPublicMcpServer(
     {
       title: 'Review Network Change',
       description:
-        'Deterministic advisory review of commands or a configuration diff. It always returns available guidance and never executes a command.',
+        'Deterministic advisory review of commands or a configuration diff. It always returns available guidance and never executes a command. Missing or incomplete knowledge may create or update a tracked research demand.',
       inputSchema: changeReviewInputSchema,
       outputSchema: changeReviewOutputSchema,
       annotations: {
-        readOnlyHint: true,
+        readOnlyHint: false,
+        destructiveHint: false,
         idempotentHint: true,
         openWorldHint: false
       }
@@ -913,6 +923,7 @@ export function createPublicMcpServer(
       outputSchema: changeVerificationOutputSchema,
       annotations: {
         readOnlyHint: true,
+        destructiveHint: false,
         idempotentHint: true,
         openWorldHint: false
       }
@@ -927,11 +938,12 @@ export function createPublicMcpServer(
     {
       title: 'Advise Network Upgrade',
       description:
-        'Return exact-model, exact-version upgrade prerequisites, risks, checks, and rollback without downloading software.',
+        'Return exact-model, exact-version upgrade prerequisites, risks, checks, and rollback without downloading software. Missing or incomplete knowledge may create or update a tracked research demand. No device commands are executed.',
       inputSchema: upgradeAdvisorInputSchema,
       outputSchema: upgradeAdvisorOutputSchema,
       annotations: {
-        readOnlyHint: true,
+        readOnlyHint: false,
+        destructiveHint: false,
         idempotentHint: true,
         openWorldHint: false
       }
@@ -951,6 +963,7 @@ export function createPublicMcpServer(
       outputSchema: networkPathOutputSchema,
       annotations: {
         readOnlyHint: true,
+        destructiveHint: false,
         idempotentHint: true,
         openWorldHint: false
       }

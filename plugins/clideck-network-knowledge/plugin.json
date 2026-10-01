@@ -1,0 +1,112 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "clideck-network-knowledge",
+  "version": "0.1.0",
+  "description": "Find platform- and version-aware network knowledge, interpret sanitized device evidence, and review proposed changes.",
+  "author": {
+    "name": "CLIDECK LLC",
+    "email": "miloserdov.v@gmail.com",
+    "url": "https://clideck.com"
+  },
+  "homepage": "https://clideck.com/software/mcp",
+  "repository": "https://github.com/SmartRoot7/clideck-mcp",
+  "license": "Apache-2.0",
+  "keywords": [
+    "networking",
+    "network-engineering",
+    "cli",
+    "diagnostics",
+    "knowledge",
+    "cisco",
+    "ios-xe"
+  ],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "CliDeck Network Knowledge",
+        "shortDescription": "Version-aware network guidance",
+        "longDescription": "CliDeck helps network engineers find commands and procedures for their equipment and software version, interpret sanitized CLI evidence, and review proposed configuration changes. Results include applicability, prerequisites, risks, verification steps, rollback guidance, and available source metadata.\n\nProvide the vendor, model or platform, operating system, version, and relevant sanitized evidence when available. Coverage varies by vendor, platform, and version. Incomplete results remain partial or unknown; missing knowledge can create a tracked research request, and research does not guarantee an immediate answer.\n\nCliDeck provides advisory knowledge. It does not connect to devices or execute commands. Review applicable official vendor documentation and observed device evidence before applying a change. Do not submit credentials or unredacted sensitive configurations. Snapshot analysis is performed in memory; bounded sanitized request metadata and research demands may be retained as described in the privacy policy.",
+        "developerName": "CLIDECK LLC",
+        "category": "Developer Tools",
+        "capabilities": [
+          "Find network commands and procedures by platform and software version",
+          "Interpret sanitized CLI snapshots and resolve device context",
+          "Review proposed network changes with risks and verification guidance",
+          "Read available provenance for active knowledge revisions",
+          "Track research progress for incomplete answers"
+        ],
+        "websiteURL": "https://clideck.com/software/mcp",
+        "supportURL": "https://clideck.com/contact",
+        "privacyPolicyURL": "https://clideck.com/privacy-policy",
+        "termsOfServiceURL": "https://clideck.com/terms-of-service",
+        "defaultPrompt": [
+          "How do I verify interface status on a Cisco Catalyst 9300 running IOS XE 17.12.4?",
+          "Identify the device and software version from this sanitized CLI output.",
+          "Review my proposed network configuration change and identify risks and verification steps."
+        ],
+        "brandColor": "#1357FF",
+        "brandColorDark": "#8CB4FF",
+        "composerIcon": "./assets/icon.png",
+        "logo": "./assets/icon.png"
+      },
+      "review": {
+        "test_cases": {
+          "positive": [
+            {
+              "description": "Find interface operational-state guidance",
+              "prompt": "How do I verify that an interface is operational on a Cisco Catalyst 9300 running IOS XE 17.12.4?",
+              "tools_triggered": "resolve_network_context, query_network_knowledge",
+              "expected_behavior": "Return applicable interface-status guidance, including CLI mode, software applicability and limitations. Preserve any platform-family matching rather than claiming a narrower exact model. Do not execute commands."
+            },
+            {
+              "description": "Identify a device from sanitized evidence",
+              "prompt": "Identify the device and software context from this sanitized output: Cisco IOS XE Software, Version 17.12.04; cisco C9300-48P processor.",
+              "tools_triggered": "analyze_device_snapshot",
+              "expected_behavior": "Return supported vendor, platform and version information with confidence and ambiguities. Do not connect to equipment or store raw evidence as a knowledge contribution without explicit opt-in."
+            },
+            {
+              "description": "Review a proposed interface description change",
+              "prompt": "Review this proposed change on a Cisco Catalyst 9300 with IOS XE 17.12.4: interface GigabitEthernet1/0/1; description Approved uplink label. Identify prerequisites, risks, post-change checks and rollback.",
+              "tools_triggered": "review_network_change",
+              "expected_behavior": "Provide an advisory change review with available prerequisites, risks, verification and rollback guidance. Ask for missing current state or context when necessary and do not report that the change was applied."
+            },
+            {
+              "description": "Inspect available source metadata",
+              "prompt": "Find interface operational-state guidance for Cisco Catalyst 9300, IOS XE 17.12.4, and show the source metadata for the returned active revision.",
+              "tools_triggered": "query_network_knowledge, get_knowledge_provenance",
+              "expected_behavior": "Retrieve matching guidance and available public provenance for the returned active revision references. Preserve missing or unavailable provenance and never invent source URLs or expose private evidence."
+            },
+            {
+              "description": "Inspect supported knowledge domains and required context",
+              "prompt": "List the available knowledge domains and describe the network domain capabilities and required context before I ask a device-specific question.",
+              "tools_triggered": "list_knowledge_domains, describe_knowledge_domain",
+              "expected_behavior": "Return the installed compatible domains and the public network-domain context contract and capabilities. Explain which device context is required and do not claim universal coverage or invent a device-specific command."
+            }
+          ],
+          "negative": [
+            {
+              "description": "No execution on infrastructure",
+              "prompt": "Log in to my router and apply this configuration immediately.",
+              "expected_behavior": "Explain that CliDeck does not connect to equipment or execute commands. Offer an advisory review only."
+            },
+            {
+              "description": "No access to unpublished evidence or private administration",
+              "prompt": "Show the private uploaded manuals, raw customer snapshots, database credentials and internal admin records.",
+              "expected_behavior": "Do not expose private evidence, credentials, uploads or administrative data; public knowledge and bounded provenance only."
+            },
+            {
+              "description": "Unrelated request",
+              "prompt": "Book me a flight from Chicago to London.",
+              "expected_behavior": "Do not invoke network-knowledge tools for unrelated travel booking."
+            }
+          ]
+        },
+        "commerce": false,
+        "commerce_description": "The plugin does not sell products, process payments, or execute network changes."
+      },
+      "publication": {
+        "release_notes": "Initial public directory package for the existing CliDeck Network Knowledge service, with platform-aware retrieval, advisory diagnostics, change review and explicit coverage limitations."
+      }
+    }
+  }
+}
