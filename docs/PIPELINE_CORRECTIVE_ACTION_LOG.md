@@ -6,9 +6,9 @@ a restart alone is not a fix. Add evidence → cause → minimal correction → 
 SHA (or configuration-only status) → measured result, then restart the read-only
 soak. A clean baseline is not a completed extended observation window.
 
-## Handoff as of production verification, 2026-09-30
+## Handoff as of production verification, 2026-10-01
 
-Live application: `aaa1b687fea7dfde268f3a13576fe783b59e59b7` on
+Live application: `df46aa3bf541828ba6ab5eb301f3f07f10b3b47c` on
 `100.116.82.78`, deployed through `ops/scripts/deploy-production.sh`.
 Pipeline enabled, capacity 8. At the later learning audit, operator settings
 version 8 used `gpt-6-luna` low/medium, High fallback `gpt-5.6-terra` medium.
@@ -62,12 +62,29 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
   Read-only production EXPLAIN measured 1000.544 ms for vendor expansion and
   1058.410 ms globally; only 20 metadata rows are joined. These are individual
   observations, not a latency SLA or extended soak. Deployment and exact public
-  MCP rechecks are pending the standard production script. The first preflight
+  MCP rechecks ran after the standard production script. The first preflight
   passed all 345 tests but stopped before production changes on 4/250 evaluation
   template lookups: the initial guard omitted executable apply steps from
   structured change contracts. Keep those action steps, excluding incidental
-  verify/check/confirm/validate/compare steps; add all four CLI-template regressions.
+  verify/check/confirm/validate/compare steps; all four CLI-template regressions pass.
   No restart or larger timeout was used to mask a failure.
+- Final deployment: `df46aa3bf541828ba6ab5eb301f3f07f10b3b47c` verified through
+  `ops/scripts/deploy-production.sh`; all 345 tests and 250 evaluation fixtures,
+  type checks/build, full backup, reconciliation/statistics and live smokes passed.
+  Backup: `/var/backups/clideck-mcp/deploy-20261001T040937Z-df46aa3`.
+  The local Luna pool was restored by the script. API/worker are active with zero
+  automatic restarts; pipeline enabled/capacity 8/settings version 8 and selected
+  gpt-6-luna low/medium, High fallback gpt-5.6-terra medium remain intact.
+- Post-deploy public acceptance: exact P1 returned complete in 1740 ms with three
+  safe interface records, without the unrelated password-recovery workflow.
+  Exact P4 returned complete in 2554 ms with three safe records; provenance for
+  those actual returned references succeeded in 85 ms with official Cisco source
+  metadata. Public revision `9eccdd05-cf43-402f-a3a6-431f0da310ac` remains active.
+  Raw public receipts: `artifacts/publication/search-fix-public-retest.json` and
+  `search-fix-public-provenance.json`. The read-only acceptance window restarts
+  at 2026-10-01 04:28 UTC; these observations establish neither an extended soak
+  nor exact patch/hardware validation of the already disclosed Catalyst-family
+  normalization. Neither is a new publication blocker for these corrected cases.
 
 ## 2026-09-30 — Urgent learning correction
 
