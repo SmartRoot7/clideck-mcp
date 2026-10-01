@@ -37,6 +37,39 @@ Resolved incidents are condensed below. Full evidence/test counts and previous
 soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.md`.
 
 
+## 2026-10-01 — Expired leases stranded all executor capacity
+
+- Evidence at 16:28–16:32 UTC on `df46aa3`: eight tasks still `running` with
+  leases expired at 05:00–05:05 UTC, zero valid AI runs, all eight fresh executor
+  heartbeats reporting `standby/capacity_reached`; five ready tasks waited.
+  Fidelity's extractor-history query ran for minutes while holding the scheduler
+  transaction. Its EXPLAIN scanned the date-only agent-run index and filtered by
+  task for each candidate; no task/history index existed. Recovery was in that
+  same transaction, so a preparation timeout rolled it back.
+- Additional evidence: collection `8f891ef7-9308-4382-b403-dab54264b49f` had a
+  200-page budget already consumed and a 200-item cursor; it repeatedly logged
+  zero pages and immediately rescheduled itself. The local launchd pool was
+  pinned to Node 20 because installation inherited the shell's Node executable.
+- Correction: migration 048 indexes exact task/started-at history; materialize
+  and lock at most 80 audit candidates before evidence/history joins. Commit
+  expired-lease recovery independently, using its own advisory lock and
+  SKIP LOCKED, and count only valid leases against executor capacity. Bound
+  scheduler/recovery statements on the server below the existing 10-second
+  client deadline. A finished collection budget clears its cursor; each later
+  scan gets its own budget while preserving lifetime counters and existing
+  refresh policy. Deployment/launchd installation require and pin Node 24.
+  Models, selected capacity, source policy, immutable knowledge, lease retry
+  limits, circuits and operator Pause/Resume are preserved.
+- Validation: 48 targeted tests passed on a fresh disposable PostgreSQL database;
+  the 17 recovery/urgent tests passed again after adding exact extractor-history
+  coverage. Type checks passed. Tests demonstrate recovery surviving preparation
+  failure, independent scheduler/row locks, live-lease preservation and finite
+  retry exhaustion, collection scan completion/renewal, and original extractor
+  model/effort selection. Node 20 installation fails before changing launchd.
+- Deployment: pending the standard full gates, production-scale history plan and
+  live executor/progress acceptance. No completed extended soak is claimed;
+  restart the read-only window after rollout.
+
 ## 2026-10-01 — Public interface search and provenance retrieval
 
 - Evidence: the OpenAI P4 interface-state/source-metadata prompt repeatedly

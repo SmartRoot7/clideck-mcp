@@ -51,7 +51,8 @@ pnpm pipeline:pool-status
 launchctl print "gui/$(id -u)/com.clideck.mcp.pipeline-tunnel"
 ```
 
-The installer pins its Node 24 executable; model/effort environment overrides
+Deployment and installation reject other Node major versions. Put Node 24 on
+`PATH`; the installer pins that executable. Model/effort environment overrides
 are obsolete. The tunnel is independent of the pool. Lease files live in
 `.secrets/pipeline/<executor-id>/`; schemas/artifacts/usage in
 `tmp/pipeline/<executor-id>/`. Never include credentials, lease tokens or another

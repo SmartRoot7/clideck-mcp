@@ -10,6 +10,10 @@ import { homedir } from 'node:os'
 import { dirname, isAbsolute, resolve } from 'node:path'
 import { promisify } from 'node:util'
 
+if (Number(process.versions.node.split('.')[0]) !== 24) {
+  throw new Error('PIPELINE_NODE_24_REQUIRED: install launchd with Node 24 on PATH')
+}
+
 const execFileAsync = promisify(execFile)
 const label = 'com.clideck.mcp.pipeline'
 const tunnelLabel = 'com.clideck.mcp.pipeline-tunnel'

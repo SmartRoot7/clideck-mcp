@@ -15,12 +15,17 @@ fi
 : "${CLIDECK_MCP_HOST:?CLIDECK_MCP_HOST is required}"
 : "${CLIDECK_MCP_USER:?CLIDECK_MCP_USER is required}"
 
-for command_name in git pnpm ssh scp curl docker openssl; do
+for command_name in node git pnpm ssh scp curl docker openssl; do
   if ! command -v "$command_name" >/dev/null 2>&1; then
     printf 'Missing required command: %s\n' "$command_name" >&2
     exit 1
   fi
 done
+
+if [[ "$(node -p 'process.versions.node.split(".")[0]')" != '24' ]]; then
+  printf 'Production deployment and local executors require Node 24 on PATH\n' >&2
+  exit 1
+fi
 
 if [[ "$(git branch --show-current)" != 'main' ]]; then
   printf 'Production deployment is allowed only from main\n' >&2

@@ -1237,89 +1237,20 @@ async function insertTask(
   return taskId
 }
 
-async function reconcileExpiredAndCompletedWork(
-  client: DatabaseClient,
-): Promise<void> {
-  // A discovery lease can exhaust without reaching either submission or the
-  // normal failure handler. The task is then terminal, but older releases left
-  // its coverage target in `discovering` forever, outside the scheduler's
-  // eligible statuses. Return only genuinely orphaned targets to the queue;
-  // an active discovery task remains the authoritative owner.
-  await client.query(
-    `UPDATE coverage_targets target
-        SET status = 'queued',
-            next_check_at = now(),
-            updated_at = now()
-      WHERE target.status = 'discovering'
-        AND NOT EXISTS (
-          SELECT 1
-          FROM pipeline_tasks task
-          WHERE task.coverage_target_id = target.id
-            AND task.task_type IN ('source_discovery', 'source_refresh')
-            AND task.status IN ('queued', 'claimed', 'running')
-        )`,
-  )
-
-  // A continuation may legitimately revisit the same fragment, but the
-  // fragment retry budget is finite. Older schedulers could reserve an
-  // eleventh pass; claim then tried to increment attempts past the database
-  // constraint and every executor repeatedly hit the same unclaimable task.
-  // Terminalize that already-materialized task before any executor can lease
-  // it, then let the run-scoped reconciler close the run and intake item.
-  const exhaustedFragmentTasks = await client.query<{
-    id: string
-    source_candidate_id: string | null
-    processing_run_id: string | null
-  }>(
-    `UPDATE pipeline_tasks task
-        SET status = 'failed',
-            failure_code = 'FRAGMENT_ATTEMPTS_EXHAUSTED',
-            failure_message =
-              'A continuation fragment exhausted its analysis retry budget.',
-            completed_at = now(),
-            updated_at = now()
-      WHERE task.status = 'queued'
-        AND task.task_type = 'fragment_analysis'
-        AND EXISTS (
-          SELECT 1
-            FROM source_fragments fragment
-           WHERE fragment.reservation_task_id = task.id
-             AND fragment.attempts >= 10
-        )
-      RETURNING task.id, task.source_candidate_id, task.processing_run_id`,
-  )
-  for (const task of exhaustedFragmentTasks.rows) {
-    await client.query(
-      `UPDATE source_fragments
-          SET status = 'failed',
-              disposition = 'targeted_retry',
-              disposition_reason = 'targeted_retry',
-              disposition_detail =
-                'Analysis retry budget exhausted after repeated continuation.',
-              reservation_task_id = NULL,
-              updated_at = now()
-        WHERE reservation_task_id = $1
-          AND status IN ('reserved', 'analyzing')`,
-      [task.id],
+// Lease recovery commits independently from queue preparation. A slow or failed
+// audit lookup must not roll back released capacity or wait behind its scheduler.
+export async function reconcileExpiredPipelineLeases(database: Database): Promise<void> {
+  await withTransientDatabaseRetry(() => withTransaction(database, async (client) => {
+    const lock = await client.query<{ acquired: boolean }>(
+      "SELECT pg_try_advisory_xact_lock(hashtext('clideck-mcp:pipeline-lease-recovery')) AS acquired",
     )
-    await recordEvent(client, {
-      taskId: task.id,
-      sourceId: task.source_candidate_id,
-      stage: 'analyze',
-      event: 'failed',
-      message: 'Fragment analysis retry budget was exhausted.'
-    })
-  }
-  const exhaustedFragmentRunIds = exhaustedFragmentTasks.rows.flatMap(
-    (task) => task.processing_run_id ? [task.processing_run_id] : [],
-  )
-  if (exhaustedFragmentRunIds.length > 0) {
-    await reconcileTerminalProcessingRunsWithClient(
-      client,
-      [...new Set(exhaustedFragmentRunIds)],
-    )
-  }
+    if (!lock.rows[0]?.acquired) return
+    await client.query("SET LOCAL statement_timeout = '9s'")
+    await reconcileExpiredLeasesWithClient(client)
+  }), 3)
+}
 
+async function reconcileExpiredLeasesWithClient(client: DatabaseClient): Promise<void> {
   const expired = await client.query<{
     id: string
     task_type: PipelineTaskRow['task_type']
@@ -1331,7 +1262,13 @@ async function reconcileExpiredAndCompletedWork(
     attempts: number
     status: string
   }>(
-    `UPDATE pipeline_tasks
+    `WITH expired_tasks AS MATERIALIZED (
+       SELECT id FROM pipeline_tasks
+        WHERE status IN ('claimed', 'running') AND lease_until <= now()
+        ORDER BY lease_until, id
+        FOR UPDATE SKIP LOCKED
+     )
+     UPDATE pipeline_tasks
         SET status = CASE WHEN attempts >= 5 THEN 'failed' ELSE 'queued' END,
             claim_owner = NULL,
             lease_token_hash = NULL,
@@ -1347,8 +1284,7 @@ async function reconcileExpiredAndCompletedWork(
             END,
             completed_at = CASE WHEN attempts >= 5 THEN now() ELSE NULL END,
             updated_at = now()
-      WHERE status IN ('claimed', 'running')
-        AND lease_until <= now()
+      WHERE id IN (SELECT id FROM expired_tasks)
       RETURNING
         id,
         task_type,
@@ -1484,6 +1420,91 @@ async function reconcileExpiredAndCompletedWork(
       [...new Set(exhaustedRunIds)],
     )
   }
+}
+
+async function reconcileExpiredAndCompletedWork(
+  client: DatabaseClient,
+): Promise<void> {
+  // A discovery lease can exhaust without reaching either submission or the
+  // normal failure handler. The task is then terminal, but older releases left
+  // its coverage target in `discovering` forever, outside the scheduler's
+  // eligible statuses. Return only genuinely orphaned targets to the queue;
+  // an active discovery task remains the authoritative owner.
+  await client.query(
+    `UPDATE coverage_targets target
+        SET status = 'queued',
+            next_check_at = now(),
+            updated_at = now()
+      WHERE target.status = 'discovering'
+        AND NOT EXISTS (
+          SELECT 1
+          FROM pipeline_tasks task
+          WHERE task.coverage_target_id = target.id
+            AND task.task_type IN ('source_discovery', 'source_refresh')
+            AND task.status IN ('queued', 'claimed', 'running')
+        )`,
+  )
+
+  // A continuation may legitimately revisit the same fragment, but the
+  // fragment retry budget is finite. Older schedulers could reserve an
+  // eleventh pass; claim then tried to increment attempts past the database
+  // constraint and every executor repeatedly hit the same unclaimable task.
+  // Terminalize that already-materialized task before any executor can lease
+  // it, then let the run-scoped reconciler close the run and intake item.
+  const exhaustedFragmentTasks = await client.query<{
+    id: string
+    source_candidate_id: string | null
+    processing_run_id: string | null
+  }>(
+    `UPDATE pipeline_tasks task
+        SET status = 'failed',
+            failure_code = 'FRAGMENT_ATTEMPTS_EXHAUSTED',
+            failure_message =
+              'A continuation fragment exhausted its analysis retry budget.',
+            completed_at = now(),
+            updated_at = now()
+      WHERE task.status = 'queued'
+        AND task.task_type = 'fragment_analysis'
+        AND EXISTS (
+          SELECT 1
+            FROM source_fragments fragment
+           WHERE fragment.reservation_task_id = task.id
+             AND fragment.attempts >= 10
+        )
+      RETURNING task.id, task.source_candidate_id, task.processing_run_id`,
+  )
+  for (const task of exhaustedFragmentTasks.rows) {
+    await client.query(
+      `UPDATE source_fragments
+          SET status = 'failed',
+              disposition = 'targeted_retry',
+              disposition_reason = 'targeted_retry',
+              disposition_detail =
+                'Analysis retry budget exhausted after repeated continuation.',
+              reservation_task_id = NULL,
+              updated_at = now()
+        WHERE reservation_task_id = $1
+          AND status IN ('reserved', 'analyzing')`,
+      [task.id],
+    )
+    await recordEvent(client, {
+      taskId: task.id,
+      sourceId: task.source_candidate_id,
+      stage: 'analyze',
+      event: 'failed',
+      message: 'Fragment analysis retry budget was exhausted.'
+    })
+  }
+  const exhaustedFragmentRunIds = exhaustedFragmentTasks.rows.flatMap(
+    (task) => task.processing_run_id ? [task.processing_run_id] : [],
+  )
+  if (exhaustedFragmentRunIds.length > 0) {
+    await reconcileTerminalProcessingRunsWithClient(
+      client,
+      [...new Set(exhaustedFragmentRunIds)],
+    )
+  }
+
 
   await client.query(
     `UPDATE agent_runs run
@@ -1993,26 +2014,31 @@ async function queueSourceWork(
       extraction_reasoning_effort: string
       processing_run_id: string | null
     }>(
-      `SELECT kc.id, kc.stable_key, kc.payload, kc.dangerous, kc.processing_run_id,
+      `WITH audit_candidates AS MATERIALIZED (
+         SELECT kc.*
+           FROM knowledge_candidates kc
+           JOIN pipeline_tasks origin ON origin.id = kc.pipeline_task_id
+          WHERE origin.source_candidate_id = $1
+            AND kc.status IN ('verified', 'published')
+            AND kc.fidelity_status = 'pending'
+            AND kc.fidelity_task_id IS NULL
+          ORDER BY kc.created_at
+          LIMIT 80
+          FOR UPDATE OF kc SKIP LOCKED
+       )
+       SELECT kc.id, kc.stable_key, kc.payload, kc.dangerous, kc.processing_run_id,
               kc.confidence, kc.quality_score,
               coalesce(extraction.model, 'legacy-unknown') AS extraction_model,
               coalesce(extraction.reasoning_effort, 'unknown') AS extraction_reasoning_effort,
               fragment.id AS evidence_span_id,
               fragment.content AS evidence_content,
               floor(fragment.ordinal / 8.0)::int AS evidence_window
-         FROM knowledge_candidates kc
-         JOIN pipeline_tasks origin ON origin.id = kc.pipeline_task_id
+         FROM audit_candidates kc
          LEFT JOIN source_fragments fragment ON fragment.id = kc.source_fragment_id
          LEFT JOIN LATERAL (SELECT run.model, run.reasoning_effort FROM agent_runs run
            WHERE run.pipeline_task_id = kc.pipeline_task_id AND run.started_at <= kc.created_at
            ORDER BY run.started_at DESC LIMIT 1) extraction ON true
-        WHERE origin.source_candidate_id = $1
-          AND kc.status IN ('verified', 'published')
-          AND kc.fidelity_status = 'pending'
-          AND kc.fidelity_task_id IS NULL
-        ORDER BY kc.created_at
-        LIMIT 80
-        FOR UPDATE OF kc SKIP LOCKED`,
+        ORDER BY kc.created_at`,
       [source.id],
     )
     if (fidelityCandidates.rows.length > 0) {
@@ -3691,6 +3717,9 @@ async function ensureStreamingWorkInTransaction(
      ) AS acquired`,
   )
   if (!scheduler.rows[0]?.acquired) return
+  // Cancel in PostgreSQL before the 10s client deadline, so rollback releases
+  // scheduler locks instead of leaving an abandoned query running for minutes.
+  await client.query("SET LOCAL statement_timeout = '9s'")
   await reconcileExpiredAndCompletedWork(client)
   const settings = await client.query<{
     enabled: boolean
@@ -3933,6 +3962,7 @@ async function ensureStreamingWorkInTransaction(
 export async function ensurePipelineWork(
   database: Database,
 ): Promise<void> {
+  await reconcileExpiredPipelineLeases(database)
   // PostgreSQL resolves a deadlock/serialization conflict by rolling the
   // complete scheduler transaction back. Retrying only those explicit,
   // transient database outcomes is safe and prevents a successful artifact
@@ -4002,6 +4032,7 @@ export async function claimPipelineTask(
       `SELECT count(*)::int AS count
        FROM pipeline_tasks
        WHERE status IN ('claimed', 'running')
+         AND lease_until > now()
          AND task_type = ANY($1::text[])`,
       [aiTaskTypes],
     )

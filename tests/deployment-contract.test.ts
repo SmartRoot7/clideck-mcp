@@ -10,6 +10,8 @@ describe('production database role contract', () => {
     expect(deploy).not.toMatch(/UPDATE pipeline_execution_profiles|SET max_concurrent_ai_runs/)
     const installer = await readFile(resolve(process.cwd(), 'src/cli/install-pipeline-launchd.ts'), 'utf8')
     expect(installer).toContain('xml(process.execPath)')
+    expect(installer).toContain('PIPELINE_NODE_24_REQUIRED')
+    expect(deploy).toContain('require Node 24 on PATH')
     expect(installer).not.toContain('pnpm pipeline:pool')
   })
   it('aggregates admin summary metrics once per large table', async () => {

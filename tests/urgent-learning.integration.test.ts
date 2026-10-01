@@ -250,6 +250,9 @@ suite('urgent learning reliability', () => {
         VALUES ($1,'test-v2','extracting')`,[source.id])
       const task = (await client.query(`INSERT INTO pipeline_tasks(task_type,stage,dedupe_key,payload,status,source_candidate_id,processing_run_id)
         VALUES ('fragment_analysis','analyze',$1,'{}','completed',$2,$3) RETURNING id`,[randomUUID(),source.id,run.id])).rows[0]
+      await client.query(`INSERT INTO agent_runs(pipeline_task_id,model,reasoning_effort,status,started_at,completed_at)
+        VALUES ($1,'gpt-5.6-luna','low','completed',now()-interval '5 minutes',now()),
+               ($1,'gpt-6-luna','medium','completed',now()+interval '1 second',now())`,[task.id])
       const candidate = (await client.query(`INSERT INTO knowledge_candidates(pipeline_task_id,stable_key,payload,content_hash,status,dangerous,confidence,quality_score,processing_run_id)
         VALUES ($1,$2,'{}',$3,'verified',false,.98,.98,$4) RETURNING id`,[task.id,`test.${randomUUID()}`,sha256Label(randomUUID()),run.id])).rows[0]
       await ensurePipelineWork(db)
@@ -257,6 +260,8 @@ suite('urgent learning reliability', () => {
         JOIN knowledge_candidates candidate ON candidate.fidelity_task_id=task.id WHERE candidate.id=$1`,[candidate.id])
       expect(queued.rows[0]?.processing_run_id).toBe(run.id)
       expect(queued.rows[0]?.payload.audit_mode).toBe('fidelity')
+      expect(queued.rows[0]?.payload.quality_extraction_model).toBe('gpt-5.6-luna')
+      expect(queued.rows[0]?.payload.quality_extraction_reasoning_effort).toBe('low')
       expect((await client.query('SELECT status FROM source_candidates WHERE id=$1',[source.id])).rows[0]!.status).toBe('completed')
     })
   })

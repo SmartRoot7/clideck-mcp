@@ -545,9 +545,10 @@ function isCollectionSitemap(url: string, root: string): boolean {
   }
 }
 
-async function expandNextSourceCollection(
+export async function expandNextSourceCollection(
   database: Database,
   logger: Logger,
+  fetchDocument: PublicDocumentFetcher = fetchPublicDocument,
 ): Promise<boolean> {
   const collection = await withTransaction(database, async (client) => {
     const selected = await client.query<{
@@ -560,7 +561,7 @@ async function expandNextSourceCollection(
       path_prefix: string
       intake_job_id: string | null
       pages_seen: number
-      cursor: { queue?: Array<{ url: string; depth: number }> }
+      cursor: { queue?: Array<{ url: string; depth: number }>; scan_pages_seen?: number }
     }>(
       `SELECT
          id,
@@ -604,6 +605,10 @@ async function expandNextSourceCollection(
   })
   if (!collection) return false
 
+  // pages_seen is a lifetime counter; only the current crawl consumes this
+  // scan's page budget. Legacy unfinished cursors used that lifetime counter.
+  const scanPagesSeen = collection.cursor.scan_pages_seen ??
+    (collection.cursor.queue?.length ? collection.pages_seen : 0)
   const initialQueue = collection.cursor.queue?.length
     ? collection.cursor.queue
     : [
@@ -618,7 +623,7 @@ async function expandNextSourceCollection(
     while (
       queue.length > 0 &&
       pages < 20 &&
-      collection.pages_seen + pages < collection.link_limit &&
+      scanPagesSeen + pages < collection.link_limit &&
       discovered.size < collection.link_limit
     ) {
       const current = queue.shift()!
@@ -651,7 +656,7 @@ async function expandNextSourceCollection(
       if (prior.rows[0]?.terminal) continue
       let response: Awaited<ReturnType<typeof fetchPublicDocument>>
       try {
-        response = await fetchPublicDocument(current.url, 2 * 1024 * 1024)
+        response = await fetchDocument(current.url, 2 * 1024 * 1024)
       } catch (error) {
         pages += 1
         const message = error instanceof Error ? error.message : 'SOURCE_FETCH_FAILED'
@@ -804,7 +809,16 @@ async function expandNextSourceCollection(
         if (result.rows[0]) inserted += 1
         else duplicates += 1
       }
-      const remaining = queue.slice(0, collection.link_limit)
+      // A full budget completes this scan even when links remain. Retaining
+      // that queue would immediately reselect it forever with zero pages.
+      const remaining = scanPagesSeen + pages >= collection.link_limit
+        ? []
+        : [...new Map(queue.filter((page) => !seen.has(page.url))
+          .map((page) => [page.url, page])).values()].slice(0, collection.link_limit)
+      const cursor = {
+        queue: remaining,
+        scan_pages_seen: remaining.length ? scanPagesSeen + pages : 0
+      }
       await client.query(
         `UPDATE source_collections
             SET status = 'active',
@@ -831,7 +845,7 @@ async function expandNextSourceCollection(
           WHERE id = $1`,
         [
           collection.id,
-          JSON.stringify({ queue: remaining }),
+          JSON.stringify(cursor),
           inserted,
           duplicates,
           pages
@@ -860,7 +874,7 @@ async function expandNextSourceCollection(
             WHERE id = $1`,
           [
             collection.intake_job_id,
-            JSON.stringify({ queue: remaining }),
+            JSON.stringify(cursor),
             inserted,
             duplicates,
             pages
@@ -2652,7 +2666,7 @@ export async function processNextPipelineTask(
     workerId,
   )
   if (!claimed) {
-    return expandNextSourceCollection(database, logger)
+    return expandNextSourceCollection(database, logger, fetchDocument)
   }
 
   const heartbeatEveryMs = Math.max(
