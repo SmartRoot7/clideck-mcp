@@ -76,7 +76,8 @@ type ConflictRow = {
 
 const nonSemanticSearchTerms = new Set([
   'add', 'change', 'configure', 'configuration', 'create', 'delete',
-  'disable', 'enable', 'manage', 'remove', 'running', 'set', 'setup', 'show'
+  'disable', 'enable', 'find', 'guidance', 'manage', 'remove', 'running',
+  'set', 'setup', 'show', 'verify'
 ])
 
 const relevanceStopWords = new Set([
@@ -459,7 +460,52 @@ async function searchBroadKnowledgeRows(
     : normalizedQuestion.toLowerCase().match(/[a-z0-9]+/g) ?? []
   if (terms.length === 0) return []
   const result = await database.query<KnowledgeRow>(
-     `SELECT
+     `WITH ranked AS MATERIALIZED (
+       SELECT revision.id, active.knowledge_item_id,
+         (ts_rank_cd(revision.search_document, to_tsquery('simple', $2), 32)
+           + ts_rank_cd(revision.search_document, to_tsquery('simple', $3), 32)
+           + similarity(lower(revision.title), lower($1)) * 0.15
+           + revision.confidence::float8 * 0.03
+           + revision.quality_score::float8 * 0.03)::float8 AS rank
+       FROM knowledge_revisions revision
+       JOIN active_knowledge_state active ON revision.id = active.revision_id
+       JOIN knowledge_items item ON item.id = active.knowledge_item_id
+       WHERE item.domain_id = 'network' AND revision.domain_id = 'network'
+         AND ($4::text[] IS NULL OR item.kind = ANY($4))
+         AND ($7::uuid IS NULL OR revision.vendor_id = $7)
+         AND NOT EXISTS (
+           SELECT 1
+           FROM knowledge_applicability_exclusions exclusion
+           WHERE exclusion.revision_id = revision.id
+             AND (exclusion.vendor_id IS NULL OR exclusion.vendor_id = $8)
+             AND (exclusion.platform_id IS NULL OR exclusion.platform_id = $9)
+             AND (
+               (exclusion.version_min IS NULL AND exclusion.version_max IS NULL)
+               OR (
+                 $10::integer[] IS NOT NULL
+                 AND (
+                   exclusion.version_normalized_min IS NULL
+                   OR $10::integer[] >= exclusion.version_normalized_min
+                 )
+                 AND (
+                   exclusion.version_normalized_max IS NULL
+                   OR $10::integer[] <= exclusion.version_normalized_max
+                 )
+               )
+             )
+         )
+         AND (
+           revision.search_document @@ to_tsquery('simple', $2)
+           OR revision.search_document @@ to_tsquery('simple', $3)
+           OR lower(revision.title) % lower($1)
+         )
+         AND EXISTS (SELECT 1 FROM unnest($5::text[]) term
+                WHERE revision.search_document @@
+                  to_tsquery('simple', term || ':*'))
+       ORDER BY rank DESC, revision.last_verified_at DESC
+       LIMIT $6
+     )
+     SELECT
        revision.id AS revision_id,
        revision.public_ref,
        item.kind,
@@ -499,14 +545,10 @@ async function searchBroadKnowledgeRows(
        coalesce(trust.next_review_at, revision.last_verified_at + 180)
          AS next_review_at,
        NULL::timestamptz AS lab_validated_at,
-       (ts_rank_cd(revision.search_document, to_tsquery('simple', $2), 32)
-         + ts_rank_cd(revision.search_document, to_tsquery('simple', $3), 32)
-         + similarity(lower(revision.title), lower($1)) * 0.15
-         + revision.confidence::float8 * 0.03
-         + revision.quality_score::float8 * 0.03)::float8 AS rank
-     FROM active_knowledge_state active
-     JOIN knowledge_revisions revision ON revision.id = active.revision_id
-     JOIN knowledge_items item ON item.id = active.knowledge_item_id
+       ranked.rank
+     FROM ranked
+     JOIN knowledge_revisions revision ON revision.id = ranked.id
+     JOIN knowledge_items item ON item.id = ranked.knowledge_item_id
      LEFT JOIN vendors vendor ON vendor.id = revision.vendor_id
      LEFT JOIN platforms platform ON platform.id = revision.platform_id
      LEFT JOIN operating_systems os ON os.id = revision.operating_system_id
@@ -514,40 +556,7 @@ async function searchBroadKnowledgeRows(
        ON applicability.revision_id = revision.id
      LEFT JOIN software_families family ON family.id = applicability.family_id
      LEFT JOIN knowledge_public_trust trust ON trust.revision_id = revision.id
-     WHERE item.domain_id = 'network' AND revision.domain_id = 'network'
-       AND ($4::text[] IS NULL OR item.kind = ANY($4))
-       AND ($7::uuid IS NULL OR revision.vendor_id = $7)
-       AND NOT EXISTS (
-         SELECT 1
-         FROM knowledge_applicability_exclusions exclusion
-         WHERE exclusion.revision_id = revision.id
-           AND (exclusion.vendor_id IS NULL OR exclusion.vendor_id = $8)
-           AND (exclusion.platform_id IS NULL OR exclusion.platform_id = $9)
-           AND (
-             (exclusion.version_min IS NULL AND exclusion.version_max IS NULL)
-             OR (
-               $10::integer[] IS NOT NULL
-               AND (
-                 exclusion.version_normalized_min IS NULL
-                 OR $10::integer[] >= exclusion.version_normalized_min
-               )
-               AND (
-                 exclusion.version_normalized_max IS NULL
-                 OR $10::integer[] <= exclusion.version_normalized_max
-               )
-             )
-           )
-       )
-       AND (
-         revision.search_document @@ to_tsquery('simple', $2)
-         OR revision.search_document @@ to_tsquery('simple', $3)
-         OR lower(revision.title) % lower($1)
-       )
-       AND (SELECT count(*) FROM unnest($5::text[]) term
-              WHERE revision.search_document @@
-                to_tsquery('simple', term || ':*')) >= 1
-     ORDER BY rank DESC, revision.last_verified_at DESC
-     LIMIT $6`,
+     ORDER BY ranked.rank DESC, revision.last_verified_at DESC`,
     [
       normalizedQuestion,
       strictTsQuery,
@@ -577,9 +586,18 @@ export async function searchKnowledge(
     /\b(?:ports?|interfaces?)\b/i.test(question)
       ? question.replace(/\berrors?\b/i, 'display interface counters errors')
       : question
-  const search = buildSearchQueries(searchQuestion, {
+  // Provenance is fetched by a separate tool. Do not let its requested output
+  // format generate thousands of unrelated 'source/show/revision' candidates.
+  const retrievalQuestion = searchQuestion.replace(
+    /\b(?:and\s+)?(?:show|include|provide|return)\s+(?:the\s+)?(?:source|provenance)\s+(?:metadata|references?|details|information)\b.*$/i,
+    '',
+  )
+  const search = buildSearchQueries(retrievalQuestion, {
     '9300': '',
     c9300: '',
+    find: '',
+    guidance: '',
+    verify: '',
     errors: 'error',
     interfaces: 'interface',
     port: 'interface',
@@ -588,8 +606,14 @@ export async function searchKnowledge(
   const semanticTerms = semanticSearchTerms(search.tokens, context)
   const minimumSemanticMatches = semanticTerms.length > 0 ? 1 : 0
   const isRelevant = (row: KnowledgeRow) =>
-    hasMinimumSemanticRelevance(semanticTerms, row) ||
-    Boolean(capabilityMatcher?.(row))
+    (hasMinimumSemanticRelevance(semanticTerms, row) ||
+      Boolean(capabilityMatcher?.(row))) &&
+    // A dangerous workflow's verification substeps do not establish that its
+    // purpose answers this question (e.g. password recovery vs interface state).
+    (!row.dangerous || hasMinimumSemanticRelevance(semanticTerms, {
+      ...row,
+      procedure_steps: []
+    }) || Boolean(capabilityMatcher?.({ ...row, procedure_steps: [] })))
   const result = minimumSemanticMatches === 0
     ? { rows: [] as KnowledgeRow[] }
     : await database.query<KnowledgeRow>(

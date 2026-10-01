@@ -36,6 +36,34 @@ version 8 used `gpt-6-luna` low/medium, High fallback `gpt-5.6-terra` medium.
 Resolved incidents are condensed below. Full evidence/test counts and previous
 soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.md`.
 
+
+## 2026-10-01 — Public interface search and provenance retrieval
+
+- Evidence: the OpenAI P4 interface-state/source-metadata prompt repeatedly
+  returned `RETRYABLE_INTERNAL_ERROR`; the public call reproduced it. On
+  372629 production revisions, its vendor broad-search EXPLAIN measured
+  14940.963 ms against the unchanged 10 s database deadline. Wide
+  applicability/trust/context joins ran for 12705 rows before the limit.
+  Output-format words generated unrelated FTS candidates. P1 also returned a
+  dangerous password-recovery workflow because its incidental verification
+  steps contained `verify`/`operational` words.
+- Correction: materialize active, domain/kind/vendor/exclusion-filtered ranked
+  IDs before broad-search metadata joins; keep the same bounded candidate
+  count and ranking. Strip the requested provenance-output clause from search
+  intent and ignore generic find/guidance/verify wrappers. Dangerous results
+  must match the primary title/summary/command purpose or a supported capability,
+  rather than only incidental procedure checks. Related dangerous recovery and
+  cross-platform upgrade guidance remains available with its safety metadata.
+  Immutable publication/provenance, applicability rules, 8 executor lanes,
+  model profiles, pause/leases/circuits and query deadlines are unchanged.
+- Validation: type checks and 20 targeted tests passed on a disposable seeded
+  PostgreSQL database, including both exact publication prompts, contaminated
+  recovery evidence, explicit recovery retrieval and portable exclusions.
+  Read-only production EXPLAIN measured 1000.544 ms for vendor expansion and
+  1058.410 ms globally; only 20 metadata rows are joined. These are individual
+  observations, not a latency SLA or extended soak. Deployment and exact public
+  MCP rechecks are pending the standard production script.
+
 ## 2026-09-30 — Urgent learning correction
 
 - Evidence/cause: the audit above measured 15 lost diagnoses, unrelated EVPN
