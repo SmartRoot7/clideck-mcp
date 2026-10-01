@@ -54,6 +54,18 @@ describeIntegration('OpenAI publication search regressions', () => {
         expect(answers.some(answer => answer.title === 'Verify an interface is operational')).toBe(true)
         expect(answers.some(answer => answer.title === 'Recover a password on a modular chassis with dual supervisors')).toBe(false)
       }
+      // Executable steps remain searchable even when a structured change
+      // contract has no command_text and uses a human-readable title.
+      for (const commandTemplate of [
+        'interface <interface> shutdown',
+        'interface <interface> no shutdown',
+        'interface <interface> ip access-group <name> in|out',
+        'logging host <address>'
+      ]) {
+        const changes = await searchKnowledge(client as unknown as Database,
+          commandTemplate, context, 3)
+        expect(changes.length).toBeGreaterThan(0)
+      }
       const targetedRecovery = await searchKnowledge(client as unknown as Database,
         'Recover a password on a modular chassis with dual supervisors', context, 10)
       expect(targetedRecovery.some(answer => answer.title === 'Recover a password on a modular chassis with dual supervisors' && answer.dangerous)).toBe(true)

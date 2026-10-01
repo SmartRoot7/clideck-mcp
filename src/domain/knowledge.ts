@@ -605,15 +605,21 @@ export async function searchKnowledge(
   })
   const semanticTerms = semanticSearchTerms(search.tokens, context)
   const minimumSemanticMatches = semanticTerms.length > 0 ? 1 : 0
+  const primaryEvidence = (row: KnowledgeRow): RelevanceEvidence => ({
+    ...row,
+    // Structured change contracts store their executable action in procedure
+    // steps. Retain those, but exclude incidental post-operation checks.
+    procedure_steps: row.procedure_steps.filter((step) =>
+      !/\b(?:verify|verification|check|checks|confirm|validate|compare)\b/i.test(step),
+    )
+  })
   const isRelevant = (row: KnowledgeRow) =>
     (hasMinimumSemanticRelevance(semanticTerms, row) ||
       Boolean(capabilityMatcher?.(row))) &&
-    // A dangerous workflow's verification substeps do not establish that its
-    // purpose answers this question (e.g. password recovery vs interface state).
-    (!row.dangerous || hasMinimumSemanticRelevance(semanticTerms, {
-      ...row,
-      procedure_steps: []
-    }) || Boolean(capabilityMatcher?.({ ...row, procedure_steps: [] })))
+    // A recovery workflow's post-checks do not make it interface-state advice.
+    (!row.dangerous || hasMinimumSemanticRelevance(
+      semanticTerms, primaryEvidence(row),
+    ) || Boolean(capabilityMatcher?.(primaryEvidence(row))))
   const result = minimumSemanticMatches === 0
     ? { rows: [] as KnowledgeRow[] }
     : await database.query<KnowledgeRow>(

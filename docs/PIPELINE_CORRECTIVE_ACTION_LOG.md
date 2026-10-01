@@ -51,8 +51,8 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
   IDs before broad-search metadata joins; keep the same bounded candidate
   count and ranking. Strip the requested provenance-output clause from search
   intent and ignore generic find/guidance/verify wrappers. Dangerous results
-  must match the primary title/summary/command purpose or a supported capability,
-  rather than only incidental procedure checks. Related dangerous recovery and
+  must match the primary title/summary/command/action-step purpose or a supported
+  capability, rather than only incidental procedure checks. Related dangerous recovery and
   cross-platform upgrade guidance remains available with its safety metadata.
   Immutable publication/provenance, applicability rules, 8 executor lanes,
   model profiles, pause/leases/circuits and query deadlines are unchanged.
@@ -62,7 +62,12 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
   Read-only production EXPLAIN measured 1000.544 ms for vendor expansion and
   1058.410 ms globally; only 20 metadata rows are joined. These are individual
   observations, not a latency SLA or extended soak. Deployment and exact public
-  MCP rechecks are pending the standard production script.
+  MCP rechecks are pending the standard production script. The first preflight
+  passed all 345 tests but stopped before production changes on 4/250 evaluation
+  template lookups: the initial guard omitted executable apply steps from
+  structured change contracts. Keep those action steps, excluding incidental
+  verify/check/confirm/validate/compare steps; add all four CLI-template regressions.
+  No restart or larger timeout was used to mask a failure.
 
 ## 2026-09-30 — Urgent learning correction
 
