@@ -8,11 +8,16 @@ soak. A clean baseline is not a completed extended observation window.
 
 ## Handoff as of production verification, 2026-10-01
 
-Live application: `df46aa3bf541828ba6ab5eb301f3f07f10b3b47c` on
+Live application: `bb8b234a10e2b3e64bc3f2c8ab4e6bbf841d4f93` on
 `100.116.82.78`, deployed through `ops/scripts/deploy-production.sh`.
 Pipeline enabled, capacity 8. At the later learning audit, operator settings
 version 8 used `gpt-6-luna` low/medium, High fallback `gpt-5.6-terra` medium.
 
+- **Executor recovery:** October 1 expired-lease/scheduler correction is deployed.
+  At 17:12 UTC all eight lanes were healthy and running with zero expired leases;
+  137 AI runs had completed successfully. API/admin/MCP acceptance passed.
+  The read-only window restarts at 17:12 UTC; this is a short acceptance baseline,
+  not an extended soak or validation of the entire knowledge base.
 - **Open:** Cisco/Akamai 403 blocks intake; September 21 restored Linux downloads
   only. One public Junos answer is verified below; an extended soak is not established.
 - **Learning audit baseline:** 15/20 unknown questions lost diagnosis tasks; a global
@@ -66,9 +71,56 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
   failure, independent scheduler/row locks, live-lease preservation and finite
   retry exhaustion, collection scan completion/renewal, and original extractor
   model/effort selection. Node 20 installation fails before changing launchd.
-- Deployment: pending the standard full gates, production-scale history plan and
-  live executor/progress acceptance. No completed extended soak is claimed;
-  restart the read-only window after rollout.
+- Deployment: clean `main` commit `bb8b234a10e2b3e64bc3f2c8ab4e6bbf841d4f93`
+  verified through `ops/scripts/deploy-production.sh`. All 348 tests, 250/250
+  evaluation fixtures, type checks and local/Linux builds passed. Full backup,
+  migration 048, grants, reconciliation/statistics, atomic switch and public
+  protocol smokes completed; the script restored the selected executor pool.
+  Backup: `/var/backups/clideck-mcp/deploy-20261001T164555Z-bb8b234`.
+  API/admin/researcher started at 17:02:56 UTC, worker at 17:02:57 UTC; all
+  remain active with zero automatic restarts. Launchd now pins bundled Node
+  24.19.0. Enabled capacity 8, settings version 8 and both model profiles remain
+  unchanged; the model catalog is fresh with no catalog/pricing error or circuit.
+- Production-scale history acceptance: read-only EXPLAIN ANALYZE of the bounded
+  preparation query (without FOR UPDATE) measured 1.755 ms for two candidates
+  and 84.458 ms for a source with 4,581 pending candidates, materializing only
+  80 before history joins. Both plans use `agent_runs_task_history_idx`; exact
+  history lookup measured 0.103/0.098 ms. Lock/recovery behavior is covered by
+  the integration regressions. These are individual samples, not a latency SLA.
+- Live acceptance, 17:03–17:14 UTC: eight fresh, healthy running executor
+  heartbeats and eight valid leases, zero expired leases. Every lane completed
+  work; at 17:12:16 UTC 137 AI runs were completed with no failed/timed-out runs.
+  Completed stages included 5 diagnoses, 35 analyses, 47 verifications, 50 deep
+  reviews and 46 publication tasks, plus acquisition/conversion/chunking.
+  At 17:13 UTC 239 new revisions existed, 233 currently active; Fidelity checks
+  recorded 128 passed and 32 repair outcomes, retaining the normal repair path.
+  The initial five-fragment analysis completed at 17:08:59 UTC and its
+  executor subsequently completed nine more runs. No active database query
+  older than 10 seconds was observed at the acceptance snapshots.
+- Collection acceptance: the exhausted collection now has an empty cursor,
+  scan counter zero, unchanged lifetime 200 pages and a future refresh time.
+  Only one zero-page completion appeared after switching, with no repeat loop.
+  Authenticated settings/models/Overview returned HTTP 200 in 257/108/2,362 ms;
+  Overview reported the deployed SHA and all eight executors healthy/running.
+  An initial pool catalog-report failure at 17:03:06 resolved; no later executor
+  errors were observed, and subsequent catalog reads were fresh/error-free.
+- Public acceptance: interface query for Cisco Catalyst 9300 / IOS XE 17.12.4
+  returned complete in 2,444 ms with three non-dangerous references; provenance
+  for those actual references succeeded. Existing Catalyst-family normalization
+  and documentation-only assurance limits remain; this is service acceptance,
+  not exact hardware/patch validation.
+- Remaining source-level outcomes: upstream HTTP 403/429/503 attempts occurred;
+  three acquisition tasks exhausted their existing retry limit (two 403, one
+  429). One continuation from a September 21 processing run correctly closed
+  with `FRAGMENT_ATTEMPTS_EXHAUSTED` after its fragment reached ten attempts;
+  no new AI run failed. Neither outcome blocked the remaining lanes. No retry
+  limit, global cooldown or quota was added. Service warning/error logs after
+  switching contained only the external HTTP failures, with no database timeout,
+  lease-validation or grant errors.
+- Receipts: `artifacts/operations/2026-10-01-pipeline-recovery/` contains the
+  first/final read-only SQL snapshots, admin responses, history plans and public
+  MCP summary (local ignored evidence). Restart the read-only observation window
+  at **2026-10-01 17:12 UTC**. No completed extended soak is claimed.
 
 ## 2026-10-01 — Public interface search and provenance retrieval
 
