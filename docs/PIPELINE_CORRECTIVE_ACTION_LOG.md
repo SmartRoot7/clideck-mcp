@@ -8,7 +8,7 @@ soak. A clean baseline is not a completed extended observation window.
 
 ## Handoff as of production verification, 2026-09-30
 
-Live application: `18064091fd831940d97aa049eb5ecace70fb66dd` on
+Live application: `aaa1b687fea7dfde268f3a13576fe783b59e59b7` on
 `100.116.82.78`, deployed through `ops/scripts/deploy-production.sh`.
 Pipeline enabled, capacity 8. At the later learning audit, operator settings
 version 8 used `gpt-6-luna` low/medium, High fallback `gpt-5.6-terra` medium.
@@ -20,7 +20,8 @@ version 8 used `gpt-6-luna` low/medium, High fallback `gpt-5.6-terra` medium.
   omits orphan `queued` demands. EVPN falsely closed with OSPF; terminal sources
   strand Fidelity backlog; public stats remain stale since August 30. Corrections
   are implemented below. All 20 later requests retained diagnosis tasks;
-  end-to-end answers and the final corrective release remain under verification.
+  one new public answer is confirmed, 19 gaps remain open; see final acceptance
+  below. The entire knowledge base and an extended soak are not yet verified.
 - **Grants:** September 21 narrow `source_collections` admin grants are now
   codified in `ops/sql/grants.sql`; preserve the exact columns below.
 - **Configuration:** September 8 cluster `jit=off` resolved Overview timeouts;
@@ -182,7 +183,25 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
   capacity checks from unfinished learning fixtures; all lease, drain, profile,
   fallback and pause checks remain enabled. History-batch testing inspects the
   reserved evidence instead of relying on identical transaction timestamps.
-  Deployment and final public recheck pending.
+  `aaa1b687fea7dfde268f3a13576fe783b59e59b7` deployed through the production
+  script at 23:55 UTC; migration 047 and all smoke checks passed. Read-only
+  replay of the three Linux demands now retains NULL vendor and returns unknown,
+  matching public queries; the NAT configuration no longer satisfies RPF.
+- Final acceptance, 23:56–23:58 UTC: all 20 public requests returned HTTP 200;
+  1 complete (new Junos revision created 23:02:37 UTC, official documentation,
+  minimum 25.1R1), 19 unknown with durable priority learning. All 20 diagnoses
+  completed, no orphan diagnosis; cohort 1 published/9 processing/10 queued.
+  Eight actual executors used selected gpt-6-luna low/medium; capacity/settings
+  retained. Latest-release progress by 23:57:59: 9 analyses, 9 verifications,
+  7 publications, 34 Fidelity passes and 6 repairs. Worker restart count zero
+  and no warning/error in its new acceptance window. Public stats refreshed at
+  23:57:42, stale=false; missing-context status explicitly requires clarification
+  and creates no research task. Daily pricing cache has 13 models and no error.
+- Limits: these short windows and interrupted experiment do not establish an
+  end-to-end latency SLA or extended soak. The complete Junos public answer's
+  asynchronous Fidelity task remains queued, so do not count it as audit-passed.
+  Existing source access, incomplete domain coverage and historical audit backlog
+  remain visible; successful publication is not proof that all knowledge is sound.
 
 ## 2026-09-30 — Knowledge quality and 20-question learning audit
 
