@@ -42,6 +42,34 @@ Resolved incidents are condensed below. Full evidence/test counts and previous
 soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.md`.
 
 
+## 2026-10-09 — Checked-out PostgreSQL client error terminated worker
+
+- Evidence: the worker exited at 06:10 UTC on `bb8b234` with an unhandled
+  `Client` error, `Connection terminated unexpectedly`, from pg 8.22.0.
+  systemd recorded exit status 1 and its first automatic restart, starting
+  again at 06:10:43 UTC. At 07:13–07:14 UTC all eight executor heartbeats were
+  fresh, zero leases were expired, and 153 AI runs completed in five minutes.
+  The underlying connection interruption is not established by this stack.
+- Cause: `createDatabase` handled only pool errors. pg-pool removes its idle
+  error listener while a client is checked out, leaving errors between queries
+  unhandled. This affects both transactions and the dedicated statistics client.
+  Confirmed against installed pg-pool source and the official client error
+  contract: https://node-postgres.com/apis/client#events.
+- Correction: install one logging error listener when each pool connection is
+  created, retaining it while checked out. Existing query rejection, rollback,
+  broken-client disposal and bounded retry behavior remain in place; no process
+  restart workaround, connection retry, capacity/model or queue policy change.
+- Validation: four targeted tests passed against disposable PostgreSQL 16.
+  New regressions terminate an actual checked-out backend while idle between
+  queries, verify logged errors and replacement connections, and confirm that
+  an interrupted transaction rejects without committing its write while a later
+  transaction succeeds. The test observes only `end`, so it cannot mask a
+  missing application `error` listener. Existing rollback-timeout disposal
+  and mechanical-lease renewal regressions also pass.
+- Deployment: pending canonical clean-main deployment; no production mutation
+  has been performed by this correction yet. Record SHA, checks, acceptance
+  and a restarted read-only observation window after deployment.
+
 ## 2026-10-01 — Expired leases stranded all executor capacity
 
 - Evidence at 16:28–16:32 UTC on `df46aa3`: eight tasks still `running` with

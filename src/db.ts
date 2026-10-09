@@ -77,6 +77,13 @@ export function createDatabase(
         : false
   })
 
+  // pg-pool removes its idle error listener while a client is checked out.
+  pool.on('connect', (client) => {
+    client.on('error', (error) => {
+      logger.error({ err: error }, 'Unexpected PostgreSQL client error')
+    })
+  })
+
   pool.on('error', (error) => {
     logger.error({ err: error }, 'Unexpected PostgreSQL pool error')
   })
