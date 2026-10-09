@@ -6,17 +6,18 @@ a restart alone is not a fix. Add evidence → cause → minimal correction → 
 SHA (or configuration-only status) → measured result, then restart the read-only
 soak. A clean baseline is not a completed extended observation window.
 
-## Handoff as of production verification, 2026-10-01
+## Handoff as of production verification, 2026-10-09
 
-Live application: `bb8b234a10e2b3e64bc3f2c8ab4e6bbf841d4f93` on
+Live application: `53c60bf6146578e3ee08af20bf39bb3223ec6fc4` on
 `100.116.82.78`, deployed through `ops/scripts/deploy-production.sh`.
-Pipeline enabled, capacity 8. At the later learning audit, operator settings
-version 8 used `gpt-6-luna` low/medium, High fallback `gpt-5.6-terra` medium.
+Pipeline enabled, capacity 8. Operator settings version 8 use `gpt-6-luna`
+low/medium, High fallback `gpt-5.6-terra` medium; unchanged at this acceptance.
 
-- **Executor recovery:** October 1 expired-lease/scheduler correction is deployed.
-  At 17:12 UTC all eight lanes were healthy and running with zero expired leases;
-  137 AI runs had completed successfully. API/admin/MCP acceptance passed.
-  The read-only window restarts at 17:12 UTC; this is a short acceptance baseline,
+- **Executor recovery:** October 1 expired-lease/scheduler correction remains
+  deployed; October 9 checked-out PostgreSQL client error handling is now deployed.
+  At 07:53 UTC all eight lanes were fresh and running with zero expired leases;
+  50 AI runs had completed successfully since switching. API/admin/MCP acceptance
+  passed. The read-only window restarts at 07:53:07 UTC; this is a short baseline,
   not an extended soak or validation of the entire knowledge base.
 - **Open:** Cisco/Akamai 403 blocks intake; September 21 restored Linux downloads
   only. One public Junos answer is verified below; an extended soak is not established.
@@ -66,9 +67,31 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
   transaction succeeds. The test observes only `end`, so it cannot mask a
   missing application `error` listener. Existing rollback-timeout disposal
   and mechanical-lease renewal regressions also pass.
-- Deployment: pending canonical clean-main deployment; no production mutation
-  has been performed by this correction yet. Record SHA, checks, acceptance
-  and a restarted read-only observation window after deployment.
+- Deployment: clean `main` commit `53c60bf6146578e3ee08af20bf39bb3223ec6fc4`
+  verified through `ops/scripts/deploy-production.sh` with Node 24. All 350 tests,
+  250/250 evaluation fixtures, type checks and local/Linux builds passed. Full
+  backup, migration/grant checks, reconciliation, applicability/statistics,
+  atomic switch and public protocol smokes completed; the script restored the
+  local executor pool. Backup (7.6 GB with checksum):
+  `/var/backups/clideck-mcp/deploy-20261009T072249Z-53c60bf`.
+- Live acceptance, 07:50:46–07:53:07 UTC: API, worker, admin and researcher active
+  with zero automatic restarts. Public health/ready returned ok/ready;
+  authenticated settings/models/Overview returned HTTP 200 and the new SHA.
+  Enabled capacity 8, settings version 8 and both model profiles are unchanged;
+  model catalog is fresh with no catalog/pricing error or open circuit.
+  All eight executor heartbeats were 0–4 seconds old and running. Eight AI runs
+  were active; task leases were valid (8–9 total across the two snapshots),
+  with zero expired leases. Successful AI completions increased from 25 to 50
+  between 07:52:03 and 07:53:07, with completions on every lane. Diagnosis,
+  analysis, verification, deep review, publication, discovery and mechanical
+  acquisition/conversion/chunking all advanced. One `AGENT_ARTIFACT_REJECTED`
+  retained the existing validation path; no fresh internal service error,
+  uncaught client error or process exit was observed.
+- The read-only observation window restarts at 07:53:07 UTC. This short acceptance
+  does not establish an extended soak or the cause of the original connection
+  interruption. The regression proves error handling and transaction recovery
+  against a real disconnect on the disposable database, without terminating
+  production connections.
 
 ## 2026-10-01 — Expired leases stranded all executor capacity
 
