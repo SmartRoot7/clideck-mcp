@@ -387,6 +387,21 @@ describe('deterministic source processing', () => {
     })
   })
 
+  it('preserves the discovery diagnosis while refreshing authoritative question context', () => {
+    const diagnosis = { missing_capabilities: ['node-fetch'], search_expansions: ['Node.js fetch diagnostics'] }
+    const stored = { knowledge_demand: { question: 'old question', diagnosis } }
+    const demand = { question: 'current question', tool_name: 'query_network_knowledge',
+      context: { operating_system: 'macOS' }, excluded_source_urls: [] }
+    expect(withLeasedKnowledgeDemand(stored, demand)).toMatchObject({
+      knowledge_demand: { ...demand, diagnosis }
+    })
+    const latest = { missing_capabilities: ['sleep-discrimination'] }
+    expect(withLeasedKnowledgeDemand(stored, { ...demand, diagnosis: latest })).toMatchObject({
+      knowledge_demand: { diagnosis: latest }
+    })
+    expect(stored.knowledge_demand).toEqual({ question: 'old question', diagnosis })
+  })
+
   it('keeps an unanswered request alive through automatic AI recovery', () => {
     expect(demandFailureDisposition({
       hasDemand: true,
@@ -1644,8 +1659,11 @@ describe('human knowledge search normalization', () => {
 
 describe('commit-bound lab assurance', () => {
   const commitSha = 'a'.repeat(40)
+  afterEach(() => vi.useRealTimers())
 
   it('rejects report tampering and false Cisco runtime badges', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-07-19T12:00:00.000Z'))
     const report = finalizeLabReport({
       schema_version: 1,
       commit_sha: commitSha,

@@ -391,8 +391,10 @@ sources. Prefer the most current uncovered document. Choose substantive leaf
 pages that contain command syntax, procedures, diagnostics, upgrade guidance,
 release details, or advisory facts. Never return a book landing page, table of
 contents, alphabetic command index, product list, search page, or document
-catalog. You must use the web-search tool. Use one focused search and open every
-returned official result far enough to confirm that its exact URL contains substantive
+catalog. You must use the web-search tool. For background coverage use one focused
+search; for a knowledge_demand use up to five focused searches, guided by its
+unanswered subquestions and missing capabilities. Open every selected official
+result far enough to confirm that its exact URL contains substantive
 knowledge. Do not download or read a full manual; the deterministic Acquire
 stage performs that work. Submit:
 If the leased payload contains knowledge_demand, this is a real unanswered user
@@ -406,9 +408,20 @@ guide merely because it covers the same product: a returned page must visibly
 contain at least one demand-specific technical term in its title, URL or
 substantive content. If a broad guide is needed, choose its direct leaf page
 or chapter for the requested feature instead.
+For cross-product or software questions, search the primary documentation of
+each relevant project or maintainer named in the question/diagnosis. An OS or
+vendor in coverage_target does not restrict all evidence to that vendor. Do not
+invent model/version support or treat a public manual as evidence of private
+application behavior, project policy or code. If private evidence is required,
+state precisely what is missing in rejection_reason.
 If knowledge_demand includes excluded_source_urls, those official documents
 were already processed without resolving the question. Do not return any of
-them again; find a distinct, directly relevant official leaf page instead.
+them again, including translated or locale copies of the same document; find a
+distinct, directly relevant official leaf page instead. Review
+previous_discovery_attempts and diagnosis.replay_result: repeated duplicates or
+an incomplete replay require a different search for the missing capability,
+not another copy of the same general guide. If no new evidence is found, give
+the specific remaining gap and unsuccessful search in rejection_reason.
 {"sources":[{"canonical_url":"https://...","document_type":"...",
 "title":"...","document_version":"version or null","document_date":"YYYY-MM-DD or null"}],
 "rejection_reason":null}

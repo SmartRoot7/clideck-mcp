@@ -25,6 +25,11 @@
   Repeated soak failures need a root-cause code/schema/grant/config fix, not a
   restart. Record evidence, cause, correction, deployed SHA and result; restart
   the read-only soak window after correction.
+- Prioritize closing real unknown/partial user questions over background coverage
+  growth, including technical questions outside network equipment. Monitor aged
+  demands, repeated discovery without new evidence and stalled source processing;
+  agent activity is not proof of learning. Keep the original question/context and
+  require a complete replay before closure. State missing private evidence clearly.
 - Fill all enabled executor lanes (operator-selected 1–8) with useful work. No global single-task or
   stage cap: discovery, demand, analysis, verification and review may use every
   free lane. `next_check_at` orders refreshes; it never blocks idle capacity.

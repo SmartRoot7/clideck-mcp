@@ -6,6 +6,14 @@ standby polling starts no Codex run. PostgreSQL owns task/lease state.
 See [capacity policy](PIPELINE_CAPACITY_AUDIT.md) and read the
 [corrective log](PIPELINE_CORRECTIVE_ACTION_LOG.md) before changes or monitoring.
 
+Recurring checks must measure learning against the original unanswered questions,
+not just executor activity or database growth. Use the compact read-only
+`ops/sql/learning-health.sql` alongside service/lease health. It reports old and
+repeated questions, completed replays, discovery without new evidence and ready
+sources with no work. A short sample is not an extended soak. User demands take
+priority over background coverage; private project behavior requires private
+evidence, not a public manual or a fabricated answer.
+
 ## Runtime policy
 
 `src/cli/pipeline-codex-policy.ts` and `src/domain/pipeline.ts` enforce:

@@ -265,4 +265,57 @@ suite('urgent learning reliability', () => {
       expect((await client.query('SELECT status FROM source_candidates WHERE id=$1',[source.id])).rows[0]!.status).toBe('completed')
     })
   })
+  it('leases the latest diagnosis and failed discovery history even for an old queued payload', async () => {
+    await transaction(async (db,client) => {
+      await client.query("UPDATE pipeline_tasks SET status='cancelled' WHERE status IN ('queued','claimed','running')")
+      await client.query("UPDATE knowledge_demands SET status='published'")
+      await client.query('DELETE FROM pipeline_model_circuits')
+      await client.query('UPDATE pipeline_settings SET enabled=true,max_concurrent_ai_runs=8 WHERE singleton')
+      const id=await queueUnknownKnowledgeDemand(db,'query_network_knowledge',{question:question(),context},{unknown:true})
+      const diagnosisTask=(await client.query("UPDATE pipeline_tasks SET status='completed' WHERE knowledge_demand_id=$1 RETURNING id",[id])).rows[0]!
+      await client.query(`INSERT INTO knowledge_demand_diagnostics
+        (knowledge_demand_id,pipeline_task_id,status,missing_capabilities,search_expansions,replay_result,artifact_hash)
+        VALUES ($1,$2,'completed',ARRAY['macsec-rekey'],ARRAY['MACsec rekey diagnostics'],'{"answer_status":"partial"}',$3)`,
+        [id,diagnosisTask.id,sha256Label(randomUUID())])
+      await client.query("UPDATE knowledge_demands SET status='discovering',diagnosis_status='completed' WHERE id=$1",[id])
+      const previous={inserted_sources:0,duplicate_sources:3,searched_source_urls:['https://www.cisco.com/already-tried']}
+      await client.query(`INSERT INTO pipeline_tasks(task_type,stage,dedupe_key,payload,status,knowledge_demand_id,result,completed_at)
+        VALUES ('source_discovery','discover',$1,'{}','completed',$2,$3,now()-interval '1 minute')`,[randomUUID(),id,previous])
+      const task=(await client.query(`INSERT INTO pipeline_tasks(task_type,stage,dedupe_key,payload,knowledge_demand_id,coverage_target_id,queue_class)
+        SELECT 'source_discovery','discover',$2,'{}',id,coverage_target_id,'demand' FROM knowledge_demands WHERE id=$1 RETURNING id`,[id,randomUUID()])).rows[0]!
+      const claim=await claimPipelineTask(db,config,'luna-1','test:diagnosis',executionProtocolVersion)
+      expect(claim['pipeline_task_id']).toBe(task.id)
+      expect(claim['payload']).toMatchObject({knowledge_demand:{
+        diagnosis:{missing_capabilities:['macsec-rekey'],search_expansions:['MACsec rekey diagnostics'],replay_result:{answer_status:'partial'}},
+        previous_discovery_attempts:[previous]
+      }})
+      expect((await client.query('SELECT payload FROM pipeline_tasks WHERE id=$1',[task.id])).rows[0]!.payload).toEqual({})
+    })
+  })
+  it('resumes an older failed run with ready evidence ahead of a newer auditing run', async () => {
+    await transaction(async (db,client) => {
+      await client.query("UPDATE pipeline_tasks SET status='cancelled' WHERE status IN ('queued','claimed','running')")
+      await client.query("UPDATE knowledge_demands SET status='published'")
+      await client.query('DELETE FROM pipeline_model_circuits')
+      await client.query('UPDATE pipeline_settings SET enabled=true,max_concurrent_ai_runs=8 WHERE singleton')
+      const id=await queueUnknownKnowledgeDemand(db,'query_network_knowledge',{question:question(),context},{unknown:true})
+      await client.query("UPDATE pipeline_tasks SET status='cancelled' WHERE knowledge_demand_id=$1",[id])
+      await client.query("UPDATE knowledge_demands SET status='processing',diagnosis_status='completed' WHERE id=$1",[id])
+      const source=(await client.query(`INSERT INTO source_candidates(coverage_target_id,canonical_url,document_type,title,status,discovered_by,knowledge_demand_id)
+        SELECT coverage_target_id,$2,'command_reference','MACsec run recovery','analyzing','test',id FROM knowledge_demands WHERE id=$1 RETURNING id`,[id,`https://www.cisco.com/${randomUUID()}`])).rows[0]!
+      const older=(await client.query(`INSERT INTO source_processing_runs(source_candidate_id,processing_version,status,created_at)
+        VALUES ($1,'old-v1','failed',now()-interval '1 day') RETURNING id`,[source.id])).rows[0]!
+      await client.query(`INSERT INTO source_processing_runs(source_candidate_id,processing_version,status)
+        VALUES ($1,'new-v2','auditing')`,[source.id])
+      const artifact=(await client.query(`INSERT INTO source_artifacts(source_candidate_id,media_type,byte_size,content_hash,storage_path,status)
+        VALUES ($1,'text/plain',100,$2,'/tmp/run-recovery-fixture.txt','chunked') RETURNING id`,[source.id,sha256Label(randomUUID())])).rows[0]!
+      const fragment=(await client.query(`INSERT INTO source_fragments(source_artifact_id,processing_run_id,ordinal,content,content_hash,attempts)
+        VALUES ($1,$2,0,'Inspect MACsec using show macsec interface.',$3,2) RETURNING id`,[artifact.id,older.id,sha256Label(randomUUID())])).rows[0]!
+      await ensurePipelineWork(db)
+      const tasks=await client.query(`SELECT processing_run_id FROM pipeline_tasks
+        WHERE source_candidate_id=$1 AND task_type='fragment_analysis' AND status='queued'`,[source.id])
+      expect(tasks.rows).toContainEqual({processing_run_id:older.id})
+      expect((await client.query('SELECT attempts,reservation_task_id,status FROM source_fragments WHERE id=$1',[fragment.id])).rows[0]).toMatchObject({attempts:2,status:'reserved'})
+    })
+  })
 })

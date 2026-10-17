@@ -6,13 +6,18 @@ a restart alone is not a fix. Add evidence → cause → minimal correction → 
 SHA (or configuration-only status) → measured result, then restart the read-only
 soak. A clean baseline is not a completed extended observation window.
 
-## Handoff as of production verification, 2026-10-09
+## Handoff as of learning investigation, 2026-10-17
 
 Live application: `53c60bf6146578e3ee08af20bf39bb3223ec6fc4` on
 `100.116.82.78`, deployed through `ops/scripts/deploy-production.sh`.
 Pipeline enabled, capacity 8. Operator settings version 8 use `gpt-6-luna`
 low/medium, High fallback `gpt-5.6-terra` medium; unchanged at this acceptance.
 
+- **Learning, October 17:** confirmed lost leased diagnosis and run-selection
+  starvation below. Correction is prepared; production remains on `53c60bf`.
+  Docker Desktop is unresponsive, so database regressions and the canonical
+  deployment are pending. The recurring check now prioritizes actual question
+  closure, repeated discovery and stalled sources, including software questions.
 - **Executor recovery:** October 1 expired-lease/scheduler correction remains
   deployed; October 9 checked-out PostgreSQL client error handling is now deployed.
   At 07:53 UTC all eight lanes were fresh and running with zero expired leases;
@@ -42,6 +47,58 @@ low/medium, High fallback `gpt-5.6-terra` medium; unchanged at this acceptance.
 Resolved incidents are condensed below. Full evidence/test counts and previous
 soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.md`.
 
+
+## 2026-10-17 — Learning repeated discovery and stranded older-run evidence
+
+- Evidence, 05:38–05:47 UTC, live `53c60bf`: user demand
+  `7ddc8291-bf44-4f8e-80b2-4fd62a991638` (macOS/Node/Tailscale diagnosis)
+  remained unresolved after 354 discovery tasks over ten days. The latest three
+  completions added no source or reused fragment and returned 2–3 duplicates.
+  Demand `ae85265e-9d39-4024-ab60-66e6b13277bb` (Hugging Face downloads)
+  had no source work since October 14 11:30 UTC. Its newer run `b9c4ef42`
+  was auditing with zero ready fragments; older failed run `0a8a21ee` retained
+  two unreserved queued fragments at attempt 9. A second read-only selection
+  confirmed the corrected ordering chooses that older run without resetting
+  attempts. At 05:44:50 UTC the compact learning check reported zero complete
+  question replays in 30 minutes, 655 discoveries without new/reused evidence,
+  and 45 sources with ready evidence and no live task. These are learning
+  failures despite healthy executors, not proof that every unanswered question
+  has publicly available evidence.
+- Causes: `withLeasedKnowledgeDemand` replaced the nested demand object and
+  discarded diagnosis/subquestions/search expansions already queued by the
+  scheduler. Discovery was limited to one search, without previous search
+  outcomes, and excluded only 20 sources owned directly by that demand.
+  Independently, analysis always preferred a newer nonterminal processing run,
+  hiding queued evidence in an older failed run even while the source remained
+  nonterminal. Existing demand-first priority was already active; raising a
+  generic numeric priority would not correct either defect.
+- Correction: lease the latest completed diagnosis and replay coverage, retain
+  stored diagnosis for compatibility, and give discovery its last three results
+  plus a bounded exclusion set including previously reused sources. Record
+  searched official URLs for subsequent attempts. Target up to five focused
+  searches at missing subquestions across official project/maintainer docs;
+  avoid locale copies and identify missing private evidence explicitly. Prefer
+  runs with ready analysis evidence while preserving their run IDs, reservations
+  and retry counts. No production row edits, model/capacity changes, cooldowns,
+  quotas or publication/replay relaxation.
+- Monitoring: the existing two-hour `clideck` heartbeat and project rules now
+  prioritize closure of real unknown/partial questions over background growth.
+  `ops/sql/learning-health.sql` provides a bounded read-only aggregate and stable
+  old/repeated question samples without generating synthetic demands. It avoids
+  treating `last_seen_at` (also updated by incomplete replay) as progress.
+- Validation so far: new diagnosis-preservation regression fails on the old
+  implementation and passes on the correction. Node 24 type checks/build and
+  all database-free tests passed (245 total; 108 database tests skipped).
+  Added database regressions for current diagnosis/history in old queued leases
+  and older-run recovery with unchanged attempts. The unrelated lab assurance
+  test had expired on October 15; freeze its test clock so real production
+  expiry checks remain enforced. Full database tests/evaluations are pending.
+- Deployment blocker: Docker Desktop responds to neither `docker ps` nor its
+  local socket `_ping` (5-second timeout). Do not bypass the canonical deploy or
+  run write-based regressions against production. User approval to restart
+  Docker was requested because other local containers would be interrupted.
+  Deployed SHA remains `53c60bf6146578e3ee08af20bf39bb3223ec6fc4`; no new
+  deployment or post-correction observation window has occurred yet.
 
 ## 2026-10-09 — Checked-out PostgreSQL client error terminated worker
 

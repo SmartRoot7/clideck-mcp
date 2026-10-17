@@ -836,6 +836,8 @@ type LeasedKnowledgeDemand = {
   tool_name: string
   context: Record<string, unknown>
   excluded_source_urls: string[]
+  diagnosis?: Record<string, unknown> | null
+  previous_discovery_attempts?: Record<string, unknown>[]
 }
 
 /**
@@ -855,6 +857,9 @@ export function withLeasedKnowledgeDemand(
       tool_name: demand.tool_name,
       context: demand.context,
       excluded_source_urls: demand.excluded_source_urls,
+      diagnosis: demand.diagnosis ??
+        (payload['knowledge_demand'] as Record<string, unknown> | undefined)?.['diagnosis'] ?? null,
+      previous_discovery_attempts: demand.previous_discovery_attempts ?? [],
     },
   }
 }
@@ -1853,6 +1858,14 @@ async function queueSourceWork(
            )
          )
        ORDER BY
+         -- A newer auditing run must not hide unfinished evidence from an
+         -- older run. Keep the original run identity and its bounded retries.
+         CASE WHEN $2 IN ('analysis', 'ai') AND EXISTS (
+           SELECT 1 FROM source_fragments pending
+           WHERE pending.processing_run_id = current_run.id
+             AND pending.status = 'queued'
+             AND pending.reservation_task_id IS NULL
+         ) THEN 0 ELSE 1 END,
          CASE WHEN current_run.status IN (
            'queued', 'acquiring', 'converting', 'segmenting', 'extracting',
            'auditing', 'repairing', 'reconciling', 'normalizing',
@@ -1864,7 +1877,7 @@ async function queueSourceWork(
      LEFT JOIN knowledge_demands demand ON demand.id = sc.knowledge_demand_id
      WHERE sc.id = $1
      FOR NO KEY UPDATE OF sc`,
-    [sourceId],
+    [sourceId, mode],
   )
   const source = sourceResult.rows[0]
   if (!source) {
@@ -4300,32 +4313,55 @@ export async function claimPipelineTask(
 
     if (task.knowledge_demand_id) {
       const demand = await client.query<Omit<LeasedKnowledgeDemand, 'excluded_source_urls'>>(
-        `SELECT question, tool_name, context
-         FROM knowledge_demands
-         WHERE id = $1`,
+        `SELECT demand.question, demand.tool_name, demand.context,
+                diagnostic.diagnosis
+         FROM knowledge_demands demand
+         LEFT JOIN LATERAL (
+           SELECT jsonb_build_object(
+             'canonical_context', canonical_context, 'subquestions', subquestions,
+             'missing_capabilities', missing_capabilities,
+             'search_expansions', search_expansions, 'document_roles', document_roles,
+             'reasoning_summary', reasoning_summary, 'replay_result', replay_result
+           ) AS diagnosis
+           FROM knowledge_demand_diagnostics
+           WHERE knowledge_demand_id = demand.id AND status = 'completed'
+           ORDER BY created_at DESC LIMIT 1
+         ) diagnostic ON true
+         WHERE demand.id = $1`,
         [task.knowledge_demand_id],
       )
       if (demand.rows[0]) {
         const exhaustedSources = await client.query<{ canonical_url: string }>(
-          `SELECT canonical_url
-           FROM source_candidates
-           WHERE knowledge_demand_id = $1
-             AND status IN (
+          `SELECT source.canonical_url
+           FROM source_candidates source
+           LEFT JOIN knowledge_demand_source_attempts attempt
+             ON attempt.source_candidate_id = source.id AND attempt.knowledge_demand_id = $1
+           WHERE (source.knowledge_demand_id = $1 OR attempt.knowledge_demand_id = $1)
+             AND source.canonical_url IS NOT NULL
+             AND source.status IN (
                'completed',
                'completed_with_exceptions',
                'duplicate',
                'rejected',
                'failed'
              )
-           ORDER BY completed_at DESC NULLS LAST, updated_at DESC
-           LIMIT 20`,
+           ORDER BY coalesce(attempt.attempted_at, source.completed_at, source.updated_at) DESC
+           LIMIT 64`,
           [task.knowledge_demand_id],
         )
+        const previousDiscovery = task.task_type === 'source_discovery'
+          ? await client.query<{ result: Record<string, unknown> }>(
+            `SELECT result FROM pipeline_tasks
+             WHERE knowledge_demand_id = $1 AND task_type = 'source_discovery'
+               AND status = 'completed' AND result IS NOT NULL
+             ORDER BY completed_at DESC LIMIT 3`, [task.knowledge_demand_id])
+          : { rows: [] }
         payload = withLeasedKnowledgeDemand(payload, {
           ...demand.rows[0],
           excluded_source_urls: exhaustedSources.rows.map(
             (source) => source.canonical_url,
           ),
+          previous_discovery_attempts: previousDiscovery.rows.map((row) => row.result),
         })
       }
       if (task.task_type === 'demand_diagnosis') {
@@ -5538,7 +5574,10 @@ export async function submitSourceDiscovery(
         [...preflightFailures.values()].reduce((sum, count) => sum + count, 0),
       preflight_failures: Object.fromEntries(preflightFailures),
       active_source_id: activeSource.rows[0]?.active_source_id ?? null,
-      rejection_reason: input.rejection_reason ?? null
+      rejection_reason: input.rejection_reason ?? null,
+      ...(task.knowledge_demand_id ? {
+        searched_source_urls: safeSources.map((source) => source.canonical_url)
+      } : {})
     }
     await recordPipelineTransition(client, {
       scope: 'source',
