@@ -59,6 +59,15 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
   settings version 8/capacity 8 unchanged, eight fresh executors, zero expired
   leases. Both original cohort requests retained their IDs and started synthesis.
   The numeric 802.1X diagnosis completed successfully at 08:00:55 UTC.
+  Read-only observation restarted at 08:01:15 UTC; this short baseline is not
+  an extended soak. At 08:06 UTC neither original cohort request has a published
+  exact answer; do not report their learning complete.
+  Follow-up code is pushed as `b82d3cb922d86c7b28d77d2e0616c385f9842b13`.
+  Explicit cleanup approval is pending for `deploy-20260930T214235Z-56fb9fe`
+  (3,357,400,713 bytes) and `deploy-20260930T220949Z-7c58632`
+  (3,358,089,976 bytes), about 6.25 GiB combined. Keep all daily backups,
+  October 9 and both fresh October 17 completed copies. No additional historical
+  copy has been removed. Type checks and all 13 focused metadata/backup tests pass.
 - Fresh artifacts repeatedly failed on question-key regex, capability length
   and ISO verification dates, including third attempts on two tasks. Cause:
   the provider-supported JSON Schema conversion deliberately drops regex,
