@@ -9,7 +9,7 @@ import type { PipelineTaskRow } from './pipeline.js'
 import type { PublicKnowledge } from './schemas.js'
 import { buildSearchQueries } from './search-query.js'
 
-const policyVersion = 'technical-answer-v1'
+const policyVersion = 'technical-answer-v2'
 type Client = Pick<DatabaseClient, 'query'>
 type Enqueue = (client: DatabaseClient, input: {
   type: PipelineTaskRow['task_type']; stage: PipelineTaskRow['stage']; priority: number;

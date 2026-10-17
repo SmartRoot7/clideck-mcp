@@ -88,3 +88,24 @@ export function publicToolError(error: unknown) {
     }
   }
 }
+
+/** Restricted researcher validation is actionable artifact feedback, not an
+ * upstream model outage. Messages contain no source text or private context. */
+export function technicalArtifactRejection(error:unknown) {
+  if (!(error instanceof Error)) return null
+  const code=error.message.split(':',1)[0] ?? ''
+  const messages:Record<string,string>={
+    TECHNICAL_PROVENANCE_NOT_IN_TASK:'Use the leased URL/hash and an exact contiguous source quote; do not paraphrase evidence_fragment.',
+    TECHNICAL_CANDIDATE_INVALID:'Correct the documented candidate context and required record fields using leased evidence.',
+    TECHNICAL_QUESTION_KEY_MISMATCH:'Copy the leased question key exactly.',
+    TECHNICAL_PRIVATE_CONTEXT_IN_PUBLIC_ANSWER:'Remove private case context from the public candidate.',
+    TECHNICAL_REVIEW_WITHOUT_SUPPORTED_ANSWER:'Do not approve an unsupported or absent answer.',
+    TECHNICAL_REVIEW_INCOMPLETE:'Retain missing capabilities/context; complete requires every leased capability identifier.',
+    TECHNICAL_REVIEW_COMPONENT_MISMATCH:'The documented component does not match the requested component.',
+    TECHNICAL_REVIEW_OS_MISMATCH:'The documented operating system does not match the request.',
+    TECHNICAL_REVIEW_OS_VERSION_MISMATCH:'The documented operating system version does not match the request.',
+    TECHNICAL_REVIEW_COMPONENT_VERSION_MISMATCH:'The documented component version does not match the request.',
+    TECHNICAL_UNREVIEWED_PUBLICATION:'Publication requires an approved supported candidate.'
+  }
+  return messages[code] ? {isError:true,content:[{type:'text' as const,text:`${code}: ${messages[code]}`}]} : null
+}

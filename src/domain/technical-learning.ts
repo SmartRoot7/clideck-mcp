@@ -42,6 +42,25 @@ function omitNulls(value:unknown):unknown {
   if (value && typeof value==='object') return Object.fromEntries(Object.entries(value).filter(([,entry])=>entry!==null).map(([key,entry])=>[key,omitNulls(entry)]))
   return value
 }
+/** The provider subset drops regex, length and date-format constraints. Bind
+ * task-owned identifiers/dates with literals and enums it actually enforces. */
+export function technicalArtifactSchema(
+  review:boolean,
+  payload:Record<string,unknown>,
+  verifiedAt=new Date().toISOString().slice(0,10),
+) {
+  const questionKey=z.string().regex(/^sha256:[0-9a-f]{64}$/).parse(payload['question_key'])
+  const required=z.array(z.string().min(1).max(120)).min(1).max(24).parse(payload['required_capabilities'])
+  const capability=z.enum(required)
+  const candidate=technicalCandidateSchema.extend({
+    last_verified_at:z.literal(verifiedAt),
+    provenance:z.array(technicalCandidateSchema.shape.provenance.element.extend({verified_at:z.literal(verifiedAt)})).min(1).max(10)
+  }).nullable()
+  const binding={question_key:z.literal(questionKey),candidate,
+    covered_capabilities:z.array(capability).max(24),missing_capabilities:z.array(capability).max(24)}
+  return review ? answerReviewSchema.extend(binding) : answerDraftSchema.extend(binding)
+}
+
 export function parseTechnicalDraft(value:unknown) {
   const input=object(value)
   return answerDraftSchema.parse({...input,candidate:input['candidate']===null ? null : omitNulls(input['candidate'])})

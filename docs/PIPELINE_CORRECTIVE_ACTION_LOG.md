@@ -8,13 +8,13 @@ soak. A clean baseline is not a completed extended observation window.
 
 ## Handoff as of learning investigation, 2026-10-17
 
-Live application: `266de23045097d317d61d9b1c8d7f772757f0213` on
+Live application: `6a81c23adca8a8502bf1c5fbc8a3fc909ae570d8` on
 `100.116.82.78`, deployed through `ops/scripts/deploy-production.sh`.
 Pipeline enabled, capacity 8. Operator settings version 8 use `gpt-6-luna`
 low/medium, High fallback `gpt-5.6-terra` medium; unchanged at this acceptance.
 
 - **Learning, October 17:** confirmed lost leased diagnosis and run-selection
-  starvation below. Correction is deployed as `266de23`; technical rollout is blocked at backup capacity; see the disk incident below.
+  starvation below. Correction is deployed as `266de23`; technical rollout `6a81c23` is deployed; a metadata-contract follow-up awaits capacity approval below.
   Docker Desktop was restarted with user approval; all 353 tests and 250 evals pass,
   and the canonical deployment completed with backup/migrations/smokes. The recurring check prioritizes actual question
   closure, repeated discovery and stalled sources, including software questions.
@@ -47,6 +47,42 @@ low/medium, High fallback `gpt-5.6-terra` medium; unchanged at this acceptance.
 Resolved incidents are condensed below. Full evidence/test counts and previous
 soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.md`.
 
+
+
+## 2026-10-17 — Provider schema omitted technical metadata constraints
+
+- Canonical deployment `6a81c23adca8a8502bf1c5fbc8a3fc909ae570d8` completed
+  at 08:00 UTC: 387 tests and 250 evals passed; backup completed in
+  `deploy-20261017T072848Z-6a81c23` (8,874,531,892 bytes), migrations 049/050,
+  grants, index, switch and smokes succeeded. Only the three approved September
+  30 copies were removed. API/ready and all four services healthy, NRestarts=0;
+  settings version 8/capacity 8 unchanged, eight fresh executors, zero expired
+  leases. Both original cohort requests retained their IDs and started synthesis.
+  The numeric 802.1X diagnosis completed successfully at 08:00:55 UTC.
+- Fresh artifacts repeatedly failed on question-key regex, capability length
+  and ISO verification dates, including third attempts on two tasks. Cause:
+  the provider-supported JSON Schema conversion deliberately drops regex,
+  length and date-format keywords. The generated schema therefore failed to
+  communicate these metadata constraints even though server validation retained
+  them. Natural-language capability labels also cannot establish exact coverage.
+- Correction: generate task-specific literal question keys and verification
+  dates, and capability enums containing the leased required identifiers. These
+  keywords survive the provider conversion. Keep server hash/quote checks,
+  exact binding, independent review and completeness checks. Prompt clarifies
+  identifiers versus explanation. Version the synthesis policy so already
+  consumed v1 windows can be reconsidered under the corrected contract; finite
+  task attempts and active leases are unchanged.
+- Additional observed rejection: leased URL/hash matched but the generated quote
+  was a paraphrase. The common prompt requested original writing without a clear
+  citation exception. Clarify short contiguous literal provenance quotations.
+  Keep the quote check strict. Restricted submission now reports allowlisted
+  technical validation errors without private details instead of generic
+  INTERNAL_ERROR; they no longer masquerade as upstream model failures.
+- Targeted regression covers the actual normalized provider schema, wrong key,
+  long prose capability and invalid date rejection, plus unchanged rejection of
+  fabricated source hashes. Corrective follow-up deployment pending capacity:
+  latest backup retained, about 8.7 GiB free versus 14.4 GiB canonical headroom.
+  Do not bypass this check or delete more history without explicit approval.
 
 ## 2026-10-17 — Numeric standard identifier rejected every diagnosis retry
 

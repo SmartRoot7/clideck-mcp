@@ -37,7 +37,7 @@ import {
   submitCandidateRevision
 } from '../domain/researcher.js'
 import { candidateRevisionSchema } from '../domain/schemas.js'
-import { publicToolError, textAndStructured } from './result.js'
+import { publicToolError, textAndStructured, technicalArtifactRejection } from './result.js'
 
 type ResearcherServerDependencies = {
   config: AppConfig
@@ -65,7 +65,7 @@ function wrapResearcherTool<TInput>(
         { err: error, tool, researcherId: dependencies.researcherId },
         'Researcher tool failed',
       )
-      return publicToolError(error)
+      return (tool==='submit_technical_answer' ? technicalArtifactRejection(error) : null) ?? publicToolError(error)
     }
   }
 }
