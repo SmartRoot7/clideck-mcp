@@ -15,7 +15,7 @@ low/medium, High fallback `gpt-5.6-terra` medium; unchanged at this acceptance.
 
 - **Learning, October 17:** confirmed lost leased diagnosis and run-selection
   starvation below. Correction is prepared; production remains on `53c60bf`.
-  Docker Desktop was restarted with user approval; 16 database regressions pass,
+  Docker Desktop was restarted with user approval; all 353 tests and 250 evals pass,
   and the canonical deployment is pending. The recurring check prioritizes actual question
   closure, repeated discovery and stalled sources, including software questions.
 - **Executor recovery:** October 1 expired-lease/scheduler correction remains
@@ -95,7 +95,13 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
   All 16 urgent-learning database regressions passed on disposable PostgreSQL 16.
   The unrelated lab assurance
   test had expired on October 15; freeze its test clock so real production
-  expiry checks remain enforced. Full deployment tests/evaluations are pending.
+  expiry checks remain enforced. The first canonical preflight stopped on seven
+  integration assertions before any production change: the multi-connection
+  intake test left 20 synthetic demands/targets behind. Other test schedulers
+  recovered them, making results depend on file order. Delete those test-owned
+  records in cleanup instead of parking them as paused/unresolved. A fresh full
+  PostgreSQL 16 run now passes all 353 tests and 250/250 evaluation fixtures.
+  The canonical deployment must rerun its gates on the clean final commit.
 - Resolved local preflight blocker: Docker Desktop responded to neither `docker ps` nor its
   local socket `_ping` (5-second timeout). Do not bypass the canonical deploy or
   run write-based regressions against production. User approval to restart

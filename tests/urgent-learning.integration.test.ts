@@ -50,9 +50,13 @@ suite('urgent learning reliability', () => {
           AND status IN ('queued','claimed','running')`,[ids])
       expect(active.rows[0]!.count).toBe(20)
     } finally {
-      await pool.query("UPDATE pipeline_tasks SET status='cancelled' WHERE knowledge_demand_id=ANY($1::uuid[])",[ids])
-      await pool.query("UPDATE coverage_targets SET status='paused' WHERE id IN (SELECT coverage_target_id FROM knowledge_demands WHERE id=ANY($1::uuid[]))",[ids])
-      await pool.query("UPDATE knowledge_demands SET status='unresolved',last_error_code='CONTEXT_REQUIRED',diagnosis_status='completed' WHERE id=ANY($1::uuid[])",[ids])
+      // This is the one multi-connection test that cannot use the rollback
+      // helper. Remove its synthetic targets too: paused fixture targets can
+      // otherwise be recovered by another suite's scheduler and defeat its
+      // queue/model assertions, depending on Vitest's file order.
+      await pool.query('DELETE FROM pipeline_tasks WHERE knowledge_demand_id=ANY($1::uuid[])',[ids])
+      const targets=await pool.query('DELETE FROM knowledge_demands WHERE id=ANY($1::uuid[]) RETURNING coverage_target_id',[ids])
+      await pool.query('DELETE FROM coverage_targets WHERE id=ANY($1::uuid[])',[targets.rows.map(row=>row.coverage_target_id)])
     }
   })
   it('keeps unknown questions with missing context visible without inventing a device', async () => {
