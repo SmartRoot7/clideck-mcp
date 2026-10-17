@@ -15,8 +15,8 @@ low/medium, High fallback `gpt-5.6-terra` medium; unchanged at this acceptance.
 
 - **Learning, October 17:** confirmed lost leased diagnosis and run-selection
   starvation below. Correction is prepared; production remains on `53c60bf`.
-  Docker Desktop is unresponsive, so database regressions and the canonical
-  deployment are pending. The recurring check now prioritizes actual question
+  Docker Desktop was restarted with user approval; 16 database regressions pass,
+  and the canonical deployment is pending. The recurring check prioritizes actual question
   closure, repeated discovery and stalled sources, including software questions.
 - **Executor recovery:** October 1 expired-lease/scheduler correction remains
   deployed; October 9 checked-out PostgreSQL client error handling is now deployed.
@@ -78,8 +78,9 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
   searched official URLs for subsequent attempts. Target up to five focused
   searches at missing subquestions across official project/maintainer docs;
   avoid locale copies and identify missing private evidence explicitly. Prefer
-  runs with ready analysis evidence while preserving their run IDs, reservations
-  and retry counts. No production row edits, model/capacity changes, cooldowns,
+  runs with ready analysis evidence or unverified candidates for the requested
+  stage, preserving their run IDs, reservations and retry counts through analysis
+  and verification. No production row edits, model/capacity changes, cooldowns,
   quotas or publication/replay relaxation.
 - Monitoring: the existing two-hour `clideck` heartbeat and project rules now
   prioritize closure of real unknown/partial questions over background growth.
@@ -90,13 +91,17 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
   implementation and passes on the correction. Node 24 type checks/build and
   all database-free tests passed (245 total; 108 database tests skipped).
   Added database regressions for current diagnosis/history in old queued leases
-  and older-run recovery with unchanged attempts. The unrelated lab assurance
+  and older-run recovery through analysis and verification with unchanged attempts.
+  All 16 urgent-learning database regressions passed on disposable PostgreSQL 16.
+  The unrelated lab assurance
   test had expired on October 15; freeze its test clock so real production
-  expiry checks remain enforced. Full database tests/evaluations are pending.
-- Deployment blocker: Docker Desktop responds to neither `docker ps` nor its
+  expiry checks remain enforced. Full deployment tests/evaluations are pending.
+- Resolved local preflight blocker: Docker Desktop responded to neither `docker ps` nor its
   local socket `_ping` (5-second timeout). Do not bypass the canonical deploy or
   run write-based regressions against production. User approval to restart
   Docker was requested because other local containers would be interrupted.
+  The user authorized a restart; normal stop timed out, the supported force-stop
+  and start commands succeeded, and the existing containers became healthy again.
   Deployed SHA remains `53c60bf6146578e3ee08af20bf39bb3223ec6fc4`; no new
   deployment or post-correction observation window has occurred yet.
 

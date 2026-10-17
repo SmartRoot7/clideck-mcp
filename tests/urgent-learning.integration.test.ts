@@ -312,10 +312,20 @@ suite('urgent learning reliability', () => {
       const fragment=(await client.query(`INSERT INTO source_fragments(source_artifact_id,processing_run_id,ordinal,content,content_hash,attempts)
         VALUES ($1,$2,0,'Inspect MACsec using show macsec interface.',$3,2) RETURNING id`,[artifact.id,older.id,sha256Label(randomUUID())])).rows[0]!
       await ensurePipelineWork(db)
-      const tasks=await client.query(`SELECT processing_run_id FROM pipeline_tasks
+      const tasks=await client.query(`SELECT id,processing_run_id FROM pipeline_tasks
         WHERE source_candidate_id=$1 AND task_type='fragment_analysis' AND status='queued'`,[source.id])
-      expect(tasks.rows).toContainEqual({processing_run_id:older.id})
+      expect(tasks.rows).toContainEqual(expect.objectContaining({processing_run_id:older.id}))
       expect((await client.query('SELECT attempts,reservation_task_id,status FROM source_fragments WHERE id=$1',[fragment.id])).rows[0]).toMatchObject({attempts:2,status:'reserved'})
+      await client.query("UPDATE pipeline_tasks SET status='completed' WHERE id=$1",[tasks.rows[0]!.id])
+      await client.query("UPDATE source_fragments SET status='analyzed',reservation_task_id=NULL WHERE id=$1",[fragment.id])
+      await client.query(`INSERT INTO knowledge_candidates
+        (pipeline_task_id,source_fragment_id,processing_run_id,stable_key,payload,content_hash,status,dangerous,confidence,quality_score,created_at)
+        VALUES ($1,$2,$3,$4,'{}',$5,'analyzed',false,.98,.98,now()-interval '1 minute')`,
+        [tasks.rows[0]!.id,fragment.id,older.id,`test.${randomUUID()}`,sha256Label(randomUUID())])
+      await ensurePipelineWork(db)
+      const verification=await client.query(`SELECT processing_run_id FROM pipeline_tasks
+        WHERE source_candidate_id=$1 AND task_type='candidate_verification' AND status='queued'`,[source.id])
+      expect(verification.rows).toContainEqual({processing_run_id:older.id})
     })
   })
 })

@@ -1856,16 +1856,27 @@ async function queueSourceWork(
                AND remaining_fragment.status = 'queued'
                AND remaining_fragment.reservation_task_id IS NULL
            )
+           OR ($2 IN ('verification', 'ai') AND EXISTS (
+             SELECT 1 FROM knowledge_candidates pending
+             WHERE pending.processing_run_id = current_run.id
+               AND pending.status = 'analyzed'
+               AND pending.verification_task_id IS NULL
+           ))
          )
        ORDER BY
          -- A newer auditing run must not hide unfinished evidence from an
          -- older run. Keep the original run identity and its bounded retries.
-         CASE WHEN $2 IN ('analysis', 'ai') AND EXISTS (
+         CASE WHEN ($2 IN ('analysis', 'ai') AND EXISTS (
            SELECT 1 FROM source_fragments pending
            WHERE pending.processing_run_id = current_run.id
              AND pending.status = 'queued'
              AND pending.reservation_task_id IS NULL
-         ) THEN 0 ELSE 1 END,
+         )) OR ($2 IN ('verification', 'ai') AND EXISTS (
+           SELECT 1 FROM knowledge_candidates pending
+           WHERE pending.processing_run_id = current_run.id
+             AND pending.status = 'analyzed'
+             AND pending.verification_task_id IS NULL
+         )) THEN 0 ELSE 1 END,
          CASE WHEN current_run.status IN (
            'queued', 'acquiring', 'converting', 'segmenting', 'extracting',
            'auditing', 'repairing', 'reconciling', 'normalizing',
