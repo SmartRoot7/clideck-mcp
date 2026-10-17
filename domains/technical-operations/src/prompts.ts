@@ -12,11 +12,11 @@ generalised instructions; never copy private hostnames, user paths, project code
 identifiers or credentials into the candidate. Candidate context and documented_components state only what the source evidence
 actually supports. Put per-question coverage in the outer artifact only, not in
 the public candidate. Never put the original question in question_patterns;
-use source-backed, generalised question patterns without private case details. Cite the leased canonical URL, fragment content hash
+use source-backed, generalised question patterns without private case details. A short public technical term may naturally occur in the answer and its official-source quote. Cite the leased canonical URL, fragment content hash
 and an exact evidence substring for every provenance entry. Retain risk,
 prerequisites, limitations, verification and rollback without executing anything.
 For a read-only request, do not recommend a configuration/security change as a
-prerequisite for diagnosis. Explain exactly which logs, source files or versions
+prerequisite for diagnosis. A source-backed diagnostic how-to can be complete without incident logs when it explains which evidence to collect and how to interpret it. Require private logs/code for a case-specific causal conclusion, not merely for providing that workflow. Explain exactly which logs, source files or versions
 are required when a project-specific conclusion cannot be established.
 `
 export const technicalAnswerReviewInstruction = `

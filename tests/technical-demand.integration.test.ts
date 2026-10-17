@@ -9,7 +9,7 @@ import type { Database } from '../src/db.js'
 import { sha256, sha256Label } from '../src/crypto.js'
 import { integrationDatabaseUrl,createTestConfig } from './helpers.js'
 import { queueUnknownKnowledgeDemand, getKnowledgeLearningProgress, reportKnowledgeGap } from '../src/domain/mcp-observability.js'
-import { ensurePipelineWork,claimPipelineTask,submitTechnicalAnswer,publishTechnicalPipelineAnswer } from '../src/domain/pipeline.js'
+import { ensurePipelineWork,claimPipelineTask,submitTechnicalAnswer,publishTechnicalPipelineAnswer,completeMechanicalPipelineTask } from '../src/domain/pipeline.js'
 import { lookupTechnicalAnswer,technicalLegacyAnswer,technicalFeedbackHash } from '../src/domain/technical-demand.js'
 import { technicalQuestionKey } from '../src/domain/technical-learning.js'
 import { technicalRequestContext, type TechnicalAnswerDraft } from '@clideck/domain-technical-operations'
@@ -42,7 +42,7 @@ suite('original-question technical learning',()=>{
  }
  const question=()=>`Inspect a Python library fixture without modifying configuration, test ${randomUUID()}`
  const context={operating_system:'macOS',operating_system_version:'27.0.1',component:'fixture-runtime',component_version:'1'}
- async function fixture(db:Database,client:pg.PoolClient, q=question(),requestedContext:Record<string,unknown>=context) {
+ async function fixture(db:Database,client:pg.PoolClient, q=question(),requestedContext:Record<string,unknown>=context,beforeQueue?:(id:string)=>Promise<void>) {
   const id=await queueUnknownKnowledgeDemand(db,'query_domain_knowledge',{question:q,context:requestedContext},{domain_id:'technical-operations',unknown:true})
   await client.query("UPDATE pipeline_tasks SET status='cancelled' WHERE knowledge_demand_id=$1",[id])
   await client.query("UPDATE knowledge_demands SET diagnosis_status='completed',status='queued' WHERE id=$1",[id])
@@ -56,6 +56,7 @@ suite('original-question technical learning',()=>{
     VALUES ($1,'fixture.txt',$2,'text/plain',32,'chunked') RETURNING id`,[source.rows[0].id,sha256Label(q)])
   for(let i=0;i<22;i++) await client.query(`INSERT INTO source_fragments(source_artifact_id,ordinal,content,content_hash,status)
     VALUES ($1,$2,$3,$4,'analyzed')`,[artifact.rows[0].id,i,`Read the controlled fixture. Evidence span ${i}.`,sha256Label('span'+i)])
+  await beforeQueue?.(id!)
   await ensurePipelineWork(db)
   const task=(await client.query("SELECT * FROM pipeline_tasks WHERE knowledge_demand_id=$1 AND task_type='technical_answer' AND status='queued'",[id])).rows[0]
   expect(task).toBeTruthy()
@@ -79,6 +80,9 @@ suite('original-question technical learning',()=>{
   expect(await queueUnknownKnowledgeDemand(db,'query_domain_knowledge',input,{domain_id:'technical-operations',unknown:true})).toBe(first)
   expect((await client.query('SELECT domain_id,last_error_code FROM knowledge_demands WHERE id=$1',[first])).rows[0]).toEqual({domain_id:'technical-operations',last_error_code:null})
   expect(await lookupTechnicalAnswer(db,q,context)).toMatchObject({answer_status:'unknown'})
+  const constrained=await queueUnknownKnowledgeDemand(db,'query_domain_knowledge',{question:q,context:{...context,model:'Intel MacBook',runtime_mode:'recovery',architecture:'x86_64'}},{domain_id:'technical-operations',unknown:true})
+  expect(constrained).not.toBe(first)
+  expect((await client.query('SELECT context FROM knowledge_demands WHERE id=$1',[constrained])).rows[0].context).toMatchObject({model:'Intel MacBook',runtime_mode:'recovery',architecture:'x86_64'})
  }))
  it('prioritizes bounded technical synthesis and preserves Pause',()=>isolated(async(db,client)=>{
   const {task}=await fixture(db,client)
@@ -114,9 +118,12 @@ suite('original-question technical learning',()=>{
   expect(publicText).not.toContain(q);expect(publicText).not.toContain(id)
   expect(replay.records[0]!.context).toEqual({component:'fixture-runtime',component_version:'1'})
   expect((await getKnowledgeLearningProgress(db,id))?.status).toBe('published')
-  const {records,...status}=replay
-  expect(queryDomainKnowledgeOutputSchema.safeParse({...status,answers:records,cross_platform_examples:[]}).success).toBe(true)
+  const {records,crossPlatformRecords,...status}=replay
+  expect(queryDomainKnowledgeOutputSchema.safeParse({...status,answers:records,cross_platform_examples:crossPlatformRecords}).success).toBe(true)
   expect((await lookupTechnicalAnswer(db,q,{...context,component_version:'2'})).answer_status).not.toBe('complete')
+  expect((await lookupTechnicalAnswer(db,q,{...context,runtime_mode:'recovery'})).answer_status).not.toBe('complete')
+  expect((await lookupTechnicalAnswer(db,q,{...context,model:'Intel MacBook'})).answer_status).not.toBe('complete')
+  expect((await lookupTechnicalAnswer(db,q,{...context,architecture:'x86_64'})).answer_status).not.toBe('complete')
   const feedback=await queueUnknownKnowledgeDemand(db,'query_domain_knowledge',{question:q,context},{domain_id:'technical-operations',unknown:true,feedback_reason:'The private fixture is different.',reported_revision_refs:[]})
   expect(feedback).toBe(id)
   expect((await lookupTechnicalAnswer(db,q,context)).answer_status).not.toBe('complete')
@@ -128,7 +135,9 @@ suite('original-question technical learning',()=>{
   const firstIds=task.payload.evidence.map((item:any)=>item.id)
   await submitTechnicalAnswer(db,{pipeline_task_id:task.id,lease_token:await lease(client,task.id),artifact:draft(task,false)})
   const review=(await client.query("SELECT * FROM pipeline_tasks WHERE knowledge_demand_id=$1 AND task_type='technical_answer_review'",[id])).rows[0]
-  await submitTechnicalAnswer(db,{pipeline_task_id:review.id,lease_token:await lease(client,review.id),artifact:{...draft(task,false),approved:false}})
+  await submitTechnicalAnswer(db,{pipeline_task_id:review.id,lease_token:await lease(client,review.id),artifact:{...draft(task,false),approved:false,next_searches:['Find official Python inspection details.']}})
+  const focused=(await client.query("SELECT priority FROM pipeline_tasks WHERE knowledge_demand_id=$1 AND task_type='source_discovery' AND status='queued'",[id])).rows[0]
+  expect(focused?.priority).toBe(165)
   const next=(await client.query("SELECT * FROM pipeline_tasks WHERE knowledge_demand_id=$1 AND task_type='technical_answer' AND id<>$2",[id,task.id])).rows[0]
   expect(next).toBeTruthy();expect(next.payload.previous_answer).toBeTruthy()
   expect(next.payload.evidence.some((item:any)=>!firstIds.includes(item.id))).toBe(true)
@@ -209,6 +218,71 @@ suite('original-question technical learning',()=>{
   expect(response.structuredContent).toMatchObject({answer_status:'complete',answers:[{applicability:{assurance_level:'generic'}}]})
   expect((await client.query('SELECT count(*)::int count FROM knowledge_demands')).rows[0].count).toBe(before)
   expect((await getKnowledgeLearningProgress(db,id))?.status).toBe('published')
+ }))
+
+ it('puts relevant retained evidence ahead of old unrelated documents without losing document diversity',()=>isolated(async(db,client)=>{
+  const relevantId='ffffffff-ffff-4fff-8fff-ffffffffffff'
+  const {task}=await fixture(db,client,question(),context,async demandId=>{
+    for(let i=0;i<18;i++) {
+      const sourceId=i===17 ? relevantId : `00000000-0000-4000-8000-${String(i+1).padStart(12,'0')}`
+      const url=`https://example.com/${sourceId}`
+      await client.query("INSERT INTO source_candidates(id,knowledge_demand_id,canonical_url,document_type,title,status,source_kind,discovered_by) VALUES ($1,$2,$3,'command_reference','Controlled evidence','completed','official_web','fixture')",[sourceId,demandId,url])
+      const artifact=(await client.query("INSERT INTO source_artifacts(source_candidate_id,storage_path,content_hash,media_type,byte_size,status) VALUES ($1,'fixture.txt',$2,'text/plain',100,'chunked') RETURNING id",[sourceId,sha256Label(url)])).rows[0]
+      const content=i===17 ? 'Inspect Python library fixture configuration without modifying configuration.' : 'Unrelated Apple warranty coverage.'
+      await client.query("INSERT INTO source_fragments(source_artifact_id,ordinal,content,content_hash,status) VALUES ($1,0,$2,$3,'analyzed')",[artifact.id,content,sha256Label(url+content)])
+    }
+  })
+  expect(task.payload.evidence.some((item:any)=>item.source_id===relevantId)).toBe(true)
+  expect(new Set(task.payload.evidence.map((item:any)=>item.source_id)).size).toBe(16)
+ }))
+
+ it('retains all diagnosis capabilities instead of truncating the completeness requirement',()=>isolated(async(db,client)=>{
+  const {id,task}=await fixture(db,client,question(),context,async demandId=>{
+    const subquestions=Array.from({length:12},(_,i)=>({capability:`part-${i}`,label:`Fixture part ${i}`,status:'missing',explanation:'Controlled completeness requirement.',search_terms:['fixture']}))
+    await client.query('UPDATE knowledge_demand_diagnostics SET subquestions=$2::jsonb,missing_capabilities=$3 WHERE knowledge_demand_id=$1',
+      [demandId,JSON.stringify(subquestions),Array.from({length:12},(_,i)=>`additional-${i}`)])
+  })
+  expect(task.payload.required_capabilities).toHaveLength(24)
+  await submitTechnicalAnswer(db,{pipeline_task_id:task.id,lease_token:await lease(client,task.id),artifact:draft(task)})
+  const review=(await client.query("SELECT * FROM pipeline_tasks WHERE knowledge_demand_id=$1 AND task_type='technical_answer_review'",[id])).rows[0]
+  await expect(submitTechnicalAnswer(db,{pipeline_task_id:review.id,lease_token:await lease(client,review.id),artifact:{...draft(task),approved:true,covered_capabilities:task.payload.required_capabilities.slice(0,20)}})).rejects.toThrow('TECHNICAL_REVIEW_INCOMPLETE')
+ }))
+
+ it('accepts a short public question phrase supported by the trusted source quote',()=>isolated(async(db,client)=>{
+  const {task}=await fixture(db,client,'Read the controlled fixture.')
+  await expect(submitTechnicalAnswer(db,{pipeline_task_id:task.id,lease_token:await lease(client,task.id),artifact:draft(task)})).resolves.toMatchObject({answer_status:'complete'})
+ }))
+
+ it('replays a retained redacted request without storing its private address in public knowledge',()=>isolated(async(db,client)=>{
+  const {id,q,task}=await fixture(db,client,'Inspect a Python library fixture at 192.168.1.25 without changing configuration.')
+  expect((await client.query('SELECT question FROM knowledge_demands WHERE id=$1',[id])).rows[0].question).not.toContain('192.168.1.25')
+  await submitTechnicalAnswer(db,{pipeline_task_id:task.id,lease_token:await lease(client,task.id),artifact:draft(task)})
+  const review=(await client.query("SELECT * FROM pipeline_tasks WHERE knowledge_demand_id=$1 AND task_type='technical_answer_review'",[id])).rows[0]
+  await submitTechnicalAnswer(db,{pipeline_task_id:review.id,lease_token:await lease(client,review.id),artifact:{...draft(task),approved:true}})
+  const pub=(await client.query("SELECT id FROM pipeline_tasks WHERE knowledge_demand_id=$1 AND task_type='technical_answer_publication'",[id])).rows[0]
+  await publishTechnicalPipelineAnswer(db,pub.id,await lease(client,pub.id))
+  const replay=await lookupTechnicalAnswer(db,q,context)
+  expect(replay.answer_status).toBe('complete')
+  expect(JSON.stringify(replay.records)).not.toContain('192.168.1.25')
+ }))
+
+ it('keeps room for unseen evidence when prior citations use old oversized UTF-8 fragments',()=>isolated(async(db,client)=>{
+  const {id,task}=await fixture(db,client,question(),context,async demandId=>{
+    const fragments=await client.query('SELECT fragment.id,fragment.content FROM source_fragments fragment JOIN source_artifacts artifact ON artifact.id=fragment.source_artifact_id JOIN source_candidates source ON source.id=artifact.source_candidate_id WHERE source.knowledge_demand_id=$1',[demandId])
+    for(const fragment of fragments.rows) {
+      const content=fragment.content+'例'.repeat(4000)
+      await client.query('UPDATE source_fragments SET content=$2,content_hash=$3 WHERE id=$1',[fragment.id,content,sha256Label(content)])
+    }
+  })
+  expect(task.payload.evidence.every((item:any)=>Buffer.byteLength(item.content)<=4096)).toBe(true)
+  const answer=draft(task,false)
+  answer.candidate!.provenance=task.payload.evidence.filter((item:any)=>item.content.includes('Read the controlled fixture.')).map((item:any)=>({...conformanceFixture.candidate.provenance[0]!,url:item.canonical_url,content_hash:item.content_hash,evidence_fragment:'Read the controlled fixture.'}))
+  await submitTechnicalAnswer(db,{pipeline_task_id:task.id,lease_token:await lease(client,task.id),artifact:answer})
+  const review=(await client.query("SELECT * FROM pipeline_tasks WHERE knowledge_demand_id=$1 AND task_type='technical_answer_review'",[id])).rows[0]
+  await submitTechnicalAnswer(db,{pipeline_task_id:review.id,lease_token:await lease(client,review.id),artifact:{...answer,approved:false}})
+  const next=(await client.query("SELECT payload FROM pipeline_tasks WHERE knowledge_demand_id=$1 AND task_type='technical_answer' AND id<>$2",[id,task.id])).rows[0]
+  expect(next).toBeTruthy()
+  expect(Buffer.byteLength(next.payload.evidence.map((item:any)=>item.content).join(''))).toBeLessThanOrEqual(65536)
  }))
 
 })

@@ -2522,8 +2522,12 @@ async function queueDemandDiscoveryWork(
     document_role: string
     priority: number
     domain_id: string
+    focused_technical_discovery: boolean
   }>(
     `SELECT
+       (demand.domain_id='technical-operations' AND EXISTS(SELECT 1 FROM technical_demand_answers answer
+         WHERE answer.demand_id=demand.id AND answer.status IN ('published','unresolved')
+           AND answer.answer_status<>'complete' AND cardinality(answer.next_searches)>0)) AS focused_technical_discovery,
        demand.domain_id, demand.id,
        demand.question,
        demand.tool_name,
@@ -2553,7 +2557,10 @@ async function queueDemandDiscoveryWork(
          FROM pipeline_tasks active
          WHERE active.knowledge_demand_id = demand.id
            AND active.status IN ('queued', 'claimed', 'running')
-           AND (demand.domain_id='network' OR active.task_type IN ('source_discovery','source_acquisition','source_conversion','source_chunking','technical_answer','technical_answer_review','technical_answer_publication','demand_diagnosis'))
+           AND (demand.domain_id='network' OR active.task_type IN ('source_discovery','source_acquisition','source_conversion','source_chunking','demand_diagnosis')
+             OR active.task_type IN ('technical_answer','technical_answer_review','technical_answer_publication') AND NOT EXISTS(
+               SELECT 1 FROM technical_demand_answers answer WHERE answer.demand_id=demand.id
+                 AND answer.status IN ('published','unresolved') AND answer.answer_status<>'complete' AND cardinality(answer.next_searches)>0))
        )
      ORDER BY demand.priority DESC, topic.last_served_at NULLS FIRST,
               topic.priority_score DESC NULLS LAST,
@@ -2672,12 +2679,13 @@ async function queueDemandDiscoveryWork(
   const taskId = await insertTask(client, {
     type: 'source_discovery',
     stage: 'discover',
-    priority: aiPriorities.demand,
+    priority: row.focused_technical_discovery ? 165 : aiPriorities.demand,
     dedupeKey: `demand:${row.id}:discover`,
     coverageTargetId: row.coverage_target_id,
     knowledgeDemandId: row.id,
     queueClass: 'demand',
     payload: {
+      focused_technical_discovery: row.focused_technical_discovery,
       coverage_target: {
         id: row.coverage_target_id,
         vendor_slug: row.vendor_slug,
@@ -3841,7 +3849,7 @@ async function ensureStreamingWorkInTransaction(
     `UPDATE pipeline_tasks
         SET priority = CASE
           WHEN task_type = 'demand_diagnosis' THEN $7::smallint
-          WHEN task_type IN ('technical_answer','technical_answer_review') THEN 165::smallint
+          WHEN task_type IN ('technical_answer','technical_answer_review') OR task_type='source_discovery' AND payload->>'focused_technical_discovery'='true' THEN 165::smallint
           WHEN knowledge_demand_id IS NOT NULL THEN $8::smallint
           WHEN task_type = 'expert_research' THEN $1::smallint
           WHEN task_type = 'candidate_deep_review'
@@ -3856,7 +3864,7 @@ async function ensureStreamingWorkInTransaction(
         AND task_type = ANY($9::text[])
         AND priority IS DISTINCT FROM CASE
           WHEN task_type = 'demand_diagnosis' THEN $7::smallint
-          WHEN task_type IN ('technical_answer','technical_answer_review') THEN 165::smallint
+          WHEN task_type IN ('technical_answer','technical_answer_review') OR task_type='source_discovery' AND payload->>'focused_technical_discovery'='true' THEN 165::smallint
           WHEN knowledge_demand_id IS NOT NULL THEN $8::smallint
           WHEN task_type = 'expert_research' THEN $1::smallint
           WHEN task_type = 'candidate_deep_review'

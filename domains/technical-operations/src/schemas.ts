@@ -45,9 +45,9 @@ const explanation = z.string().trim().min(3).max(1000)
 export const answerDraftSchema = z.strictObject({
   question_key: z.string().regex(/^sha256:[0-9a-f]{64}$/),
   answer_status: z.enum(['complete','partial','unknown']),
-  covered_capabilities: z.array(z.string().trim().min(1).max(120)).max(20),
+  covered_capabilities: z.array(z.string().trim().min(1).max(120)).max(24),
   candidate: candidateSchema.nullable(),
-  missing_capabilities: z.array(z.string().trim().min(1).max(120)).max(20),
+  missing_capabilities: z.array(z.string().trim().min(1).max(120)).max(24),
   missing_context: z.array(explanation).max(10),
   next_searches: z.array(explanation).max(12),
   reason: explanation

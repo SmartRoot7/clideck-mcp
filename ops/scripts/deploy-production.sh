@@ -75,6 +75,11 @@ if ! ssh -o ConnectTimeout=10 "$remote_host" sudo -n true 2>/dev/null; then
   exit 1
 fi
 
+printf '==> Verify backup space and recover an explicitly selected incomplete dump\n'
+ssh -o ConnectTimeout=10 "$remote_host" sudo -n /bin/bash -s -- \
+  "${CLIDECK_MCP_BACKUP_ROOT:-/var/backups/clideck-mcp}" \
+  "${CLIDECK_MCP_CLEANUP_FAILED_BACKUP_SHA:-}" < ops/scripts/prepare-backup-space.sh
+
 printf '==> Preflight %s\n' "$commit_sha"
 pnpm check
 

@@ -433,8 +433,8 @@ export function createPublicMcpServer(
     wrapTool(dependencies, 'query_domain_knowledge', async (input) => {
       if (input.domain_id==='technical-operations') {
         const result=await lookupTechnicalAnswer(dependencies.database,input.question,input.context,input.limit)
-        const {records,...status}=result
-        return {...status,answers:records,cross_platform_examples:[]}
+        const {records,crossPlatformRecords,...status}=result
+        return {...status,answers:records,cross_platform_examples:crossPlatformRecords}
       }
       if (input.domain_id === 'network') {
         const parsedContext = networkContextInputSchema.parse(input.context)
@@ -533,7 +533,7 @@ export function createPublicMcpServer(
         const result=await lookupTechnicalAnswer(dependencies.database,input.question,input.context,input.limit)
         const resolution=await resolveKnowledgeContext(dependencies.database,input.context)
         return {context:resolution.publicContext,answers:result.records.map(technicalLegacyAnswer),
-          cross_platform_examples:[],unknown:result.unknown,answer_status:result.answer_status,coverage:result.coverage,
+          cross_platform_examples:result.crossPlatformRecords.map(technicalLegacyAnswer),unknown:result.unknown,answer_status:result.answer_status,coverage:result.coverage,
           next_action:result.records.length ? 'use_answer' as const : 'request_expert_answer' as const}
       }
 
@@ -613,7 +613,7 @@ export function createPublicMcpServer(
         const result=await lookupTechnicalAnswer(dependencies.database,input.goal,input.context,input.limit)
         const resolution=await resolveKnowledgeContext(dependencies.database,input.context)
         return {context:resolution.publicContext,answers:result.records.map(technicalLegacyAnswer),
-          cross_platform_examples:[],unknown:result.unknown,answer_status:result.answer_status,coverage:result.coverage,
+          cross_platform_examples:result.crossPlatformRecords.map(technicalLegacyAnswer),unknown:result.unknown,answer_status:result.answer_status,coverage:result.coverage,
           next_action:result.records.length ? 'use_answer' as const : 'request_expert_answer' as const}
       }
 

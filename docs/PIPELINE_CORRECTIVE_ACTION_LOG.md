@@ -14,7 +14,7 @@ Pipeline enabled, capacity 8. Operator settings version 8 use `gpt-6-luna`
 low/medium, High fallback `gpt-5.6-terra` medium; unchanged at this acceptance.
 
 - **Learning, October 17:** confirmed lost leased diagnosis and run-selection
-  starvation below. Correction is deployed as `266de23`; scoped technical learning is prepared for the next canonical deployment.
+  starvation below. Correction is deployed as `266de23`; technical rollout is blocked at backup capacity; see the disk incident below.
   Docker Desktop was restarted with user approval; all 353 tests and 250 evals pass,
   and the canonical deployment completed with backup/migrations/smokes. The recurring check prioritizes actual question
   closure, repeated discovery and stalled sources, including software questions.
@@ -47,6 +47,71 @@ low/medium, High fallback `gpt-5.6-terra` medium; unchanged at this acceptance.
 Resolved incidents are condensed below. Full evidence/test counts and previous
 soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.md`.
 
+
+## 2026-10-17 — Technical request scope and relevant-evidence follow-up
+
+- A focused regression reproduced a new exact-cache collision: the same question
+  on Intel/M1 or normal/recovery shared a completion binding because the first
+  technical mapper retained only public pack dimensions. The raw request
+  constraints must remain available to the reviewer and in the private exact key,
+  without inventing public hardware applicability or conflating OS/library versions.
+- Retain bounded vendor/model/mode/architecture/execution-environment constraints
+  privately in intake, lease snapshots and exact lookup; normal/absent mode and
+  placeholder vendor normalize consistently with existing legacy requests. Related
+  searches still use the typed documented context. Explicitly mismatched related
+  OS/component versions appear as examples, never complete request answers.
+- A controlled PostgreSQL regression with 18 unrelated documents and a relevant
+  document showed that ordering document UUIDs could exclude the relevant evidence
+  from the first 16-span window. Rank matches to original-question terms within
+  and across documents while preserving a diverse, bounded evidence window.
+  When a partial review requests focused searches, materialize those searches
+  alongside further retained-evidence work at the same 165 priority; FIFO can
+  advance missing documentation instead of consuming unrelated bulk facts first.
+  No global cap, quota, cooldown or source reservation changes.
+- Old reviewed completion bindings are requeued by migration 050 for the corrected
+  scope. No public revision rewrite or cancellation of fresh leases. Changed task
+  snapshots supersede normally through the submission guard.
+- Regression evidence: ignored old/new scope probe reproduces the collision on
+  initial code and distinguishes constraints on the correction. Draft integration
+  tests run via local aliases against disposable PostgreSQL, leaving the current
+  clean deployment source unchanged. Record final tests/deployed SHA/real-cohort
+  outcomes after the follow-up canonical deployment.
+
+- Additional verified fixes: retain every diagnosis capability (up to 24 rather
+  than silently truncating to 20); keep short public phrases present in trusted
+  source quotes while rejecting private echoes; share intake's existing strict
+  redaction when computing repeat-query bindings. Old large UTF-8 fragments use
+  byte-safe spans so retained citations leave capacity for new evidence.
+- Current validation: Node 24 type checks/domain conformance pass; 32 real-role
+  technical/urgent DB regressions and five backup guard regressions pass. Final
+  full canonical gates remain required.
+
+## 2026-10-17 — Backup exhausted production disk before application switch
+
+- At 07:12:26 UTC PostgreSQL checkpointer PANIC: could not write
+  `pg_logical/replorigin_checkpoint.tmp`, `No space left on device`. Repeated
+  recovery checkpoints failed for the same reason. Root filesystem 250 GiB was
+  100% full; `/var/backups/clideck-mcp` occupied 168 GiB. The failed deployment's
+  own incomplete archive was 8,399,166,568 bytes in
+  `deploy-20261017T064517Z-c7b573e`. `pg_dump` then reported SSL EOF while copying
+  `source_fragments`; this was a disk failure, not evidence of a network outage.
+  MCP was unavailable; PostgreSQL 16's official disk-full documentation confirms
+  this failure mode: https://www.postgresql.org/docs/16/disk-full.html.
+- Clean-main candidate `c7b573e56e8bf3de697c532fa679daf42e5a967e` passed 374
+  tests, 250 evals and Linux build but never reached migration/switch. Production
+  remains `266de23`. The canonical cleanup restored the local executor pool.
+- Cause: backup had neither capacity preflight nor a free-space reserve; failed
+  archives were retained. Correct the canonical flow, not database state by hand.
+  New preflight may remove only an explicitly selected failed SHA's incomplete
+  dump, never completed or unrelated backups. Require estimated dump headroom
+  plus a 2-GiB database reserve; the backup monitors free space, terminates only
+  its own dump and cleans its partial on failure. Deploy uses the tested candidate
+  backup helper so the guard applies to this first corrected deployment.
+- Recovery pending through `ops/scripts/deploy-production.sh` on the clean
+  corrective commit with `CLIDECK_MCP_CLEANUP_FAILED_BACKUP_SHA=c7b573e...`.
+  No manual SSH deletion/SQL/service restart or password storage. Completed
+  history remains intact. Record resulting free space/readiness and any remaining
+  capacity blocker before proceeding with a full backup/deploy.
 
 ## 2026-10-17 — Technical questions lost between publication and exact retrieval
 

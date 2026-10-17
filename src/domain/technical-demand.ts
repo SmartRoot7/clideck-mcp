@@ -4,9 +4,10 @@ import type { Database, DatabaseClient } from '../db.js'
 import { sha256Label } from '../crypto.js'
 import { searchDomainKnowledge, createDomainKnowledgeRevision } from './domain-knowledge.js'
 import { publishKnowledgeBatch } from './publication.js'
-import { technicalDomainId, technicalQuestionKey, technicalEvidenceSchema, parseTechnicalDraft, parseTechnicalReview, bindTechnicalCandidate, assertTechnicalReviewCoverage } from './technical-learning.js'
+import { technicalDomainId, retainedTechnicalQuestion, technicalQuestionKey, technicalEvidenceSchema, parseTechnicalDraft, parseTechnicalReview, bindTechnicalCandidate, assertTechnicalReviewCoverage } from './technical-learning.js'
 import type { PipelineTaskRow } from './pipeline.js'
 import type { PublicKnowledge } from './schemas.js'
+import { buildSearchQueries } from './search-query.js'
 
 const policyVersion = 'technical-answer-v1'
 type Client = Pick<DatabaseClient, 'query'>
@@ -15,8 +16,20 @@ type Enqueue = (client: DatabaseClient, input: {
   dedupeKey: string; knowledgeDemandId: string; payload: Record<string, unknown>;
   reasoningEffort?: 'low' | 'medium'; queueClass: 'demand'
 }) => Promise<string | null>
-const scopeFor = (question: string, context: Record<string, unknown>) =>
-  technicalRequestContext(question, (context['raw_context'] as Record<string, unknown> | undefined) ?? context)
+export const technicalRequestScope = (question: string, context: Record<string, unknown>) => {
+  const raw=(context['raw_context'] as Record<string, unknown> | undefined) ?? context
+  const value=(key:string)=>typeof raw[key]==='string' && raw[key].trim() ? z.string().trim().min(1).max(240).parse(raw[key]) : undefined
+  const vendor=value('vendor')
+  // Retain legacy request constraints privately even when the public component
+  // pack has no hardware/mode applicability dimension. They cannot share an
+  // exact completion cache, and the reviewer must see the requested environment.
+  return {...technicalRequestContext(retainedTechnicalQuestion(question),raw),
+    runtime_mode:value('runtime_mode') ?? 'normal',
+    ...(vendor && !/^not[ -]specified$/i.test(vendor) ? {vendor:vendor.toLowerCase()} : {}),
+    ...(value('model') ? {model:value('model')!} : {}),
+    ...(value('architecture') ? {architecture:value('architecture')!} : {}),
+    ...(value('execution_environment') ? {execution_environment:value('execution_environment')!} : {})}
+}
 export const technicalFeedbackHash = (context: Record<string, unknown>) => sha256Label(JSON.stringify([
   context['feedback_reason'] ?? null, context['reported_revision_refs'] ?? []
 ]))
@@ -31,7 +44,7 @@ const snapshotSchema = z.object({
 
 /** Read-only exact replay: a keyword-related fact alone cannot close a question. */
 export async function lookupTechnicalAnswer(client: Client, question: string, rawContext: Record<string, unknown>, limit = 5) {
-  const context = scopeFor(question, rawContext)
+  const context = technicalRequestScope(question, rawContext)
   const key = technicalQuestionKey(question, context)
   const reviewed = await client.query<{ revision_id: string; answer_status: 'complete' | 'partial'; covered_capabilities: string[] }>(
     `SELECT answer.revision_id, answer.answer_status, answer.covered_capabilities
@@ -47,10 +60,16 @@ export async function lookupTechnicalAnswer(client: Client, question: string, ra
   )
   const exact = reviewed.rows[0]
   const found = await searchDomainKnowledge(client, { domainId: technicalDomainId, question,
-    context: exact ? {} : context, limit,
+    context: exact ? {} : technicalRequestContext('',context), limit,
     ...(exact ? { revisionIds: [exact.revision_id] } : {}) })
-  const records = found.records.map(record => publicRecordSchema.parse(record))
-  return { domain_id: technicalDomainId, context, records,
+  const related = found.records.map(record => publicRecordSchema.parse(record))
+  const incompatible=(record:PackPublicRecord)=>Boolean(
+    context.operating_system && record.context.operating_system && context.operating_system!==record.context.operating_system ||
+    context.operating_system_version && record.context.operating_system_version && context.operating_system_version!==record.context.operating_system_version ||
+    context.component_version && record.context.component_version && context.component_version!==record.context.component_version)
+  const records=related.filter(record=>!incompatible(record))
+  const crossPlatformRecords=related.filter(incompatible)
+  return { domain_id: technicalDomainId, context, records, crossPlatformRecords,
     unknown: !exact && records.length === 0,
     answer_status: exact && records.length ? exact.answer_status : records.length ? 'partial' as const : 'unknown' as const,
     coverage: (exact?.covered_capabilities ?? []).map(capability => ({ capability, label: capability, status: 'covered' as const, answer_refs: records.map(record => record.revision_ref) })),
@@ -105,7 +124,7 @@ export async function queueTechnicalAnswer(client: DatabaseClient, enqueue: Enqu
       ORDER BY demand.priority DESC, demand.first_seen_at
       FOR UPDATE OF demand SKIP LOCKED`)
   for (const demand of selected.rows) {
-    const context = scopeFor(demand.question, demand.context)
+    const context = technicalRequestScope(demand.question, demand.context)
     const questionKey = technicalQuestionKey(demand.question, context)
     const feedbackHash = technicalFeedbackHash(demand.context)
     const prior = await client.query<{ candidate: unknown; payload: Record<string, unknown> }>(
@@ -130,31 +149,36 @@ export async function queueTechnicalAnswer(client: DatabaseClient, enqueue: Enqu
             AND task_type='source_discovery' AND status='completed' ORDER BY completed_at DESC LIMIT 10) history
         ) urls ON source.canonical_url=urls.url
       ), used AS MATERIALIZED (
-        SELECT ref->>'id' AS id, coalesce((ref->>'offset')::int,0) AS span_offset
+        SELECT ref->>'id' AS id, coalesce((ref->>'offset')::int,0) AS span_offset, ref->>'content_hash' AS content_hash
         FROM technical_demand_answers answer CROSS JOIN LATERAL jsonb_array_elements(answer.evidence_refs) ref
         WHERE answer.demand_id=$1 AND answer.question_key=$2 AND answer.feedback_hash=$3 AND answer.policy_version=$4
       ), ranked AS (
         SELECT fragment.id, source.id source_id, source.canonical_url, source.source_ref,
           source.source_kind, source.document_type, source.title, source.document_version,
           source.document_date::text, fragment.section_title, fragment.content_hash,
-          span.span_offset, substring(fragment.content FROM span.span_offset+1 FOR 4096) content,
+          span.span_offset, substring(fragment.content FROM span.span_offset+1 FOR widths.span_chars) content,
+          relevance.matches AS term_matches,
           row_number() OVER (PARTITION BY source.id ORDER BY
-            CASE WHEN fragment.content ILIKE '%' || $5 || '%' THEN 0 ELSE 1 END,
-            fragment.id, span.span_offset) doc_rank
+            relevance.matches DESC, fragment.ordinal, span.span_offset) doc_rank
         FROM linked_sources linked JOIN source_candidates source ON source.id=linked.id
         JOIN source_artifacts artifact ON artifact.source_candidate_id=source.id
         JOIN source_fragments fragment ON fragment.source_artifact_id=artifact.id
-        CROSS JOIN LATERAL generate_series(0,greatest(0,char_length(fragment.content)-1),4096) span(span_offset)
+        CROSS JOIN LATERAL (SELECT CASE
+          WHEN octet_length(fragment.content)<=4096 OR octet_length(fragment.content)=char_length(fragment.content) THEN 4096
+          ELSE 1024 END AS span_chars) widths
+        CROSS JOIN LATERAL generate_series(0,greatest(0,char_length(fragment.content)-1),widths.span_chars) span(span_offset)
+        CROSS JOIN LATERAL (SELECT count(*)::int matches FROM unnest($5::text[]) term
+          WHERE fragment.content ILIKE '%' || term || '%') relevance
         WHERE source.source_kind='official_web' AND source.canonical_url LIKE 'https://%'
-          AND NOT EXISTS (SELECT 1 FROM used WHERE used.id=fragment.id::text AND used.span_offset=span.span_offset)
-      ) SELECT * FROM ranked ORDER BY doc_rank, source_id, id, span_offset LIMIT 16`,
-      [demand.id,questionKey,feedbackHash,policyVersion,context.component ?? context.operating_system ?? ''])
+          AND NOT EXISTS (SELECT 1 FROM used WHERE used.id=fragment.id::text AND used.span_offset=span.span_offset AND used.content_hash=fragment.content_hash)
+      ) SELECT * FROM ranked ORDER BY doc_rank, term_matches DESC, source_id, id, span_offset LIMIT 16`,
+      [demand.id,questionKey,feedbackHash,policyVersion,buildSearchQueries(demand.question).tokens.slice(0,24)])
     if (!found.rows.length) continue
     const evidence = [...retained]
     const refs: Array<Record<string, unknown>> = []
     let bytes = evidence.reduce((sum,item)=>sum+Buffer.byteLength(item.content),0)
     for (const row of found.rows) {
-      const { span_offset: offset, doc_rank: _rank, ...raw } = row
+      const { span_offset: offset, doc_rank: _rank, term_matches: _matches, ...raw } = row
       const fragment = technicalEvidenceSchema.parse(raw)
       const size = Buffer.byteLength(fragment.content)
       if (evidence.length>=16 || bytes+size>65536) break
@@ -163,7 +187,7 @@ export async function queueTechnicalAnswer(client: DatabaseClient, enqueue: Enqu
     }
     if (!refs.length) continue
     const evidenceHash = sha256Label(JSON.stringify([questionKey, feedbackHash, policyVersion, refs, retained.map(item=>item.content_hash)]))
-    const required = [...new Set([...(demand.diagnosis.subquestions ?? []).map(part=>part.capability),...(demand.diagnosis.missing_capabilities ?? [])])].slice(0,20)
+    const required = [...new Set([...(demand.diagnosis.subquestions ?? []).map(part=>part.capability),...(demand.diagnosis.missing_capabilities ?? [])])]
     const inserted = await client.query<{id:string}>(`INSERT INTO technical_demand_answers
       (demand_id,question_key,feedback_hash,requested_context,evidence_hash,evidence_refs,policy_version,required_capabilities)
       VALUES ($1,$2,$3,$4::jsonb,$5,$6::jsonb,$7,$8) ON CONFLICT (demand_id,evidence_hash) DO NOTHING RETURNING id`,
@@ -189,16 +213,17 @@ async function currentSnapshot(client: Client, task: PipelineTaskRow) {
   const result = await client.query<{ question:string;context:Record<string,unknown> }>(
     'SELECT question,context FROM knowledge_demands WHERE id=$1 FOR UPDATE', [task.knowledge_demand_id])
   const demand = result.rows[0]
-  const current = demand && technicalQuestionKey(demand.question,scopeFor(demand.question,demand.context))===snapshot.question_key
+  const current = demand && technicalQuestionKey(demand.question,technicalRequestScope(demand.question,demand.context))===snapshot.question_key
     && technicalFeedbackHash(demand.context)===snapshot.feedback_hash
   if (!current) await client.query("UPDATE technical_demand_answers SET status='superseded',updated_at=now() WHERE id=$1",[snapshot.answer_id])
   return { snapshot, current }
 }
 
-function assertNoPrivateEcho(candidate: unknown, question: string) {
+function assertNoPrivateEcho(candidate: unknown, question: string, evidence:Array<{content:string}>) {
   const serialized=JSON.stringify(candidate)
   const tokens=[question,...question.matchAll(/(?:\/Users\/|\/home\/|\/opt\/)[^\s"']+|\b(?:\d{1,3}\.){3}\d{1,3}\b/g)].map(value=>typeof value==='string' ? value : value[0])
-  if (tokens.some(value=>value.length>=7 && serialized.includes(value))) throw new Error('TECHNICAL_PRIVATE_CONTEXT_IN_PUBLIC_ANSWER')
+  const publicLiteral=(value:string)=>evidence.some(fragment=>fragment.content.replace(/\s+/g,' ').includes(value.replace(/\s+/g,' ')))
+  if (tokens.some(value=>value.length>=7 && serialized.includes(value) && !publicLiteral(value))) throw new Error('TECHNICAL_PRIVATE_CONTEXT_IN_PUBLIC_ANSWER')
 }
 
 export async function submitTechnicalArtifact(client: DatabaseClient, task: PipelineTaskRow, artifact: unknown, enqueue: Enqueue): Promise<Record<string, unknown>> {
@@ -208,7 +233,7 @@ export async function submitTechnicalArtifact(client: DatabaseClient, task: Pipe
   const parsed=review ? parseTechnicalReview(artifact) : parseTechnicalDraft(artifact)
   if (parsed.question_key!==snapshot.question_key) throw new Error('TECHNICAL_QUESTION_KEY_MISMATCH')
   const candidate=parsed.candidate ? bindTechnicalCandidate(parsed.candidate,snapshot.evidence,`${snapshot.stable_key}.${parsed.candidate.record_type}`,new Date().toISOString().slice(0,10)) : null
-  if (candidate) assertNoPrivateEcho(candidate,snapshot.question)
+  if (candidate) assertNoPrivateEcho(candidate,snapshot.question,snapshot.evidence)
   if (review) assertTechnicalReviewCoverage(parseTechnicalReview({...parsed,candidate}), {
     questionKey:snapshot.question_key,requestedContext:technicalRequestContext('',snapshot.requested_context),requiredCapabilities:snapshot.required_capabilities },candidate)
   const approved=review && parseTechnicalReview(parsed).approved
@@ -246,7 +271,7 @@ export async function publishTechnicalAnswer(client: DatabaseClient, task: Pipel
   if (!approved.approved || !approved.candidate) throw new Error('TECHNICAL_UNREVIEWED_PUBLICATION')
   const candidate=bindTechnicalCandidate(approved.candidate,snapshot.evidence,`${snapshot.stable_key}.${approved.candidate.record_type}`,new Date().toISOString().slice(0,10))
   assertTechnicalReviewCoverage(approved,{questionKey:snapshot.question_key,requestedContext:technicalRequestContext('',snapshot.requested_context),requiredCapabilities:snapshot.required_capabilities},candidate)
-  assertNoPrivateEcho(candidate,snapshot.question)
+  assertNoPrivateEcho(candidate,snapshot.question,snapshot.evidence)
   const revision=await createDomainKnowledgeRevision(client,technicalDomainId,candidate,{createdBy:'researcher',validationLevel:'documentation_reviewed'})
   await publishKnowledgeBatch(client,[{itemId:revision.itemId,revisionId:revision.revisionId}],'Reviewed technical user-gap answer')
   await client.query(`UPDATE technical_demand_answers SET status='published',revision_id=$2,updated_at=now() WHERE id=$1`,[snapshot.answer_id,revision.revisionId])

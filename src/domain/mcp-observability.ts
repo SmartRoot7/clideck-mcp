@@ -1,5 +1,5 @@
 import { isTechnicalOperationsQuestion, technicalRequestContext } from '@clideck/domain-technical-operations'
-import { technicalFeedbackHash } from './technical-demand.js'
+import { technicalFeedbackHash, technicalRequestScope } from './technical-demand.js'
 import { isIP } from 'node:net'
 
 import type { Database, DatabaseClient } from '../db.js'
@@ -233,9 +233,9 @@ async function prepareKnowledgeDemand(
   if (toolName==='query_domain_knowledge' && outputRecord['domain_id']==='technical-operations') {
     if (typeof questionValue!=='string') return null
     const question=sanitizeScalarString(questionValue).slice(0,2000)
-    const context={...technicalRequestContext(question,rawTechnicalContext),learning_domain_id:'technical-operations',
+    const context={...technicalRequestScope(question,rawTechnicalContext),learning_domain_id:'technical-operations',
       ...(typeof outputRecord['feedback_reason']==='string' ? {feedback_reason:outputRecord['feedback_reason'],reported_revision_refs:outputRecord['reported_revision_refs'] ?? []} : {})}
-    return {question,context:{...context,technical_feedback_hash:technicalFeedbackHash(context)},demandKey:sha256(JSON.stringify(stableValue({domain_id:'technical-operations',question,context:technicalRequestContext(question,rawTechnicalContext)})))}
+    return {question,context:{...context,technical_feedback_hash:technicalFeedbackHash(context)},demandKey:sha256(JSON.stringify(stableValue({domain_id:'technical-operations',question,context:technicalRequestScope(question,rawTechnicalContext)})))}
   }
   let contextValue = recordOf(outputRecord['context'])
   if (

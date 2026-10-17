@@ -9,6 +9,7 @@ import {
   type PackContext,
   type TechnicalAnswerReview,
 } from '@clideck/domain-technical-operations'
+import { sanitizeSnapshot } from './snapshot.js'
 import { sha256Label } from '../crypto.js'
 import { escalateKnowledgeRisk, type KnowledgeRiskLevel } from './risk.js'
 
@@ -23,9 +24,14 @@ export const technicalEvidenceSchema = z.strictObject({
 })
 export type TechnicalEvidence = z.infer<typeof technicalEvidenceSchema>
 
+/** Use the same retained question as learning intake; never hash raw secrets
+ * into a different completion binding from their deliberately redacted form. */
+export function retainedTechnicalQuestion(question:string):string {
+  return sanitizeSnapshot(question.replaceAll('\u0000',''),'strict').sanitized.slice(0,2000)
+}
 export function technicalQuestionKey(question:string, context:PackContext):string {
   const scope=Object.fromEntries(Object.entries(context).filter(([,value])=>value!==undefined).sort(([left],[right])=>left.localeCompare(right)))
-  return sha256Label(JSON.stringify([question.trim(),scope]))
+  return sha256Label(JSON.stringify([retainedTechnicalQuestion(question).trim(),scope]))
 }
 
 function object(value:unknown):Record<string,unknown> {

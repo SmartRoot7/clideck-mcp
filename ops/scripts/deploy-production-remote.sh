@@ -50,9 +50,12 @@ set -a
 # shellcheck disable=SC1091
 source "$config_directory/backup.env"
 set +a
-BACKUP_DIRECTORY="$backup_directory" \
+if ! BACKUP_DIRECTORY="$backup_directory" \
   BACKUP_RETENTION_DAYS=36500 \
-  "$previous_release/ops/scripts/backup.sh"
+  "$candidate_directory/ops/scripts/backup.sh"; then
+  printf 'Backup failed before application switch; incomplete dump cleanup is owned by backup.sh\n' >&2
+  exit 1
+fi
 tar -C /etc -czf "$backup_directory/etc-clideck-mcp.tar.gz" clideck-mcp
 
 switched=0
