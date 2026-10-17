@@ -133,7 +133,10 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
   `deploy-20260930T211222Z-7bc9125` (3,356,557,867 bytes).
   Their combined size is about 9.4 GiB. This irreversible historical cleanup
   was explicitly approved by the user at 07:23 UTC for these three targets only.
-  No historical target was removed before approval. The deployment will rerun every ordinary gate after capacity
+  The first approved attempt stopped before deletion: SSH dropped an empty optional
+  SHA argument and shifted the CSV into its slot. Quote the remote command arguments,
+  including empty slots; a regression exercises the canonical preflight across a
+  shell boundary. No historical target was removed before this correction. The deployment will rerun every ordinary gate after capacity
   is available. New helper tests cover approved exact lists and protection of
   the newest two backups. No password storage or ad hoc production changes.
 - Verification at 07:21 UTC: all 385 tests and 250/250 evals pass on disposable

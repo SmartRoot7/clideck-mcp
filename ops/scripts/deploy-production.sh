@@ -79,10 +79,12 @@ if [[ -n "${CLIDECK_MCP_PRUNE_APPROVED_BACKUPS:-}" && ! "$CLIDECK_MCP_PRUNE_APPR
   printf 'Approved backup list contains invalid characters\n' >&2; exit 1
 fi
 printf '==> Verify backup space and recover an explicitly selected incomplete dump\n'
-ssh -o ConnectTimeout=10 "$remote_host" sudo -n /bin/bash -s -- \
+# SSH joins remote arguments into a shell command; quote empty optional slots too.
+printf -v backup_preflight_command 'sudo -n /bin/bash -s -- %q %q %q' \
   "${CLIDECK_MCP_BACKUP_ROOT:-/var/backups/clideck-mcp}" \
   "${CLIDECK_MCP_CLEANUP_FAILED_BACKUP_SHA:-}" \
-  "${CLIDECK_MCP_PRUNE_APPROVED_BACKUPS:-}" < ops/scripts/prepare-backup-space.sh
+  "${CLIDECK_MCP_PRUNE_APPROVED_BACKUPS:-}"
+ssh -o ConnectTimeout=10 "$remote_host" "$backup_preflight_command" < ops/scripts/prepare-backup-space.sh
 
 printf '==> Preflight %s\n' "$commit_sha"
 pnpm check

@@ -61,3 +61,14 @@ it('prunes only an explicitly approved historical set while protecting the newes
  expect(approved.status,approved.stderr).toBe(0)
  const remaining=await readdir(f.root);for(const name of names.slice(0,3))expect(remaining).not.toContain(name);for(const name of names.slice(3))expect(remaining).toContain(name)
 })
+
+it('preserves the empty failed-SHA slot through the canonical SSH preflight',async()=>{
+ const f=await fixture();const names=['deploy-20260930T052121Z-04ddae1','deploy-20261009T072249Z-53c60bf','deploy-20261017T055739Z-266de23']
+ for(const name of names){const dir=join(f.root,name);await mkdir(dir);await writeFile(join(dir,'previous-release.txt'),'fixture');await writeFile(join(dir,'clideck-mcp-fixture.dump'),'complete');await writeFile(join(dir,'clideck-mcp-fixture.dump.sha256'),'checksum')}
+ await writeFile(join(f.bin,'ssh'),'#!/bin/bash\nshift 3\n/bin/bash -c "$*"\n',{mode:0o755})
+ await writeFile(join(f.bin,'sudo'),'#!/bin/bash\nshift\nexec "$@"\n',{mode:0o755})
+ const deploy=await readFile(resolve('ops/scripts/deploy-production.sh'),'utf8')
+ const preflight=deploy.slice(deploy.indexOf("printf '==> Verify backup space"),deploy.indexOf("printf '==> Preflight"))
+ const result=spawnSync('bash',['-c',preflight],{env:{...f.env,remote_host:'fixture',CLIDECK_MCP_BACKUP_ROOT:f.root,CLIDECK_MCP_CLEANUP_FAILED_BACKUP_SHA:'',CLIDECK_MCP_PRUNE_APPROVED_BACKUPS:names[0]!},encoding:'utf8'})
+ expect(result.status,result.stderr).toBe(0);expect(await readdir(f.root)).not.toContain(names[0]);expect(await readdir(f.root)).toContain(names[2])
+})
