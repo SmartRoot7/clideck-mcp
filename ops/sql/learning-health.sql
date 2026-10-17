@@ -19,9 +19,13 @@ WITH recent AS MATERIALIZED (
     'ae85265e-9d39-4024-ab60-66e6b13277bb'
   )
 ), samples AS (
-  SELECT demand.id, left(demand.question,180) question, demand.status,
+  SELECT demand.id, demand.domain_id, left(demand.question,180) question, demand.status,
     demand.last_error_code, demand.replay_status, demand.demand_count,
     round(extract(epoch FROM now()-demand.first_seen_at)/3600,1) age_hours,
+    (SELECT jsonb_build_object('status',answer.status,'answer_status',answer.answer_status,
+       'covered',answer.covered_capabilities,'missing',answer.missing_capabilities,
+       'missing_context',answer.missing_context,'reason',answer.reason,'updated_at',answer.updated_at)
+     FROM technical_demand_answers answer WHERE answer.demand_id=demand.id ORDER BY answer.created_at DESC LIMIT 1) technical_learning,
     (SELECT jsonb_build_object(
        'queued',count(*) FILTER (WHERE task.status='queued'),
        'active',count(*) FILTER (WHERE task.status IN ('claimed','running')),
@@ -39,15 +43,18 @@ WITH recent AS MATERIALIZED (
   WHERE source.status IN ('prepared','analyzing','verifying')
     AND NOT EXISTS (SELECT 1 FROM pipeline_tasks live WHERE live.source_candidate_id=source.id
       AND live.status IN ('queued','claimed','running'))
+    AND NOT EXISTS (SELECT 1 FROM pipeline_tasks live WHERE live.knowledge_demand_id=demand.id
+      AND live.task_type IN ('technical_answer','technical_answer_review','technical_answer_publication')
+      AND live.status IN ('queued','claimed','running'))
   GROUP BY source.id
   HAVING count(*) FILTER (WHERE fragment.status='queued' AND fragment.reservation_task_id IS NULL)>0
 )
 SELECT jsonb_build_object(
   'snapshot_utc',now(),
   'demands',(SELECT jsonb_agg(to_jsonb(s)) FROM (
-    SELECT status,last_error_code,count(*) count,
+    SELECT domain_id,status,last_error_code,count(*) count,
       min(first_seen_at) oldest, count(*) FILTER (WHERE first_seen_at<now()-interval '1 day') older_than_day
-    FROM knowledge_demands GROUP BY status,last_error_code) s),
+    FROM knowledge_demands GROUP BY domain_id,status,last_error_code) s),
   'real_closures_30m',(SELECT count(*) FROM knowledge_demands
     WHERE status='published' AND replay_status='complete' AND completed_at>=now()-interval '30 minutes'),
   'completed_work_30m',(SELECT jsonb_agg(to_jsonb(s)) FROM (

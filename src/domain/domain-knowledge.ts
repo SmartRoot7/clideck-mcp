@@ -97,6 +97,7 @@ export async function createDomainKnowledgeRevision(
   client: DatabaseQueryable,
   domainId: string,
   unparsedCandidate: unknown,
+  author: { createdBy: string; validationLevel: 'documentation_reviewed' | 'deterministic_validation' } = { createdBy: 'super_admin', validationLevel: 'deterministic_validation' },
 ): Promise<DomainRevisionReference> {
   const pack = getDomainPackRegistry().get(domainId)
   await assertInstalledPack(client, domainId)
@@ -227,7 +228,7 @@ export async function createDomainKnowledgeRevision(
        $1, $2, $3, $4::jsonb, $5::jsonb, $6, 'validated',
        $7, $8, $9::text[], '[]'::jsonb, $10::jsonb, $11::jsonb,
        $12::jsonb, $13::jsonb, $14::jsonb, $15, $16, $17, $18,
-       $19, $20::date, 'super_admin'
+       $19, $20::date, $21
      )
      RETURNING id`,
     [
@@ -250,7 +251,8 @@ export async function createDomainKnowledgeRevision(
       core.confidence,
       core.quality_score,
       core.confidence_reason,
-      core.last_verified_at
+      core.last_verified_at,
+      author.createdBy
     ],
   )
   const revisionId = revision.rows[0]!.id
@@ -259,6 +261,7 @@ export async function createDomainKnowledgeRevision(
     const document = await client.query<{ id: string }>(
       `INSERT INTO source_documents (
          domain_id,
+         source_kind, source_ref,
          canonical_url,
          document_type,
          title,
@@ -268,7 +271,7 @@ export async function createDomainKnowledgeRevision(
          content_hash,
          evidence_fragment
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       VALUES ($1, $10, $11, $2, $3, $4, $5, $6, $7, $8, $9)
        ON CONFLICT (domain_id, canonical_url, content_hash)
        DO UPDATE SET verified_at = greatest(
          source_documents.verified_at,
@@ -284,7 +287,8 @@ export async function createDomainKnowledgeRevision(
         source.document_date ?? null,
         source.verified_at,
         source.content_hash,
-        source.evidence_fragment
+        source.evidence_fragment,
+        source.source_kind, source.source_ref ?? null
       ],
     )
     await client.query(
@@ -315,7 +319,7 @@ export async function createDomainKnowledgeRevision(
      )
      VALUES (
        $1,
-       'deterministic_validation',
+       $6,
        $2,
        $3,
        $4::date + CASE WHEN $5 THEN 90 ELSE 180 END
@@ -325,7 +329,8 @@ export async function createDomainKnowledgeRevision(
       core.provenance.length,
       core.confidence_reason,
       core.last_verified_at,
-      core.dangerous
+      core.dangerous,
+      author.validationLevel
     ],
   )
 
@@ -378,6 +383,7 @@ export async function searchDomainKnowledge(
     question: string
     context?: unknown
     limit?: number
+    revisionIds?: string[]
   },
 ): Promise<DomainKnowledgeSearchResult> {
   const pack = getDomainPackRegistry().get(input.domainId)
@@ -391,7 +397,7 @@ export async function searchDomainKnowledge(
   )
   const search = buildSearchQueries(input.question)
   const minimumSemanticMatches = Math.min(2, search.tokens.length)
-  if (minimumSemanticMatches === 0) {
+  if (minimumSemanticMatches === 0 && !input.revisionIds?.length) {
     return {
       domain_id: input.domainId,
       context: jsonObjectSchema.parse(context),
@@ -488,21 +494,21 @@ export async function searchDomainKnowledge(
      ) conflicts ON true
      WHERE ki.domain_id = $1
        AND kr.domain_id = $1
-       AND kr.domain_context @> $4::jsonb
-       AND (
+       AND ($10::uuid[] IS NOT NULL OR kr.domain_context @> $4::jsonb)
+       AND ($10::uuid[] IS NOT NULL AND kr.id = ANY($10::uuid[]) OR $10::uuid[] IS NULL AND (
          kr.search_document @@ to_tsquery('simple', $5) OR
          kr.search_document @@ to_tsquery('simple', $6) OR
          lower(kr.title) % lower($2) OR
          lower(kr.summary) % lower($2)
-       )
+       ))
      )
      SELECT *
      FROM scored
-     WHERE relevance >= greatest(
+     WHERE ($10::uuid[] IS NOT NULL OR relevance >= greatest(
        coalesce((SELECT max(relevance) * 0.5 FROM scored), 0),
        0.01
      )
-       AND semantic_matches >= $9
+       AND semantic_matches >= $9)
      ORDER BY relevance DESC, quality_score DESC, revision_id
      LIMIT $7`,
     [
@@ -514,7 +520,8 @@ export async function searchDomainKnowledge(
       search.relaxedTsQuery,
       limit,
       search.tokens,
-      minimumSemanticMatches
+      minimumSemanticMatches,
+      input.revisionIds ?? null
     ],
   )
 

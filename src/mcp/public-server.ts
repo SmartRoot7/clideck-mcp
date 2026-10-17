@@ -1,3 +1,5 @@
+import { isTechnicalOperationsQuestion } from '@clideck/domain-technical-operations'
+import { lookupTechnicalAnswer, technicalLegacyAnswer } from '../domain/technical-demand.js'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { networkLearningFeedbackSchema } from '@clideck/domain-network'
@@ -173,7 +175,7 @@ function wrapTool<TInput, TOutput>(
       stopTimer({ outcome: 'success' })
       const publicOutput = output as Record<string, unknown>
       const usageOutcome = classifyMcpOutcome(publicOutput)
-      const knowledgeDemandId = ['report_knowledge_gap','get_learning_status'].includes(toolName)
+      const knowledgeDemandId = ['report_knowledge_gap','report_domain_knowledge_gap','get_learning_status'].includes(toolName)
         ? (publicOutput['learning'] as { id?: string } | null)?.id ?? null
         : usageOutcome === 'unknown'
         ? await queueUnknownKnowledgeDemand(
@@ -321,7 +323,7 @@ export function createPublicMcpServer(
       websiteUrl: 'https://clideck.com/software/mcp'
     },
     {
-      instructions: 'Treat unknown and partial results as incomplete. Such questions are automatically recorded for priority learning. If a returned answer does not address the original question, call report_knowledge_gap with the same question, context, reason and revision_refs. Use get_learning_status to check progress. Ask the user for missing context when learning.needs_context is true. Never claim that research or model training has completed unless status is published; this system learns verified knowledge, not model weights.',
+      instructions: 'Treat unknown and partial results as incomplete. Such questions are automatically recorded for priority learning. If a returned answer does not address the original question, call report_knowledge_gap with the same question, context, reason and revision_refs (report_domain_knowledge_gap for technical-operations queries). Use get_learning_status to check progress. Ask the user for missing context when learning.needs_context is true. Never claim that research or model training has completed unless status is published; this system learns verified knowledge, not model weights.',
       ...(dependencies.taskStore
       ? {
           taskStore: dependencies.taskStore,
@@ -349,6 +351,19 @@ export function createPublicMcpServer(
   }, wrapTool(dependencies, 'report_knowledge_gap', async (input) => ({
     learning: await reportKnowledgeGap(dependencies.database, input)
   })))
+
+  server.registerTool('report_domain_knowledge_gap', {
+    title:'Report an Incomplete Technical Answer',
+    description:'Retain the original technical question, independent OS/component versions and missing details for priority learning. Does not alter published revisions.',
+    inputSchema:z.object({domain_id:z.literal('technical-operations'),question:z.string().trim().min(3).max(2000),
+      context:z.record(z.string(),z.unknown()),reason:z.string().trim().min(3).max(1000),revision_refs:z.array(z.string().uuid()).max(5).optional()}),
+    outputSchema:z.object({learning:knowledgeLearningProgressSchema.nullable()}),
+    annotations:{readOnlyHint:false,destructiveHint:false,openWorldHint:false}
+  },wrapTool(dependencies,'report_domain_knowledge_gap',async input=>{
+    const id=await queueUnknownKnowledgeDemand(dependencies.database,'query_domain_knowledge',input,
+      {domain_id:input.domain_id,unknown:true,answer_status:'unknown',feedback_reason:input.reason,reported_revision_refs:input.revision_refs ?? []})
+    return {learning:id ? await getKnowledgeLearningProgress(dependencies.database,id) : null}
+  }))
 
   server.registerTool('get_learning_status', {
     title: 'Get Learning Progress',
@@ -416,6 +431,11 @@ export function createPublicMcpServer(
       }
     },
     wrapTool(dependencies, 'query_domain_knowledge', async (input) => {
+      if (input.domain_id==='technical-operations') {
+        const result=await lookupTechnicalAnswer(dependencies.database,input.question,input.context,input.limit)
+        const {records,...status}=result
+        return {...status,answers:records,cross_platform_examples:[]}
+      }
       if (input.domain_id === 'network') {
         const parsedContext = networkContextInputSchema.parse(input.context)
         const resolution = await resolveKnowledgeContext(
@@ -509,6 +529,14 @@ export function createPublicMcpServer(
       }
     },
     wrapTool(dependencies, 'query_network_knowledge', async (input) => {
+      if (isTechnicalOperationsQuestion(input.question,input.context,Boolean(input.context.model || input.context.vendor))) {
+        const result=await lookupTechnicalAnswer(dependencies.database,input.question,input.context,input.limit)
+        const resolution=await resolveKnowledgeContext(dependencies.database,input.context)
+        return {context:resolution.publicContext,answers:result.records.map(technicalLegacyAnswer),
+          cross_platform_examples:[],unknown:result.unknown,answer_status:result.answer_status,coverage:result.coverage,
+          next_action:result.records.length ? 'use_answer' as const : 'request_expert_answer' as const}
+      }
+
       const resolution = await resolveKnowledgeContext(
         dependencies.database,
         input.context,
@@ -581,6 +609,14 @@ export function createPublicMcpServer(
       }
     },
     wrapTool(dependencies, 'get_network_workflow', async (input) => {
+      if (isTechnicalOperationsQuestion(input.goal,input.context,Boolean(input.context.model || input.context.vendor))) {
+        const result=await lookupTechnicalAnswer(dependencies.database,input.goal,input.context,input.limit)
+        const resolution=await resolveKnowledgeContext(dependencies.database,input.context)
+        return {context:resolution.publicContext,answers:result.records.map(technicalLegacyAnswer),
+          cross_platform_examples:[],unknown:result.unknown,answer_status:result.answer_status,coverage:result.coverage,
+          next_action:result.records.length ? 'use_answer' as const : 'request_expert_answer' as const}
+      }
+
       const resolution = await resolveKnowledgeContext(
         dependencies.database,
         input.context,

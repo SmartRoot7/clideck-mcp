@@ -41,6 +41,7 @@ import {
 import {
   claimMechanicalPipelineTask,
   completeMechanicalPipelineTask,
+  publishTechnicalPipelineAnswer,
   failPipelineTask,
   heartbeatMechanicalPipelineTask,
   pipelineCandidatePayloadSchema,
@@ -148,7 +149,7 @@ async function reconcilePublishedKnowledgeDemands(
        'processing',
        'unresolved',
        'failed'
-     ) AND demand.id = ANY($1::uuid[])`,
+     ) AND demand.domain_id='network' AND demand.id = ANY($1::uuid[])`,
     [demandIds],
   )
   for (const demand of demands.rows) {
@@ -2636,6 +2637,8 @@ async function executeMechanicalTask(
       return convertSource(database, claimed)
     case 'source_chunking':
       return chunkSource(database, config, claimed)
+    case 'technical_answer_publication':
+      return publishTechnicalPipelineAnswer(database,claimed.task.id,claimed.leaseToken)
     case 'candidate_publication':
       return publishCandidateBatch(database, claimed)
     case 'source_publication':

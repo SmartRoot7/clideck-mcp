@@ -83,3 +83,34 @@ cached input and output tokens, with source/date/error. Refresh is fixed to the
 official pricing URL; outages retain the last successful rates. These are not
 API dollar prices or included subscription limits. Seven-day observations show
 failures, duration and extraction Fidelity findings without inventing a quality ranking.
+
+
+### Original-question technical learning
+
+The `technical-operations` Domain Kit pack covers macOS/Linux, Node/Python,
+developer tools and APIs without inventing network vendor/OS identities.
+Requested OS/component versions remain separate; published context describes only
+source-supported applicability. Unknown/partial public queries create durable
+user demands. Legacy macOS/software queries route conservatively to this domain;
+explicit network hardware/protocol questions retain network applicability.
+
+After diagnosis, `technical_answer` (Luna) and independent
+`technical_answer_review` (Luna High) take priority 165, above bulk demand
+extraction/discovery (160), below diagnosis (170). They may fill all operator
+lanes; ordinary leases, retries, profiles and Pause apply. Synthesis reads at most
+16 official-source spans / 64 KiB without taking source reservations. Each window
+advances unseen evidence and retains cited evidence from the prior proposal.
+Consumed evidence windows are not retried as new tasks. Missing public evidence
+feeds focused discovery; missing private logs/code/versions are stated explicitly.
+Repeated queries cannot silently clear that requirement or rejected-answer feedback.
+
+A reviewed supported answer uses `technical_answer_publication`, ordinary core
+immutable revisions and normal release activation. Only a complete independent
+review of every diagnosis capability AND exact original-question/context replay
+against an active revision closes the demand. Related search hits and partial
+publications remain partial. Private questions/context/hashes live in the learning
+ledger; public records contain generalised source-backed knowledge. Versioned
+component-aware feedback uses `report_domain_knowledge_gap`; existing network
+feedback remains compatible. `get_learning_status` explains missing private data.
+The two-hour check uses `ops/sql/learning-health.sql` to measure closure and
+progress rather than database growth. A short baseline is not an extended soak.

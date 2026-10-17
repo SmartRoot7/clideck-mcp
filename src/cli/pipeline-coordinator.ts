@@ -1,3 +1,5 @@
+import { answerDraftSchema, answerReviewSchema, technicalAnswerInstruction, technicalAnswerReviewInstruction } from '@clideck/domain-technical-operations'
+import { parseTechnicalDraft, parseTechnicalReview } from '../domain/technical-learning.js'
 import { executionModelSchema, executionReasoningSchema, executionProtocolVersion } from '@clideck/admin-contracts'
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
@@ -76,6 +78,7 @@ const claimedTaskSchema = z.object({
   task_type: z.enum([
     'expert_research',
     'demand_diagnosis',
+    'technical_answer', 'technical_answer_review',
     'source_discovery',
     'fragment_analysis',
     'candidate_verification',
@@ -271,7 +274,7 @@ async function runClient(
     action === 'submit-analysis' ||
     action === 'submit-verification' ||
     action === 'submit-deep-review' ||
-    action === 'submit-demand-diagnosis'
+    action === 'submit-demand-diagnosis' || action === 'submit-technical-answer'
   ) {
     const draftPath = args[0]
     if (!draftPath) throw new Error('Submission JSON path is required')
@@ -281,9 +284,10 @@ async function runClient(
       'submit-analysis': 'submit_fragment_analysis',
       'submit-verification': 'submit_candidate_verification',
       'submit-deep-review': 'submit_candidate_deep_review',
+      'submit-technical-answer': 'submit_technical_answer',
       'submit-demand-diagnosis': 'submit_demand_diagnosis'
     }[action]!
-    const submission = action === 'submit-demand-diagnosis'
+    const submission = action === 'submit-technical-answer' ? {artifact:draft} : action === 'submit-demand-diagnosis'
       ? demandDiagnosisSubmissionPayload(draft)
       : draft
     return callResearcherTool(tool, {
@@ -372,6 +376,8 @@ must remain inside the JSON.
 `.trim()
 
   const taskInstruction = {
+    technical_answer: technicalAnswerInstruction,
+    technical_answer_review: technicalAnswerReviewInstruction,
     demand_diagnosis: `
 Diagnose why the deterministic knowledge search did not completely answer this
 request. Do not browse, publish knowledge, invent identifiers, or create source
@@ -828,6 +834,8 @@ function artifactSchemaForTask(
     case 'source_discovery':
     case 'source_refresh':
       return discoveryArtifactSchema
+    case 'technical_answer': return answerDraftSchema
+    case 'technical_answer_review': return answerReviewSchema
     case 'demand_diagnosis':
       return demandDiagnosisAgentArtifactSchema
     case 'fragment_analysis':
@@ -851,6 +859,8 @@ function validateAgentArtifact(
       return discoveryArtifactSchema.parse(
         omitNullObjectProperties(parsed),
       )
+    case 'technical_answer': return parseTechnicalDraft(parsed)
+    case 'technical_answer_review': return parseTechnicalReview(parsed)
     case 'demand_diagnosis':
       return parseDemandDiagnosisAgentArtifact(parsed)
     case 'fragment_analysis':
@@ -957,6 +967,8 @@ async function submitAgentArtifact(
   const action = {
     source_discovery: 'submit-discovery',
     demand_diagnosis: 'submit-demand-diagnosis',
+    technical_answer: 'submit-technical-answer',
+    technical_answer_review: 'submit-technical-answer',
     source_refresh: 'submit-discovery',
     fragment_analysis: 'submit-analysis',
     candidate_verification: 'submit-verification',

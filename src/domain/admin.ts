@@ -131,7 +131,7 @@ export async function getAdminOverview(
            count(*) FILTER (
              WHERE status IN ('claimed', 'running')
                AND task_type IN (
-                 'expert_research', 'source_discovery',
+                 'expert_research', 'source_discovery', 'demand_diagnosis', 'technical_answer', 'technical_answer_review',
                  'fragment_analysis', 'candidate_verification',
                  'candidate_deep_review', 'source_refresh'
                )
@@ -583,6 +583,7 @@ export async function getAdminOverview(
              array_agg(DISTINCT live.claim_owner) FILTER (
                WHERE live.task_type IN (
                  'expert_research',
+                 'demand_diagnosis', 'technical_answer', 'technical_answer_review',
                  'source_discovery',
                  'fragment_analysis',
                  'candidate_verification',

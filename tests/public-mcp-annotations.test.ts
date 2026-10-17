@@ -24,7 +24,7 @@ describe('public MCP publication annotations', () => {
     try {
       await Promise.all([client.connect(clientTransport), server.connect(serverTransport)])
       const { tools } = await client.listTools()
-      expect(tools).toHaveLength(19)
+      expect(tools).toHaveLength(20)
       for (const tool of tools) {
         for (const flag of ['readOnlyHint', 'destructiveHint', 'openWorldHint'] as const) {
           expect(typeof tool.annotations?.[flag], `${tool.name}.${flag}`).toBe('boolean')

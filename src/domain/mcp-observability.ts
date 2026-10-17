@@ -1,3 +1,5 @@
+import { isTechnicalOperationsQuestion, technicalRequestContext } from '@clideck/domain-technical-operations'
+import { technicalFeedbackHash } from './technical-demand.js'
 import { isIP } from 'node:net'
 
 import type { Database, DatabaseClient } from '../db.js'
@@ -205,7 +207,7 @@ async function prepareKnowledgeDemand(
   if (!outputRecord) return null
   if (
     toolName === 'query_domain_knowledge' &&
-    outputRecord['domain_id'] !== 'network'
+    !['network','technical-operations'].includes(String(outputRecord['domain_id']))
   ) {
     return null
   }
@@ -225,6 +227,16 @@ async function prepareKnowledgeDemand(
             inputRecord?.['target_version']
           ].filter((value) => typeof value === 'string').join(' ')
         : inputRecord?.['question']
+  const rawTechnicalContext=recordOf(inputRecord?.['context']) ?? {}
+  const isTechnical=outputRecord['domain_id']==='technical-operations' ||
+    typeof questionValue==='string' && isTechnicalOperationsQuestion(questionValue,rawTechnicalContext,Boolean(rawTechnicalContext['model'] || rawTechnicalContext['vendor']))
+  if (toolName==='query_domain_knowledge' && outputRecord['domain_id']==='technical-operations') {
+    if (typeof questionValue!=='string') return null
+    const question=sanitizeScalarString(questionValue).slice(0,2000)
+    const context={...technicalRequestContext(question,rawTechnicalContext),learning_domain_id:'technical-operations',
+      ...(typeof outputRecord['feedback_reason']==='string' ? {feedback_reason:outputRecord['feedback_reason'],reported_revision_refs:outputRecord['reported_revision_refs'] ?? []} : {})}
+    return {question,context:{...context,technical_feedback_hash:technicalFeedbackHash(context)},demandKey:sha256(JSON.stringify(stableValue({domain_id:'technical-operations',question,context:technicalRequestContext(question,rawTechnicalContext)})))}
+  }
   let contextValue = recordOf(outputRecord['context'])
   if (
     !contextValue ||
@@ -338,7 +350,7 @@ async function prepareKnowledgeDemand(
   } = context
   return {
     question,
-    context,
+    context: isTechnical ? {...context,learning_domain_id:'technical-operations',technical_feedback_hash:technicalFeedbackHash(context)} : context,
     demandKey: sha256(JSON.stringify(stableValue({
       domain_id: 'network',
       question: question.toLocaleLowerCase('en-US'),
@@ -402,9 +414,9 @@ export async function getKnowledgeLearningProgress(database: Database, demandId:
   const result = await database.query<{
     id: string; status: string; needs_context: boolean; last_error_code: string | null;
     stage: string | null; elapsed_seconds: number; last_progress_at: string | Date | null;
-    queued_tasks: number; active_tasks: number; revision_ref: string | null
+    queued_tasks: number; active_tasks: number; revision_ref: string | null; missing_context:string[] | null; reason:string | null
   }>(
-    `SELECT demand.id, demand.status,
+    `SELECT demand.id, demand.status, technical.missing_context, technical.reason,
             demand.last_error_code = 'CONTEXT_REQUIRED' AS needs_context,
             demand.last_error_code,
             activity.stage, activity.queued_tasks, activity.active_tasks,
@@ -413,6 +425,7 @@ export async function getKnowledgeLearningProgress(database: Database, demandId:
             revision.public_ref AS revision_ref
        FROM knowledge_demands demand
        LEFT JOIN knowledge_revisions revision ON revision.id=demand.result_revision_id
+       LEFT JOIN LATERAL (SELECT missing_context,reason FROM technical_demand_answers WHERE demand_id=demand.id AND status IN ('published','unresolved') ORDER BY updated_at DESC LIMIT 1) technical ON true
        LEFT JOIN LATERAL (
          SELECT count(*) FILTER (WHERE task.status='queued')::int AS queued_tasks,
                 count(*) FILTER (WHERE task.status IN ('claimed','running'))::int AS active_tasks,
@@ -431,7 +444,7 @@ export async function getKnowledgeLearningProgress(database: Database, demandId:
   if (!row) return null
   return { ...row, last_progress_at: row.last_progress_at instanceof Date ? row.last_progress_at.toISOString() : row.last_progress_at,
     needs_context: row.needs_context === true,
-    message: row.needs_context ? 'Specify the operating system, device and version to continue learning.'
+    message: row.needs_context ? row.missing_context?.join(' ') || 'Specify the operating system, device and version to continue learning.'
       : row.status === 'published' ? 'The original question now has a complete answer. Repeat the knowledge query.'
       : row.status === 'unresolved' ? 'Research has not found a complete verified answer yet.'
       : row.last_error_code ? 'Learning is waiting for recovery. The original question is retained.'
@@ -473,6 +486,10 @@ export async function queueApproximateKnowledgeDemand(
   if (!outputRecord || classifyMcpOutcome(outputRecord) !== 'success') {
     return null
   }
+  const technicalInput=recordOf(input)
+  const technicalContext=recordOf(technicalInput?.['context']) ?? {}
+  if (outputRecord['domain_id']==='technical-operations' || isTechnicalOperationsQuestion(
+    extractMcpQuestion(toolName,input),technicalContext,Boolean(technicalContext['vendor'] || technicalContext['model']))) return null
   const answers = outputRecord['answers']
   const firstAnswer = Array.isArray(answers) ? recordOf(answers[0]) : null
   const applicability = recordOf(firstAnswer?.['applicability'])

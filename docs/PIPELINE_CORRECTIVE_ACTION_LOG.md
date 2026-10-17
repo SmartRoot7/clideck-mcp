@@ -8,15 +8,15 @@ soak. A clean baseline is not a completed extended observation window.
 
 ## Handoff as of learning investigation, 2026-10-17
 
-Live application: `53c60bf6146578e3ee08af20bf39bb3223ec6fc4` on
+Live application: `266de23045097d317d61d9b1c8d7f772757f0213` on
 `100.116.82.78`, deployed through `ops/scripts/deploy-production.sh`.
 Pipeline enabled, capacity 8. Operator settings version 8 use `gpt-6-luna`
 low/medium, High fallback `gpt-5.6-terra` medium; unchanged at this acceptance.
 
 - **Learning, October 17:** confirmed lost leased diagnosis and run-selection
-  starvation below. Correction is prepared; production remains on `53c60bf`.
+  starvation below. Correction is deployed as `266de23`; scoped technical learning is prepared for the next canonical deployment.
   Docker Desktop was restarted with user approval; all 353 tests and 250 evals pass,
-  and the canonical deployment is pending. The recurring check prioritizes actual question
+  and the canonical deployment completed with backup/migrations/smokes. The recurring check prioritizes actual question
   closure, repeated discovery and stalled sources, including software questions.
 - **Executor recovery:** October 1 expired-lease/scheduler correction remains
   deployed; October 9 checked-out PostgreSQL client error handling is now deployed.
@@ -47,6 +47,51 @@ low/medium, High fallback `gpt-5.6-terra` medium; unchanged at this acceptance.
 Resolved incidents are condensed below. Full evidence/test counts and previous
 soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.md`.
 
+
+## 2026-10-17 — Technical questions lost between publication and exact retrieval
+
+- Confirmed on the real Hugging Face demand: 2,628 published revisions had neither
+  vendor nor network OS catalog IDs. macOS itself was absent from that catalog.
+  Publication therefore omitted applicability rows, and exact network search
+  could not return those facts as a complete answer. Generic priority changes
+  cannot fix this. The user selected working technical scope: macOS/Linux,
+  Node/Python, tools and APIs. Old published revisions remain immutable.
+- Correction: scaffolded/validated `technical-operations` Domain Kit pack with
+  independent OS and component versions. Conservative legacy routing preserves
+  explicit network hardware/protocol handling. Source-backed answers use a
+  private exact-question ledger and separate public, generalised knowledge.
+  Retained official documents feed bounded 16-span/64-KiB question synthesis,
+  independent Luna High review, then ordinary core publication/release activation.
+  Both AI stages have priority 165 above bulk demand extraction/discovery (160);
+  all operator-enabled lanes can learn different gaps. Models/settings/Pause,
+  transactional leases, ordinary finite retries and source reservations persist.
+- Deepening advances unseen source spans and retains cited prior evidence.
+  Per-window evidence fingerprints prevent unchanged work loops. Missing public
+  evidence returns focused search hints. Missing private code/logs/versions stays
+  explicit across repeat queries; feedback invalidates the old exact-answer
+  binding, including reports without revision refs. Stale in-flight snapshots
+  cannot publish/close a changed question. Partial publication never closes it.
+  Original questions/requested environment and private identifiers are not public
+  payload fields; citations are rebound to trusted task bytes/hashes/URLs.
+- Compatibility: three explicit task types keep rollback executors from consuming
+  differently shaped publication tasks. Migration reclassifies unresolved macOS
+  and clear software requests, including the two audited IDs, without rewriting
+  published facts or resetting fragment attempts. New column-specific API ledger
+  reads and worker/researcher grants are exercised with the actual DB roles.
+  Existing network tool envelopes remain valid; typed feedback is additive via
+  `report_domain_knowledge_gap`. Reviewed complete technical replay does not
+  reopen merely because its legacy applicability label is generic.
+- Verification: domain conformance/type checks pass. Last full PostgreSQL 16 run:
+  373 tests and 250/250 evals. Subsequent public legacy-replay regression and the
+  focused cohort (27 tests including 16 existing urgent regressions) pass. Tests
+  cover eight simultaneous learning lanes, Pause, bounded/unseen evidence,
+  citations/private echo, independent incomplete/partial review, stale feedback,
+  active-release exact replay, component version mismatch and real MCP/API roles.
+  The canonical deployment will rerun every gate on the final clean commit.
+- First-fix observation at 06:38 UTC: the real Hugging Face question again has
+  completed verification, publication and deep review tasks. The macOS/Node
+  question retains its focused discovery task. Neither observation establishes
+  complete original-question closure. Technical-domain deployment is pending.
 
 ## 2026-10-17 — Learning repeated discovery and stranded older-run evidence
 
@@ -111,8 +156,23 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
   Docker was requested because other local containers would be interrupted.
   The user authorized a restart; normal stop timed out, the supported force-stop
   and start commands succeeded, and the existing containers became healthy again.
-  Deployed SHA remains `53c60bf6146578e3ee08af20bf39bb3223ec6fc4`; no new
-  deployment or post-correction observation window has occurred yet.
+- Deployment: clean main `266de23045097d317d61d9b1c8d7f772757f0213` verified
+  by the canonical Node 24 script, all 353 tests/250 evals and ordinary build,
+  backup, migration/grants, reconciliation, switch and smokes. Backup directory:
+  `/var/backups/clideck-mcp/deploy-20261017T055739Z-266de23`.
+- Initial read-only baseline, 06:32:38 UTC: all four services active/NRestarts 0,
+  capacity 8/settings version 8 and both model profiles unchanged. Eight fresh
+  executor heartbeats (0–6 seconds), eight valid leases, zero expired. Since
+  06:30 UTC 37 AI runs completed; 13 analysis/11 verification/12 deep reviews and
+  eight publications completed. This is progress, not proof of original-question
+  closure or a completed extended soak. Observation restarts at this baseline.
+- Further confirmed cause: software facts without resolved vendor AND network OS
+  are excluded from exact network applicability retrieval. The Hugging Face
+  demand has 2,628 published revisions with neither catalog identity. macOS is
+  absent from that catalog. A component-aware technical domain and direct,
+  reviewed original-question synthesis are being added for the user-authorized
+  scope: macOS/Linux, Node/Python, tools and APIs. No fabricated network OS or
+  rewriting old published revisions.
 
 ## 2026-10-09 — Checked-out PostgreSQL client error terminated worker
 

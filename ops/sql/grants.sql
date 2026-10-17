@@ -476,3 +476,8 @@ ALTER DEFAULT PRIVILEGES FOR ROLE clideck_mcp_migrator IN SCHEMA public
   GRANT SELECT ON TABLES TO clideck_mcp_backup;
 ALTER DEFAULT PRIVILEGES FOR ROLE clideck_mcp_migrator IN SCHEMA public
   GRANT SELECT ON SEQUENCES TO clideck_mcp_backup;
+
+GRANT SELECT (demand_id,question_key,feedback_hash,revision_id,answer_status,covered_capabilities,status,updated_at,missing_context,reason)
+ ON technical_demand_answers TO clideck_mcp_api;
+GRANT SELECT,INSERT,UPDATE ON technical_demand_answers TO clideck_mcp_worker,clideck_mcp_researcher;
+GRANT SELECT ON technical_demand_answers TO clideck_mcp_admin;

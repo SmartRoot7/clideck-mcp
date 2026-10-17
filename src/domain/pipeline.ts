@@ -1,3 +1,4 @@
+import { queueTechnicalAnswer, submitTechnicalArtifact, publishTechnicalAnswer } from './technical-demand.js'
 import { randomUUID } from 'node:crypto'
 
 import { z } from 'zod'
@@ -799,6 +800,9 @@ export type PipelineTaskRow = {
   task_type:
     | 'expert_research'
     | 'demand_diagnosis'
+    | 'technical_answer'
+    | 'technical_answer_review'
+    | 'technical_answer_publication'
     | 'source_discovery'
     | 'source_acquisition'
     | 'source_conversion'
@@ -865,6 +869,7 @@ export function withLeasedKnowledgeDemand(
 }
 
 const aiTaskTypes: PipelineTaskRow['task_type'][] = [
+  'technical_answer', 'technical_answer_review',
   'expert_research',
   'demand_diagnosis',
   'source_discovery',
@@ -875,6 +880,7 @@ const aiTaskTypes: PipelineTaskRow['task_type'][] = [
 ]
 
 const mechanicalTaskTypes: PipelineTaskRow['task_type'][] = [
+  'technical_answer_publication',
   'source_acquisition',
   'source_conversion',
   'source_chunking',
@@ -883,6 +889,7 @@ const mechanicalTaskTypes: PipelineTaskRow['task_type'][] = [
 ]
 
 const nonBlockingAiTaskTypes: PipelineTaskRow['task_type'][] = [
+  'technical_answer', 'technical_answer_review',
   'demand_diagnosis',
   'fragment_analysis',
   'candidate_verification',
@@ -929,9 +936,10 @@ async function queueDemandDiagnosisWork(
     context: Record<string, unknown>
     coverage_target_id: string
     diagnosis_version: string
+    domain_id: string
   }>(
     `SELECT id, question, tool_name, context, coverage_target_id,
-            diagnosis_version
+            diagnosis_version, domain_id
        FROM knowledge_demands demand
       WHERE demand.status <> 'published'
         AND demand.diagnosis_status IN ('pending', 'failed', 'queued', 'running')
@@ -961,7 +969,7 @@ async function queueDemandDiagnosisWork(
     queueClass: 'demand',
     payload: {
       diagnosis_version: row.diagnosis_version,
-      deterministic_subquestions: decomposeNetworkQuestion(row.question),
+      deterministic_subquestions: row.domain_id==='technical-operations' ? [] : decomposeNetworkQuestion(row.question),
       knowledge_demand: {
         question: row.question,
         tool_name: row.tool_name,
@@ -2513,9 +2521,10 @@ async function queueDemandDiscoveryWork(
     version_branch: string | null
     document_role: string
     priority: number
+    domain_id: string
   }>(
     `SELECT
-       demand.id,
+       demand.domain_id, demand.id,
        demand.question,
        demand.tool_name,
        demand.context,
@@ -2533,7 +2542,8 @@ async function queueDemandDiscoveryWork(
      LEFT JOIN knowledge_demand_topic_memberships membership
        ON membership.knowledge_demand_id = demand.id
      LEFT JOIN demand_topics topic ON topic.id = membership.demand_topic_id
-     WHERE demand.status IN ('queued', 'unresolved', 'failed')
+     WHERE (demand.status IN ('queued', 'unresolved', 'failed') OR demand.domain_id='technical-operations' AND demand.status='processing')
+       AND demand.last_error_code IS DISTINCT FROM 'CONTEXT_REQUIRED'
        AND demand.diagnosis_status = 'completed'
        -- A topic's historical exhaustion must not block a ready user request.
        -- Demand-specific retry dates and live leases still prevent retry loops.
@@ -2543,6 +2553,7 @@ async function queueDemandDiscoveryWork(
          FROM pipeline_tasks active
          WHERE active.knowledge_demand_id = demand.id
            AND active.status IN ('queued', 'claimed', 'running')
+           AND (demand.domain_id='network' OR active.task_type IN ('source_discovery','source_acquisition','source_conversion','source_chunking','technical_answer','technical_answer_review','technical_answer_publication','demand_diagnosis'))
        )
      ORDER BY demand.priority DESC, topic.last_served_at NULLS FIRST,
               topic.priority_score DESC NULLS LAST,
@@ -2631,10 +2642,8 @@ async function queueDemandDiscoveryWork(
       LIMIT 8`,
     [row.id, row.coverage_target_id, termPatterns],
   )
-  const reused = await reuseDuplicateSourcesForKnowledgeDemand(
-    client,
-    row.id,
-    existingSources.rows.map((source) => source.id),
+  const reused = row.domain_id==='technical-operations' ? { sourceIds:[],reusedFragments:0,reopenedCandidates:0 } : await reuseDuplicateSourcesForKnowledgeDemand(
+    client, row.id, existingSources.rows.map((source) => source.id),
   )
   if (reused.sourceIds.length > 0) {
     await client.query(
@@ -3801,6 +3810,9 @@ async function ensureStreamingWorkInTransaction(
     if (!(await queueDemandDiagnosisWork(client))) break
   }
   for (let index = 0; index < pipeline.max_concurrent_ai_runs; index++) {
+    if (!(await queueTechnicalAnswer(client, insertTask))) break
+  }
+  for (let index = 0; index < pipeline.max_concurrent_ai_runs; index++) {
     if (!(await queueDemandDiscoveryWork(client))) break
   }
   await queueUrgentDemandWork(client, pipeline.max_concurrent_ai_runs)
@@ -3829,6 +3841,7 @@ async function ensureStreamingWorkInTransaction(
     `UPDATE pipeline_tasks
         SET priority = CASE
           WHEN task_type = 'demand_diagnosis' THEN $7::smallint
+          WHEN task_type IN ('technical_answer','technical_answer_review') THEN 165::smallint
           WHEN knowledge_demand_id IS NOT NULL THEN $8::smallint
           WHEN task_type = 'expert_research' THEN $1::smallint
           WHEN task_type = 'candidate_deep_review'
@@ -3843,6 +3856,7 @@ async function ensureStreamingWorkInTransaction(
         AND task_type = ANY($9::text[])
         AND priority IS DISTINCT FROM CASE
           WHEN task_type = 'demand_diagnosis' THEN $7::smallint
+          WHEN task_type IN ('technical_answer','technical_answer_review') THEN 165::smallint
           WHEN knowledge_demand_id IS NOT NULL THEN $8::smallint
           WHEN task_type = 'expert_research' THEN $1::smallint
           WHEN task_type = 'candidate_deep_review'
@@ -4322,7 +4336,7 @@ export async function claimPipelineTask(
       }
     }
 
-    if (task.knowledge_demand_id) {
+    if (task.knowledge_demand_id && !task.task_type.startsWith('technical_answer')) {
       const demand = await client.query<Omit<LeasedKnowledgeDemand, 'excluded_source_urls'>>(
         `SELECT demand.question, demand.tool_name, demand.context,
                 diagnostic.diagnosis
@@ -5632,8 +5646,9 @@ export async function submitDemandDiagnosis(
       tool_name: string
       demand_count: number
       diagnosis_version: string
+      domain_id: string
     }>(
-      `SELECT id, question, tool_name, demand_count, diagnosis_version
+      `SELECT id, question, tool_name, demand_count, diagnosis_version, domain_id
          FROM knowledge_demands
         WHERE id = $1
         FOR UPDATE`,
@@ -5643,7 +5658,7 @@ export async function submitDemandDiagnosis(
     if (!demand) throw new Error('KNOWLEDGE_DEMAND_NOT_FOUND')
 
     const diagnosis = demandDiagnosisAgentArtifactSchema.parse(input.diagnosis)
-    const fallbackParts = decomposeNetworkQuestion(demand.question)
+    const fallbackParts = demand.domain_id==='technical-operations' ? [] : decomposeNetworkQuestion(demand.question)
     const identity = diagnosticTopicIdentity(diagnosis, fallbackParts)
     const topic = await client.query<{ id: string; created: boolean }>(
       `INSERT INTO demand_topics (
@@ -5700,6 +5715,7 @@ export async function submitDemandDiagnosis(
     let replay: Awaited<ReturnType<typeof replayDemandCoverage>>
     await client.query('SAVEPOINT demand_coverage_replay')
     try {
+      if (demand.domain_id === 'technical-operations') throw new Error('TECHNICAL_REPLAY_REQUIRES_REVIEWED_ANSWER')
       replay = await replayDemandCoverage(client, demand, diagnosis)
     } catch {
       await client.query('ROLLBACK TO SAVEPOINT demand_coverage_replay')
@@ -7304,4 +7320,24 @@ export async function failPipelineTask(
   })
   await ensurePipelineWork(database)
   return result
+}
+
+export async function submitTechnicalAnswer(database: Database, input: {pipeline_task_id:string;lease_token:string;artifact:unknown}) {
+  const result=await withTransaction(database,async client=>{
+    const task=await assertPipelineLease(client,input.pipeline_task_id,input.lease_token)
+    if (!['technical_answer','technical_answer_review'].includes(task.task_type)) throw new Error('PIPELINE_TASK_TYPE_INVALID')
+    const completion=await submitTechnicalArtifact(client,task,input.artifact,insertTask)
+    await completeTask(client,task,completion)
+    return completion
+  })
+  await ensurePipelineWork(database)
+  return result
+}
+
+export async function publishTechnicalPipelineAnswer(database:Database,taskId:string,leaseToken:string) {
+  return withTransaction(database,async client=>{
+    const task=await assertPipelineLease(client,taskId,leaseToken)
+    if (task.task_type!=='technical_answer_publication') throw new Error('PIPELINE_TASK_TYPE_INVALID')
+    return publishTechnicalAnswer(client,task)
+  })
 }

@@ -25,6 +25,7 @@ import {
   submitCandidateDeepReview,
   submitCandidateVerification,
   submitDemandDiagnosis,
+  submitTechnicalAnswer,
   submitSourceDiscovery
 } from '../domain/pipeline.js'
 import {
@@ -166,6 +167,12 @@ export function createResearcherMcpServer(
       async (input) => submitDemandDiagnosis(dependencies.database, input),
     ),
   )
+
+  server.registerTool('submit_technical_answer', {
+    description:'Submit a leased original-question technical answer or independent review. Source binding, publication and closure are server-owned.',
+    inputSchema:z.object({pipeline_task_id:z.string().uuid(),lease_token:z.string().min(32).max(128),artifact:z.record(z.string(),z.unknown())}),
+    annotations:{readOnlyHint:false,destructiveHint:false,openWorldHint:false}
+  },wrapResearcherTool(dependencies,'submit_technical_answer',async input=>submitTechnicalAnswer(dependencies.database,input)))
 
   server.registerTool(
     'submit_source_discovery',

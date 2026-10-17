@@ -2842,7 +2842,7 @@ describeIntegration('PostgreSQL integration', () => {
             'query_domain_knowledge'
           ]),
         )
-        expect(tools.tools).toHaveLength(19)
+        expect(tools.tools).toHaveLength(20)
 
         const listed = await mcpClient.callTool({
           name: 'list_knowledge_domains',
@@ -2851,7 +2851,8 @@ describeIntegration('PostgreSQL integration', () => {
         expect(listed.structuredContent).toMatchObject({
           domains: expect.arrayContaining([
             expect.objectContaining({ id: 'network' }),
-            expect.objectContaining({ id: 'engineering-measurements' })
+            expect.objectContaining({ id: 'engineering-measurements' }),
+            expect.objectContaining({ id: 'technical-operations' })
           ])
         })
 
