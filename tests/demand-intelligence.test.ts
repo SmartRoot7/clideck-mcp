@@ -138,6 +138,21 @@ describe('Demand Intelligence', () => {
     })
   })
 
+  it('retains numeric standard names as valid matching diagnosis identifiers', () => {
+    const parsed=parseDemandDiagnosisAgentArtifact({
+      failure_class:'missing_knowledge',answer_status:'unknown',
+      canonical_context:{operating_system:'Packet Tracer'},
+      subquestions:[{capability:'802.1X',label:'802.1X applicability',status:'missing',
+        explanation:'Device-specific evidence is still required.',search_terms:['802.1X']}],
+      existing_coverage_summary:'The original standard is not fully covered.',missing_capabilities:['802_1x'],
+      search_expansions:['802.1X applicability'],document_roles:['commands'],
+      recommended_action:'targeted_discovery',reasoning_summary:'Retain the standard while repairing only its identifier format.'
+    })
+    expect(parsed.subquestions[0]?.capability).toBe('cap-802-1x')
+    expect(parsed.missing_capabilities).toEqual(['cap-802-1x'])
+    expect(parsed.subquestions[0]?.label).toBe('802.1X applicability')
+  })
+
   it('bounds diagnosis text and arrays to the strict persisted schema', () => {
     const parsed = parseDemandDiagnosisAgentArtifact({
       failure_class: 'missing_knowledge',

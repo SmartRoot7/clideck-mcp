@@ -96,7 +96,8 @@ function nullableText(value: unknown, maxLength = Number.MAX_SAFE_INTEGER): stri
 
 function normalizeDiagnosisCapability(value: unknown): unknown {
   if (typeof value !== 'string' || value.trim().length === 0) return value
-  const normalized = normalizeTopicSlug(value)
+  const slug = normalizeTopicSlug(value)
+  const normalized = (/^[a-z]/.test(slug) ? slug : `cap-${slug}`)
     .slice(0, 63)
     .replace(/-+$/, '')
   return normalized.length >= 2 ? normalized : value

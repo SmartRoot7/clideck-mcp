@@ -48,6 +48,18 @@ Resolved incidents are condensed below. Full evidence/test counts and previous
 soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.md`.
 
 
+## 2026-10-17 — Numeric standard identifier rejected every diagnosis retry
+
+- Fresh post-recovery failures repeatedly affected demand `0756fac1-ba1d-47d9-810b-9da1d634236b`:
+  `subquestions.5.capability` failed the strict letter-first identifier pattern.
+  Its original campus/security question includes `802.1X`. Existing normalizer
+  converts punctuation but leaves `802-1x` numeric-first, causing each otherwise
+  valid diagnosis artifact to be rejected and retried.
+- Prefix only numeric-first capability identifiers with `cap-`, retaining the
+  original label/search terms and applying the same conversion to missing-capability
+  references. The strict schema, topic identity, source policy and models remain.
+  Regression covers `802.1X`/`802_1x` matching to `cap-802-1x`; canonical gates pending.
+
 ## 2026-10-17 — Technical request scope and relevant-evidence follow-up
 
 - A focused regression reproduced a new exact-cache collision: the same question
@@ -120,8 +132,8 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
   `deploy-20260930T201539Z-ed4ae50` (3,355,319,065 bytes),
   `deploy-20260930T211222Z-7bc9125` (3,356,557,867 bytes).
   Their combined size is about 9.4 GiB. This irreversible historical cleanup
-  requires user approval; no target was removed. Alternatively provide additional
-  disk capacity. The deployment will rerun every ordinary gate after capacity
+  was explicitly approved by the user at 07:23 UTC for these three targets only.
+  No historical target was removed before approval. The deployment will rerun every ordinary gate after capacity
   is available. New helper tests cover approved exact lists and protection of
   the newest two backups. No password storage or ad hoc production changes.
 - Verification at 07:21 UTC: all 385 tests and 250/250 evals pass on disposable
