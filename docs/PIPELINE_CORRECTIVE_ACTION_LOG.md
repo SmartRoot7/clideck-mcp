@@ -107,11 +107,29 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
   plus a 2-GiB database reserve; the backup monitors free space, terminates only
   its own dump and cleans its partial on failure. Deploy uses the tested candidate
   backup helper so the guard applies to this first corrected deployment.
-- Recovery pending through `ops/scripts/deploy-production.sh` on the clean
-  corrective commit with `CLIDECK_MCP_CLEANUP_FAILED_BACKUP_SHA=c7b573e...`.
-  No manual SSH deletion/SQL/service restart or password storage. Completed
-  history remains intact. Record resulting free space/readiness and any remaining
-  capacity blocker before proceeding with a full backup/deploy.
+- Recovery at 07:18 UTC: canonical preflight on clean/pushed `54b8384` with
+  `CLIDECK_MCP_CLEANUP_FAILED_BACKUP_SHA=c7b573e56e8bf3de697c532fa679daf42e5a967e`
+  removed only that failed incomplete archive. PostgreSQL recovered and readiness
+  returned `ready` without manual SQL/service restart. Available 8,229,412,864
+  bytes; required headroom 15,448,350,069 bytes. Preflight correctly stopped before
+  a new dump/migration/switch. Production remains `266de23`.
+- Completed backups remain untouched. Prepared an explicit opt-in canonical
+  cleanup list for three historical September 30 deployment backups, preserving
+  the newest two completed deploy copies and all daily copies. Exact targets:
+  `deploy-20260930T052121Z-04ddae1` (3,347,372,269 bytes),
+  `deploy-20260930T201539Z-ed4ae50` (3,355,319,065 bytes),
+  `deploy-20260930T211222Z-7bc9125` (3,356,557,867 bytes).
+  Their combined size is about 9.4 GiB. This irreversible historical cleanup
+  requires user approval; no target was removed. Alternatively provide additional
+  disk capacity. The deployment will rerun every ordinary gate after capacity
+  is available. New helper tests cover approved exact lists and protection of
+  the newest two backups. No password storage or ad hoc production changes.
+- Verification at 07:21 UTC: all 385 tests and 250/250 evals pass on disposable
+  PostgreSQL 16; type checks and domain conformance pass. Live old release is
+  enabled at capacity 8/settings version 8 with unchanged models, eight fresh
+  executor heartbeats, eight valid/zero expired leases and 98 successful AI runs
+  since 07:18. Some bounded artifact rejections remain; this short recovery
+  baseline is not an extended soak or proof of original-question closure.
 
 ## 2026-10-17 — Technical questions lost between publication and exact retrieval
 

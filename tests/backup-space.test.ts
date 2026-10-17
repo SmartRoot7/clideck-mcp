@@ -52,3 +52,12 @@ it('keeps a successful archive and its checksum',async()=>{
  expect(result.status,result.stderr).toBe(0)
  const files=await readdir(f.root);expect(files.some(name=>name.endsWith('.dump'))).toBe(true);expect(files.some(name=>name.endsWith('.dump.sha256'))).toBe(true)
 })
+it('prunes only an explicitly approved historical set while protecting the newest two deploy backups',async()=>{
+ const f=await fixture();const names=['deploy-20260930T052121Z-04ddae1','deploy-20260930T201539Z-ed4ae50','deploy-20260930T211222Z-7bc9125','deploy-20261009T072249Z-53c60bf','deploy-20261017T055739Z-266de23']
+ for(const name of names){const dir=join(f.root,name);await mkdir(dir);await writeFile(join(dir,'previous-release.txt'),'fixture');await writeFile(join(dir,'clideck-mcp-fixture.dump'),'complete');await writeFile(join(dir,'clideck-mcp-fixture.dump.sha256'),'checksum')}
+ const denied=spawnSync('bash',[resolve('ops/scripts/prepare-backup-space.sh'),f.root,'',names[4]!],{env:f.env,encoding:'utf8'})
+ expect(denied.status).toBe(1);expect(denied.stderr).toContain('newest completed')
+ const approved=spawnSync('bash',[resolve('ops/scripts/prepare-backup-space.sh'),f.root,'',names.slice(0,3).join(',')],{env:f.env,encoding:'utf8'})
+ expect(approved.status,approved.stderr).toBe(0)
+ const remaining=await readdir(f.root);for(const name of names.slice(0,3))expect(remaining).not.toContain(name);for(const name of names.slice(3))expect(remaining).toContain(name)
+})
