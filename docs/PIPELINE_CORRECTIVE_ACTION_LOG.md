@@ -101,6 +101,9 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
   recovered them, making results depend on file order. Delete those test-owned
   records in cleanup instead of parking them as paused/unresolved. A fresh full
   PostgreSQL 16 run now passes all 353 tests and 250/250 evaluation fixtures.
+  A second canonical preflight exposed a UI-test race: analysis rendered its
+  detected context before its busy flag cleared, so the test clicked a disabled
+  Search button. Wait for the button to become enabled; no product UI change.
   The canonical deployment must rerun its gates on the clean final commit.
 - Resolved local preflight blocker: Docker Desktop responded to neither `docker ps` nor its
   local socket `_ping` (5-second timeout). Do not bypass the canonical deploy or

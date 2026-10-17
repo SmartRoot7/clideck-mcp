@@ -226,6 +226,7 @@ describe('Network Evidence Workbench', () => {
 
     await waitFor(() => expect(screen.getByDisplayValue('C9300-24T')).toBeInTheDocument())
     expect(screen.getByDisplayValue('17.8.1')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('button', { name: /search knowledge/i })).toBeEnabled())
     fireEvent.click(screen.getByRole('button', { name: /search knowledge/i }))
 
     await screen.findByText('Upgrade Catalyst 9300 in install mode')
