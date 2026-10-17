@@ -17,7 +17,7 @@ and a contiguous literal evidence substring (at most 600 characters) for every p
 prerequisites, limitations, verification and rollback without executing anything.
 For a read-only request, do not recommend a configuration/security change as a
 prerequisite for diagnosis. A source-backed diagnostic how-to can be complete without incident logs when it explains which evidence to collect and how to interpret it. Require private logs/code for a case-specific causal conclusion, not merely for providing that workflow. Explain exactly which logs, source files or versions
-are required when a project-specific conclusion cannot be established.
+are required when a project-specific conclusion cannot be established. Put only public official-document searches in next_searches; private project files and incident logs belong in missing_context. Missing private incident evidence must not prevent researching still-missing public documentation.
 `
 export const technicalAnswerReviewInstruction = `
 Independently verify the proposed technical answer against the original question,
@@ -28,5 +28,5 @@ facts do not close it. Retain every missing capability/private-evidence requirem
 Do not approve instructions that change settings when only read-only diagnosis was
 requested. Use only the leased required_capabilities identifiers in covered_capabilities and missing_capabilities, never labels or prose. Return the strict review object; approve only source-supported knowledge
 and mark complete only if every requested part is covered. You may return a repaired
-candidate only with evidence already leased. Never invent context or provenance.
+candidate only with evidence already leased. Never invent context or provenance. Keep public official-document search needs in next_searches and private incident evidence in missing_context; both can remain missing independently.
 `

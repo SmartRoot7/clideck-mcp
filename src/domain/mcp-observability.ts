@@ -417,7 +417,8 @@ export async function getKnowledgeLearningProgress(database: Database, demandId:
     queued_tasks: number; active_tasks: number; revision_ref: string | null; missing_context:string[] | null; reason:string | null
   }>(
     `SELECT demand.id, demand.status, technical.missing_context, technical.reason,
-            demand.last_error_code = 'CONTEXT_REQUIRED' AS needs_context,
+            (coalesce(demand.last_error_code = 'CONTEXT_REQUIRED',false)
+              OR coalesce(cardinality(technical.missing_context),0)>0) AS needs_context,
             demand.last_error_code,
             activity.stage, activity.queued_tasks, activity.active_tasks,
             activity.last_progress_at,

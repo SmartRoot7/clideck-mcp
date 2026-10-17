@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { createPublicMcpServer } from '../src/mcp/public-server.js'
@@ -143,6 +144,37 @@ suite('original-question technical learning',()=>{
   expect(next.payload.evidence.some((item:any)=>!firstIds.includes(item.id))).toBe(true)
   await ensurePipelineWork(db)
   expect((await client.query("SELECT count(*)::int count FROM pipeline_tasks WHERE knowledge_demand_id=$1 AND task_type='technical_answer'",[id])).rows[0].count).toBe(2)
+ }))
+ it('continues public evidence research while retaining private incident evidence requirements',()=>isolated(async(db,client)=>{
+  const {id,task}=await fixture(db,client)
+  await submitTechnicalAnswer(db,{pipeline_task_id:task.id,lease_token:await lease(client,task.id),artifact:draft(task,false)})
+  const review=(await client.query("SELECT * FROM pipeline_tasks WHERE knowledge_demand_id=$1 AND task_type='technical_answer_review'",[id])).rows[0]
+  const missingContext=['Provide the timestamped application error chain for a case-specific conclusion.']
+  const nextSearches=['Find official Python inspection details for the documented read-only workflow.']
+  await submitTechnicalAnswer(db,{pipeline_task_id:review.id,lease_token:await lease(client,review.id),artifact:{...draft(task,false),approved:false,missing_context:missingContext,next_searches:nextSearches}})
+  const focused=(await client.query("SELECT priority FROM pipeline_tasks WHERE knowledge_demand_id=$1 AND task_type='source_discovery' AND status='queued'",[id])).rows[0]
+  expect(focused?.priority).toBe(165)
+  const next=(await client.query("SELECT payload FROM pipeline_tasks WHERE knowledge_demand_id=$1 AND task_type='technical_answer' AND id<>$2",[id,task.id])).rows[0]
+  expect(next).toBeTruthy()
+  expect(await getKnowledgeLearningProgress(db,id)).toMatchObject({needs_context:true,missing_context:missingContext})
+  expect((await lookupTechnicalAnswer(db,task.payload.question,context)).answer_status).not.toBe('complete')
+ }))
+ it('repairs existing mixed holds without reopening private-only holds or changing task leases',()=>isolated(async(db,client)=>{
+  const ids:string[]=[]
+  for(const mixed of [true,false]) {
+   const {id,task}=await fixture(db,client);ids.push(id)
+   await submitTechnicalAnswer(db,{pipeline_task_id:task.id,lease_token:await lease(client,task.id),artifact:draft(task,false)})
+   const review=(await client.query("SELECT * FROM pipeline_tasks WHERE knowledge_demand_id=$1 AND task_type='technical_answer_review'",[id])).rows[0]
+   await submitTechnicalAnswer(db,{pipeline_task_id:review.id,lease_token:await lease(client,review.id),artifact:{...draft(task,false),approved:false,missing_context:['Provide private incident logs.'],next_searches:mixed?['Official Python diagnostic documentation.']:[]}})
+   await client.query("UPDATE knowledge_demands SET last_error_code='CONTEXT_REQUIRED' WHERE id=$1",[id])
+  }
+  const taskState=()=>client.query('SELECT id,status,attempts,lease_until,lease_token_hash FROM pipeline_tasks WHERE knowledge_demand_id=ANY($1::uuid[]) ORDER BY id',[ids])
+  const before=(await taskState()).rows
+  await client.query(await readFile(new URL('../migrations/051_technical_mixed_evidence.sql',import.meta.url),'utf8'))
+  const errors=await client.query('SELECT id,last_error_code FROM knowledge_demands WHERE id=ANY($1::uuid[])',[ids])
+  expect(errors.rows.find(row=>row.id===ids[0]).last_error_code).toBe('TECHNICAL_EVIDENCE_INCOMPLETE')
+  expect(errors.rows.find(row=>row.id===ids[1]).last_error_code).toBe('CONTEXT_REQUIRED')
+  expect((await taskState()).rows).toEqual(before)
  }))
  it('reports private evidence needs without repeatedly synthesizing the same evidence',()=>isolated(async(db,client)=>{
   const {id,q,task}=await fixture(db,client)

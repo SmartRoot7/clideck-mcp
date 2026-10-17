@@ -49,6 +49,41 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
 
 
 
+
+## 2026-10-17 10:04 UTC — Private evidence hold also blocked public research
+
+- Compact production snapshot: health/ready good, API/worker/admin/researcher
+  active with NRestarts=0, eight fresh executor heartbeats, eight valid leases,
+  zero expired, settings version 8/capacity 8 unchanged. No fresh journal errors.
+  Technical work reached 52 drafts, 42 independent reviews and three publications;
+  zero complete original-question closures in the last 30 minutes. These counts
+  do not establish complete learning for the monitored two questions.
+- Both original cohort IDs are now partial/unresolved with CONTEXT_REQUIRED.
+  One repeat read confirmed that each latest rejected review still names missing
+  public capabilities and explicit official-document searches, alongside private
+  incident evidence. Node/Tailscale needs runtime/error/heartbeat/sleep evidence;
+  Hugging Face needs the exact invocation/repository, installed client versions,
+  timestamped traceback and contemporaneous route observations. Do not invent
+  a case-specific causal answer or silently drop those requirements.
+- Cause: recordTechnicalGap classified every nonempty missing_context as a total
+  hold. Both synthesis and discovery exclude CONTEXT_REQUIRED, so missing private
+  logs prevented researching the independent public documentation gaps too.
+- Minimal correction: retain TECHNICAL_EVIDENCE_INCOMPLETE while both public
+  missing capabilities and next_searches remain; CONTEXT_REQUIRED still stops
+  work when only private context remains. Public learning status derives
+  needs_context from retained review evidence independently, so the private
+  requirements remain visible while useful public work continues. Prompts put
+  public official-document searches in next_searches and private data in
+  missing_context. Migration 051 reclassifies existing latest reviewed mixed
+  holds only; it does not reset task attempts, leases or immutable revisions.
+- Regression: the mixed-gap test fails on prior main because no focused discovery
+  task is queued. Corrected code passes all 34 technical/urgent PostgreSQL tests,
+  including private-only standby and migration preservation of task/lease state.
+  Type checks pass. Production remains 6a81c23; this correction joins the pending
+  metadata follow-up. About 8.6 GiB free; the existing request to remove precisely
+  56fb9fe/7c58632 completed historical backups is still awaiting user approval.
+  No additional backup deletion, deployment or production mutation was performed.
+
 ## 2026-10-17 — Provider schema omitted technical metadata constraints
 
 - Canonical deployment `6a81c23adca8a8502bf1c5fbc8a3fc909ae570d8` completed

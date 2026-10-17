@@ -256,8 +256,10 @@ export async function submitTechnicalArtifact(client: DatabaseClient, task: Pipe
 
 async function recordTechnicalGap(client:Client,demandId:string,answer:{answer_status:string;missing_context:string[];missing_capabilities:string[];next_searches:string[];reason:string}) {
   await client.query(`UPDATE knowledge_demands SET status='unresolved',replay_status=$2,
-    last_error_code=CASE WHEN cardinality($3::text[])>0 THEN 'CONTEXT_REQUIRED' ELSE 'TECHNICAL_EVIDENCE_INCOMPLETE' END,
-    next_retry_at=now(),replayed_at=now() WHERE id=$1`,[demandId,answer.answer_status,answer.missing_context])
+    last_error_code=CASE WHEN cardinality($3::text[])>0
+      AND (cardinality($4::text[])=0 OR cardinality($5::text[])=0)
+      THEN 'CONTEXT_REQUIRED' ELSE 'TECHNICAL_EVIDENCE_INCOMPLETE' END,
+    next_retry_at=now(),replayed_at=now() WHERE id=$1`,[demandId,answer.answer_status,answer.missing_context,answer.missing_capabilities,answer.next_searches])
   await client.query(`UPDATE knowledge_demand_diagnostics SET replay_result=$2::jsonb
     WHERE id=(SELECT id FROM knowledge_demand_diagnostics WHERE knowledge_demand_id=$1 ORDER BY created_at DESC LIMIT 1)`,
     [demandId,JSON.stringify({answer_status:answer.answer_status,missing_context:answer.missing_context,
