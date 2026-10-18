@@ -95,14 +95,15 @@ docker run --detach --rm \
   --env POSTGRES_PASSWORD="$test_database_password" \
   postgres:16-alpine >/dev/null
 for attempt in {1..60}; do
+  # The image's initialization server accepts sockets before the final TCP server starts.
   if docker exec "$test_database_container" \
-    pg_isready --username postgres --dbname postgres >/dev/null 2>&1; then
+    pg_isready --host=127.0.0.1 --username postgres --dbname postgres >/dev/null 2>&1; then
     break
   fi
   sleep 1
 done
 docker exec "$test_database_container" \
-  pg_isready --username postgres --dbname postgres >/dev/null
+  pg_isready --host=127.0.0.1 --username postgres --dbname postgres >/dev/null
 for role_name in \
   clideck_mcp_api clideck_mcp_admin clideck_mcp_worker \
   clideck_mcp_researcher clideck_mcp_quarantine clideck_mcp_backup \

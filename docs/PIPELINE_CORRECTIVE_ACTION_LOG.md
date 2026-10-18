@@ -56,6 +56,26 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
 
 
 
+## 2026-10-18 21:17 UTC — Approved cleanup completed; local preflight readiness race corrected
+
+- The user approved precisely deploy-20260930T230659Z-1806409,
+  deploy-20260930T234029Z-aaa1b68 and deploy-20261001T023833Z-cbcd30a.
+  Canonical deployment of clean main 571878b removed these three only and measured
+  18,417,426,432 available bytes versus 16,131,478,760 required. The capacity
+  approval below is resolved; do not reuse this already-consumed cleanup list.
+- Types passed, but local test-role creation hit a missing PostgreSQL socket.
+  No production dump, migration, switch or restart occurred. Cause: the official
+  image starts a temporary socket-only initialization server, which made the
+  old socket pg_isready gate succeed before initialization shutdown/restart.
+  The [official image entrypoint](https://github.com/docker-library/postgres/blob/master/docker-entrypoint.sh)
+  explicitly starts that temporary server with listen_addresses empty.
+- Minimal deployment correction: both readiness probes require 127.0.0.1 TCP.
+  A controlled PostgreSQL 16 container with a delayed init script reproduces
+  socket-ready/TCP-not-ready; the TCP gate waits until initialization completes
+  and immediate role creation then succeeds. Shell syntax and all 18 deployment
+  contract tests pass. The normal deploy, with no further cleanup selection,
+  will rerun every ordinary gate before applying the publication correction.
+
 ## 2026-10-18 20:25 UTC — Existing technical item publication fails under worker permissions
 
 - Compact check: health/ready good, four services active with NRestarts=0,
