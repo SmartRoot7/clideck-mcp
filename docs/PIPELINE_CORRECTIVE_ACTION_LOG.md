@@ -20,8 +20,8 @@ low/medium, High fallback `gpt-5.6-terra` medium; unchanged at this acceptance.
   procedure. Node/Tailscale returns unknown for macOS 27.0.1, with a macOS 27
   example kept separate. Neither original question is closed. The check prioritizes actual question
   closure, repeated discovery and stalled sources, including software questions.
-  Repeated-item regression passes; no new technical publication was eligible
-  during the short post-switch observation, so its live acceptance remains open.
+  Repeated-item live acceptance now passes: four technical publications added
+  revisions to existing items, with worker identity UPDATE still denied.
 - **Executor recovery:** October 1 expired-lease/scheduler correction remains
   deployed; October 9 checked-out PostgreSQL client error handling is now deployed.
   At 21:59 UTC all eight lanes were fresh, with seven valid leases and zero expired;
@@ -55,6 +55,36 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
 
 
 
+
+## 2026-10-18 22:24 UTC — Existing-item publication confirmed in production
+
+- One compact read-only check on deployed 395fb500cb735cd8c4a8a7da1eefb0ced1eebe93:
+  health/ready good, all four services active with NRestarts=0, settings enabled
+  version 8/capacity 8, eight executor heartbeats under 14 seconds, three valid
+  leases and zero expired. No error-priority service entries in the last 15 minutes.
+- The previously pending live acceptance is now satisfied without synthetic
+  demands or manual task resets. Four technical publications completed against
+  existing items: demand 6087cfd2-8d31-4075-ab05-ab257794a21e appended revisions
+  2, 3 and 4 at 22:13:12, 22:14:16 and 22:16:05 UTC; demand
+  e6b5a6a4-c77b-4ca6-8276-62a2e8946ff9 appended revision 2 at 22:23:40 UTC.
+  Worker still lacks UPDATE on knowledge_items; no technical publication task
+  failed since the switch. This exercises the corrected existing-item path.
+- Since 21:55:33 UTC, 607 AI runs, 97 technical drafts and 97 independent reviews
+  completed; four technical and 29 ordinary candidate publications completed.
+  Retained validation rejected 34 artifacts; one historical run expired, with
+  no currently expired leases. All aggregated work uses the demand queue;
+  84/127 discoveries added no new evidence, while 44 acquisitions and 41 source
+  conversions/chunkings completed. These counts do not establish full answers.
+- Exact original-question/context replays retain both cohort IDs and needs_context.
+  Node/Tailscale remains unknown for macOS 27.0.1, with the macOS 27 workflow only
+  an example; evidence windows advanced from 21 to 25 and source processing is
+  current. Hugging Face remains partial at revision cfdd2c81-78a7-4303-823c-bc59d698bd20,
+  with HTTPS/Xet and incident-diagnostic gaps plus the same missing private data.
+  Neither cohort is closed. The learning aggregate has one complete closure in
+  30 minutes elsewhere; do not attribute it to these two questions.
+- No runtime code, settings, grants, task attempts or deployment changed during
+  this check. The read-only window remains based at 21:56:47 UTC; this roughly
+  half-hour observation is not a completed extended soak.
 
 ## 2026-10-18 21:59 UTC — Publication correction deployed; short acceptance
 
