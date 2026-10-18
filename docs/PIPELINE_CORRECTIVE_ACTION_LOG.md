@@ -6,24 +6,27 @@ a restart alone is not a fix. Add evidence → cause → minimal correction → 
 SHA (or configuration-only status) → measured result, then restart the read-only
 soak. A clean baseline is not a completed extended observation window.
 
-## Handoff as of learning investigation, 2026-10-17
+## Handoff as of learning follow-up deployment, 2026-10-18
 
-Live application: `6a81c23adca8a8502bf1c5fbc8a3fc909ae570d8` on
+Live application: `d9bf09952ef48799d6a958f6aeb5d8edf4cd9758` on
 `100.116.82.78`, deployed through `ops/scripts/deploy-production.sh`.
 Pipeline enabled, capacity 8. Operator settings version 8 use `gpt-6-luna`
 low/medium, High fallback `gpt-5.6-terra` medium; unchanged at this acceptance.
 
-- **Learning, October 17:** confirmed lost leased diagnosis and run-selection
-  starvation below. Correction is deployed as `266de23`; technical rollout `6a81c23` is deployed; a metadata-contract follow-up awaits capacity approval below.
-  Docker Desktop was restarted with user approval; all 353 tests and 250 evals pass,
-  and the canonical deployment completed with backup/migrations/smokes. The recurring check prioritizes actual question
+- **Learning, October 18:** metadata-contract and mixed private/public evidence
+  corrections are deployed below. The approved three-copy cleanup and canonical
+  deployment completed; 392 tests and 250 evals passed. The exact Node/Tailscale
+  replay now returns an independently reviewed partial Console procedure;
+  Hugging Face remains unknown and is processing another evidence window. Neither
+  original question is closed. The recurring check prioritizes actual question
   closure, repeated discovery and stalled sources, including software questions.
 - **Executor recovery:** October 1 expired-lease/scheduler correction remains
   deployed; October 9 checked-out PostgreSQL client error handling is now deployed.
-  At 07:53 UTC all eight lanes were fresh and running with zero expired leases;
-  50 AI runs had completed successfully since switching. API/admin/MCP acceptance
-  passed. The read-only window restarts at 07:53:07 UTC; this is a short baseline,
-  not an extended soak or validation of the entire knowledge base.
+  At 19:24 UTC all eight lanes were fresh, with eight valid leases and zero expired;
+  116 AI runs had completed successfully since switching. Health/ready, four
+  services and canonical API/admin/MCP smokes passed. The read-only window
+  restarts at 2026-10-18 19:10:19 UTC; this is a short baseline, not an extended
+  soak or validation of the entire knowledge base.
 - **Open:** Cisco/Akamai 403 blocks intake; September 21 restored Linux downloads
   only. One public Junos answer is verified below; an extended soak is not established.
 - **Learning audit baseline:** 15/20 unknown questions lost diagnosis tasks; a global
@@ -50,6 +53,63 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
 
 
 
+
+## 2026-10-18 19:24 UTC — Learning follow-up deployed after approved backup cleanup
+
+- The user approved the three-copy proposal below. The canonical deploy script
+  removed only deploy-20260930T214235Z-56fb9fe, deploy-20260930T220949Z-7c58632
+  and deploy-20260930T224350Z-7be2bfd (10,092,649,806 bytes total). Read-only
+  verification confirms those three absent; October 9 and both October 17 deploy
+  copies remain, as do daily copies. The earlier pending approvals/capacity notes
+  below are superseded. Preflight measured 17,385,222,144 available bytes against
+  15,459,281,486 required; no reserve/headroom check was bypassed.
+- Clean main d9bf09952ef48799d6a958f6aeb5d8edf4cd9758 was deployed only through
+  ops/scripts/deploy-production.sh with Node 24 and the exact approved list.
+  All 392 tests and 250/250 evals, type checks, builds, backup, migration 051,
+  grants, reconciliation/index/stats, atomic switch and ordinary smokes passed.
+  The completed backup is deploy-20261018T183316Z-d9bf099, with a 9,322,663,408-byte
+  dump and checksum, no partial file. The script restarted the local Luna pool;
+  the current release symlink confirms this SHA. About 7.6 GiB remain free.
+- Root causes/corrections: b82d3cb makes provider-supported metadata constraints
+  task-specific literals/enums and returns safe actionable artifact feedback;
+  2a79bbd separates private context requirements from unfinished public research.
+  Migration 051 resumes existing mixed gaps while retaining private requirements,
+  finite attempts, leases and immutable revisions. Detailed evidence and focused
+  regressions are in the two October 17 entries below. No provenance, independent
+  review or complete-original-question closure check was relaxed.
+- Post-switch health/ready are good, API/worker/admin/researcher active with
+  NRestarts=0. At 19:24:03 UTC settings remain enabled/version 8/capacity 8,
+  all eight executor heartbeats are under 30 seconds old, eight leases valid,
+  none expired. Luna low, Luna High medium and the configured High fallback
+  remain unchanged. Since 19:09:30 UTC, 116 AI runs completed successfully;
+  completed work includes 62 technical drafts, 40 independent reviews, two
+  technical publications, 13 discovery/acquisition/conversion/chunking tasks
+  each and one diagnosis. Complete original-question closures remain zero;
+  activity and partial publications do not establish complete learning.
+- Node/Tailscale cohort 7ddc8291-bf44-4f8e-80b2-4fd62a991638 completed draft,
+  independent review and publication at 19:20:56 UTC. Replaying the exact original
+  question with its original Apple/macOS 27.0.1/diagnostic/zsh context returned
+  answer_status=partial and revision 16bea534-7b6b-4872-9a37-fe2017388369,
+  "Collecting macOS Console evidence for transient failures". Only Apple's
+  documented Console collection steps are supported; this does not establish
+  Node/executor/Tailscale behavior or the incident cause. The demand remains open
+  with replay_status=partial and another technical draft queued. needs_context
+  stays true: incident times, redacted Node errors and targets, heartbeat/lease
+  and server logs, sleep/wake and contemporaneous Tailscale/interface evidence,
+  exact Node/Tailscale versions and relevant application configuration/code.
+- Hugging Face cohort ae85265e-9d39-4024-ab60-66e6b13277bb retains its exact
+  question/macOS/normal/zsh context. Its first post-switch draft exhausted five
+  bounded attempts at 19:19:14 UTC on a nonliteral provenance quotation; the
+  strict check correctly rejected it. A next unseen evidence window was queued
+  immediately and is running at 19:23:38 UTC. Exact public replay still returns
+  unknown, same demand ID and needs_context=true. Needed private evidence remains
+  the redacted timestamped traceback, exact MLX Whisper repository/invocation,
+  installed huggingface_hub/hf_xet versions and contemporaneous route observations.
+  Neither cohort was replaced by a synthetic demand or marked complete.
+- Read-only observation restarted at 19:10:19 UTC. These are short acceptance
+  observations, not a completed extended soak. Canonical output is retained
+  locally in tmp/learning-followup-deploy.log; subsequent regular checks should
+  measure source/evidence progress and exact question closure, not database size.
 
 ## 2026-10-18 12:15 UTC — Earlier two-backup capacity proposal is insufficient
 
