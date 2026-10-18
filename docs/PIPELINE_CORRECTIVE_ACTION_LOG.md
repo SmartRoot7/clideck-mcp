@@ -20,6 +20,8 @@ low/medium, High fallback `gpt-5.6-terra` medium; unchanged at this acceptance.
   Hugging Face remains unknown and is processing another evidence window. Neither
   original question is closed. The recurring check prioritizes actual question
   closure, repeated discovery and stalled sources, including software questions.
+  The 20:25 UTC check confirmed a repeated-item publication permission failure;
+  the correction below is implemented locally and awaits deployment capacity.
 - **Executor recovery:** October 1 expired-lease/scheduler correction remains
   deployed; October 9 checked-out PostgreSQL client error handling is now deployed.
   At 19:24 UTC all eight lanes were fresh, with eight valid leases and zero expired;
@@ -53,6 +55,45 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
 
 
 
+
+## 2026-10-18 20:25 UTC — Existing technical item publication fails under worker permissions
+
+- Compact check: health/ready good, four services active with NRestarts=0,
+  settings version 8/capacity 8 unchanged, eight fresh executors, eight valid
+  leases and zero expired. All recent work is in the demand queue: 159 technical
+  drafts, 168 reviews, eight technical publications and 48 discoveries completed
+  in 30 minutes; no complete original-question closures. Node is processing a
+  subsequent evidence window; Hugging Face remains unresolved with explicit
+  source insufficiency and private timestamped traceback/version/invocation gaps.
+  Connected MCP calls failed in this monitor's transport, so no new public query
+  replay or MCP guidance is claimed; production SQL provides this state evidence.
+- A separate runtime aggregate exposed 12 failed technical publication tasks in
+  the same interval. One repeat and short worker logs confirm PostgreSQL 42501,
+  permission denied for table knowledge_items, in createDomainKnowledgeRevision.
+  Successful first publications had hidden the existing-item path: its SELECT
+  FOR UPDATE requires UPDATE on at least one column, while the production worker
+  intentionally has only SELECT/INSERT on item identity. See the official
+  [PostgreSQL privilege rule](https://www.postgresql.org/docs/16/ddl-priv.html).
+- Minimal code correction: acquire a transaction advisory lock per stable key
+  before item insertion/reuse and revision allocation; remove the existing-item
+  FOR UPDATE. This preserves deduplication and serial revision numbers without
+  granting identity mutation or restricting unrelated keys/operator lanes.
+  Existing revisions, provenance, independent review and finite task attempts
+  remain unchanged. [PostgreSQL advisory locks](https://www.postgresql.org/docs/16/explicit-locking.html#ADVISORY-LOCKS)
+  release with the publication transaction.
+- Regression on isolated PostgreSQL 16 with actual production grants: the old
+  code fails both repeat-publication and existing-item revision tests with the
+  observed permission error. Corrected tests verify retry reuse, unchanged prior
+  revision and appended revision 2; concurrent workers serialize only the same
+  key, allow an unrelated publication and release the lock on rollback. Types,
+  all 394 tests and 250/250 evals pass on a freshly migrated/seeded/indexed local
+  fixture with the production grant matrix. Deployment remains pending below.
+- Production is still d9bf09952ef48799d6a958f6aeb5d8edf4cd9758; this is a new
+  failed observation, not a clean extended soak. Read-only capacity check found
+  7,962,902,528 available bytes; the largest completed dump implies a canonical
+  requirement of 16,131,478,760 bytes. No other deploy/dump is running. Additional
+  historical backup deletion requires a new exact approval; the previously
+  approved three copies are already gone and cannot supply capacity again.
 
 ## 2026-10-18 19:24 UTC — Learning follow-up deployed after approved backup cleanup
 

@@ -115,6 +115,11 @@ export async function createDomainKnowledgeRevision(
     throw new Error(`DOMAIN_CANDIDATE_PACK_MISMATCH:${domainId}`)
   }
 
+  // Serialize revision allocation per key without granting UPDATE on item identity.
+  await client.query(
+    "SELECT pg_advisory_xact_lock(hashtextextended('domain-knowledge:' || $1::text, 0))",
+    [core.stable_key],
+  )
   const inserted = await client.query<ExistingItemRow>(
     `INSERT INTO knowledge_items (domain_id, stable_key, kind)
      VALUES ($1, $2, $3)
@@ -126,8 +131,7 @@ export async function createDomainKnowledgeRevision(
     await client.query<ExistingItemRow>(
       `SELECT id, domain_id, kind
        FROM knowledge_items
-       WHERE stable_key = $1
-       FOR UPDATE`,
+       WHERE stable_key = $1`,
       [core.stable_key],
     )
   ).rows[0]

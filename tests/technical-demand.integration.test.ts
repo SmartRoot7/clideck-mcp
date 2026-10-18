@@ -5,6 +5,7 @@ import { createPublicMcpServer } from '../src/mcp/public-server.js'
 import { createLogger } from '../src/logger.js'
 import { createMetrics } from '../src/metrics.js'
 import { randomUUID } from 'node:crypto'
+import { setTimeout as delay } from 'node:timers/promises'
 import pg from 'pg'
 import type { Database } from '../src/db.js'
 import { sha256, sha256Label } from '../src/crypto.js'
@@ -13,6 +14,7 @@ import { queueUnknownKnowledgeDemand, getKnowledgeLearningProgress, reportKnowle
 import { ensurePipelineWork,claimPipelineTask,submitTechnicalAnswer,publishTechnicalPipelineAnswer,completeMechanicalPipelineTask } from '../src/domain/pipeline.js'
 import { lookupTechnicalAnswer,technicalLegacyAnswer,technicalFeedbackHash } from '../src/domain/technical-demand.js'
 import { technicalQuestionKey } from '../src/domain/technical-learning.js'
+import { createDomainKnowledgeRevision } from '../src/domain/domain-knowledge.js'
 import { technicalRequestContext, type TechnicalAnswerDraft } from '@clideck/domain-technical-operations'
 import { conformanceFixture } from '../domains/technical-operations/src/pack.js'
 import { executionProtocolVersion } from '@clideck/admin-contracts'
@@ -107,7 +109,9 @@ suite('original-question technical learning',()=>{
   await submitTechnicalAnswer(db,{pipeline_task_id:review.id,lease_token:await lease(client,review.id),artifact:{...draft(task),approved:true}})
   const pub=(await client.query("SELECT id FROM pipeline_tasks WHERE knowledge_demand_id=$1 AND task_type='technical_answer_publication'",[id])).rows[0]
   await client.query('RESET ROLE');const token=await lease(client,pub.id);await client.query('SET LOCAL ROLE clideck_mcp_worker')
-  expect(await publishTechnicalPipelineAnswer(db,pub.id,token)).toMatchObject({original_question_replayed:true,answer_status:'complete'})
+  const publication=await publishTechnicalPipelineAnswer(db,pub.id,token)
+  expect(publication).toMatchObject({original_question_replayed:true,answer_status:'complete'})
+  expect(await publishTechnicalPipelineAnswer(db,pub.id,token)).toMatchObject(publication)
   await client.query('SET LOCAL ROLE clideck_mcp_api')
   const replay=await lookupTechnicalAnswer(db,q,context)
   expect(replay.answer_status).toBe('complete');expect(replay.records).toHaveLength(1)
@@ -130,6 +134,55 @@ suite('original-question technical learning',()=>{
   expect((await lookupTechnicalAnswer(db,q,context)).answer_status).not.toBe('complete')
   await queueUnknownKnowledgeDemand(db,'query_domain_knowledge',{question:q,context},{domain_id:'technical-operations',unknown:true})
   expect((await lookupTechnicalAnswer(db,q,context)).answer_status).not.toBe('complete')
+ }))
+ it('reuses an existing item and appends immutable revisions with worker permissions',()=>isolated(async(_db,client)=>{
+  await client.query('SET LOCAL ROLE clideck_mcp_worker')
+  expect((await client.query("SELECT has_table_privilege(current_user,'knowledge_items','UPDATE') allowed")).rows[0].allowed).toBe(false)
+  const candidate={...conformanceFixture.candidate,stable_key:`technical-operations.answer.${randomUUID()}`}
+  const author={createdBy:'researcher',validationLevel:'documentation_reviewed'} as const
+  const first=await createDomainKnowledgeRevision(client,'technical-operations',candidate,author)
+  expect(await createDomainKnowledgeRevision(client,'technical-operations',candidate,author)).toEqual({...first,created:false})
+  const updated=await createDomainKnowledgeRevision(client,'technical-operations',{...candidate,summary:'Updated controlled fixture inspection guidance.'},author)
+  expect(updated.itemId).toBe(first.itemId)
+  expect(updated.revisionId).not.toBe(first.revisionId)
+  expect((await client.query('SELECT revision_number,summary FROM knowledge_revisions WHERE knowledge_item_id=$1 ORDER BY revision_number',[first.itemId])).rows).toEqual([
+    {revision_number:1,summary:candidate.summary},
+    {revision_number:2,summary:'Updated controlled fixture inspection guidance.'},
+  ])
+ }))
+ it('serializes the same revision key while allowing an unrelated worker publication',()=>isolated(async(_db,client)=>{
+  const candidate={...conformanceFixture.candidate,stable_key:`technical-operations.answer.${randomUUID()}`}
+  const author={createdBy:'researcher',validationLevel:'documentation_reviewed'} as const
+  await client.query('SAVEPOINT publication_lock')
+  await client.query('SET LOCAL ROLE clideck_mcp_worker')
+  await createDomainKnowledgeRevision(client,'technical-operations',candidate,author)
+  await client.query('RESET ROLE')
+  const other=await pool.connect()
+  let pending:ReturnType<typeof createDomainKnowledgeRevision>|undefined
+  try {
+   await other.query('BEGIN')
+   await other.query('SET LOCAL ROLE clideck_mcp_worker')
+   await other.query("SET LOCAL statement_timeout='2s'")
+   const unrelated={...candidate,stable_key:`technical-operations.answer.${randomUUID()}`,
+    provenance:candidate.provenance.map(source=>({...source,url:`https://example.com/${randomUUID()}`}))}
+   expect((await createDomainKnowledgeRevision(other,'technical-operations',unrelated,author)).created).toBe(true)
+   const pid=(await other.query('SELECT pg_backend_pid() pid')).rows[0].pid
+   pending=createDomainKnowledgeRevision(other,'technical-operations',candidate,author)
+   void pending.catch(()=>undefined)
+   let waiting=false
+   for(let attempt=0;attempt<30&&!waiting;attempt++) {
+    waiting=(await client.query("SELECT wait_event='advisory' waiting FROM pg_stat_activity WHERE pid=$1",[pid])).rows[0]?.waiting===true
+    if(!waiting) await delay(10)
+   }
+   expect(waiting).toBe(true)
+   await client.query('ROLLBACK TO SAVEPOINT publication_lock')
+   expect((await pending).created).toBe(true)
+  } finally {
+   await client.query('ROLLBACK TO SAVEPOINT publication_lock')
+   await pending?.catch(()=>undefined)
+   await other.query('ROLLBACK')
+   other.release()
+  }
  }))
  it('advances unseen evidence after a partial answer and never repeats a consumed window',()=>isolated(async(db,client)=>{
   const {id,task}=await fixture(db,client)
