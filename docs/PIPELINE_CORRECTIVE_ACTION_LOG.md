@@ -50,6 +50,30 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
 
 
 
+
+## 2026-10-18 12:15 UTC — Earlier two-backup capacity proposal is insufficient
+
+- Health/ready and four services remain good; eight fresh executors, eight valid
+  and zero expired leases, unchanged settings 8/capacity 8. Both original cohort
+  requests remain partial under the already documented, not-yet-deployed fixes.
+- Root filesystem is 98% used. Compact snapshot showed 6.3 GiB available; one
+  repeat showed 7,437,971,456 bytes (about 6.9 GiB), with no pg_dump running.
+  Even the repeat's larger value plus the previously proposed two historical
+  copies cannot meet the canonical approximately 14.4-GiB preflight requirement.
+  Do not run a dump or bypass the reserve/headroom check.
+- The unanswered two-copy approval proposal is superseded by this explicit
+  three-copy proposal: deploy-20260930T214235Z-56fb9fe (3,357,400,713 bytes),
+  deploy-20260930T220949Z-7c58632 (3,358,089,976 bytes), and
+  deploy-20260930T224350Z-7be2bfd (3,377,159,117 bytes). Total 10,092,649,806
+  bytes, about 9.4 GiB. All daily copies, October 9 and the two freshest October
+  17 completed deploy copies remain protected. These exact files exist; the two
+  newest completed deploy copies are still 266de23 and 6a81c23.
+- Approval for this additional history deletion is still required; the earlier
+  human approval covered only the already removed first three September 30
+  copies. No additional backup deletion or production mutation was performed.
+  After approval recheck current capacity and deploy clean main only through
+  the canonical script with the exact approved list; run all ordinary gates.
+
 ## 2026-10-17 10:04 UTC — Private evidence hold also blocked public research
 
 - Compact production snapshot: health/ready good, API/worker/admin/researcher
