@@ -8,26 +8,26 @@ soak. A clean baseline is not a completed extended observation window.
 
 ## Handoff as of learning follow-up deployment, 2026-10-18
 
-Live application: `d9bf09952ef48799d6a958f6aeb5d8edf4cd9758` on
+Live application: `395fb500cb735cd8c4a8a7da1eefb0ced1eebe93` on
 `100.116.82.78`, deployed through `ops/scripts/deploy-production.sh`.
 Pipeline enabled, capacity 8. Operator settings version 8 use `gpt-6-luna`
 low/medium, High fallback `gpt-5.6-terra` medium; unchanged at this acceptance.
 
 - **Learning, October 18:** metadata-contract and mixed private/public evidence
-  corrections are deployed below. The approved three-copy cleanup and canonical
-  deployment completed; 392 tests and 250 evals passed. The exact Node/Tailscale
-  replay now returns an independently reviewed partial Console procedure;
-  Hugging Face remains unknown and is processing another evidence window. Neither
-  original question is closed. The recurring check prioritizes actual question
+  corrections and the repeated-item publication correction are deployed below.
+  The approved three-copy cleanup and canonical deployment completed; 394 tests
+  and 250 evals passed. Exact Hugging Face replay now returns a partial download
+  procedure. Node/Tailscale returns unknown for macOS 27.0.1, with a macOS 27
+  example kept separate. Neither original question is closed. The check prioritizes actual question
   closure, repeated discovery and stalled sources, including software questions.
-  The 20:25 UTC check confirmed a repeated-item publication permission failure;
-  the correction below is implemented locally and awaits deployment capacity.
+  Repeated-item regression passes; no new technical publication was eligible
+  during the short post-switch observation, so its live acceptance remains open.
 - **Executor recovery:** October 1 expired-lease/scheduler correction remains
   deployed; October 9 checked-out PostgreSQL client error handling is now deployed.
-  At 19:24 UTC all eight lanes were fresh, with eight valid leases and zero expired;
-  116 AI runs had completed successfully since switching. Health/ready, four
+  At 21:59 UTC all eight lanes were fresh, with seven valid leases and zero expired;
+  75 AI runs had completed successfully since switching. Health/ready, four
   services and canonical API/admin/MCP smokes passed. The read-only window
-  restarts at 2026-10-18 19:10:19 UTC; this is a short baseline, not an extended
+  restarts at 2026-10-18 21:56:47 UTC; this is a short baseline, not an extended
   soak or validation of the entire knowledge base.
 - **Open:** Cisco/Akamai 403 blocks intake; September 21 restored Linux downloads
   only. One public Junos answer is verified below; an extended soak is not established.
@@ -55,6 +55,55 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
 
 
 
+
+## 2026-10-18 21:59 UTC — Publication correction deployed; short acceptance
+
+- Clean main 395fb500cb735cd8c4a8a7da1eefb0ced1eebe93 deployed through the
+  canonical script with Node 24, including 0ef99f0's per-key publication lock
+  and the local test-database readiness correction below. All 394 tests,
+  250/250 evals, types, local/Linux builds, full backup, migrations/grants,
+  reconciliation/index/stats, atomic switch and ordinary smokes passed.
+  The script restarted the local Luna pool on this SHA; readlink confirms it.
+- The approved 1806409/aaa1b68/cbcd30a directories are absent. October 9,
+  both October 17 copies and October 18 d9bf099 are verified present; daily
+  copies were outside the cleanup selection. New backup:
+  deploy-20261018T212118Z-395fb50, 9,348,708,923-byte completed dump and
+  157-byte checksum file, no partial file. About 8.55 GiB remain free.
+  This resolves the capacity approval below; do not reuse the consumed list.
+- API/worker/admin/researcher active since 21:55:33 UTC, NRestarts=0;
+  health/ready good. At 21:59:17 UTC all eight executor heartbeats are under
+  30 seconds old, seven leases valid and none expired. Settings remain enabled,
+  version 8/capacity 8; no models, operator choices, Pause or task retry limits
+  were changed. Worker still has no UPDATE privilege on knowledge_items.
+- Since service switch, 75 AI runs completed, two artifacts were rejected by
+  retained validation checks, two ordinary candidates published, ten technical
+  drafts and ten independent technical reviews completed. Those reviews did
+  not approve a candidate; no technical publication was queued/completed in
+  this short window, so the existing-item production path is not yet observed.
+  The reproduced permission failure is fixed in code and covered by actual-role
+  repeat/revision/concurrency regressions. No fresh error-priority service
+  journal entries appeared in the first post-switch read. Preserve the live
+  repeat-publication acceptance as a follow-up; do not force an approval or
+  reset exhausted task attempts just to demonstrate publication.
+- Exact original-question replays succeeded through MCP with the same cohort
+  IDs and unchanged contexts. Hugging Face is partial with public revision
+  cfdd2c81-78a7-4303-823c-bc59d698bd20, "Download selected Hugging Face repository
+  files". It supports documented CLI/Python file selection and dry-run usage,
+  not HTTPS-only/Xet bypass or macOS Errno 65 diagnosis. Installed client versions,
+  timestamped errors and the precise repository/invocation remain required.
+- Node/Tailscale exact replay is unknown for macOS 27.0.1. The macOS 27 workflow
+  abffed09-0ad6-43db-949a-c6e7b96fe1c7 is returned only as a separate example,
+  without inferring applicability to the patch version or component semantics.
+  Timestamped Node errors/configuration, executor heartbeat logs/timeouts,
+  sleep/wake/network evidence, Tailscale/service logs and exact component
+  versions remain visible via needs_context=true. Both demands stay open;
+  a partial public document is not complete original-question learning.
+- Read-only observation restarts at 21:56:47 UTC after fresh executors returned.
+  This is a short post-deployment baseline, not a completed extended soak.
+  Canonical output: tmp/publication-lock-deploy-retry.log; repeat-publication
+  acceptance: tmp/publication-lock-acceptance.sql with acceptance_since set to
+  2026-10-18T21:55:33Z. Future routine checks must track reviewed publication,
+  unseen relevant evidence and exact closure rather than agent/database growth.
 
 ## 2026-10-18 21:17 UTC — Approved cleanup completed; local preflight readiness race corrected
 
