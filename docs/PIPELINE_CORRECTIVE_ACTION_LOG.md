@@ -88,12 +88,27 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
   key, allow an unrelated publication and release the lock on rollback. Types,
   all 394 tests and 250/250 evals pass on a freshly migrated/seeded/indexed local
   fixture with the production grant matrix. Deployment remains pending below.
+  Correction is committed/pushed as 0ef99f0; no branches/worktrees/PRs were created.
 - Production is still d9bf09952ef48799d6a958f6aeb5d8edf4cd9758; this is a new
   failed observation, not a clean extended soak. Read-only capacity check found
   7,962,902,528 available bytes; the largest completed dump implies a canonical
   requirement of 16,131,478,760 bytes. No other deploy/dump is running. Additional
   historical backup deletion requires a new exact approval; the previously
   approved three copies are already gone and cannot supply capacity again.
+- Clean-main canonical deployment was attempted with Node 24 and no cleanup
+  selection. Sudo authorization passed; backup preflight stopped before rollout:
+  8,002,711,552 available bytes versus 16,131,478,760 required, exit 1 with
+  BACKUP_INSUFFICIENT_FREE_SPACE. No dump, grants, switch or production restart
+  was performed. Existing publication failures remain until deployment.
+- A new exact cleanup proposal is awaiting approval: the three oldest remaining
+  completed deployment copies, deploy-20260930T230659Z-1806409 (3,393,877,879
+  bytes), deploy-20260930T234029Z-aaa1b68 (3,396,338,946 bytes), and
+  deploy-20261001T023833Z-cbcd30a (3,412,932,192 bytes). Total 10,203,149,017
+  bytes, about 9.5 GiB; enough for current headroom. Preserve all daily copies,
+  October 9, both October 17 copies and the fresh October 18 copy. No additional
+  completed history has been deleted. After approval use only the canonical
+  script with this exact list and all ordinary gates; then measure real
+  publication/revision progress and restart the read-only observation window.
 
 ## 2026-10-18 19:24 UTC — Learning follow-up deployed after approved backup cleanup
 
