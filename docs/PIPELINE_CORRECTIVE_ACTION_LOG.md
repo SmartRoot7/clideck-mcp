@@ -14,14 +14,13 @@ Pipeline enabled, capacity 8. Operator settings version 8 use `gpt-6-luna`
 low/medium, High fallback `gpt-5.6-terra` medium; unchanged at this acceptance.
 
 - **Learning, October 19:** metadata-contract and mixed private/public evidence
-  corrections and the repeated-item publication correction are deployed below.
-  The approved three-copy cleanup and canonical deployment completed; 394 tests
-  and 250 evals passed. Exact Hugging Face replay now returns a partial download
-  procedure. Node/Tailscale returns unknown for macOS 27.0.1, with a macOS 27
-  example kept separate. Neither original question is closed. The check prioritizes actual question
-  closure, repeated discovery and stalled sources, including software questions.
-  Repeated-item live acceptance now passes: four technical publications added
-  revisions to existing items, with worker identity UPDATE still denied.
+  corrections and the repeated-item publication correction remain deployed.
+  Current canonical deployment passed 406 tests and 250 evals. Exact Node and
+  Hugging Face replays return partial procedures; macOS 27.0.1 applicability and
+  installed library versions are not inferred. The check prioritizes actual
+  question closure, repeated discovery and stalled sources, including software
+  questions. Repeated-item publication acceptance remains valid, with worker
+  identity UPDATE still denied.
   The October 19 claim-order correction is now deployed: all six sampled old
   ready user-gap tasks were claimed; three completed in the first snapshot.
   Both exact original-question/context replays remain partial, not closed.
@@ -66,7 +65,7 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
 
 
 
-## 2026-10-19 — Owner-approved automatic backup retention and pending learning deployment
+## 2026-10-19 — Automatic backup retention and learning fairness deployed
 
 - Owner approved deletion of deploy-20261017T055739Z-266de23 and explicitly
   replaced per-copy approval with automatic removal of obsolete backups after
@@ -92,10 +91,8 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
   2 GiB reserve remain mandatory.
 - Targeted filesystem regressions cover count rotation, unreadable/corrupt new
   archives, running dump exclusion, symlinks, unmanaged snapshots and rollout
-  ordering. Canonical clean-main deployment will include the previously verified
+  ordering. Canonical clean-main deployment includes the previously verified
   learning-queue correction 2850ad0 and all ordinary test/build/backup gates.
-  Deployment result, freed space, deployed SHA and post-switch learning/lease
-  acceptance remain to be recorded below; no extended soak is claimed.
 - Completed: clean main 1e62f00014da18b37fc191596951bf2096a7b3b2 deployed via
   ops/scripts/deploy-production.sh with Node 24. The explicit 266de23 removal
   met ordinary headroom; all 406 tests, 250/250 evals, types, local/Linux builds,
