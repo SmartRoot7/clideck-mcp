@@ -94,10 +94,26 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
   background priority. Types, all 399 tests and 250/250 evals pass on a fresh
   migrated/seeded/indexed PostgreSQL 16 fixture with production grants.
   Deployment remains required before declaring the starvation corrected live.
+  Correction is committed and pushed as 2850ad0 on main.
 - Production remains 395fb500cb735cd8c4a8a7da1eefb0ced1eebe93; no runtime change
   or restart was performed during diagnosis. The read-only window must restart
   after deploying this correction; prior healthy executor snapshots do not prove
   progress on the stranded questions.
+- Canonical deploy of clean main with Node 24 and no cleanup selection passed
+  sudo authorization but stopped at backup preflight: 8,638,193,664 available
+  bytes versus 16,170,547,032 required, BACKUP_INSUFFICIENT_FREE_SPACE, exit 1.
+  No backup, migration, grant, switch or restart was attempted. Prior explicitly
+  approved cleanup lists have already been consumed and must not be reused.
+- Proposed new explicit cleanup: only deploy-20261017T055739Z-266de23,
+  8,867,244,281 bytes (about 8.3 GiB). Its completed dump exists and it is outside
+  the newest-two protection; current available space plus it meets the ordinary
+  headroom check. Preserve every daily copy, October 9, the other October 17
+  copy deploy-20261017T072848Z-6a81c23, and both October 18 copies d9bf099/395fb50.
+  This is a new retention decision requiring approval, not covered by any
+  previous September 30/October 1 cleanup consent. No extra history was deleted.
+  Once approved, use only the canonical script with that exact list and all
+  normal gates. Verify claims/progress of old queued user-gap work after switch,
+  retain original-question/OS/component context and restart read-only observation.
 
 ## 2026-10-18 22:24 UTC — Existing-item publication confirmed in production
 
