@@ -22,6 +22,8 @@ low/medium, High fallback `gpt-5.6-terra` medium; unchanged at this acceptance.
   closure, repeated discovery and stalled sources, including software questions.
   Repeated-item live acceptance now passes: four technical publications added
   revisions to existing items, with worker identity UPDATE still denied.
+  The October 19 check confirms ready user-gap work starved by stage ordering;
+  its claim-order correction is implemented below and awaits deployment.
 - **Executor recovery:** October 1 expired-lease/scheduler correction remains
   deployed; October 9 checked-out PostgreSQL client error handling is now deployed.
   At 21:59 UTC all eight lanes were fresh, with seven valid leases and zero expired;
@@ -55,6 +57,47 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
 
 
 
+
+## 2026-10-19 02:22 UTC — Technical refills starve older user-gap research and source work
+
+- Health/ready good, four services active with NRestarts=0, settings enabled
+  version 8/capacity 8, eight fresh executors and eight valid/no expired leases.
+  This does not establish healthy learning: the last 30 minutes completed 77
+  technical drafts, 78 reviews and three partial publications, but no fragment
+  analysis or ordinary candidate verification/review/publication. 130 of 154
+  discovery completions added no evidence, and ready sources without work grew
+  to 163. Both original questions remain partial; Node evidence windows reached
+  43, while Hugging Face's last completed work is still October 18 19:35 UTC.
+- One repeat confirms the specific starvation. Hugging Face has a ready demand
+  source_discovery task created October 17 08:00:38 UTC, available since then,
+  attempts=0, priority 160 and no context hold. Active work is all priority 165:
+  four focused discoveries, two technical drafts, one technical review and one
+  mechanical publication. The standard ready queue includes 702 discoveries,
+  17 analyses, 56 verifications and 45 reviews at 160. No fresh service errors.
+- Cause: a continuously replenished 165 technical/focused-discovery tier always
+  precedes other real user learning at 160. An unconditional preference for
+  source-bound tasks before task age can also bypass an older discovery after
+  priorities are equal. This strands public research even though private incident
+  requirements remain correctly visible; it is not an operator Pause or missing
+  executor capacity.
+- Minimal correction: AI and mechanical claims treat historical demand-stage
+  priority 165 at the ordinary user-gap tier 160, then order ready work by age.
+  Source-bound work keeps its former preference only for equal-age ties. Initial
+  diagnosis urgency 170 and user-gap precedence over background work remain.
+  Persisted task metadata, active leases/model snapshots, available_at, dedupe,
+  finite attempts, operator-selected 1–8 lanes and Pause are unchanged; no new
+  quotas, cooldowns, stage caps or global serial execution were introduced.
+- Actual PostgreSQL regressions reproduce all five failures on old code: older
+  discovery, analysis, verification, review and acquisition lose to new technical
+  refills/publication. Corrected code passes all 41 technical/urgent tests,
+  including legacy simultaneous-source behavior, Pause, profile selection and
+  background priority. Types, all 399 tests and 250/250 evals pass on a fresh
+  migrated/seeded/indexed PostgreSQL 16 fixture with production grants.
+  Deployment remains required before declaring the starvation corrected live.
+- Production remains 395fb500cb735cd8c4a8a7da1eefb0ced1eebe93; no runtime change
+  or restart was performed during diagnosis. The read-only window must restart
+  after deploying this correction; prior healthy executor snapshots do not prove
+  progress on the stranded questions.
 
 ## 2026-10-18 22:24 UTC — Existing-item publication confirmed in production
 

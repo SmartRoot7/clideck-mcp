@@ -1003,6 +1003,11 @@ const aiPriorities = {
   discover: 50
 } as const
 
+// A technical refill must not outrank older ready work for other user gaps.
+// Keep diagnosis urgency, but claim historical 165-stage boosts at the demand tier.
+const claimPrioritySql = `CASE WHEN queue_class='demand' AND priority=165
+  THEN ${aiPriorities.demand} ELSE priority END`
+
 export function boundFragmentAnalysisBatch<
   T extends { content: string }
 >(
@@ -4133,9 +4138,8 @@ export async function claimPipelineTask(
        ORDER BY CASE WHEN queue_class='demand' AND (knowledge_demand_id IS NULL OR EXISTS (
          SELECT 1 FROM knowledge_demands demand WHERE demand.id=pipeline_tasks.knowledge_demand_id
            AND demand.status<>'published' AND demand.last_error_code IS DISTINCT FROM 'CONTEXT_REQUIRED'
-       )) THEN 0 ELSE 1 END, priority DESC,
-         CASE WHEN knowledge_demand_id IS NOT NULL AND source_candidate_id IS NOT NULL THEN 0 ELSE 1 END,
-         created_at
+       )) THEN 0 ELSE 1 END, ${claimPrioritySql} DESC, created_at,
+         CASE WHEN knowledge_demand_id IS NOT NULL AND source_candidate_id IS NOT NULL THEN 0 ELSE 1 END
        FOR UPDATE SKIP LOCKED
        LIMIT 1`,
       [aiTaskTypes],
@@ -4494,7 +4498,7 @@ export async function claimMechanicalPipelineTask(
        ORDER BY CASE WHEN queue_class='demand' AND (knowledge_demand_id IS NULL OR EXISTS (
          SELECT 1 FROM knowledge_demands demand WHERE demand.id=pipeline_tasks.knowledge_demand_id
            AND demand.status<>'published' AND demand.last_error_code IS DISTINCT FROM 'CONTEXT_REQUIRED'
-       )) THEN 0 ELSE 1 END, priority DESC, created_at
+       )) THEN 0 ELSE 1 END, ${claimPrioritySql} DESC, created_at
        FOR UPDATE SKIP LOCKED
        LIMIT 1`,
       [mechanicalTaskTypes],

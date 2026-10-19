@@ -11,7 +11,7 @@ import type { Database } from '../src/db.js'
 import { sha256, sha256Label } from '../src/crypto.js'
 import { integrationDatabaseUrl,createTestConfig } from './helpers.js'
 import { queueUnknownKnowledgeDemand, getKnowledgeLearningProgress, reportKnowledgeGap } from '../src/domain/mcp-observability.js'
-import { ensurePipelineWork,claimPipelineTask,submitTechnicalAnswer,publishTechnicalPipelineAnswer,completeMechanicalPipelineTask } from '../src/domain/pipeline.js'
+import { ensurePipelineWork,claimPipelineTask,claimMechanicalPipelineTask,submitTechnicalAnswer,publishTechnicalPipelineAnswer,completeMechanicalPipelineTask } from '../src/domain/pipeline.js'
 import { lookupTechnicalAnswer,technicalLegacyAnswer,technicalFeedbackHash } from '../src/domain/technical-demand.js'
 import { technicalQuestionKey } from '../src/domain/technical-learning.js'
 import { createDomainKnowledgeRevision } from '../src/domain/domain-knowledge.js'
@@ -99,6 +99,34 @@ suite('original-question technical learning',()=>{
   expect(claim['execution_profile']).toBe('luna')
   expect((claim['payload'] as any).question_key).toBe(task['payload'].question_key)
   expect((claim['payload'] as any).knowledge_demand).toBeUndefined()
+ }))
+ it.each([
+  ['source_discovery','discover'],['fragment_analysis','analyze'],
+  ['candidate_verification','verify'],['candidate_deep_review','deep_review'],
+ ])('serves aged user %s work before newly refilled technical and source-bound work',(type,stage)=>isolated(async(db,client)=>{
+  const {id,task}=await fixture(db,client)
+  const older=(await client.query(`INSERT INTO pipeline_tasks
+    (task_type,stage,priority,dedupe_key,payload,knowledge_demand_id,queue_class,created_at,available_at)
+    VALUES ($1,$2,160,$3,'{}',$4,'demand',now()-interval '2 days',now()-interval '2 days') RETURNING id`,
+    [type,stage,randomUUID(),id])).rows[0]
+  const linked=(await client.query(`INSERT INTO pipeline_tasks
+    (task_type,stage,priority,dedupe_key,payload,knowledge_demand_id,source_candidate_id,queue_class)
+    VALUES ('fragment_analysis','analyze',160,$1,'{}',$2,$3,'demand') RETURNING id`,
+    [randomUUID(),id,task.payload.evidence[0].source_id])).rows[0]
+  await client.query(`INSERT INTO pipeline_tasks(task_type,stage,priority,dedupe_key,payload,created_at)
+    VALUES ('source_discovery','discover',200,$1,'{}',now()-interval '3 days')`,[randomUUID()])
+  const claim=await claimPipelineTask(db,createTestConfig(),'pipeline-executor-01','fixture-fairness',executionProtocolVersion)
+  expect(claim['pipeline_task_id']).toBe(older.id)
+  expect((await client.query('SELECT status FROM pipeline_tasks WHERE id=ANY($1::uuid[])',[[task.id,linked.id]])).rows).toEqual([{status:'queued'},{status:'queued'}])
+ }))
+ it('serves aged user source acquisition before a fresh technical publication',()=>isolated(async(db,client)=>{
+  const {id,task}=await fixture(db,client)
+  const older=(await client.query(`INSERT INTO pipeline_tasks
+    (task_type,stage,priority,dedupe_key,payload,knowledge_demand_id,queue_class,created_at,available_at)
+    VALUES ('source_acquisition','acquire',160,$1,'{}',$2,'demand',now()-interval '2 days',now()-interval '2 days') RETURNING id`,[randomUUID(),id])).rows[0]
+  await client.query(`INSERT INTO pipeline_tasks(task_type,stage,priority,dedupe_key,payload,knowledge_demand_id,queue_class)
+    VALUES ('technical_answer_publication','publish',165,$1,$2::jsonb,$3,'demand')`,[randomUUID(),JSON.stringify(task.payload),id])
+  expect((await claimMechanicalPipelineTask(db,createTestConfig(),'fixture-worker'))?.task.id).toBe(older.id)
  }))
  it('publishes only after independent complete review and exact replay through the ordinary active release',()=>isolated(async(db,client)=>{
   const {id,q,task}=await fixture(db,client)
