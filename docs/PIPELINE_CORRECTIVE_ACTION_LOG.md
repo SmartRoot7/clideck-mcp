@@ -6,14 +6,14 @@ a restart alone is not a fix. Add evidence → cause → minimal correction → 
 SHA (or configuration-only status) → measured result, then restart the read-only
 soak. A clean baseline is not a completed extended observation window.
 
-## Handoff as of learning follow-up deployment, 2026-10-18
+## Handoff as of learning fairness and backup retention deployment, 2026-10-19
 
-Live application: `395fb500cb735cd8c4a8a7da1eefb0ced1eebe93` on
+Live application: `1e62f00014da18b37fc191596951bf2096a7b3b2` on
 `100.116.82.78`, deployed through `ops/scripts/deploy-production.sh`.
 Pipeline enabled, capacity 8. Operator settings version 8 use `gpt-6-luna`
 low/medium, High fallback `gpt-5.6-terra` medium; unchanged at this acceptance.
 
-- **Learning, October 18:** metadata-contract and mixed private/public evidence
+- **Learning, October 19:** metadata-contract and mixed private/public evidence
   corrections and the repeated-item publication correction are deployed below.
   The approved three-copy cleanup and canonical deployment completed; 394 tests
   and 250 evals passed. Exact Hugging Face replay now returns a partial download
@@ -22,14 +22,22 @@ low/medium, High fallback `gpt-5.6-terra` medium; unchanged at this acceptance.
   closure, repeated discovery and stalled sources, including software questions.
   Repeated-item live acceptance now passes: four technical publications added
   revisions to existing items, with worker identity UPDATE still denied.
-  The October 19 check confirms ready user-gap work starved by stage ordering;
-  its claim-order correction is implemented below and awaits deployment.
+  The October 19 claim-order correction is now deployed: all six sampled old
+  ready user-gap tasks were claimed; three completed in the first snapshot.
+  Both exact original-question/context replays remain partial, not closed.
+- **Storage, October 19:** owner replaced per-copy approval with automatic
+  retention after successful deployment: one daily and one deployment backup,
+  current/previous application releases only. Canonical cleanup removed fourteen
+  daily archives, eight old deployment directories and nine old releases, after
+  the separately approved 266de23 preflight removal. Free space is now about
+  149 GiB (39% filesystem use), versus 8.3 GiB before; backup storage is 20 GiB.
+  Future routine rotation under this policy needs no new per-copy approval.
 - **Executor recovery:** October 1 expired-lease/scheduler correction remains
   deployed; October 9 checked-out PostgreSQL client error handling is now deployed.
-  At 21:59 UTC all eight lanes were fresh, with seven valid leases and zero expired;
-  75 AI runs had completed successfully since switching. Health/ready, four
+  At October 19 19:05:50 UTC all eight lanes were fresh, with eight valid leases
+  and zero expired; ten AI runs had completed successfully since switching. Health/ready, four
   services and canonical API/admin/MCP smokes passed. The read-only window
-  restarts at 2026-10-18 21:56:47 UTC; this is a short baseline, not an extended
+  restarts at 2026-10-19 19:05:50 UTC; this is a short baseline, not an extended
   soak or validation of the entire knowledge base.
 - **Open:** Cisco/Akamai 403 blocks intake; September 21 restored Linux downloads
   only. One public Junos answer is verified below; an extended soak is not established.
@@ -88,6 +96,36 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
   learning-queue correction 2850ad0 and all ordinary test/build/backup gates.
   Deployment result, freed space, deployed SHA and post-switch learning/lease
   acceptance remain to be recorded below; no extended soak is claimed.
+- Completed: clean main 1e62f00014da18b37fc191596951bf2096a7b3b2 deployed via
+  ops/scripts/deploy-production.sh with Node 24. The explicit 266de23 removal
+  met ordinary headroom; all 406 tests, 250/250 evals, types, local/Linux builds,
+  full backup, migrations/grants/reconciliation/index/stats, API/admin/MCP smokes
+  and local pool restart passed. Targeted retention/contract tests: 32 passed.
+  Switch: API/admin/researcher 19:03:14 UTC, worker 19:03:18 UTC.
+- New completed backup: deploy-20261019T182647Z-1e62f00, dump 9,458,488,330 bytes
+  with archive-index validation and verified checksum. After successful smokes,
+  automatic retention removed fourteen older daily dump/checksum pairs, eight
+  obsolete deployment directories (including the abandoned partial) and nine
+  old application releases. Retained exactly this deployment backup, daily
+  clideck-mcp-20261017T032238Z.dump (8,847,817,616 bytes), current 1e62f00 and
+  previous 395fb50 application releases. Host-migration snapshots preserved.
+  Backups use 20 GiB and releases 726 MiB. Filesystem free space increased from
+  8,813,137,920 to 159,044,476,928 bytes, about 140 GiB freed; use fell to 39%.
+- Acceptance at 19:05:50 UTC: health/ready good, four services active/NRestarts=0,
+  eight fresh executors (oldest heartbeat five seconds), eight valid/no expired
+  leases, settings enabled/version 8/capacity 8 unchanged, worker item UPDATE
+  still denied. No fresh error-priority service entries since switch. Ten AI
+  runs completed successfully; new claims include twelve old-priority-160
+  discoveries and six urgent-priority-170 diagnoses. All six sampled priority-160
+  discoveries created October 18 03:51–03:53 UTC changed from queued/attempts=0
+  to attempts=1: three completed without failure and three running. This is real
+  progress on previously bypassed work, not just executor activity.
+- Exact Node/macOS 27.0.1 and Hugging Face replays retain their original IDs and
+  return partial answers, with missing public capabilities and private incident
+  context still visible. OS applicability and installed component versions are
+  not inferred. Neither question is closed by this acceptance. Restart read-only
+  observation at 2026-10-19 19:05:50 UTC; this short snapshot is not an extended
+  soak. Routine backup rotation is now automatic; no deployment blocker remains.
 
 ## 2026-10-19 02:22 UTC — Technical refills starve older user-gap research and source work
 
