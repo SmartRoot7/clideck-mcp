@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 # Called only by the canonical deployment preflight. An explicit failed SHA
-# authorizes cleanup of its incomplete dump; completed backups are never removed.
+# authorizes cleanup of its incomplete dump; preflight prunes completed backups
+# only from an explicit list. Automatic retention follows successful rollout.
 backup_root="${1:-/var/backups/clideck-mcp}"
 failed_sha="${2:-}"
 prune_list="${3:-}"

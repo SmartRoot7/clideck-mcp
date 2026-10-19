@@ -3,7 +3,6 @@ set -euo pipefail
 
 : "${BACKUP_DATABASE_URL:?BACKUP_DATABASE_URL is required}"
 : "${BACKUP_DIRECTORY:=/var/backups/clideck-mcp}"
-: "${BACKUP_RETENTION_DAYS:=14}"
 
 install -d -m 0700 "$BACKUP_DIRECTORY"
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -51,11 +50,7 @@ done
 wait "$backup_pid"
 backup_pid=''
 
+pg_restore --list "$temporary_path" >/dev/null
 mv "$temporary_path" "$backup_path"
 sha256sum "$backup_path" > "$backup_path.sha256"
-find "$BACKUP_DIRECTORY" \
-  -maxdepth 1 \
-  -type f \
-  -name 'clideck-mcp-*.dump*' \
-  -mtime "+$BACKUP_RETENTION_DAYS" \
-  -delete
+bash "$(dirname "${BASH_SOURCE[0]}")/prune-backups.sh" "$BACKUP_DIRECTORY"

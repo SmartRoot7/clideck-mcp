@@ -58,6 +58,37 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
 
 
 
+## 2026-10-19 — Owner-approved automatic backup retention and pending learning deployment
+
+- Owner approved deletion of deploy-20261017T055739Z-266de23 and explicitly
+  replaced per-copy approval with automatic removal of obsolete backups after
+  a healthy deployment. The earlier requirement to preserve every daily copy
+  is superseded by this retention decision; do not ask again for routine history
+  rotation under this policy.
+- Observed production storage: 250 GiB root filesystem, 232 GiB used and
+  8.3 GiB free; /var/backups/clideck-mcp uses 157 GiB, versus PostgreSQL 51 GiB,
+  application artifacts 8.7 GiB, releases 3.6 GiB and logs 1.4 GiB. Fifteen daily
+  dumps from October 3–17 coexist with deployment history. Cause: independent
+  14-day daily and 14-deployment retention, plus eight extra releases beyond
+  current/previous; the previous retention boundary needed repeated manual
+  space approvals. Abandoned deployment directories also retained a 1.3 GB
+  partial dump. Host-migration snapshots account for 2.9 GiB and are preserved.
+- New policy: retain one latest daily dump and the pre-switch backup belonging
+  to the latest successful deployment; keep current/previous application releases
+  only. Validate archive readability and checksums before rotation. Daily backup
+  success rotates only daily files; deployment backup history and abandoned
+  attempts rotate only after canonical smokes, pipeline-state restoration and
+  atomic-link verification. A failed backup/rollout keeps earlier recovery
+  points. Strict names, regular paths, symlink exclusions and running-pg_dump
+  protection preserve unmanaged/migration data. Full-backup headroom and the
+  2 GiB reserve remain mandatory.
+- Targeted filesystem regressions cover count rotation, unreadable/corrupt new
+  archives, running dump exclusion, symlinks, unmanaged snapshots and rollout
+  ordering. Canonical clean-main deployment will include the previously verified
+  learning-queue correction 2850ad0 and all ordinary test/build/backup gates.
+  Deployment result, freed space, deployed SHA and post-switch learning/lease
+  acceptance remain to be recorded below; no extended soak is claimed.
+
 ## 2026-10-19 02:22 UTC — Technical refills starve older user-gap research and source work
 
 - Health/ready good, four services active with NRestarts=0, settings enabled

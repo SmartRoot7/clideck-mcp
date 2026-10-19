@@ -60,9 +60,16 @@ reference, not an instruction to repeat the completed host move.
   unit's `ReadWritePaths` must agree. Preserve `ProtectSystem=strict` elsewhere.
 - Backups: `/var/backups/clideck-mcp`, owner
   `clideck_mcp_backup:clideck_mcp`, mode `0700`.
-- Backup policy: daily custom-format `pg_dump`, encrypted offsite transfer,
-  14 daily and 8 weekly copies, monthly restore test. A timer success alone
-  is insufficient: verify checksum and restore after host migration.
+- Local retention (owner-approved October 19): one latest completed daily dump
+  and one backup from the latest successful deployment. Validate the dump's
+  archive index and checksum before retention. Canonical rollout removes older
+  deployment backups, including abandoned attempts, only after successful
+  smokes; it keeps the current and previous application releases for rollback.
+  Preflight still requires space for a full new dump and a 2 GiB reserve; it
+  never deletes the retained recovery point to make room. A failed new backup
+  or rollout preserves the older recovery points. Unknown files and host-move
+  snapshots are outside automatic retention. A timer success alone is
+  insufficient: verify restore after host migration and perform restore drills.
 - Offsite destination and critical alert channel were previously external
   prerequisites; verify their actual configuration before claiming recovery
   readiness. This documentation review did not inspect production.

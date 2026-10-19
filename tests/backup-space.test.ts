@@ -1,7 +1,8 @@
-import {mkdtemp,mkdir,writeFile,readFile,readdir,rm} from 'node:fs/promises'
+import {mkdtemp,mkdir,writeFile,readFile,readdir,rm,symlink} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import {join,resolve} from 'node:path'
 import {spawnSync} from 'node:child_process'
+import {createHash} from 'node:crypto'
 import {afterEach,expect,it} from 'vitest'
 const directories:string[]=[]
 afterEach(async()=>{for(const path of directories.splice(0))await rm(path,{recursive:true,force:true})})
@@ -10,6 +11,7 @@ async function fixture(){
  const bin=join(root,'bin');await mkdir(bin)
  await writeFile(join(bin,'df'),'#!/bin/bash\nprintf "Filesystem 1024-blocks Used Available Capacity Mounted on\\nfixture 99999999 1 ${FIXTURE_AVAILABLE_KB:-99999999} 1%% /\\n"\n',{mode:0o755})
  await writeFile(join(bin,'pgrep'),'#!/bin/bash\nexit 1\n',{mode:0o755})
+ await writeFile(join(bin,'pg_restore'),'#!/bin/bash\nexit 0\n',{mode:0o755})
  return {root,bin,env:{...process.env,PATH:bin+':'+process.env['PATH'],BACKUP_DIRECTORY:root,BACKUP_DATABASE_URL:'postgresql://fixture',BACKUP_MIN_FREE_BYTES:'1024'}}
 }
 it('removes only the explicitly selected failed deployment partial and preserves complete/unrelated backups',async()=>{
@@ -71,4 +73,83 @@ it('preserves the empty failed-SHA slot through the canonical SSH preflight',asy
  const preflight=deploy.slice(deploy.indexOf("printf '==> Verify backup space"),deploy.indexOf("printf '==> Preflight"))
  const result=spawnSync('bash',['-c',preflight],{env:{...f.env,remote_host:'fixture',CLIDECK_MCP_BACKUP_ROOT:f.root,CLIDECK_MCP_CLEANUP_FAILED_BACKUP_SHA:'',CLIDECK_MCP_PRUNE_APPROVED_BACKUPS:names[0]!},encoding:'utf8'})
  expect(result.status,result.stderr).toBe(0);expect(await readdir(f.root)).not.toContain(names[0]);expect(await readdir(f.root)).toContain(names[2])
+})
+
+async function completedDump(directory:string,timestamp:string){
+ const dump=join(directory,`clideck-mcp-${timestamp}.dump`)
+ await writeFile(dump,'complete')
+ await writeFile(dump+'.sha256',createHash('sha256').update('complete').digest('hex')+'  '+dump+'\n')
+ return dump
+}
+
+it('rotates daily backups by count only after the new archive passes validation',async()=>{
+ const f=await fixture();const old=await completedDump(f.root,'20261018T000000Z')
+ await writeFile(join(f.root,'operator-notes.txt'),'preserve')
+ const deployment=join(f.root,'deploy-20261017T000000Z-aaaaaaa');await mkdir(deployment)
+ await writeFile(join(deployment,'previous-release.txt'),'preserve')
+ await writeFile(join(f.bin,'pg_dump'),'#!/bin/bash\nfor arg do case "$arg" in --file=*) printf complete > "${arg#--file=}";; esac; done\n',{mode:0o755})
+ const result=spawnSync('bash',[resolve('ops/scripts/backup.sh')],{env:f.env,encoding:'utf8',timeout:5000})
+ expect(result.status,result.stderr).toBe(0)
+ const files=await readdir(f.root)
+ expect(files).not.toContain(old.split('/').at(-1));expect(files.filter(name=>name.endsWith('.dump'))).toHaveLength(1)
+ expect(files).toContain('operator-notes.txt');expect(files).toContain(deployment.split('/').at(-1))
+})
+
+it('preserves the previous daily backup if the new archive is unreadable',async()=>{
+ const f=await fixture();const old=await completedDump(f.root,'20261018T000000Z')
+ await writeFile(join(f.bin,'pg_dump'),'#!/bin/bash\nfor arg do case "$arg" in --file=*) printf broken > "${arg#--file=}";; esac; done\n',{mode:0o755})
+ await writeFile(join(f.bin,'pg_restore'),'#!/bin/bash\nexit 2\n',{mode:0o755})
+ const result=spawnSync('bash',[resolve('ops/scripts/backup.sh')],{env:f.env,encoding:'utf8',timeout:5000})
+ expect(result.status).toBe(2);expect(await readFile(old,'utf8')).toBe('complete')
+ expect(await readFile(old+'.sha256','utf8')).toContain(createHash('sha256').update('complete').digest('hex'))
+})
+
+it('retains one verified deployment and daily backup while leaving unmanaged paths alone',async()=>{
+ const f=await fixture();const oldDaily=await completedDump(f.root,'20261017T000000Z');const daily=await completedDump(f.root,'20261018T000000Z')
+ const old=join(f.root,'deploy-20261017T000000Z-aaaaaaa');const failed=join(f.root,'deploy-20261017T010000Z-bbbbbbb');const current=join(f.root,'deploy-20261019T000000Z-ccccccc')
+ for(const dir of [old,failed,current]){await mkdir(dir);await writeFile(join(dir,'previous-release.txt'),'previous')}
+ await completedDump(old,'20261017T000000Z');await writeFile(join(failed,'clideck-mcp-failed.dump.partial'),'incomplete');const currentDump=await completedDump(current,'20261019T000000Z')
+ for(const name of ['host-migration','deploy-operator-notes'])await mkdir(join(f.root,name))
+ const result=spawnSync('bash',[resolve('ops/scripts/prune-backups.sh'),f.root,current],{env:f.env,encoding:'utf8'})
+ expect(result.status,result.stderr).toBe(0)
+ const files=await readdir(f.root)
+ expect(files).not.toContain(old.split('/').at(-1));expect(files).not.toContain(failed.split('/').at(-1));expect(files).not.toContain(oldDaily.split('/').at(-1))
+ expect(await readFile(daily,'utf8')).toBe('complete');expect(await readFile(currentDump,'utf8')).toBe('complete')
+ expect(files).toContain('host-migration');expect(files).toContain('deploy-operator-notes')
+})
+
+it('deletes no history when the retained deployment checksum is invalid',async()=>{
+ const f=await fixture();const old=await completedDump(f.root,'20261017T000000Z');await completedDump(f.root,'20261018T000000Z')
+ const current=join(f.root,'deploy-20261019T000000Z-ccccccc');await mkdir(current);await writeFile(join(current,'previous-release.txt'),'previous')
+ const dump=await completedDump(current,'20261019T000000Z');await writeFile(dump,'corrupted')
+ const result=spawnSync('bash',[resolve('ops/scripts/prune-backups.sh'),f.root,current],{env:f.env,encoding:'utf8'})
+ expect(result.status).not.toBe(0);expect(await readFile(old,'utf8')).toBe('complete')
+})
+
+it('does not prune while another dump is running',async()=>{
+ const f=await fixture();const old=await completedDump(f.root,'20261017T000000Z');await completedDump(f.root,'20261018T000000Z')
+ await writeFile(join(f.bin,'pgrep'),'#!/bin/bash\nexit 0\n',{mode:0o755})
+ const result=spawnSync('bash',[resolve('ops/scripts/prune-backups.sh'),f.root],{env:f.env,encoding:'utf8'})
+ expect(result.status).toBe(1);expect(result.stderr).toContain('running pg_dump');expect(await readFile(old,'utf8')).toBe('complete')
+})
+
+it('neither follows backup symlinks nor accepts one as the retained deployment',async()=>{
+ const f=await fixture();const outside=await fixture();const dump=await completedDump(outside.root,'20261017T000000Z')
+ const linked=join(f.root,'deploy-20261017T000000Z-aaaaaaa');await symlink(outside.root,linked)
+ const current=join(f.root,'deploy-20261019T000000Z-ccccccc');await mkdir(current);await writeFile(join(current,'previous-release.txt'),'previous');await completedDump(current,'20261019T000000Z')
+ await symlink(dump,join(f.root,'clideck-mcp-20261017T000000Z.dump'));await symlink(dump+'.sha256',join(f.root,'clideck-mcp-20261017T000000Z.dump.sha256'))
+ const denied=spawnSync('bash',[resolve('ops/scripts/prune-backups.sh'),f.root,linked],{env:f.env,encoding:'utf8'})
+ expect(denied.status).not.toBe(0)
+ const result=spawnSync('bash',[resolve('ops/scripts/prune-backups.sh'),f.root,current],{env:f.env,encoding:'utf8'})
+ expect(result.status,result.stderr).toBe(0);expect(await readFile(dump,'utf8')).toBe('complete');expect(await readdir(f.root)).toContain(linked.split('/').at(-1))
+})
+
+it('runs deployment retention after smoke and restoration and keeps only current and previous releases',async()=>{
+ const remote=await readFile(resolve('ops/scripts/deploy-production-remote.sh'),'utf8')
+ const retentionAt=remote.indexOf('if ! prune_deployment_history; then')
+ expect(retentionAt).toBeGreaterThan(remote.indexOf('"$release_directory/ops/scripts/smoke-test.sh"'))
+ expect(retentionAt).toBeGreaterThan(remote.indexOf('restore_pipeline_state\n\nif [['))
+ expect(remote).toContain('"$entry" == "$current_release" || "$entry" == "$previous_keep"')
+ expect(remote).not.toContain('retention_count')
+ expect(remote).toContain('bash "$release_directory/ops/scripts/prune-backups.sh" "$backup_root" "$backup_directory"')
 })

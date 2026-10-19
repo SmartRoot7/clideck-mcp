@@ -12,18 +12,11 @@ release_root="${CLIDECK_MCP_RELEASE_ROOT:-/opt/clideck-mcp/releases}"
 current_link="${CLIDECK_MCP_CURRENT_LINK:-/opt/clideck-mcp/current}"
 config_directory="${CLIDECK_MCP_CONFIG_DIRECTORY:-/etc/clideck-mcp}"
 backup_root="${CLIDECK_MCP_BACKUP_ROOT:-/var/backups/clideck-mcp}"
-release_retention_count="${CLIDECK_MCP_RELEASE_RETENTION_COUNT:-8}"
-backup_retention_count="${CLIDECK_MCP_BACKUP_RETENTION_COUNT:-14}"
 caddy_config="${CLIDECK_MCP_CADDY_CONFIG:-/etc/caddy/Caddyfile}"
 admin_tailscale_origin="${CLIDECK_MCP_ADMIN_TAILSCALE_ORIGIN:-https://clideck-mcp.taild43e46.ts.net}"
 
 if [[ ! "$commit_sha" =~ ^[0-9a-f]{40}$ ]]; then
   printf 'A full 40-character Git commit SHA is required\n' >&2
-  exit 1
-fi
-if [[ ! "$release_retention_count" =~ ^[1-9][0-9]*$ ]] ||
-   [[ ! "$backup_retention_count" =~ ^[1-9][0-9]*$ ]]; then
-  printf 'Deployment retention counts must be positive integers\n' >&2
   exit 1
 fi
 
@@ -51,7 +44,6 @@ set -a
 source "$config_directory/backup.env"
 set +a
 if ! BACKUP_DIRECTORY="$backup_directory" \
-  BACKUP_RETENTION_DAYS=36500 \
   "$candidate_directory/ops/scripts/backup.sh"; then
   printf 'Backup failed before application switch; incomplete dump cleanup is owned by backup.sh\n' >&2
   exit 1
@@ -373,8 +365,8 @@ if [[ "$(readlink -f "$current_link")" != "$release_directory" ]]; then
 fi
 
 prune_deployment_history() {
-  local current_release previous_keep entry entry_name index
-  local -a release_entries backup_entries
+  local current_release previous_keep entry entry_name
+  local -a release_entries
   current_release="$(readlink -f "$current_link")"
   previous_keep="$previous_release"
 
@@ -382,32 +374,16 @@ prune_deployment_history() {
     find "$release_root" -mindepth 1 -maxdepth 1 -type d \
       -printf '%T@ %p\n' | sort -nr | cut -d' ' -f2-
   )
-  index=0
   for entry in "${release_entries[@]}"; do
     entry_name="${entry##*/}"
     [[ "$entry_name" =~ ^[0-9a-f]{40}$ ]] || continue
     if [[ "$entry" == "$current_release" || "$entry" == "$previous_keep" ]]; then
       continue
     fi
-    index=$((index + 1))
-    if (( index > release_retention_count )); then
-      rm -rf -- "$entry"
-    fi
+    printf 'Remove obsolete release: %s\n' "$entry"
+    rm -rf -- "$entry" || return
   done
-
-  mapfile -t backup_entries < <(
-    find "$backup_root" -mindepth 1 -maxdepth 1 -type d \
-      -name 'deploy-*' -printf '%T@ %p\n' | sort -nr | cut -d' ' -f2-
-  )
-  index=0
-  for entry in "${backup_entries[@]}"; do
-    entry_name="${entry##*/}"
-    [[ "$entry_name" =~ ^deploy-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{7}$ ]] || continue
-    index=$((index + 1))
-    if (( index > backup_retention_count )) && [[ "$entry" != "$backup_directory" ]]; then
-      rm -rf -- "$entry"
-    fi
-  done
+  bash "$release_directory/ops/scripts/prune-backups.sh" "$backup_root" "$backup_directory"
 }
 
 # Retention runs only after migration, service restart, smoke, pipeline-state
