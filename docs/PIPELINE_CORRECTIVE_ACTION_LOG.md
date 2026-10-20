@@ -6,16 +6,16 @@ a restart alone is not a fix. Add evidence → cause → minimal correction → 
 SHA (or configuration-only status) → measured result, then restart the read-only
 soak. A clean baseline is not a completed extended observation window.
 
-## Handoff as of learning fairness and backup retention deployment, 2026-10-19
+## Handoff as of prepared-evidence scheduling deployment, 2026-10-20
 
-Live application: `1e62f00014da18b37fc191596951bf2096a7b3b2` on
+Live application: `f86a21775b556f513606b91b6fd87199645024a9` on
 `100.116.82.78`, deployed through `ops/scripts/deploy-production.sh`.
 Pipeline enabled, capacity 8. Operator settings version 8 use `gpt-6-luna`
 low/medium, High fallback `gpt-5.6-terra` medium; unchanged at this acceptance.
 
-- **Learning, October 19:** metadata-contract and mixed private/public evidence
+- **Learning, October 20:** metadata-contract and mixed private/public evidence
   corrections and the repeated-item publication correction remain deployed.
-  Current canonical deployment passed 406 tests and 250 evals. Exact Node and
+  Current canonical deployment passed 414 tests and 250 evals. Exact Node and
   Hugging Face replays return partial procedures; macOS 27.0.1 applicability and
   installed library versions are not inferred. The check prioritizes actual
   question closure, repeated discovery and stalled sources, including software
@@ -24,19 +24,26 @@ low/medium, High fallback `gpt-5.6-terra` medium; unchanged at this acceptance.
   The October 19 claim-order correction is now deployed: all six sampled old
   ready user-gap tasks were claimed; three completed in the first snapshot.
   Both exact original-question/context replays remain partial, not closed.
+  The October 20 correction now lets prepared evidence precede empty repeated
+  discovery at the same effective priority. All six sampled tasks still waiting
+  at switch were claimed: five completed and one is in a bounded artifact retry.
+  At 21:28:54 UTC analysis, verification, deep review and technical work use all
+  eight lanes. The ready-source backlog remains open; this short result proves
+  selection/completion progress, not durable backlog reduction or question closure.
 - **Storage, October 19:** owner replaced per-copy approval with automatic
   retention after successful deployment: one daily and one deployment backup,
   current/previous application releases only. Canonical cleanup removed fourteen
   daily archives, eight old deployment directories and nine old releases, after
   the separately approved 266de23 preflight removal. Free space is now about
-  149 GiB (39% filesystem use), versus 8.3 GiB before; backup storage is 20 GiB.
+  148 GiB (39% filesystem use), versus 8.3 GiB before; backup storage is about 20 GiB.
   Future routine rotation under this policy needs no new per-copy approval.
 - **Executor recovery:** October 1 expired-lease/scheduler correction remains
   deployed; October 9 checked-out PostgreSQL client error handling is now deployed.
-  At October 19 19:05:50 UTC all eight lanes were fresh, with eight valid leases
-  and zero expired; ten AI runs had completed successfully since switching. Health/ready, four
+  At October 20 21:28:54 UTC all eight lanes were fresh, with eight valid leases
+  and zero expired; nineteen AI runs completed successfully since switching
+  (one artifact rejection is retrying). Health/ready, four
   services and canonical API/admin/MCP smokes passed. The read-only window
-  restarts at 2026-10-19 19:05:50 UTC; this is a short baseline, not an extended
+  restarts at 2026-10-20 21:28:54 UTC; this is a short baseline, not an extended
   soak or validation of the entire knowledge base.
 - **Open:** Cisco/Akamai 403 blocks intake; September 21 restored Linux downloads
   only. One public Junos answer is verified below; an extended soak is not established.
@@ -81,8 +88,9 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
 - Cause: empty repeated discovery and prepared evidence share effective demand
   priority 160; creation time lets the older discovery backlog repeatedly win.
   Four PostgreSQL regressions reproduce analysis, verification, deep-review and
-  technical-review starvation before the correction. The latest successful
-  discovery, rather than any historical failure, determines current progress.
+  technical-review starvation before the correction. Only the latest completed
+  discovery determines progress; an older empty search does not demote a later
+  productive one.
 - Minimal correction: within the same demand/effective-priority tier, a search
   whose latest completed attempt added no evidence yields to other ready work.
   First searches and searches that added a source, reused fragments or reopened
@@ -93,9 +101,38 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
   publication quality and operator Pause are unchanged.
 - Validation: eight new regressions (four fail before/four already pass), all
   49 technical/urgent integration tests, full 414 tests and 250 evals pass against
-  isolated PostgreSQL 16 with production grants. Deployment and measured
-  production acceptance are pending; this entry does not close either question
-  or establish an extended soak.
+  isolated PostgreSQL 16 with production grants. Canonical clean-main deployment
+  repeated all ordinary gates with Node 24 and completed successfully at
+  f86a21775b556f513606b91b6fd87199645024a9. Full pre-switch dump:
+  deploy-20261020T204950Z-f86a217, 9,493,138,862 bytes, archive/checksum validated.
+  Migration 052, grants, reconciliation/index/stats, Linux/local builds and all
+  API/admin/MCP smokes passed. Services switched at 21:25:30–31 UTC; the local
+  Luna pool restarted through the deployer. Automatic retention kept this one
+  deployment backup and daily clideck-mcp-20261020T032202Z.dump; obsolete history
+  rotated successfully. Free space remains 148 GiB; no storage approval needed.
+- Acceptance at 21:28:54 UTC: settings enabled/version 8/capacity 8 unchanged,
+  eight fresh heartbeats (oldest five seconds), eight valid/no expired leases,
+  four services active/NRestarts=0, health/ready good, no fresh service error
+  entries. Worker identity UPDATE remains denied. Nineteen AI runs completed;
+  one AGENT_ARTIFACT_REJECTED run is in the existing bounded retry path.
+  Post-switch completed work includes one fragment analysis, eight deep reviews,
+  three technical drafts, five independent technical reviews and one candidate
+  publication. Current lanes: two analyses, two verifications, two deep reviews,
+  one technical draft and one technical review. The sole completed discovery
+  added evidence; no completed empty repeat appears in this short window.
+- Eight task IDs were sampled before deployment: two completed on the old
+  version before switching and are excluded from correction evidence. All six
+  still waiting at switch were claimed by the new version; five completed and
+  one technical review is running attempt 2 after artifact validation rejection.
+  This verifies actual evidence processing rather than heartbeat activity.
+  Ready sources without live work remain 436, versus 424 immediately after pool
+  startup; sustained backlog reduction is not established by this short slice.
+- Exact original Node/macOS 27.0.1 and Hugging Face questions/contexts still
+  replay partial with unchanged revision refs b76b7068 and d84279a6. Missing
+  public capabilities and case-specific versions, invocation/error/heartbeat
+  logs and aligned host/network evidence remain explicit. Neither question is
+  closed. Restart read-only observation at 2026-10-20 21:28:54 UTC; this is not
+  an extended soak or a validation of the whole knowledge base.
 
 ## 2026-10-19 — Automatic backup retention and learning fairness deployed
 
