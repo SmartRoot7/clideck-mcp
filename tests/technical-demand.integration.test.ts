@@ -128,6 +128,47 @@ suite('original-question technical learning',()=>{
     VALUES ('technical_answer_publication','publish',165,$1,$2::jsonb,$3,'demand')`,[randomUUID(),JSON.stringify(task.payload),id])
   expect((await claimMechanicalPipelineTask(db,createTestConfig(),'fixture-worker'))?.task.id).toBe(older.id)
  }))
+ it.each([
+  ['fragment_analysis','analyze'],['candidate_verification','verify'],
+  ['candidate_deep_review','deep_review'],['technical_answer_review','verify'],
+ ])('serves ready %s evidence before an older discovery repeat that added nothing',(type,stage)=>isolated(async(db,client)=>{
+  const {id,task}=await fixture(db,client)
+  await client.query("UPDATE pipeline_tasks SET available_at=now()+interval '1 day' WHERE id=$1",[task.id])
+  await client.query(`INSERT INTO pipeline_tasks(task_type,stage,status,priority,dedupe_key,payload,knowledge_demand_id,queue_class,result,completed_at)
+    VALUES ('source_discovery','discover','completed',160,$1,'{}',$2,'demand',
+      '{"inserted_sources":0,"reused_fragments":0,"reopened_candidates":0}',now()-interval '1 hour')`,[randomUUID(),id])
+  await client.query(`INSERT INTO pipeline_tasks(task_type,stage,priority,dedupe_key,payload,knowledge_demand_id,queue_class,created_at)
+    VALUES ('source_discovery','discover',160,$1,'{}',$2,'demand',now()-interval '2 days')`,[randomUUID(),id])
+  const ready=(await client.query(`INSERT INTO pipeline_tasks(task_type,stage,priority,dedupe_key,payload,knowledge_demand_id,queue_class,created_at)
+    VALUES ($1,$2,160,$3,$4::jsonb,$5,'demand',now()-interval '30 minutes') RETURNING id`,[type,stage,randomUUID(),JSON.stringify(task.payload),id])).rows[0]
+  expect((await claimPipelineTask(db,createTestConfig(),'pipeline-executor-01','fixture-evidence',executionProtocolVersion))['pipeline_task_id']).toBe(ready.id)
+ }))
+ it.each(['inserted_sources','reused_fragments','reopened_candidates'])('keeps discovery age priority when its latest completion made %s progress',(field)=>isolated(async(db,client)=>{
+  const {id,task}=await fixture(db,client)
+  for(const [result,age] of [[{},'2 hours'],[{[field]:1},'1 hour']] as const) await client.query(`INSERT INTO pipeline_tasks
+    (task_type,stage,status,priority,dedupe_key,payload,knowledge_demand_id,queue_class,result,completed_at)
+    VALUES ('source_discovery','discover','completed',160,$1,'{}',$2,'demand',$3::jsonb,now()-$4::interval)`,[randomUUID(),id,JSON.stringify(result),age])
+  const discovery=(await client.query(`INSERT INTO pipeline_tasks(task_type,stage,priority,dedupe_key,payload,knowledge_demand_id,queue_class,created_at)
+    VALUES ('source_discovery','discover',160,$1,'{}',$2,'demand',now()-interval '2 days') RETURNING id`,[randomUUID(),id])).rows[0]
+  expect((await claimPipelineTask(db,createTestConfig(),'pipeline-executor-01','fixture-productive-search',executionProtocolVersion))['pipeline_task_id']).toBe(discovery.id)
+  expect((await client.query('SELECT status FROM pipeline_tasks WHERE id=$1',[task.id])).rows[0].status).toBe('queued')
+ }))
+ it('lets no-evidence discovery repeats fill all eight lanes when no other ready work exists',()=>isolated(async(db,client)=>{
+  const discoveries:string[]=[]
+  for(let i=0;i<8;i++){
+    const {id,task}=await fixture(db,client)
+    await client.query("UPDATE pipeline_tasks SET available_at=now()+interval '1 day' WHERE id=$1",[task.id])
+    await client.query(`INSERT INTO pipeline_tasks(task_type,stage,status,priority,dedupe_key,payload,knowledge_demand_id,queue_class,result,completed_at)
+      VALUES ('source_discovery','discover','completed',160,$1,'{}',$2,'demand','{"inserted_sources":0}',now()-interval '1 hour')`,[randomUUID(),id])
+    const search=(await client.query(`INSERT INTO pipeline_tasks(task_type,stage,priority,dedupe_key,payload,knowledge_demand_id,queue_class)
+      VALUES ('source_discovery','discover',160,$1,'{}',$2,'demand') RETURNING id`,[randomUUID(),id])).rows[0]
+    discoveries.push(search.id)
+  }
+  const claims=[]
+  for(let i=1;i<=8;i++) claims.push(await claimPipelineTask(db,createTestConfig(),`pipeline-executor-${String(i).padStart(2,'0')}`,`fixture-repeat:${i}`,executionProtocolVersion))
+  expect(new Set(claims.map(claim=>claim['pipeline_task_id']))).toEqual(new Set(discoveries))
+  expect(claims.map(claim=>claim['task_type'])).toEqual(Array(8).fill('source_discovery'))
+ }))
  it('publishes only after independent complete review and exact replay through the ordinary active release',()=>isolated(async(db,client)=>{
   const {id,q,task}=await fixture(db,client)
   await client.query('SET LOCAL ROLE clideck_mcp_researcher')

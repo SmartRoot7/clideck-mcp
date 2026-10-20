@@ -4108,6 +4108,8 @@ export async function claimPipelineTask(
       }
     }
 
+    // An empty repeated search yields to ready evidence work at the same priority.
+    // This is ordering only: repeats can still use every lane when no such work exists.
     const selected = await client.query<PipelineTaskRow>(
       `SELECT
          id,
@@ -4122,6 +4124,17 @@ export async function claimPipelineTask(
          execution_profile,
          queue_class
        FROM pipeline_tasks
+       LEFT JOIN LATERAL (
+         SELECT coalesce((previous.result->>'inserted_sources')::int, 0) = 0
+            AND coalesce((previous.result->>'reused_fragments')::int, 0) = 0
+            AND coalesce((previous.result->>'reopened_candidates')::int, 0) = 0 AS without_new_evidence
+         FROM pipeline_tasks previous
+         WHERE pipeline_tasks.task_type = 'source_discovery'
+           AND previous.knowledge_demand_id = pipeline_tasks.knowledge_demand_id
+           AND previous.task_type = 'source_discovery' AND previous.status = 'completed'
+         ORDER BY previous.completed_at DESC
+         LIMIT 1
+       ) previous_discovery ON true
        WHERE status = 'queued'
          AND available_at <= now()
          AND task_type = ANY($1::text[])
@@ -4138,9 +4151,11 @@ export async function claimPipelineTask(
        ORDER BY CASE WHEN queue_class='demand' AND (knowledge_demand_id IS NULL OR EXISTS (
          SELECT 1 FROM knowledge_demands demand WHERE demand.id=pipeline_tasks.knowledge_demand_id
            AND demand.status<>'published' AND demand.last_error_code IS DISTINCT FROM 'CONTEXT_REQUIRED'
-       )) THEN 0 ELSE 1 END, ${claimPrioritySql} DESC, created_at,
+       )) THEN 0 ELSE 1 END, ${claimPrioritySql} DESC,
+         CASE WHEN task_type = 'source_discovery' AND previous_discovery.without_new_evidence THEN 1 ELSE 0 END,
+         created_at,
          CASE WHEN knowledge_demand_id IS NOT NULL AND source_candidate_id IS NOT NULL THEN 0 ELSE 1 END
-       FOR UPDATE SKIP LOCKED
+       FOR UPDATE OF pipeline_tasks SKIP LOCKED
        LIMIT 1`,
       [aiTaskTypes],
     )

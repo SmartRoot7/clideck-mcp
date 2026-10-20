@@ -65,6 +65,38 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
 
 
 
+## 2026-10-20 20:40 UTC — Empty discovery repeats delay prepared user evidence
+
+- Health/ready and all four services are healthy (NRestarts=0); capacity remains
+  8, with eight fresh executor heartbeats and eight valid/no expired leases.
+  Nevertheless, 241 of 245 discoveries completed in the preceding 30 minutes
+  added no sources, reused fragments or reopened candidates. Only five fragment
+  analyses and two verifications completed; no real question closed. Prepared
+  user sources without live work increased from 296 at 02:26 to 410 at 20:40.
+  Both stable original Node/macOS and Hugging Face replays remain partial.
+- One confirming snapshot at 20:40:55 shows all eight lanes doing discovery,
+  while eight ready unresolved-user analyses, six verifications and sixteen deep
+  reviews wait. No model circuit is open. This is distinct from the earlier
+  host-sleep lease expirations, whose sampled tasks recovered without a restart.
+- Cause: empty repeated discovery and prepared evidence share effective demand
+  priority 160; creation time lets the older discovery backlog repeatedly win.
+  Four PostgreSQL regressions reproduce analysis, verification, deep-review and
+  technical-review starvation before the correction. The latest successful
+  discovery, rather than any historical failure, determines current progress.
+- Minimal correction: within the same demand/effective-priority tier, a search
+  whose latest completed attempt added no evidence yields to other ready work.
+  First searches and searches that added a source, reused fragments or reopened
+  candidates retain age ordering. No stage cap, cooldown or quota is added;
+  repeats still fill all eight lanes when they are the only ready work. Migration
+  052 indexes latest completed discovery by demand; claims lock only their task
+  row with SKIP LOCKED. Models, settings, leases, bounded retries, provenance,
+  publication quality and operator Pause are unchanged.
+- Validation: eight new regressions (four fail before/four already pass), all
+  49 technical/urgent integration tests, full 414 tests and 250 evals pass against
+  isolated PostgreSQL 16 with production grants. Deployment and measured
+  production acceptance are pending; this entry does not close either question
+  or establish an extended soak.
+
 ## 2026-10-19 — Automatic backup retention and learning fairness deployed
 
 - Owner approved deletion of deploy-20261017T055739Z-266de23 and explicitly
