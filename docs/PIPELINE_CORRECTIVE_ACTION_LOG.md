@@ -13,6 +13,17 @@ Live application: `f86a21775b556f513606b91b6fd87199645024a9` on
 Pipeline enabled, capacity 8. Operator settings version 8 use `gpt-6-luna`
 low/medium, High fallback `gpt-5.6-terra` medium; unchanged at this acceptance.
 
+- **Runtime blocker, October 22:** services and leases remain healthy, but real
+  AI completions stopped at 18:56:13 UTC. At 20:58 and 21:17, every finished
+  recent AI run failed with CODEX_PROCESS_FAILED (55 failures/no completions in
+  each 30-minute slice). A controlled CLI run in the pool's bootstrap context
+  fails configuration loading with "Failed to synchronize managed preferences
+  (code -32600)"; the same runtime/model/schema/payload works from the active
+  app context. Bundled 0.163.0-alpha.10.2 and standalone 0.163.0/0.162.0 reproduce
+  the bootstrap error. No replacement was activated, management settings were
+  not bypassed, and no restart/deployment was used. See evidence and limits
+  below. Background Codex configuration synchronization needs recovery before
+  this observation window can pass the learning-progress criterion.
 - **Learning, October 20:** metadata-contract and mixed private/public evidence
   corrections and the repeated-item publication correction remain deployed.
   Current canonical deployment passed 414 tests and 250 evals. Exact Node and
@@ -71,6 +82,59 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
 
 
 
+
+## 2026-10-22 20:58 UTC — Background Codex execution blocked; no project correction established
+
+- Initial compact slice: health/ready good, API/admin/researcher active with
+  NRestarts=0, worker active with the previously observed NRestarts=1, no fresh
+  error-priority service journal entries, eight fresh heartbeats and eight
+  valid/no expired leases. Settings remain enabled/version 8/capacity 8. Live
+  application is still f86a21775b556f513606b91b6fd87199645024a9; free space 146 GiB.
+- Learning is stopped despite healthy executors: 55 failed AI runs and zero
+  completions during the initial 30-minute slice; the confirming five-minute
+  slice also has only CODEX_PROCESS_FAILED failures and eight active runs.
+  Representative low/medium gpt-6-luna runs exit 1 after about 222–223 seconds
+  with zero reported input/output tokens. At 21:17:15 UTC the preceding 30
+  minutes still have 55 failures/no completions; last successful AI completion
+  is 18:56:13.320010 UTC. There are 114 ready user sources without live work.
+  No model circuit is open. Account limit read reports ordinary usage allowed
+  and 5% weekly usage; no reset or credit operation was performed.
+- Two exact original-question/context replays remain partial with unchanged
+  b76b7068/d84279a6 revisions and explicit missing public/private evidence.
+  Node has 85 evidence windows; Hugging Face has 37. No question is closed by
+  executor heartbeats, publication counts, or the diagnostic probes.
+- Controlled foreground diagnostics use the existing binary, policy arguments,
+  environment allowlist, gpt-6-luna low/medium, a copied output schema and one
+  already leased payload. They succeed, including the executor working folder.
+  No probe claims a pipeline task, submits an artifact, creates a synthetic
+  demand or changes production data. Raw task/source text and credentials are
+  not retained in the diagnostic logs.
+- A foreground diagnostic executed with `launchctl bsexec` in the existing
+  coordinator's bootstrap context fails before inference: "Error: thread/start:
+  thread/start failed: failed to load configuration: Failed to synchronize
+  managed preferences (code -32600)". The default bundled CLI is
+  0.163.0-alpha.10.2. The same error reproduces with the no-daemon flag and
+  temporary official standalone 0.163.0 and 0.162.0 binaries. The latter were
+  compatibility probes only and were not activated. The host reports no DEP/MDM
+  enrollment; the standard system requirements/managed-config files and checked
+  com.openai.codex managed-preference plists are absent.
+- Scope and uncertainty: the bootstrap configuration failure is reproducible;
+  it narrows recovery to the host/Codex runtime integration. Existing run records
+  retain exit codes and diagnostic fingerprints, not the raw child error, so
+  the bootstrap probe is not a verbatim capture of a failed production child.
+  A specific application-code correction has not been established. Official
+  [non-interactive documentation](https://learn.chatgpt.com/docs/non-interactive-mode)
+  documents the controlled CLI flags and JSONL errors; official
+  [managed-configuration documentation](https://learn.chatgpt.com/docs/enterprise/managed-configuration)
+  confirms that managed requirements must remain effective. No policy bypass,
+  alternate auth, model change, global queue blocker, Pause change or unproven
+  restart was applied. Temporary standalone packages were removed after probing.
+- Result: unresolved runtime/configuration blocker, not a successful correction.
+  No application deployment or new soak baseline; the read-only window has
+  failed the AI-completion criterion. Recover background Codex configuration
+  synchronization, then verify fresh leases and actual original-question
+  learning progress before claiming recovery. Keep original model settings and
+  all publication/provenance checks intact.
 
 ## 2026-10-20 20:40 UTC — Empty discovery repeats delay prepared user evidence
 
