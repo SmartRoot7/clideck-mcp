@@ -1157,7 +1157,7 @@ async function recordEvent(
        message,
        metadata
      )
-     VALUES ($1, $2, $3, $4, $5, $6::jsonb)`,
+     VALUES ($1, $2, $3, $4, left($5, 1000), $6::jsonb)`,
     values: [
       input.taskId ?? null,
       input.sourceId ?? null,

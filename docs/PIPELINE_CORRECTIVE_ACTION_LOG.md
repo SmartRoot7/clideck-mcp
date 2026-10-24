@@ -13,7 +13,14 @@ Live application: `f86a21775b556f513606b91b6fd87199645024a9` on
 Pipeline enabled, capacity 8. Operator settings version 8 use `gpt-6-luna`
 low/medium, High fallback `gpt-5.6-terra` medium; unchanged at this acceptance.
 
-- **Runtime blocker, October 22:** services and leases remain healthy, but real
+- **Runtime recovery observed, October 24:** the 03:06 and 09:09 UTC slices have
+  796 and 892 successful AI runs in 30 minutes, respectively; the earlier
+  background Codex failure is no longer present in these slices. No runtime
+  replacement, restart or application change was made by this monitoring run;
+  the recovery cause is unestablished. Both exact questions remain partial,
+  although new drafts/reviews and evidence windows now advance. This is not
+  complete question closure or a completed extended soak.
+- **Prior runtime blocker, October 22:** services and leases remained healthy, but real
   AI completions stopped at 18:56:13 UTC. At 20:58 and 21:17, every finished
   recent AI run failed with CODEX_PROCESS_FAILED (55 failures/no completions in
   each 30-minute slice). A controlled CLI run in the pool's bootstrap context
@@ -22,8 +29,8 @@ low/medium, High fallback `gpt-5.6-terra` medium; unchanged at this acceptance.
   app context. Bundled 0.163.0-alpha.10.2 and standalone 0.163.0/0.162.0 reproduce
   the bootstrap error. No replacement was activated, management settings were
   not bypassed, and no restart/deployment was used. See evidence and limits
-  below. Background Codex configuration synchronization needs recovery before
-  this observation window can pass the learning-progress criterion.
+  below. Its failed observation window is historical; the October 24 snapshots
+  above establish renewed execution, not a root-cause runtime correction.
 - **Learning, October 20:** metadata-contract and mixed private/public evidence
   corrections and the repeated-item publication correction remain deployed.
   Current canonical deployment passed 414 tests and 250 evals. Exact Node and
@@ -82,6 +89,39 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
 
 
 
+
+## 2026-10-24 09:09 UTC — Long retry event rolls back failure persistence
+
+- Compact slice: live f86a21775b556f513606b91b6fd87199645024a9,
+  health/ready good, four services active (restart counters 0/2/0/0 unchanged),
+  eight fresh executors, eight valid/no expired leases, settings enabled/version
+  8/capacity 8. In 30 minutes 892 AI runs completed; 32 technical drafts,
+  32 independent reviews and five technical publications completed. Prepared
+  user sources without work declined from 207 at 03:06 to 177. Exact Node/Hugging
+  Face replays remain partial; evidence windows advanced from 85/37 to 87/39,
+  with current explicit missing public and incident-specific evidence. OS and
+  component versions are not inferred from each other.
+- Four source-conversion tasks failed with PIPELINE_MECHANICAL_FAILURE in the
+  preceding 30 minutes. One confirming slice at 09:10 and scoped worker logs
+  show repeated PostgreSQL 23514 pipeline_events_message_check errors in
+  failPipelineTask. Representative tasks 6e596b7f/d00ead8c contain 1,000-character
+  converter failures; malformed/non-PDF input is still rejected by pdftotext.
+- Cause: the bounded failure message receives the 29-character retry prefix
+  after input validation. Inserting the resulting event exceeds the existing
+  1,000-character constraint, rolling back the entire failure transaction and
+  retaining the running lease until recovery. At attempt five the prefix is
+  absent and terminal failure can persist. This is a failure-bookkeeping defect,
+  not evidence that the underlying source document is valid.
+- Minimal correction: bound the final display message to 1,000 PostgreSQL
+  characters at recordEvent insertion. Full bounded task failure text and event
+  failure-code metadata remain intact; schema constraints, source rejection,
+  five-attempt retry bound, leases, settings, models and operator Pause remain
+  unchanged. No source-format or publication-policy workaround is introduced.
+- Validation: real PostgreSQL 16 regressions with worker-role grants reproduce
+  the failure at attempts one/four before the correction (two failures, five
+  passing tests); all seven recovery tests pass afterward, including terminal
+  attempt five and an unchanged short message. Canonical deployment pending;
+  record deployed SHA and post-switch evidence after its ordinary gates.
 
 ## 2026-10-22 20:58 UTC — Background Codex execution blocked; no project correction established
 

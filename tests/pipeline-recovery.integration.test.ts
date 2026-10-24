@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import pg from 'pg'
+import { sha256 } from '../src/crypto.js'
 import type { Database } from '../src/db.js'
-import { ensurePipelineWork, reconcileExpiredPipelineLeases } from '../src/domain/pipeline.js'
+import { ensurePipelineWork, failPipelineTask, reconcileExpiredPipelineLeases } from '../src/domain/pipeline.js'
 import { expandNextSourceCollection } from '../src/domain/pipeline-worker.js'
 import { createLogger } from '../src/logger.js'
 import { createTestConfig, integrationDatabaseUrl } from './helpers.js'
@@ -27,6 +28,42 @@ suite('pipeline incident recovery', () => {
       VALUES ($1,'gpt-6-luna','low','running')`, [id])
     return id
   }
+  it.each([
+    { attempts: 1, message: 'Deterministic pipeline stage failed: pdftotext '.padEnd(1_000, 'x') },
+    { attempts: 4, message: 'Deterministic pipeline stage failed: pdftotext '.padEnd(1_000, 'x') },
+    { attempts: 5, message: 'Deterministic pipeline stage failed: pdftotext '.padEnd(1_000, 'x') },
+    { attempts: 1, message: 'Source conversion failed.' }
+  ])('persists conversion failure and releases its lease at attempt $attempts (message length $message.length)', async ({ attempts, message }) => {
+    const id = randomUUID()
+    const token = randomUUID()
+    ids.push(id)
+    await database.query(`INSERT INTO pipeline_tasks
+      (id,task_type,stage,status,dedupe_key,payload,attempts,claim_owner,lease_token_hash,lease_until,heartbeat_at)
+      VALUES ($1::uuid,'source_conversion','convert','running',($1::uuid)::text,'{}',$2,'fixture-worker',$3,now()+interval '2 minutes',now())`,
+      [id,attempts,sha256(token)])
+    const worker = new pg.Pool({ connectionString: integrationDatabaseUrl, options: '-c role=clideck_mcp_worker', max: 2 })
+    try {
+      const retrying = attempts < 5
+      await expect(failPipelineTask(worker, {
+        pipeline_task_id: id, lease_token: token,
+        failure_code: 'PIPELINE_MECHANICAL_FAILURE', failure_message: message
+      })).resolves.toMatchObject({ status: retrying ? 'queued' : 'failed', retrying })
+      expect((await database.query(`SELECT status,attempts,failure_code,failure_message,claim_owner,
+        lease_token_hash,lease_until,heartbeat_at,completed_at IS NOT NULL AS terminal
+        FROM pipeline_tasks WHERE id=$1`, [id])).rows[0]).toMatchObject({
+        status: retrying ? 'queued' : 'failed', attempts,
+        failure_code: 'PIPELINE_MECHANICAL_FAILURE', failure_message: message,
+        claim_owner: null, lease_token_hash: null, lease_until: null, heartbeat_at: null,
+        terminal: !retrying
+      })
+      expect((await database.query(`SELECT event_type,message,metadata FROM pipeline_events
+        WHERE pipeline_task_id=$1 AND event_type IN ('retried','failed')`, [id])).rows).toEqual([{
+        event_type: retrying ? 'retried' : 'failed',
+        message: (retrying ? `Stage returned to the queue: ${message}` : message).slice(0,1_000),
+        metadata: { failure_code: 'PIPELINE_MECHANICAL_FAILURE' }
+      }])
+    } finally { await worker.end() }
+  })
   it('commits expired lease recovery even when the following scheduler transaction fails', async () => {
     const expired = await task()
     const exhausted = await task(5)
