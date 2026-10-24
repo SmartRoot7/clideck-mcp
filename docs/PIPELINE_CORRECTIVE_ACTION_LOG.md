@@ -6,9 +6,9 @@ a restart alone is not a fix. Add evidence → cause → minimal correction → 
 SHA (or configuration-only status) → measured result, then restart the read-only
 soak. A clean baseline is not a completed extended observation window.
 
-## Handoff as of prepared-evidence scheduling deployment, 2026-10-20
+## Handoff as of failure-event persistence deployment, 2026-10-24
 
-Live application: `f86a21775b556f513606b91b6fd87199645024a9` on
+Live application: `bc7b416e6fde4f0b5c8413603208f829eebd048e` on
 `100.116.82.78`, deployed through `ops/scripts/deploy-production.sh`.
 Pipeline enabled, capacity 8. Operator settings version 8 use `gpt-6-luna`
 low/medium, High fallback `gpt-5.6-terra` medium; unchanged at this acceptance.
@@ -20,6 +20,13 @@ low/medium, High fallback `gpt-5.6-terra` medium; unchanged at this acceptance.
   the recovery cause is unestablished. Both exact questions remain partial,
   although new drafts/reviews and evidence windows now advance. This is not
   complete question closure or a completed extended soak.
+- **Failure persistence, October 24:** retry prefixes could overflow the event
+  message constraint and roll back failure/lease updates. Final event text is
+  now bounded at insertion; full bounded task diagnostics and existing retry
+  limits remain intact. Canonical deployment passed 418 tests and 250 evals.
+  At 09:54 UTC all eight lanes were fresh, with valid/no expired leases and
+  thirteen completed AI runs. No fresh event-constraint errors were observed;
+  a natural long-message retry has not yet occurred in this short slice.
 - **Prior runtime blocker, October 22:** services and leases remained healthy, but real
   AI completions stopped at 18:56:13 UTC. At 20:58 and 21:17, every finished
   recent AI run failed with CODEX_PROCESS_FAILED (55 failures/no completions in
@@ -33,7 +40,7 @@ low/medium, High fallback `gpt-5.6-terra` medium; unchanged at this acceptance.
   above establish renewed execution, not a root-cause runtime correction.
 - **Learning, October 20:** metadata-contract and mixed private/public evidence
   corrections and the repeated-item publication correction remain deployed.
-  Current canonical deployment passed 414 tests and 250 evals. Exact Node and
+  Current canonical deployment passed 418 tests and 250 evals. Exact Node and
   Hugging Face replays return partial procedures; macOS 27.0.1 applicability and
   installed library versions are not inferred. The check prioritizes actual
   question closure, repeated discovery and stalled sources, including software
@@ -61,8 +68,10 @@ low/medium, High fallback `gpt-5.6-terra` medium; unchanged at this acceptance.
   and zero expired; nineteen AI runs completed successfully since switching
   (one artifact rejection is retrying). Health/ready, four
   services and canonical API/admin/MCP smokes passed. The read-only window
-  restarts at 2026-10-20 21:28:54 UTC; this is a short baseline, not an extended
-  soak or validation of the entire knowledge base.
+  restarted at 2026-10-20 21:28:54 UTC and later failed the October 22 runtime
+  criterion. The new post-correction read-only baseline is October 24 09:54:48
+  UTC; this is a short baseline, not an extended soak or validation of the entire
+  knowledge base.
 - **Open:** Cisco/Akamai 403 blocks intake; September 21 restored Linux downloads
   only. One public Junos answer is verified below; an extended soak is not established.
 - **Learning audit baseline:** 15/20 unknown questions lost diagnosis tasks; a global
@@ -120,8 +129,29 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
 - Validation: real PostgreSQL 16 regressions with worker-role grants reproduce
   the failure at attempts one/four before the correction (two failures, five
   passing tests); all seven recovery tests pass afterward, including terminal
-  attempt five and an unchanged short message. Canonical deployment pending;
-  record deployed SHA and post-switch evidence after its ordinary gates.
+  attempt five and an unchanged short message. Canonical Node 24 clean-main
+  deployment passed all 418 tests, 250 evals, type checks, local/Linux builds,
+  normal reconciliation/index/stats/grants and API/admin/MCP smokes.
+- Deployed SHA: bc7b416e6fde4f0b5c8413603208f829eebd048e. Services switched at
+  09:52:04–05 UTC; the deployer restored settings and restarted the local pool.
+  Full validated pre-switch dump: deploy-20261024T091433Z-bc7b416,
+  clideck-mcp-20261024T091433Z.dump, 9,820,295,998 bytes, with checksum. Automatic
+  retention removed the obsolete f86a217 deployment backup and 1e62f00 release;
+  current/previous releases and the one-daily/one-deployment policy are preserved.
+  Free space is 145 GiB; no storage approval was needed.
+- Acceptance at 09:54:01 UTC: health/ready good, four services active with
+  NRestarts=0, eight fresh heartbeats (oldest five seconds), eight valid/no expired
+  leases, settings enabled/version 8/capacity 8, worker knowledge-item UPDATE
+  still denied. Thirteen AI runs completed since 09:53:30, including fragment
+  analysis, deep review, diagnosis, discovery and two technical drafts. Both
+  exact original-question/context replays remain partial at unchanged public
+  revisions b76b7068/d84279a6; this does not close either question.
+- At 09:54:48 UTC scoped service logs have no new error entries and zero
+  pipeline_events_message_check violations. No natural failed/retried event has
+  occurred after the switch yet: the maximum-length retry path is verified by
+  the worker-role PostgreSQL regressions, with live recurrence still to observe.
+  Restart the read-only observation window at this timestamp; do not call this
+  short acceptance a completed extended soak.
 
 ## 2026-10-22 20:58 UTC — Background Codex execution blocked; no project correction established
 
