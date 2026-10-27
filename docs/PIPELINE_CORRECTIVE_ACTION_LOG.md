@@ -6,13 +6,23 @@ a restart alone is not a fix. Add evidence → cause → minimal correction → 
 SHA (or configuration-only status) → measured result, then restart the read-only
 soak. A clean baseline is not a completed extended observation window.
 
-## Handoff as of failure-event persistence deployment, 2026-10-24
+## Handoff as of prepared-source selection deployment, 2026-10-27
 
-Live application: `bc7b416e6fde4f0b5c8413603208f829eebd048e` on
+Live application: `76d2df37d7203b1a11b2f291ea8c0cf50238a4ab` on
 `100.116.82.78`, deployed through `ops/scripts/deploy-production.sh`.
 Pipeline enabled, capacity 8. Operator settings version 8 use `gpt-6-luna`
 low/medium, High fallback `gpt-5.6-terra` medium; unchanged at this acceptance.
 
+- **Prepared evidence, October 27:** the urgent analysis source scan let sources
+  without available fragments occupy its LIMIT 16 and hide prepared user
+  evidence. Eligibility now precedes that limit. Canonical deployment passed
+  420 tests and 250 evals. Three sampled prepared sources completed analysis;
+  additional batches and candidate verification advanced. At 04:55:17 UTC all
+  eight executors were fresh, with eight valid/no expired leases and 61 completed
+  AI runs since switching. The two oldest sampled sources and the wider backlog
+  remain open; the exact Node/Hugging Face replays remain partial. Five bridge
+  heartbeat-write timeouts clustered at pool startup; the confirming fresh log
+  slice has none. New read-only baseline: 2026-10-27 04:55:32 UTC, not an extended soak.
 - **Runtime recovery observed, October 24:** the 03:06 and 09:09 UTC slices have
   796 and 892 successful AI runs in 30 minutes, respectively; the earlier
   background Codex failure is no longer present in these slices. No runtime
@@ -134,10 +144,42 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
   correction (one failed, fifty passed); all 51 urgent-learning and technical
   demand tests pass afterward. Existing reservations and unresolved review
   candidates are preserved. Production data was not altered by these tests.
-- Deployment pending the active daily backup (started 03:25:38 UTC). The canonical
-  preflight rejects competing pg_dump processes; do not interrupt that backup
-  or bypass the deployer. Record the clean-main deployed SHA and canonical gates,
-  then check sampled real source progress and restart read-only observation.
+- Deployment waited for the scheduled daily backup (started 03:25:38 UTC) to
+  finish successfully, without competing pg_dump processes. Clean-main Node 24
+  canonical deployment passed all 420 tests, 250 evals, type checks, local/Linux
+  builds, normal grants/reconciliation/index/stats and API/admin/MCP smokes.
+  Deployed SHA: 76d2df37d7203b1a11b2f291ea8c0cf50238a4ab. Four services switched
+  at 04:49:09–10 UTC; the deployer restored settings and the local pool.
+- Validated pre-switch dump: deploy-20261027T040753Z-76d2df3,
+  clideck-mcp-20261027T040753Z.dump, 10,456,705,741 bytes, with checksum.
+  Canonical retention removed the obsolete bc7b416 deployment backup and f86a217
+  application release. One daily/one deployment backup and current/previous
+  releases remain; free space is 142 GiB. No new storage approval was needed.
+- Acceptance at 04:55:17 UTC: health/ready good, four services active with
+  NRestarts=0, eight fresh executor heartbeats (oldest three seconds), eight
+  valid/no expired leases, settings enabled/version 8/capacity 8, worker
+  knowledge-item UPDATE still denied. Since switching, 61 AI runs completed;
+  two artifact rejections remain bounded by ordinary retries. Completed work
+  includes eleven analyses, eight verifications and thirty-four deep reviews.
+- Three of the eight prepared-source samples (21f7ca4d, 9eb48d2a, 2530beee)
+  completed their first post-switch analysis by 04:54:27; candidate verification
+  and subsequent batches advanced. Two further samples (daa7a5ca, 0e843e2f)
+  received queued analysis. The October 19/20 examples still await work.
+  The learning aggregate at 04:54:32 has 336 ready sources without live work;
+  this short result proves eligibility/claim/completion progress, not durable
+  backlog reduction or complete resolution of every old demand.
+- Both exact original-question/context replays remain partial at unchanged public
+  revisions b76b7068/d84279a6. Node still needs actual Node/Tailscale versions,
+  timestamped client/server and heartbeat evidence, plus application timeout and
+  retry semantics. Hugging Face still needs exact installed component versions,
+  invocation/repository/revision, trace and aligned route/DNS/HTTPS observations;
+  learning metadata was temporarily unavailable on its replay. No macOS or
+  component version is inferred and neither question is closed by this fix.
+- Five researcher-bridge heartbeat upserts timed out together at 04:53:37–40
+  around pool startup. The single confirming log slice from 04:53:41 through
+  04:55:17 has no new errors; no restart or speculative correction was made.
+  No pipeline_events_message_check error recurred. Restart the read-only window
+  at 2026-10-27 04:55:32 UTC; this acceptance is not a completed extended soak.
 
 ## 2026-10-24 09:09 UTC — Long retry event rolls back failure persistence
 
