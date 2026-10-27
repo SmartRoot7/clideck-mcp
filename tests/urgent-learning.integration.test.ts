@@ -171,6 +171,63 @@ suite('urgent learning reliability', () => {
       expect((await client.query('SELECT knowledge_demand_id FROM pipeline_tasks WHERE id=$1',[claim['pipeline_task_id']])).rows[0]!.knowledge_demand_id).toBe(id)
     })
   })
+  it.each([0,16])('materializes prepared evidence beyond %i sources waiting for review without analysis fragments', async (emptySources) => {
+    await transaction(async (db,client) => {
+      await client.query("UPDATE pipeline_tasks SET status='cancelled' WHERE status IN ('queued','claimed','running')")
+      await client.query("UPDATE knowledge_demands SET status='published'")
+      await client.query('DELETE FROM active_source_slots')
+      await client.query('DELETE FROM pipeline_model_circuits')
+      await client.query('UPDATE pipeline_settings SET enabled=true,max_concurrent_ai_runs=8,max_active_sources=1 WHERE singleton')
+      const demands=[]
+      for (let i=0;i<2;i++) {
+        const id=await queueUnknownKnowledgeDemand(db,'query_network_knowledge',{question:question(),context},{unknown:true})
+        demands.push(id!)
+        await client.query("UPDATE pipeline_tasks SET status='cancelled' WHERE knowledge_demand_id=$1",[id])
+        await client.query("UPDATE knowledge_demands SET status='processing',diagnosis_status='completed',first_seen_at=now()-$2::interval WHERE id=$1",[id,i===0?'2 days':'1 day'])
+      }
+      async function source(demandId:string|null,status:string) {
+        return (await client.query(`INSERT INTO source_candidates(canonical_url,document_type,title,status,discovered_by,knowledge_demand_id)
+          VALUES ($1,'command_reference','Prepared evidence fixture',$2,'test',$3) RETURNING id`,
+          [`https://www.cisco.com/${randomUUID()}`,status,demandId])).rows[0]!.id as string
+      }
+      async function fragment(sourceId:string) {
+        const hash=sha256Label(randomUUID())
+        const artifact=(await client.query(`INSERT INTO source_artifacts(source_candidate_id,media_type,byte_size,content_hash,storage_path,status)
+          VALUES ($1,'text/plain',64,$2,'/tmp/prepared-evidence-fixture.txt','chunked') RETURNING id`,[sourceId,hash])).rows[0]!
+        return (await client.query(`INSERT INTO source_fragments(source_artifact_id,ordinal,content,content_hash)
+          VALUES ($1,0,'Inspect MACsec interface read-only.',$2) RETURNING id`,[artifact.id,hash])).rows[0]!.id as string
+      }
+      // Keep the only ordinary source lane busy with an existing reservation;
+      // urgent evidence must be found independently of those source lanes.
+      const busy=await source(null,'analyzing')
+      const reserved=await fragment(busy)
+      const future=(await client.query(`INSERT INTO pipeline_tasks(task_type,stage,dedupe_key,payload,source_candidate_id,available_at)
+        VALUES ('fragment_analysis','analyze',$1,'{}',$2,now()+interval '1 hour') RETURNING id`,[randomUUID(),busy])).rows[0]!
+      await client.query("UPDATE source_fragments SET status='reserved',reservation_task_id=$2 WHERE id=$1",[reserved,future.id])
+      await client.query('INSERT INTO active_source_slots(slot_number,source_candidate_id) VALUES (1,$1)',[busy])
+      const reviews=[]
+      for (let i=0;i<emptySources;i++) {
+        const empty=await source(demands[0]!,'verifying')
+        const origin=(await client.query(`INSERT INTO pipeline_tasks(task_type,stage,status,dedupe_key,payload,source_candidate_id)
+          VALUES ('fragment_analysis','analyze','completed',$1,'{}',$2) RETURNING id`,[randomUUID(),empty])).rows[0]!
+        const candidate=(await client.query(`INSERT INTO knowledge_candidates
+          (pipeline_task_id,stable_key,payload,content_hash,status,dangerous,confidence,quality_score,fidelity_status)
+          VALUES ($1,$2,'{}',$3,'deep_review',false,.98,.98,'passed') RETURNING id`,
+          [origin.id,`fixture.prepared.${randomUUID()}`,sha256Label(randomUUID())])).rows[0]!
+        reviews.push(candidate.id)
+      }
+      const ready=await source(demands[1]!,'prepared')
+      const evidence=await fragment(ready)
+      await ensurePipelineWork(db)
+      const tasks=(await client.query(`SELECT id FROM pipeline_tasks WHERE source_candidate_id=$1
+        AND task_type='fragment_analysis' AND status='queued'`,[ready])).rows
+      expect(tasks).toHaveLength(1)
+      expect((await client.query('SELECT status,reservation_task_id FROM source_fragments WHERE id=$1',[evidence])).rows[0])
+        .toEqual({status:'reserved',reservation_task_id:tasks[0]!.id})
+      expect((await client.query("SELECT count(*)::int count FROM knowledge_candidates WHERE id=ANY($1::uuid[]) AND status='deep_review'",[reviews])).rows[0]!.count).toBe(emptySources)
+      expect((await client.query('SELECT reservation_task_id FROM source_fragments WHERE id=$1',[reserved])).rows[0]!.reservation_task_id).toBe(future.id)
+    })
+  })
   it('keeps relevant evidence first and preserves every historical key in bounded analysis', async () => {
     await transaction(async (db,client) => {
       await client.query("UPDATE pipeline_tasks SET status='cancelled' WHERE status IN ('queued','claimed','running')")

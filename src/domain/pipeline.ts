@@ -3726,6 +3726,12 @@ async function queueUrgentDemandWork(client: DatabaseClient, capacity: number): 
           WHERE demand.status<>'published'
             AND (source.status IN ('prepared','analyzing','verifying') OR
               ($1='verification' AND source.status IN ('completed','completed_with_exceptions','duplicate','rejected')))
+            AND ($1<>'analysis' OR EXISTS (
+                SELECT 1 FROM source_artifacts artifact
+                JOIN source_fragments fragment ON fragment.source_artifact_id=artifact.id
+                WHERE artifact.source_candidate_id=source.id
+                  AND fragment.status='queued' AND fragment.reservation_task_id IS NULL
+            ))
             AND ($1='analysis' OR source.id IN (
                 SELECT DISTINCT origin.source_candidate_id FROM pipeline_tasks origin
                 JOIN knowledge_candidates candidate ON candidate.pipeline_task_id=origin.id

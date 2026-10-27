@@ -99,6 +99,46 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
 
 
 
+## 2026-10-27 03:24 UTC — Empty analysis sources hide prepared user evidence
+
+- Initial compact slice: live bc7b416e6fde4f0b5c8413603208f829eebd048e,
+  health/ready and four services healthy with NRestarts=0, eight fresh executors,
+  eight valid/no expired leases, settings enabled/version 8/capacity 8. About
+  821 AI runs completed in 30 minutes, but 307 ready user sources had no live
+  work, versus 228 at October 26 21:22. There were 263 discoveries (249 empty),
+  ten technical drafts and ten independent reviews, without complete closure
+  of either stable original Node/Hugging Face question. Their replays remain
+  partial; incident-specific versions, traces and aligned read-only evidence
+  remain missing, with OS applicability separate from component versions.
+- One confirming slice at 03:25:39 has 269 discoveries (252 empty) and live
+  analysis/review work. Scoped logs show only intermittent GatewayTimeouts,
+  without recurrence of pipeline_events_message_check. Prepared source
+  95c1129b-5ad8-4dd1-8dfb-477ddb6b0212 has 453 queued/unreserved fragments
+  untouched since October 19; 45f3497c-cb2f-4376-bba2-84e907166b15 has 94
+  untouched since October 20. These sources have only mechanical task history.
+- Cause: queueUrgentDemandWork applies its LIMIT 16 before excluding analysis
+  sources with no queued, unreserved fragments. In the matching production
+  selection, 15 of the first 16 sources have no available analysis fragments.
+  Sources legitimately awaiting candidate review can therefore occupy this
+  bounded scan indefinitely and hide prepared evidence outside ordinary source
+  lanes. Keeping those sources verifying while review is pending is correct.
+- Minimal correction: require an available analysis fragment before the bounded
+  source selection; verification eligibility, source/task locking, reservation
+  dedupe, finite retries, publication/provenance checks, models, all eight lanes
+  and operator Pause remain intact. No quota, cooldown, stage cap or synthetic
+  demand is introduced. Existing indexes support the predicate: the read-only
+  production SELECT with EXPLAIN ANALYZE completes in 63.209 ms.
+- Regression: transaction-isolated PostgreSQL 16 fixtures keep the ordinary
+  source lane occupied and place zero/sixteen legitimate review-only sources
+  ahead of prepared user evidence. The sixteen-source case fails before the
+  correction (one failed, fifty passed); all 51 urgent-learning and technical
+  demand tests pass afterward. Existing reservations and unresolved review
+  candidates are preserved. Production data was not altered by these tests.
+- Deployment pending the active daily backup (started 03:25:38 UTC). The canonical
+  preflight rejects competing pg_dump processes; do not interrupt that backup
+  or bypass the deployer. Record the clean-main deployed SHA and canonical gates,
+  then check sampled real source progress and restart read-only observation.
+
 ## 2026-10-24 09:09 UTC — Long retry event rolls back failure persistence
 
 - Compact slice: live f86a21775b556f513606b91b6fd87199645024a9,
