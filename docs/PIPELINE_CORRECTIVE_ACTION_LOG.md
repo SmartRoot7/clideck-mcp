@@ -109,6 +109,42 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
 
 
 
+## 2026-10-28 09:30 UTC — Publication history recount exceeds the worker deadline
+
+- Compact slice: live 76d2df37d7203b1a11b2f291ea8c0cf50238a4ab,
+  health/ready and four services healthy with NRestarts=0, eight fresh executors,
+  eight valid/no expired leases, settings enabled/version 8/capacity 8. There
+  are 764 completed AI runs in 30 minutes, ten technical drafts/nine independent
+  reviews and no ready user source without work. Original Node/Hugging Face
+  replays remain partial with explicit incident-specific missing evidence.
+- Publication is degraded despite continuing analysis/review: eleven publication
+  tasks reached terminal PIPELINE_MECHANICAL_FAILURE in 30 minutes, versus 45
+  completed. Initial fresh logs have 28 deterministic query timeouts; one
+  confirming slice has 31 since 09:15. Task e732bf39-c611-45a7-aea9-72945850e92a
+  exhausted its five attempts with a 50-candidate payload. Scoped worker stacks
+  identify the UPDATE agent_runs published_revisions recount, not revision
+  creation or the publication policy. No stuck expired lease was observed.
+- Cause: the correlated published-candidate count has no index on its origin.
+  Open-candidate and pending-Fidelity indexes cannot serve published history.
+  Production EXPLAIN shows a full knowledge_candidates sequential scan for each
+  matching historical agent run; the same read-only SELECT exceeds an eight-second
+  server timeout without row writes or row locking. Repeated recounts can
+  exceed the unchanged ten-second worker query deadline and roll back activation.
+- Minimal correction: migration 053 adds a partial index on
+  knowledge_candidates(pipeline_task_id) WHERE status='published'. Application
+  queries, counters, immutable revisions, provenance, grants, retry bounds,
+  publication validation, models, all eight lanes and operator Pause are unchanged.
+- PostgreSQL 16 regression uses a 50-origin mixed publication batch, retry history,
+  10,000 historical candidates and the worker role. Before the index, the recount
+  discards 7,840 unrelated published rows on every origin scan (one failed/eight
+  passing tests). With the migration all nine publication/search/recovery tests
+  pass, without unrelated-history scans; each of 51 matching historical runs has
+  the correct 160 published records and an unrelated run retains its count of 99.
+  Fixtures are isolated and rolled back; production data was not changed.
+- Canonical clean-main Node 24 deployment and live plan/publication acceptance
+  are pending. Record deployed SHA, gates and actual post-switch publication
+  progress, then restart the read-only observation window.
+
 ## 2026-10-27 03:24 UTC — Empty analysis sources hide prepared user evidence
 
 - Initial compact slice: live bc7b416e6fde4f0b5c8413603208f829eebd048e,
