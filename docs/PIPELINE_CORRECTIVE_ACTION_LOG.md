@@ -6,21 +6,33 @@ a restart alone is not a fix. Add evidence → cause → minimal correction → 
 SHA (or configuration-only status) → measured result, then restart the read-only
 soak. A clean baseline is not a completed extended observation window.
 
-## Handoff as of prepared-source selection deployment, 2026-10-27
+## Handoff as of publication-origin index deployment, 2026-10-28
 
-Live application: `76d2df37d7203b1a11b2f291ea8c0cf50238a4ab` on
+Live application: `470bff4279bce34cecf13a193979353b249bdeac` on
 `100.116.82.78`, deployed through `ops/scripts/deploy-production.sh`.
 Pipeline enabled, capacity 8. Operator settings version 8 use `gpt-6-luna`
 low/medium, High fallback `gpt-5.6-terra` medium; unchanged at this acceptance.
 
+- **Publication history, October 28:** repeated full candidate-history scans
+  exhausted publication retries. Migration 053 adds the published-origin index;
+  the same read-only production query now takes 14.957 ms instead of exceeding
+  eight seconds. Canonical deployment passed 421 tests/250 evals. In the saved
+  failed batch, 40 records published and ten returned to quality review; all 19
+  historical-run counters match actual published totals. At 10:28:07 UTC eight
+  executors were fresh, with seven valid/no expired leases, 78 completed AI runs
+  and seven completed publications since switching. One follow-up demand
+  reconciliation timeout did not recur in the confirming fresh slice. Original
+  Node/Hugging Face replays remain partial; the prepared-source backlog without
+  live work was zero in the initial slice. New read-only baseline: October 28
+  10:28:12 UTC; this is not a completed extended soak.
 - **Prepared evidence, October 27:** the urgent analysis source scan let sources
   without available fragments occupy its LIMIT 16 and hide prepared user
   evidence. Eligibility now precedes that limit. Canonical deployment passed
   420 tests and 250 evals. Three sampled prepared sources completed analysis;
   additional batches and candidate verification advanced. At 04:55:17 UTC all
   eight executors were fresh, with eight valid/no expired leases and 61 completed
-  AI runs since switching. The two oldest sampled sources and the wider backlog
-  remain open; the exact Node/Hugging Face replays remain partial. Five bridge
+  AI runs since switching. The two oldest sources and the wider backlog were
+  still open at that acceptance; exact Node/Hugging Face replays remained partial. Five bridge
   heartbeat-write timeouts clustered at pool startup; the confirming fresh log
   slice has none. New read-only baseline: 2026-10-27 04:55:32 UTC, not an extended soak.
 - **Runtime recovery observed, October 24:** the 03:06 and 09:09 UTC slices have
@@ -141,9 +153,44 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
   pass, without unrelated-history scans; each of 51 matching historical runs has
   the correct 160 published records and an unrelated run retains its count of 99.
   Fixtures are isolated and rolled back; production data was not changed.
-- Canonical clean-main Node 24 deployment and live plan/publication acceptance
-  are pending. Record deployed SHA, gates and actual post-switch publication
-  progress, then restart the read-only observation window.
+- Clean-main Node 24 canonical deployment passed all 421 tests, 250 evals, type
+  checks, local/Linux builds, migration 053, normal grants/reconciliation/index/
+  stats and API/admin/MCP smokes. Deployed SHA:
+  470bff4279bce34cecf13a193979353b249bdeac. Four services switched at
+  10:22:39–59 UTC; the deployer restored settings and started the local pool.
+- Validated pre-switch dump: deploy-20261028T094025Z-470bff4,
+  clideck-mcp-20261028T094025Z.dump, 10,755,587,709 bytes, with checksum.
+  Canonical retention removed the obsolete 76d2df3 deployment backup and bc7b416
+  release. One daily/one deployment backup and current/previous releases remain;
+  free space is 140 GiB. No additional storage approval was needed.
+- The identical read-only production SELECT now uses
+  knowledge_candidates_published_origin_idx (index-only scan), completing in
+  14.957 ms for the saved 50-candidate/19-origin batch, versus the eight-second
+  timeout before migration. No worker deadline was raised. Before the fix all
+  50 candidates were verified and reserved, with 40 existing immutable revisions.
+  At 10:25:39, 40 were published and ten deferred to deep review by ordinary
+  validation; no manual retry, data edit or validation bypass was used. At
+  10:28:07 all 19 historical-run counters match their actual published totals.
+- Acceptance at 10:28:07 UTC: health/ready good, four services active with
+  NRestarts=0, eight fresh executor heartbeats (oldest 51 seconds), seven valid/
+  no expired leases, settings enabled/version 8/capacity 8, worker knowledge-item
+  UPDATE still denied. Since switching 78 AI runs and seven publications completed;
+  analysis, verification, independent deep review, diagnosis, discovery and one
+  technical draft/independent technical review advanced. One artifact rejection
+  remains subject to the existing retry bounds. Neither stable original question
+  is closed by those completions.
+- Exact original-question/context replays remain partial at b76b7068/d84279a6.
+  Node still lacks incident timestamps, error stacks, executor/server evidence
+  and project source/configuration; Hugging Face still lacks exact macOS and
+  component versions, timestamped failures and read-only endpoint observations.
+  Generic applicability is not evidence of the requested OS or installed component
+  version. No private incident cause or complete workflow is claimed.
+- A single timeout occurred at 10:25:29 in reconcilePublishedKnowledgeDemands,
+  after the publication transaction had committed. Its stack is distinct from the
+  corrected counter query. The confirming fresh slice from 10:25:30 through
+  10:28:07 has no errors; no speculative follow-up change or extra restart was
+  made. Restart the read-only observation window at 2026-10-28 10:28:12 UTC.
+  This short acceptance is not a completed extended soak.
 
 ## 2026-10-27 03:24 UTC — Empty analysis sources hide prepared user evidence
 
