@@ -418,7 +418,14 @@ or chapter for the requested feature instead.
 For cross-product or software questions, search the primary documentation of
 each relevant project or maintainer named in the question/diagnosis. An OS or
 vendor in coverage_target does not restrict all evidence to that vendor. Do not
-invent model/version support or treat a public manual as evidence of private
+transfer a version between products. For technical-operations, use
+knowledge_demand.requested_context: operating_system_version constrains only the
+OS; component_version constrains only the named component. Legacy context.version
+and coverage_target.version_branch are OS versions, not versions of Node.js,
+Python, Tailscale or a library. An absent component_version remains unknown;
+do not require Node.js 27.0.1 documentation because macOS 27.0.1 was requested.
+Keep documented component versions explicit and separate from requested OS scope.
+Do not invent model/version support or treat a public manual as evidence of private
 application behavior, project policy or code. If private evidence is required,
 state precisely what is missing in rejection_reason.
 If knowledge_demand includes excluded_source_urls, those official documents

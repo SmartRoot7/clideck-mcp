@@ -1,4 +1,4 @@
-import { queueTechnicalAnswer, submitTechnicalArtifact, publishTechnicalAnswer } from './technical-demand.js'
+import { queueTechnicalAnswer, submitTechnicalArtifact, publishTechnicalAnswer, technicalRequestScope } from './technical-demand.js'
 import { randomUUID } from 'node:crypto'
 
 import { z } from 'zod'
@@ -860,6 +860,9 @@ export function withLeasedKnowledgeDemand(
       question: demand.question,
       tool_name: demand.tool_name,
       context: demand.context,
+      ...(demand.context['learning_domain_id'] === 'technical-operations'
+        ? { requested_context: technicalRequestScope(demand.question, demand.context) }
+        : {}),
       excluded_source_urls: demand.excluded_source_urls,
       diagnosis: demand.diagnosis ??
         (payload['knowledge_demand'] as Record<string, unknown> | undefined)?.['diagnosis'] ?? null,

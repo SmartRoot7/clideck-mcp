@@ -376,6 +376,7 @@ describe('deterministic source processing', () => {
     })
 
     expect(storedTaskPayload).not.toHaveProperty('knowledge_demand')
+    expect(leasedPayload).not.toHaveProperty('knowledge_demand.requested_context')
     expect(leasedPayload).toMatchObject({
       source_id: 'source-1',
       knowledge_demand: {
@@ -400,6 +401,28 @@ describe('deterministic source processing', () => {
       knowledge_demand: { diagnosis: latest }
     })
     expect(stored.knowledge_demand).toEqual({ question: 'old question', diagnosis })
+  })
+
+  it.each([
+    { version: '27.0.1' },
+    { operating_system_version: '27.0.1', component: 'nodejs', component_version: '24.9.0' }
+  ])('separates OS and component versions in leased technical discovery context: %j', (versions) => {
+    const context = { learning_domain_id: 'technical-operations', operating_system: 'macOS',
+      shell_environment: 'zsh', ...versions }
+    const stored = { coverage_target: { version_branch: '27.0.1' } }
+    const leased = withLeasedKnowledgeDemand(stored, {
+      question: 'Diagnose Node.js fetch failures on macOS 27.0.1',
+      tool_name: 'query_network_knowledge', context, excluded_source_urls: []
+    })
+    expect(leased).toMatchObject({ knowledge_demand: {
+      context,
+      requested_context: { operating_system: 'macos', operating_system_version: '27.0.1',
+        component: 'nodejs', shell_environment: 'zsh' }
+    } })
+    const requested = (leased['knowledge_demand'] as Record<string, unknown>)['requested_context'] as Record<string, unknown>
+    expect(requested['component_version']).toBe(versions.component_version)
+    expect(requested).not.toHaveProperty('version')
+    expect(stored).not.toHaveProperty('knowledge_demand')
   })
 
   it('keeps an unanswered request alive through automatic AI recovery', () => {

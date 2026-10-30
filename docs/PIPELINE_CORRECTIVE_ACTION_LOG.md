@@ -6,12 +6,23 @@ a restart alone is not a fix. Add evidence → cause → minimal correction → 
 SHA (or configuration-only status) → measured result, then restart the read-only
 soak. A clean baseline is not a completed extended observation window.
 
-## Handoff as of publication-origin index deployment, 2026-10-28
+## Handoff as of technical discovery context correction, 2026-10-30
 
 Live application: `470bff4279bce34cecf13a193979353b249bdeac` on
 `100.116.82.78`, deployed through `ops/scripts/deploy-production.sh`.
 Pipeline enabled, capacity 8. Operator settings version 8 use `gpt-6-luna`
 low/medium, High fallback `gpt-5.6-terra` medium; unchanged at this acceptance.
+
+- **Technical discovery, October 30:** the 13:02/13:03 UTC slices confirm repeated
+  discovery without new evidence for the original Node/Hugging Face questions.
+  Node discovery incorrectly reports missing Node.js 27.0.1 documentation, although
+  27.0.1 is the requested macOS version. Leased discovery retains only the legacy
+  version envelope; technical answer tasks already receive separate OS/component
+  dimensions. The correction adds that existing normalized scope to leased technical
+  demand context and explains its use in discovery. Two regressions fail before
+  the change; 73 focused tests pass after it. Deployment/acceptance is pending.
+  Neither question is closed; substantive public guidance and private incident
+  evidence are still missing.
 
 - **Publication history, October 28:** repeated full candidate-history scans
   exhausted publication retries. Migration 053 adds the published-origin index;
@@ -120,6 +131,41 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
 
 
 
+
+## 2026-10-30 13:02 UTC — Discovery confuses the requested OS version with Node.js
+
+- Initial compact slice: live 470bff4279bce34cecf13a193979353b249bdeac,
+  health/ready and four services active with NRestarts=0, eight fresh executors,
+  seven valid/no expired leases, settings enabled/version 8/capacity 8. In 30
+  minutes 964 AI runs, 47 candidate publications, six technical drafts and six
+  independent reviews completed, but no original question reached complete replay.
+  There are 127 empty discoveries out of 134 and two prepared sources without
+  live work. Fresh errors are nine intermittent Gateway Timeouts; no new internal
+  event-constraint or publication-counter failure is present.
+- One scoped confirming slice at 13:03 UTC shows the latest six discoveries for
+  the two stable demands all inserted/reused no evidence. Node's 07:19 and 12:10
+  results explicitly seek Node.js v27.0.1 documentation. The original question,
+  canonical diagnosis and stored context identify macOS 27.0.1, not that Node
+  version. The leased discovery payload has context.version and a coverage target
+  version_branch but lacks the separate requested_context used by answer tasks.
+- Minimal correction: reuse technicalRequestScope when leasing a technical demand,
+  retaining the original question/raw context and adding normalized OS/component
+  fields. Discovery instructions prohibit transferring OS versions to components;
+  an unspecified component version remains unspecified. Network payloads keep their
+  existing shape. No claims, models, capacity, Pause, dedupe, retries, publication
+  thresholds, provenance or immutable revisions change.
+- Two regression cases cover the legacy macOS version and explicit separate Node
+  version. Before the correction two fail/52 pass; afterward all 73 focused
+  product-feature/demand-intelligence tests pass. The network lease test also
+  asserts that the technical scope is absent. Canonical deployment is pending.
+- The evidence-window check shows different fragment IDs/hashes being visited,
+  not proof of repeating the same leased span: Node has 112 windows and Hugging
+  Face 63. Review correctly rejects unrelated Node error-reference sections and
+  an Apple JavaScript-only page. This correction addresses the demonstrated
+  version confusion; it does not establish that discovery now finds all missing
+  guidance or remove the need for private heartbeat, traceback, version and
+  timestamped network evidence. Exact public replays remain partial at
+  ca5d3c42-c9ef-4bc7-a02d-64a6795ccad7 / d84279a6-e30e-4c7c-a345-c63e4809614b.
 
 ## 2026-10-28 09:30 UTC — Publication history recount exceeds the worker deadline
 
