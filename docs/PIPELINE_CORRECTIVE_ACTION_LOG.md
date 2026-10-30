@@ -8,7 +8,7 @@ soak. A clean baseline is not a completed extended observation window.
 
 ## Handoff as of technical discovery context correction, 2026-10-30
 
-Live application: `470bff4279bce34cecf13a193979353b249bdeac` on
+Live application: `a95b0bc9752d78f4ac1a863a36f4bf3ba517aa3b` on
 `100.116.82.78`, deployed through `ops/scripts/deploy-production.sh`.
 Pipeline enabled, capacity 8. Operator settings version 8 use `gpt-6-luna`
 low/medium, High fallback `gpt-5.6-terra` medium; unchanged at this acceptance.
@@ -20,9 +20,14 @@ low/medium, High fallback `gpt-5.6-terra` medium; unchanged at this acceptance.
   version envelope; technical answer tasks already receive separate OS/component
   dimensions. The correction adds that existing normalized scope to leased technical
   demand context and explains its use in discovery. Two regressions fail before
-  the change; 73 focused tests pass after it. Deployment/acceptance is pending.
-  Neither question is closed; substantive public guidance and private incident
-  evidence are still missing.
+  the change; 73 focused tests pass after it. Canonical deployment passed 423
+  tests/250 evals and all smokes; four services switched at 13:53:33 UTC and the
+  local pool restarted afterward. At 13:57:12 UTC all eight executors were fresh,
+  with seven valid/no expired leases, 47 completed AI runs and one completed
+  publication since switching. A real discovery lease carries requested_context.
+  Neither original question is closed; their next post-switch discoveries have
+  not completed in this short acceptance. New read-only baseline: October 30
+  13:57:12 UTC, not an extended soak.
 
 - **Publication history, October 28:** repeated full candidate-history scans
   exhausted publication retries. Migration 053 adds the published-origin index;
@@ -157,7 +162,27 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
 - Two regression cases cover the legacy macOS version and explicit separate Node
   version. Before the correction two fail/52 pass; afterward all 73 focused
   product-feature/demand-intelligence tests pass. The network lease test also
-  asserts that the technical scope is absent. Canonical deployment is pending.
+  asserts that the technical scope is absent. Canonical Node 24 deployment passed
+  423 tests (344 root, 32 domain, 47 admin), 250 evals, type checks, local/Linux
+  builds, normal migration/grant/reconciliation/index/stats and API/admin/MCP
+  smokes. Deployed SHA: a95b0bc9752d78f4ac1a863a36f4bf3ba517aa3b. Four services
+  switched at 13:53:33 UTC; the deployer restored settings and restarted Luna.
+- Validated pre-switch dump: deploy-20261030T130805Z-a95b0bc,
+  clideck-mcp-20261030T130806Z.dump, 11,270,593,216 bytes, with checksum. Canonical
+  retention removed the obsolete 470bff4 deployment backup and 76d2df3 release,
+  retaining one daily/one deployment backup and current/previous application
+  releases. Free space is 138 GiB. No manual production mutation or extra restart
+  was used.
+- Acceptance at 13:57:12 UTC: health/ready good, four services active/NRestarts=0,
+  eight fresh executors (oldest 15 seconds), seven valid/no expired leases,
+  settings enabled/version 8/capacity 8, worker knowledge-item UPDATE still denied.
+  Since switching 47 AI runs completed, including one publication, seven fragment
+  analyses, two verifications, 32 deep reviews, six discoveries and one diagnosis.
+  Fresh post-switch error slices are empty. Discovery lease
+  ac76514a-6697-42fd-9413-38ec497d5f01/settings version 8 contains normalized
+  requested_context; the exact macOS/Node version cases are covered by regression.
+  The two stable demands remain queued for subsequent discovery at this
+  acceptance; no post-switch source-selection result is claimed for them.
 - The evidence-window check shows different fragment IDs/hashes being visited,
   not proof of repeating the same leased span: Node has 112 windows and Hugging
   Face 63. Review correctly rejects unrelated Node error-reference sections and
@@ -166,6 +191,9 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
   guidance or remove the need for private heartbeat, traceback, version and
   timestamped network evidence. Exact public replays remain partial at
   ca5d3c42-c9ef-4bc7-a02d-64a6795ccad7 / d84279a6-e30e-4c7c-a345-c63e4809614b.
+  Restart the read-only observation window at 2026-10-30 13:57:12 UTC. This is a
+  short acceptance, not an extended soak or proof of complete original-question
+  learning.
 
 ## 2026-10-28 09:30 UTC — Publication history recount exceeds the worker deadline
 
