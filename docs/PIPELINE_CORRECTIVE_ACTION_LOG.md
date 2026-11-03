@@ -22,9 +22,15 @@ low/medium, High fallback `gpt-5.6-terra` medium; unchanged at this acceptance.
   4.318 seconds. The minimal correction changes only the local AI pool's
   ProcessType to Standard and removes the unhelpful bootstrap guard/tests.
   The SSH tunnel stays Background. Nine runtime tests and type checking pass.
-  Local configuration installation/acceptance is pending. No models, capacity,
-  Pause, authentication or network controls change. The October 30 window failed;
-  no new healthy baseline or completed extended soak is yet claimed.
+  Installed from clean main 2b0e442 at 16:28:18 UTC. At 16:29:23 UTC ten AI
+  runs have completed, all eight executors are fresh with eight valid/no expired
+  leases and no fresh server errors. Operator settings remain enabled/version
+  8/capacity 8. No models, Pause, authentication or network controls change.
+  New read-only baseline: 16:29:23 UTC, not an extended soak or closure of the
+  still-partial original Node/Hugging Face questions.
+  Follow-up at 16:31:38 UTC: 66 successful AI completions, one publication and
+  continued review/discovery/analysis progress, eight fresh executors and eight
+  valid/no expired leases; no AI failures since the configuration correction.
 
 - **Technical discovery, October 30:** the 13:02/13:03 UTC slices confirm repeated
   discovery without new evidence for the original Node/Hugging Face questions.
@@ -198,8 +204,31 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
   leaves the coordinator alive and closes port 9229. This diagnostic failure is
   separate from the original routing outage. Temporary jobs and copied private
   task/output artifacts are removed after inspection.
-- Installation and real queue-progress acceptance pending. Do not treat the
-  earlier server switch or successful isolated probes as restored collection.
+- Configuration-only acceptance: clean main 2b0e442 is pushed and applied with
+  Node 24 through the documented pipeline:pool-stop/pipeline:install-launchd
+  local controls. The installed AI plist is Standard and the SSH tunnel remains
+  Background. The remote application stays e2c4a6a; no remote deployment steps
+  are reproduced manually. At 16:29:23 UTC ten real AI runs have completed
+  since installation: six deep reviews, three user-demand diagnoses and one
+  discovery. All eight executors are fresh (oldest eleven seconds), eight
+  leases are valid/none expired, settings enabled/version 8/capacity 8, and
+  worker knowledge-item UPDATE remains denied. Health/ready, four services
+  active/NRestarts=0, and the fresh server-error slice are healthy. This is
+  actual queue progression, not just live heartbeat or a successful toy prompt.
+- Learning-health shows no prepared user source without work and zero complete
+  original-question closures in the 30-minute window. Exact Node/Hugging Face
+  replays still return partial at ca5d3c42-c9ef-4bc7-a02d-64a6795ccad7 and
+  d84279a6-e30e-4c7c-a345-c63e4809614b; their known missing public guidance and
+  incident/version context remain open. Restart the read-only observation window
+  at 2026-11-03 16:29:23 UTC. This short acceptance is not an extended soak or
+  validation of the entire knowledge base.
+- Follow-up at 16:31:38 UTC confirms continuing execution: 66 completed AI runs,
+  48 completed deep reviews, fifteen discoveries, three demand diagnoses, one
+  fragment analysis and one candidate publication since installation. No failed
+  AI run appears in this window. Eight executors are fresh (oldest 21 seconds),
+  with eight valid/no expired leases and unchanged operator settings. These
+  measurements establish restored task progression, not closure of the two
+  original technical questions or a completed extended observation window.
 
 ## 2026-11-03 14:37 UTC — Initial bootstrap hypothesis (superseded)
 
