@@ -6,26 +6,26 @@ a restart alone is not a fix. Add evidence → cause → minimal correction → 
 SHA (or configuration-only status) → measured result, then restart the read-only
 soak. A clean baseline is not a completed extended observation window.
 
-## Handoff as of background runtime failure, 2026-11-03
+## Handoff as of invalid launchd bootstrap correction, 2026-11-03
 
 Live application: `a95b0bc9752d78f4ac1a863a36f4bf3ba517aa3b` on
 `100.116.82.78`, deployed through `ops/scripts/deploy-production.sh`.
 Pipeline enabled, capacity 8. Operator settings version 8 use `gpt-6-luna`
 low/medium, High fallback `gpt-5.6-terra` medium; unchanged at this acceptance.
 
-- **Runtime blocked again, November 3:** successful AI execution stops at
-  06:07:07 UTC. At 06:32:05 UTC all eight executors are fresh, eight leases are
-  valid/none expired, but the eighteen subsequent finished AI runs have failed
-  with process exit 1. A minimal read-only probe using the installed
-  `codex-cli 0.166.0-alpha.5.1` and the pipeline's argument/environment policies
-  fails in the pool's bootstrap context before model execution:
-  "Failed to synchronize managed preferences (code -32600)". The identical
-  probe succeeds from the active session. The underlying synchronization cause
-  remains unestablished; no application fix, runtime replacement, settings bypass
-  or restart was made. Background Codex configuration loading needs restoration.
-  The October 30 observation window fails the runtime-progress criterion; no new
-  clean baseline or completed extended soak is claimed. Original Node/Hugging
-  Face questions remain partial, with missing public guidance and private context.
+- **Invalid bootstrap, November 3:** successful AI execution stops at 06:07:07
+  UTC despite live heartbeats and leases. The manual investigation identifies a
+  dead inherited Mach bootstrap port in pool PID 42688: service lookups return
+  MACH_SEND_INVALID_DEST, launchctl managerpid exits 153 and DNS lookup fails.
+  Direct TCP works; the same Codex/environment/real task succeeds in a fresh
+  launchd job. The earlier managed-preferences error is a symptom of that
+  damaged context, not evidence of a broken management policy. The new guard
+  confirms the specific managerpid failure twice, gracefully releases the pool
+  and exits so launchd can supply a live context. Ten focused tests and a real
+  broken-context pool probe pass. Deployment is pending; live code remains
+  a95b0bc. The trigger that invalidated the OS port is unestablished. No models,
+  authentication, management or network controls changed. The October 30 window
+  failed; no new healthy baseline or completed extended soak is yet claimed.
 
 - **Technical discovery, October 30:** the 13:02/13:03 UTC slices confirm repeated
   discovery without new evidence for the original Node/Hugging Face questions.
@@ -150,6 +150,52 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
 
 
 
+
+## 2026-11-03 14:37 UTC — Invalid inherited Mach bootstrap strands the local pool
+
+- Manual investigation of the collection outage: health/ready and four server
+  services remain healthy/NRestarts=0, settings enabled/version 8/capacity 8,
+  eight fresh executors/eight valid/no expired leases. All 54 recent AI finishes
+  fail; latest success is still 06:07:07 UTC. A scoped aggregate finds 1,030
+  failed runs since then, duration 222,298–224,283 ms (median 223,255.5 ms),
+  and none matches the constant stderr fingerprint of the quick bsexec
+  managed-preferences probe. That initial probe alone was insufficient to
+  identify the actual failure boundary.
+- A fresh, temporary one-shot launchd job succeeds with the installed
+  codex-cli 0.166.0-alpha.5.1 and the actual executor's allowed environment.
+  It also completes an unsubmitted copy of real review task
+  ca98f5f9-51c5-4822-a998-e84aae69e9a7 in 6,812 ms, using the original
+  gpt-6-luna/low claim, 24,985-byte payload and identical 4,155-byte schema.
+  No new pipeline demand, claim or publication is submitted by these probes.
+  Temporary launchd jobs and private copied task/output files are removed.
+- Root-cause boundary: native bootstrap_look_up calls from the old pool's
+  inherited context return 268435459 (0x10000003, MACH_SEND_INVALID_DEST in the
+  installed Apple SDK) for preferences and notification services. The active
+  context resolves those same services successfully. launchctl managerpid and
+  managername exit 153 in the old context, but return 1/Aqua in the active
+  context. DNS lookup fails only in the old context; direct TCP to
+  104.18.32.47:443 succeeds in both. The two managed preference keys are absent.
+  Apple-provided launchctl documentation confirms that bsexec adopts the target
+  Mach bootstrap namespace, not its environment; actual environment values were
+  separately copied/compared. The originating event that killed the old port is
+  unknown. No Tailscale, firewall, proxy, DNS, certificate or policy change is
+  justified. CliDeck MCP was consulted first for the network symptom and returned
+  partial general macOS diagnostics, not a specific cause.
+- Minimal correction: on macOS, the pool probes launchctl managerpid before
+  runtime refresh. Only two consecutive failures with the observed numeric 153
+  and exact manager-PID diagnostic establish an invalid context. It then uses
+  existing graceful executor shutdown and exits 1; KeepAlive can create a fresh
+  process with a live bootstrap. Healthy/non-macOS runs and unknown/timeout
+  probe errors do not trigger replacement. Settings, models, Pause, capacity,
+  task priority, dedupe, finite retries, leases and publication rules are intact.
+- Validation: eight new detector cases plus two existing runtime-resilience
+  cases pass. The real detector returns true in the old pool context and false
+  in the active context. Running the corrected pool in the damaged context
+  emits PIPELINE_LAUNCHD_BOOTSTRAP_INVALID and exits 1 before spawning any
+  executors or requesting work. Sanitized evidence is in
+  tmp/codex-runtime-{user-probe,launchd-exact,real-task}-20261103/diagnostic.json
+  and the bootstrap/native probes. Canonical deployment and acceptance pending;
+  this is not recovery or a new observation baseline yet.
 
 ## 2026-11-03 06:27 UTC — Background Codex execution stops despite live leases
 
