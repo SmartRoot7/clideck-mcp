@@ -6,12 +6,26 @@ a restart alone is not a fix. Add evidence → cause → minimal correction → 
 SHA (or configuration-only status) → measured result, then restart the read-only
 soak. A clean baseline is not a completed extended observation window.
 
-## Handoff as of technical discovery context correction, 2026-10-30
+## Handoff as of background runtime failure, 2026-11-03
 
 Live application: `a95b0bc9752d78f4ac1a863a36f4bf3ba517aa3b` on
 `100.116.82.78`, deployed through `ops/scripts/deploy-production.sh`.
 Pipeline enabled, capacity 8. Operator settings version 8 use `gpt-6-luna`
 low/medium, High fallback `gpt-5.6-terra` medium; unchanged at this acceptance.
+
+- **Runtime blocked again, November 3:** successful AI execution stops at
+  06:07:07 UTC. At 06:32:05 UTC all eight executors are fresh, eight leases are
+  valid/none expired, but the eighteen subsequent finished AI runs have failed
+  with process exit 1. A minimal read-only probe using the installed
+  `codex-cli 0.166.0-alpha.5.1` and the pipeline's argument/environment policies
+  fails in the pool's bootstrap context before model execution:
+  "Failed to synchronize managed preferences (code -32600)". The identical
+  probe succeeds from the active session. The underlying synchronization cause
+  remains unestablished; no application fix, runtime replacement, settings bypass
+  or restart was made. Background Codex configuration loading needs restoration.
+  The October 30 observation window fails the runtime-progress criterion; no new
+  clean baseline or completed extended soak is claimed. Original Node/Hugging
+  Face questions remain partial, with missing public guidance and private context.
 
 - **Technical discovery, October 30:** the 13:02/13:03 UTC slices confirm repeated
   discovery without new evidence for the original Node/Hugging Face questions.
@@ -136,6 +150,48 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
 
 
 
+
+## 2026-11-03 06:27 UTC — Background Codex execution stops despite live leases
+
+- Initial compact slice: live a95b0bc9752d78f4ac1a863a36f4bf3ba517aa3b,
+  health/ready good, four services active/NRestarts=0, eight fresh executors,
+  eight valid/no expired leases, settings enabled/version 8/capacity 8. Recent
+  server errors are empty. The 30-minute slice contains 172 successful AI runs,
+  but its latest success is 06:07:07.310964 UTC and subsequent attempts fail.
+- One confirming slice at 06:28:37 UTC shows no successful AI completion in ten
+  minutes, 1,102 queued tasks, eight fresh executors and valid leases. Recent
+  failures have process exit 1 and diagnostic CODEX_PROCESS_FAILED, including
+  one AGENT_REPORTING_FAILED. At 06:32:05 UTC the last-success timestamp is
+  unchanged: seventeen CODEX_PROCESS_FAILED and one AGENT_REPORTING_FAILED
+  completions since that success, all with exit 1; eight runs remain active.
+- Failure-boundary probe: the installed codex-cli 0.166.0-alpha.5.1, Node 24 and
+  the pipeline's codexExecutorArguments/codexExecutorEnvironment are reused with
+  a minimal JSON-output prompt, gpt-6-luna/low, read-only sandbox and tools
+  disabled. In the existing pool bootstrap context (`launchctl bsexec 42688`)
+  it exits 1 in 197 ms without JSONL events: thread/start cannot load
+  configuration because "Failed to synchronize managed preferences (code
+  -32600)". The identical probe from the active session exits 0 in 4,609 ms
+  with turn.completed and no stderr. This establishes a reproducible background
+  configuration-loading failure, not the underlying managed-preferences cause
+  or the exact stderr of every historical failed task. It resembles October
+  22's observed boundary on a newer installed runtime; no causal equivalence is
+  assumed. Sanitized local evidence is in
+  tmp/codex-runtime-observe-20261103/{bootstrap-diagnostic,diagnostic}.json.
+- Learning-health still shows zero complete original-question closures in 30
+  minutes, five technical drafts/six independent reviews, no technical publication
+  in that slice, 38 empty discoveries out of 44, and zero prepared user sources
+  without work. Recent task groups are demand-associated. The stable Node and
+  Hugging Face demands have 117/71 evidence windows; their exact original-question
+  and context replays remain partial at ca5d3c42-c9ef-4bc7-a02d-64a6795ccad7 and
+  d84279a6-e30e-4c7c-a345-c63e4809614b. Reviews still withhold unsupported fetch,
+  heartbeat and HTTPS/Xet guidance, and require timestamped incident evidence and
+  actual component versions. These partial answers do not close either question.
+- Correction/deployment: none. No demonstrated repository correction restores
+  managed-preferences synchronization; background Codex configuration loading is
+  the blocker. Models, capacity, Pause, authentication and management settings
+  remain unchanged; no restart or redeploy was used. The October 30 read-only
+  observation window fails the runtime-progress criterion. A new healthy baseline
+  must follow observed execution recovery; this is not a completed extended soak.
 
 ## 2026-10-30 13:02 UTC — Discovery confuses the requested OS version with Node.js
 
