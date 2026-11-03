@@ -6,26 +6,25 @@ a restart alone is not a fix. Add evidence → cause → minimal correction → 
 SHA (or configuration-only status) → measured result, then restart the read-only
 soak. A clean baseline is not a completed extended observation window.
 
-## Handoff as of invalid launchd bootstrap correction, 2026-11-03
+## Handoff as of launchd scheduling correction, 2026-11-03
 
-Live application: `a95b0bc9752d78f4ac1a863a36f4bf3ba517aa3b` on
+Live application: `e2c4a6afd14708b636c79ff07bb756d640c26f48` on
 `100.116.82.78`, deployed through `ops/scripts/deploy-production.sh`.
 Pipeline enabled, capacity 8. Operator settings version 8 use `gpt-6-luna`
 low/medium, High fallback `gpt-5.6-terra` medium; unchanged at this acceptance.
 
-- **Invalid bootstrap, November 3:** successful AI execution stops at 06:07:07
-  UTC despite live heartbeats and leases. The manual investigation identifies a
-  dead inherited Mach bootstrap port in pool PID 42688: service lookups return
-  MACH_SEND_INVALID_DEST, launchctl managerpid exits 153 and DNS lookup fails.
-  Direct TCP works; the same Codex/environment/real task succeeds in a fresh
-  launchd job. The earlier managed-preferences error is a symptom of that
-  damaged context, not evidence of a broken management policy. The new guard
-  confirms the specific managerpid failure twice, gracefully releases the pool
-  and exits so launchd can supply a live context. Ten focused tests and a real
-  broken-context pool probe pass. Deployment is pending; live code remains
-  a95b0bc. The trigger that invalidated the OS port is unestablished. No models,
-  authentication, management or network controls changed. The October 30 window
-  failed; no new healthy baseline or completed extended soak is yet claimed.
+- **Confirmed scheduling failure, November 3:** actual executors report
+  "workspace routing discovery timed out". The initial bsexec/bootstrap
+  explanation was premature: the e2c4a6a deployment did not restore execution,
+  and a new pool still failed while its own managerpid check passed. A controlled
+  two-level launchd experiment on macOS 27.0.1 reproduces the real 223-second
+  failure with ProcessType=Background; the identical Standard job succeeds in
+  4.318 seconds. The minimal correction changes only the local AI pool's
+  ProcessType to Standard and removes the unhelpful bootstrap guard/tests.
+  The SSH tunnel stays Background. Nine runtime tests and type checking pass.
+  Local configuration installation/acceptance is pending. No models, capacity,
+  Pause, authentication or network controls change. The October 30 window failed;
+  no new healthy baseline or completed extended soak is yet claimed.
 
 - **Technical discovery, October 30:** the 13:02/13:03 UTC slices confirm repeated
   discovery without new evidence for the original Node/Hugging Face questions.
@@ -151,7 +150,61 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
 
 
 
-## 2026-11-03 14:37 UTC — Invalid inherited Mach bootstrap strands the local pool
+## 2026-11-03 16:26 UTC — Background classification causes Codex routing timeouts
+
+- The e2c4a6a deployment did not restore AI execution. Actual-process stderr and
+  JSONL errors, captured briefly through the localhost-only Node inspector,
+  show model refresh request timeouts and repeated "workspace routing discovery
+  timed out", ending after about 223 seconds. The bootstrap explanation below
+  was based on bsexec probes and was insufficient: a fresh production pool also
+  fails, although its in-process managerpid check passes. No bootstrap-guard
+  recycle occurs. The guard and its tests are removed in this correction.
+- Canonical deployment of e2c4a6a passed 431 tests/250 evals, type checks,
+  local/Linux builds, validated backup, migrations/grants/reconciliation/index/
+  stats and remote API/admin/MCP smokes. Four services switched at 15:55:27 UTC.
+  Backup: deploy-20261103T150738Z-e2c4a6a,
+  clideck-mcp-20261103T150738Z.dump, 12,035,709,834 bytes. Retention removed the
+  obsolete 470bff4 release and a95b0bc deployment backup; 134 GiB remain free.
+  After local installation the outer deploy script exited 35 on its final public
+  HTTPS health check (connection reset). Bounded read-only repeats of external
+  health/ready and the standard admin smoke pass. This is not a claim that the
+  outer script exited successfully or that collection recovered at that point.
+- Actual-process diagnostic controls: the same minimal CLI probe launched from
+  a coordinator fails both directly and via launchctl asuser; --no-daemon also
+  fails in 223.458 seconds. A new two-level launchd job with the same environment,
+  Node/Codex versions, arguments, schema and input succeeds in 3.366 seconds.
+  The distinguishing configured property is ProcessType=Background on the real
+  pool. In a paired two-level experiment changing only that classification,
+  Background reproduces the real routing error and exits 1 in 222.779 seconds;
+  explicit Standard exits 0 with turn.completed in 4.318 seconds.
+- Scope: observed macOS 27.0.1/Darwin 27.0.0, Node 24.22.1 and Codex
+  0.166.0-alpha.5.1. Apple-provided launchd.plist(5) documents resource restrictions
+  for Background jobs and Standard as equivalent to omitting ProcessType. This
+  experiment identifies the configuration trigger on this host; the specific OS
+  resource-policy event behind the 06:07 onset remains unknown. No account,
+  workspace-routing override, proxy, DNS, firewall, Tailscale or certificate
+  setting is changed.
+- Minimal correction: use Standard for the local user-enabled AI pool, retaining
+  Background for its existing SSH tunnel. This local launchd configuration is
+  applied by the documented pipeline installer from clean main; the remote
+  application remains e2c4a6a because no remote application behavior changes.
+  Capacity 1–8, operator Pause/settings/model snapshots, finite retries, leases,
+  provenance and publication controls are unchanged. Nine focused runtime cases
+  and the full TypeScript check pass. Native Background/Standard comparison is
+  the relevant regression; no test merely asserting the XML string is added.
+- Diagnostic cleanup: the first inspector cleanup attempted a dynamic import
+  unsupported in that evaluation context and terminated one coordinator; the
+  existing supervisor replaced it. Subsequent cleanup uses getBuiltinModule,
+  leaves the coordinator alive and closes port 9229. This diagnostic failure is
+  separate from the original routing outage. Temporary jobs and copied private
+  task/output artifacts are removed after inspection.
+- Installation and real queue-progress acceptance pending. Do not treat the
+  earlier server switch or successful isolated probes as restored collection.
+
+## 2026-11-03 14:37 UTC — Initial bootstrap hypothesis (superseded)
+
+The interpretation in this entry was superseded by actual-process capture and
+the controlled ProcessType experiment above; its guard did not restore execution.
 
 - Manual investigation of the collection outage: health/ready and four server
   services remain healthy/NRestarts=0, settings enabled/version 8/capacity 8,

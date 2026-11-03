@@ -4,7 +4,6 @@ import { access } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { discoverCodexModels } from './codex-model-catalog.js'
 import { callPipelineBridge } from './pipeline-bridge.js'
-import { hasInvalidLaunchdBootstrap } from './launchd-context.js'
 
 import {
   pipelineExecutorIds,
@@ -91,14 +90,6 @@ async function refreshCatalog(): Promise<void> {
   if (refreshing || stopping) return
   refreshing = true
   try {
-    if (await hasInvalidLaunchdBootstrap()) {
-      process.stderr.write(
-        `${new Date().toISOString()} PIPELINE_LAUNCHD_BOOTSTRAP_INVALID: ` +
-        'releasing executors before launchd supplies a live bootstrap context\n',
-      )
-      await stopPool()
-      process.exit(1)
-    }
     const control = await callPipelineBridge(process.env, 'get_pipeline_runtime_settings', {})
     const requested = typeof control['refresh_requested_at'] === 'string' ? Date.parse(control['refresh_requested_at']) : 0
     if (Date.now() - lastCatalogRefresh < 5 * 60_000 && requested <= lastCatalogRefresh) return
