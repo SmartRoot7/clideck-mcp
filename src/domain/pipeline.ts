@@ -46,7 +46,8 @@ import { decomposeNetworkQuestion, normalizeTopicSlug } from './network-intent.j
 import { recoverUnqueuedKnowledgeDemands } from './mcp-observability.js'
 import {
   candidateKnowledgeSchema,
-  deactivatePublishedCandidates
+  deactivatePublishedCandidates,
+  lockCandidateRows
 } from './publication.js'
 import { enforceKnowledgeRisk } from './risk.js'
 import { batchEvidenceUnits, shouldRunQualityCheck } from './pipeline-v2.js'
@@ -6291,6 +6292,9 @@ export async function submitCandidateVerification(
       requeued: 0
     }
     if (task.payload['audit_mode'] === 'fidelity') {
+      // Publication may overlap this audit. Acquire all rows in the same order
+      // before per-decision updates or compensating release activation.
+      await lockCandidateRows(client, [...allowedCandidateIds])
       const actualRun = await client.query<{ id: string; model: string }>(
         `SELECT id, model FROM agent_runs WHERE pipeline_task_id = $1 ORDER BY started_at DESC LIMIT 1`, [task.id])
       const verifierModel = actualRun.rows[0]?.model ?? 'legacy-unknown'

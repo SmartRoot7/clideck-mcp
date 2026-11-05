@@ -49,6 +49,7 @@ import {
 } from './pipeline.js'
 import {
   createKnowledgeRevision,
+  lockCandidateRows,
   publishKnowledgeBatch
 } from './publication.js'
 import {
@@ -2350,6 +2351,10 @@ async function publishCandidateBatch(
   }
 
   const result = await withTransaction(database, async (client) => {
+    await lockCandidateRows(client, [
+      ...revisions.map((revision) => revision.candidateId),
+      ...deferred.map((candidate) => candidate.candidateId)
+    ])
     let deferredLow = 0
     let excludedMalformed = 0
     for (const candidate of deferred) {

@@ -6,12 +6,31 @@ a restart alone is not a fix. Add evidence → cause → minimal correction → 
 SHA (or configuration-only status) → measured result, then restart the read-only
 soak. A clean baseline is not a completed extended observation window.
 
-## Handoff as of launchd scheduling correction, 2026-11-03
+## Handoff as of publication/QA deadlock diagnosis, 2026-11-05
 
 Live application: `e2c4a6afd14708b636c79ff07bb756d640c26f48` on
 `100.116.82.78`, deployed through `ops/scripts/deploy-production.sh`.
 Pipeline enabled, capacity 8. Operator settings version 8 use `gpt-6-luna`
 low/medium, High fallback `gpt-5.6-terra` medium; unchanged at this acceptance.
+
+- **Publication/QA locking, November 5 — correction pending deployment:** the
+  18:33/18:34 UTC slices confirm recurring publication and failure-write timeouts.
+  PostgreSQL logs establish seven publication-versus-fidelity candidate-row
+  deadlocks today, among 43 total deadlocks with several different lock paths.
+  Publication bulk updates and per-decision fidelity updates acquire overlapping
+  candidate rows in different orders. The prepared correction locks only the
+  affected rows in UUID order in both transactions, before release activation.
+  Type checking and eleven existing focused tests pass. A real PostgreSQL
+  opposite-order concurrency regression is added but **has not run**: local
+  Docker Engine does not answer version/status or its socket /_ping endpoint.
+  No server deployment or restart was attempted, and production remains e2c4a6a.
+  Both sampled publication tasks eventually completed after retries, but their
+  final zero counters follow earlier committed publications, not proof that
+  every timeout was harmless. Other demand/source lock paths and post-commit
+  reconciliation timeouts are not claimed fixed. Restore the local Docker
+  Engine, run the new regression and canonical deployment before acceptance.
+  The November 3 baseline has failed this database-concurrency criterion; a new
+  read-only window starts only after a deployed correction, not from this slice.
 
 - **Confirmed scheduling failure, November 3:** actual executors report
   "workspace routing discovery timed out". The initial bsexec/bootstrap
@@ -155,6 +174,54 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
 
 
 
+
+## 2026-11-05 18:33 UTC — Publication/fidelity row-order deadlock; deployment blocked
+
+- Evidence: health/ready and four services are healthy/NRestarts=0, all eight
+  executors fresh, settings enabled/version 8/capacity 8, no expired leases.
+  The initial 15-minute log slice has two publication read timeouts and one
+  failure-persistence timeout. The confirming slice adds another failure-write
+  timeout and post-commit demand-reconciliation timeout. Publication task
+  84e4b220-2efb-444d-87be-7e4361549d40 eventually completes at 18:34:42 UTC
+  on attempt 3; d8064a72-9bab-46b4-acf3-84869af1c21d at 18:36:00 UTC on
+  attempt 2. Both have committed candidate revisions before their final retry.
+  Do not equate continued AI throughput with absence of a database defect.
+- A bounded PostgreSQL log examination finds 43 deadlocks on November 5;
+  seven specifically pair the publication knowledge_candidates bulk UPDATE
+  with fidelity's per-candidate SELECT FOR UPDATE. The latest is 17:57:08 UTC.
+  Different row orders let each transaction hold a candidate needed by the
+  other. Other deadlocks involve demand/source/task rows and are outside this
+  minimal correction; not every observed timeout is attributed to this pair.
+- Correction: prelock affected candidate IDs in the same UUID order in final
+  publication and fidelity submission, before either takes a release lock.
+  Unrelated rows and all operator lanes remain concurrent. Existing task
+  reservations, finite retries, model/settings snapshots, immutable revisions,
+  provenance, quality decisions and release activation are unchanged. This
+  follows PostgreSQL 16's documented consistent-lock-order guidance:
+  https://www.postgresql.org/docs/16/explicit-locking.html#LOCKING-DEADLOCKS
+- Validation: full root TypeScript check and eleven existing focused execution,
+  pipeline and resilience tests pass. The new PostgreSQL regression forces a
+  reversed audit batch to wait behind a publication's first row, verifies both
+  batches finish, and checks an unrelated row remains writable under production
+  roles. It is currently skipped, **not validated**: Docker Desktop processes
+  exist, but docker version/desktop status exceed bounded eight-second checks
+  and its Unix-socket /_ping returns no bytes within five seconds. No local
+  PostgreSQL server executable is available. No Docker restart/reset or remote
+  test data mutation was performed. The unrelated hanging docker ps probe was
+  stopped; no deployment process remains.
+- Deployment status: pending restoration of local Docker Engine and execution
+  of the PostgreSQL regression, followed by clean-main canonical deployment
+  with Node 24. Production SHA remains
+  e2c4a6afd14708b636c79ff07bb756d640c26f48; local AI launchd remains Standard
+  from 2b0e442. No new backup, migration, application switch or restart occurs.
+  Do not claim the prepared correction is deployed or begin a new soak yet.
+- Learning: Node has 118 reviewed evidence windows, Hugging Face 72. The new
+  Hugging Face partial publication replays as partial at
+  1b792eea-bd55-4233-a337-5d53e28b5f09; it still lacks Errno 65/Xet/standard
+  HTTPS MLX download guidance and private incident/version context. Node still
+  replays partial at ca5d3c42-c9ef-4bc7-a02d-64a6795ccad7. Neither original
+  question is closed. Learning-health has zero prepared sources without work
+  and zero complete original-question closures in the initial 30-minute slice.
 
 ## 2026-11-03 16:26 UTC — Background classification causes Codex routing timeouts
 

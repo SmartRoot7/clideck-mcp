@@ -33,6 +33,20 @@ type CandidateTaskRow = {
   payload: unknown
 }
 
+/** Lock intersecting publication/QA batches before either takes release locks. */
+export async function lockCandidateRows(
+  client: DatabaseClient,
+  candidateIds: string[],
+): Promise<void> {
+  if (candidateIds.length === 0) return
+  await client.query(
+    `SELECT id FROM knowledge_candidates
+      WHERE id = ANY($1::uuid[])
+      ORDER BY id FOR UPDATE`,
+    [candidateIds],
+  )
+}
+
 const evidenceRolePriority = {
   primary: 3,
   corroborating: 2,
