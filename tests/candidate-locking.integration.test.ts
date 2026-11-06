@@ -22,7 +22,7 @@ suite('overlapping publication and fidelity batches', () => {
         VALUES ($1::uuid,'fragment_analysis','analyze','completed',($1::uuid)::text,'{}')`, [origin])
       await observer.query(`INSERT INTO knowledge_candidates
         (id,pipeline_task_id,stable_key,payload,content_hash,status,dangerous,confidence,quality_score)
-        SELECT id,$1,'fixture.lock.'||id,'{}','sha256:'||repeat('a',64),'verified',false,.98,.98
+        SELECT id,$1,'fixture.lock.'||id,'{}','sha256:'||repeat(md5(id::text),2),'verified',false,.98,.98
         FROM unnest($2::uuid[]) id`, [origin, [first, second, unrelated]])
       for (const [client, role] of [[left, 'clideck_mcp_worker'], [right, 'clideck_mcp_researcher']] as const) {
         await client.query('BEGIN')

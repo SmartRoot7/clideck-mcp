@@ -6,12 +6,21 @@ a restart alone is not a fix. Add evidence → cause → minimal correction → 
 SHA (or configuration-only status) → measured result, then restart the read-only
 soak. A clean baseline is not a completed extended observation window.
 
-## Handoff as of publication/QA deadlock diagnosis, 2026-11-05
+## Handoff as of publication/QA regression validation, 2026-11-06
 
 Live application: `e2c4a6afd14708b636c79ff07bb756d640c26f48` on
 `100.116.82.78`, deployed through `ops/scripts/deploy-production.sh`.
 Pipeline enabled, capacity 8. Operator settings version 8 use `gpt-6-luna`
 low/medium, High fallback `gpt-5.6-terra` medium; unchanged at this acceptance.
+
+- **November 6 continuation:** Docker Engine responds again at 12:29 UTC.
+  The opposite-order PostgreSQL regression now passes under worker/researcher
+  grants, including unrelated-row concurrency; all nine focused publication
+  locking/counter/recovery tests pass. The first run exposed a duplicate hash
+  in the new test fixture, corrected to a unique hash per candidate; application
+  code is unchanged from bbbe515. The Docker blocker below is historical.
+  Clean-main canonical deployment is next; production remains e2c4a6a until
+  the script switches it. No new observation baseline is established yet.
 
 - **Publication/QA locking, November 5 — correction pending deployment:** the
   18:33/18:34 UTC slices confirm recurring publication and failure-write timeouts.
@@ -174,6 +183,30 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
 
 
 
+
+## 2026-11-06 12:31 UTC — Docker restored; publication/QA regression passes
+
+- The ordinary heartbeat's bounded Docker socket check returns OK. No Docker
+  restart/reset was performed by this run. Main is clean at bbbe515 and no
+  competing deployment is running. Production is still e2c4a6a; eight executors
+  are fresh, eight leases valid/none expired, capacity/version unchanged at 8.
+- A fresh isolated PostgreSQL 16 database is migrated, seeded, indexed and
+  granted using the existing local acceptance setup. The new concurrency test
+  initially fails on duplicate fixture content hashes before locking begins;
+  each fixture candidate now has its own hash. It then passes with production
+  worker/researcher roles: the reverse-order audit waits on the publication's
+  first row without taking its next row, both transactions finish, and an
+  unrelated candidate remains writable. Publication counters and recovery
+  regressions also pass: nine tests across three files. Full log:
+  tmp/candidate-locking-validation-20261106.log. No remote test data is created.
+- Next: commit the fixture correction/evidence, then use the complete canonical
+  clean-main Node 24 deployment. This entry does not claim deployment or an
+  extended soak, nor resolution of the other observed demand/source lock paths.
+- Learning-health still has zero prepared sources without work and no complete
+  original-question closures in the 30-minute slice. Node has 119 reviewed
+  evidence windows, Hugging Face 72; release-note-only Node evidence is correctly
+  rejected. Exact public replays remain partial at ca5d3c42 and 1b792eea with
+  the original contexts and concrete missing incident/component evidence.
 
 ## 2026-11-05 18:33 UTC — Publication/fidelity row-order deadlock; deployment blocked
 
