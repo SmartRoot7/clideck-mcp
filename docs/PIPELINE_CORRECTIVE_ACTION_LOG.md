@@ -6,40 +6,30 @@ a restart alone is not a fix. Add evidence → cause → minimal correction → 
 SHA (or configuration-only status) → measured result, then restart the read-only
 soak. A clean baseline is not a completed extended observation window.
 
-## Handoff as of publication/QA regression validation, 2026-11-06
+## Handoff as of publication/QA lock correction, 2026-11-06
 
-Live application: `e2c4a6afd14708b636c79ff07bb756d640c26f48` on
+Live application: `9020527385e8e719d69a859f7f9c548f82aee866` on
 `100.116.82.78`, deployed through `ops/scripts/deploy-production.sh`.
 Pipeline enabled, capacity 8. Operator settings version 8 use `gpt-6-luna`
 low/medium, High fallback `gpt-5.6-terra` medium; unchanged at this acceptance.
 
-- **November 6 continuation:** Docker Engine responds again at 12:29 UTC.
-  The opposite-order PostgreSQL regression now passes under worker/researcher
-  grants, including unrelated-row concurrency; all nine focused publication
-  locking/counter/recovery tests pass. The first run exposed a duplicate hash
-  in the new test fixture, corrected to a unique hash per candidate; application
-  code is unchanged from bbbe515. The Docker blocker below is historical.
-  Clean-main canonical deployment is next; production remains e2c4a6a until
-  the script switches it. No new observation baseline is established yet.
-
-- **Publication/QA locking, November 5 — correction pending deployment:** the
-  18:33/18:34 UTC slices confirm recurring publication and failure-write timeouts.
-  PostgreSQL logs establish seven publication-versus-fidelity candidate-row
-  deadlocks today, among 43 total deadlocks with several different lock paths.
-  Publication bulk updates and per-decision fidelity updates acquire overlapping
-  candidate rows in different orders. The prepared correction locks only the
-  affected rows in UUID order in both transactions, before release activation.
-  Type checking and eleven existing focused tests pass. A real PostgreSQL
-  opposite-order concurrency regression is added but **has not run**: local
-  Docker Engine does not answer version/status or its socket /_ping endpoint.
-  No server deployment or restart was attempted, and production remains e2c4a6a.
-  Both sampled publication tasks eventually completed after retries, but their
-  final zero counters follow earlier committed publications, not proof that
-  every timeout was harmless. Other demand/source lock paths and post-commit
-  reconciliation timeouts are not claimed fixed. Restore the local Docker
-  Engine, run the new regression and canonical deployment before acceptance.
-  The November 3 baseline has failed this database-concurrency criterion; a new
-  read-only window starts only after a deployed correction, not from this slice.
+- **Publication/QA locking, November 6 — deployed:** Docker Engine responds
+  again without a restart by this run. The PostgreSQL concurrency regression
+  passes under worker/researcher grants, including unrelated-row concurrency;
+  nine focused locking/counter/recovery tests pass. Canonical clean-main Node
+  24 deployment of 9020527 exits successfully after all 424 tests/250 evals,
+  builds, validated backup, migrations/grants/reconciliation/index/stats and
+  smokes. Four services switch at 13:22:45 UTC, active/NRestarts=0. Local AI
+  pool restarts with Standard scheduling; capacity/settings/models unchanged.
+  At 13:26:19 UTC nine AI runs and five fidelity checks have completed, eight
+  executors are fresh, seven leases valid/none expired, no fresh server errors.
+  Follow-up at 13:27:35 UTC: 26 completed AI runs, eight fidelity checks and one
+  completed publication, with continued discovery/analysis/technical work.
+  Other previously observed demand/source lock paths and post-commit timeouts
+  are not claimed fixed. Exact Node/Hugging Face replays remain partial; neither
+  question is closed. New read-only baseline: November 6 13:26:19 UTC, not a
+  completed extended soak. The Docker blocker and November 3 baseline below
+  are historical.
 
 - **Confirmed scheduling failure, November 3:** actual executors report
   "workspace routing discovery timed out". The initial bsexec/bootstrap
@@ -183,6 +173,50 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
 
 
 
+
+## 2026-11-06 13:27 UTC — Publication/QA lock correction deployed and advancing
+
+- Deployed SHA: 9020527385e8e719d69a859f7f9c548f82aee866, clean main, via
+  ops/scripts/deploy-production.sh with Node 24. The complete outer script
+  exits 0 and prints Production deployment verified. All 424 tests (345 root,
+  32 domain, 47 admin), 250/250 evals, type checks, local/Linux builds,
+  converter checks and remote API/admin/MCP smokes pass. The opposite-order
+  PostgreSQL regression is included. No ad hoc deployment steps are used.
+- Backup: deploy-20261106T123340Z-9020527,
+  clideck-mcp-20261106T123340Z.dump, 12,419,872,165 bytes, validated through
+  the normal archive/checksum gates. Canonical retention removes the obsolete
+  a95b0bc release and e2c4a6a deployment backup; the previous application e2c4a6a
+  and current daily/deployment archives are retained. About 131 GiB remain free.
+  Full deployment log: tmp/candidate-locking-deploy-20261106.log.
+- Four services start the new release at 13:22:45 UTC, active/NRestarts=0;
+  health/ready pass. The script restores the local AI pool, whose launchd
+  ProcessType remains Standard. At 13:26:19 UTC nine successful AI runs, three
+  deep reviews, five fidelity verifications and two demand diagnoses have
+  advanced. Eight executors are fresh (oldest five seconds), seven leases
+  valid/none expired, enabled/version 8/capacity 8; worker knowledge-item UPDATE
+  remains denied. Fresh server errors and event-constraint errors are zero.
+  Evidence: tmp/candidate-locking-acceptance-20261106.json.
+- Follow-up at 13:27:35 UTC: 26 completed AI runs, nine deep reviews, eight
+  fidelity verifications, one publication, three fragment analyses, two
+  discoveries and two technical drafts. All eight executors remain fresh;
+  four leases are valid/none expired at this point, with unchanged capacity.
+  No AI failure or fresh server error appears. This establishes real work
+  after restart, including both corrected paths, not just live heartbeat.
+  Evidence: tmp/candidate-locking-followup-20261106.json.
+- Learning-health initially has four prepared user sources awaiting work after
+  the long backup interval and zero complete question closures. Fragment work
+  subsequently advances; the four-source backlog is not declared drained by
+  this slice. Exact original Node/Hugging Face queries and contexts replay as
+  partial at ca5d3c42-c9ef-4bc7-a02d-64a6795ccad7 and
+  1b792eea-bd55-4233-a337-5d53e28b5f09. Node's latest evidence window remains
+  unresolved/unknown because release notes do not cover its requested workflow;
+  neither partial publication closes the question. OS/component versions stay
+  separate and concrete incident/version context remains missing.
+- Restart read-only observation at 2026-11-06 13:26:19 UTC. This is a short
+  post-deployment baseline, not a completed extended soak. The correction
+  addresses the seven confirmed publication-versus-fidelity row-order
+  deadlocks; other historical source/demand/task locking paths and follow-up
+  reconciliation timeouts are not claimed resolved by this change.
 
 ## 2026-11-06 12:31 UTC — Docker restored; publication/QA regression passes
 
