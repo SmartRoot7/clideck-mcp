@@ -4254,6 +4254,16 @@ export async function claimPipelineTask(
       }
     }
 
+    // Persist the claim payload in the first task update. Updating it again
+    // makes PostgreSQL recheck unchanged parent FKs while holding capacity.
+    let payload = usingModelFallback
+      ? { ...task.payload, model_fallback_attempted_for: `${profile.model}:${profile.reasoning_effort}` }
+      : task.payload
+    if (payload['audit_mode'] === 'fidelity') {
+      payload = { ...payload, quality_profile_key: fidelityExecutionProfileKey(
+        String(payload['quality_extraction_model'] ?? 'legacy-unknown'),
+        String(payload['quality_extraction_reasoning_effort'] ?? 'unknown'), requestedModel, taskReasoning) }
+    }
     const leaseToken = randomUrlToken()
     const leaseUntil = new Date(
       Date.now() + config.taskLeaseSeconds * 1_000,
@@ -4266,15 +4276,7 @@ export async function claimPipelineTask(
               lease_until = $4,
               heartbeat_at = now(),
               attempts = attempts + 1,
-              payload = CASE WHEN $5::boolean
-                THEN jsonb_set(
-                  payload,
-                  '{model_fallback_attempted_for}',
-                  to_jsonb($6::text),
-                  true
-                )
-                ELSE payload
-              END,
+              payload = $5::jsonb,
               updated_at = now()
         WHERE id = $1`,
       [
@@ -4282,8 +4284,7 @@ export async function claimPipelineTask(
         researcherId,
         sha256(leaseToken),
         leaseUntil.toISOString(),
-        usingModelFallback,
-        `${profile.model}:${profile.reasoning_effort}`
+        JSON.stringify(payload)
       ],
     )
     const run = await client.query<{ id: string }>(
@@ -4322,15 +4323,6 @@ export async function claimPipelineTask(
       },
     )
 
-    let payload = usingModelFallback
-      ? { ...task.payload, model_fallback_attempted_for: `${profile.model}:${profile.reasoning_effort}` }
-      : task.payload
-    if (payload['audit_mode'] === 'fidelity') {
-      payload = { ...payload, quality_profile_key: fidelityExecutionProfileKey(
-        String(payload['quality_extraction_model'] ?? 'legacy-unknown'),
-        String(payload['quality_extraction_reasoning_effort'] ?? 'unknown'), requestedModel, taskReasoning) }
-      await client.query('UPDATE pipeline_tasks SET payload = $2::jsonb WHERE id = $1', [task.id, JSON.stringify(payload)])
-    }
     if (task.task_type === 'expert_research' && task.expert_task_id) {
       const expert = await client.query<{
         public_id: string

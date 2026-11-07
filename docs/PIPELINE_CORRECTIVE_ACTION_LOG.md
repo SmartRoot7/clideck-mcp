@@ -6,12 +6,32 @@ a restart alone is not a fix. Add evidence → cause → minimal correction → 
 SHA (or configuration-only status) → measured result, then restart the read-only
 soak. A clean baseline is not a completed extended observation window.
 
-## Handoff as of publication/QA lock correction, 2026-11-06
+## Handoff as of fidelity claim diagnosis, 2026-11-07
 
 Live application: `9020527385e8e719d69a859f7f9c548f82aee866` on
 `100.116.82.78`, deployed through `ops/scripts/deploy-production.sh`.
 Pipeline enabled, capacity 8. Operator settings version 8 use `gpt-6-luna`
 low/medium, High fallback `gpt-5.6-terra` medium; unchanged at this acceptance.
+
+- **Fidelity claim outage, November 7 — correction prepared, deployment blocked:**
+  At 12:41/12:42 UTC health/ready and all four services are healthy/NRestarts=0,
+  but all eight executor heartbeats are stale, no leases are active and 1,119
+  tasks are queued. Last executor heartbeat/AI completion: 08:40:26 UTC. The
+  Standard launchd pool and its tunnel are running; repeated claims return
+  `RETRYABLE_INTERNAL_ERROR`. Researcher warning logs contain 104 query read
+  timeouts in five minutes, so a level>=50-only error summary misses this
+  failure. A scoped PostgreSQL sample shows one fidelity claim's second payload
+  update waiting on the scheduler's `knowledge_demands` row lock while holding
+  `clideck-mcp:ai-capacity`; seven other claims wait behind that capacity lock.
+  Correction combines payload normalization with the first lease update.
+  Type checks and 16 focused tests pass; the new PostgreSQL concurrency
+  regression is still unexecuted because Docker Engine is unavailable and
+  Docker Desktop is not running. No restart, production mutation or deployment
+  has been performed. The November 6 observation window failed; no replacement
+  baseline or completed extended soak is claimed. Next: start Docker Desktop,
+  demonstrate regression failure before/pass after, then canonical clean-main
+  Node 24 deployment and acceptance. Original Node/Hugging Face replays remain
+  partial, with specific missing incident evidence; neither question is closed.
 
 - **Publication/QA locking, November 6 — deployed:** Docker Engine responds
   again without a restart by this run. The PostgreSQL concurrency regression
@@ -173,6 +193,59 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
 
 
 
+
+## 2026-11-07 12:48 UTC — Fidelity claim blocks all lanes on an unchanged parent FK
+
+- **Evidence:** the 12:41:16 and 12:42:09 UTC read-only samples confirm no
+  AI/task completions in 30 minutes, zero active/expired leases, eight stale
+  executors and 1,119 queued tasks. Last AI completion/heartbeat is 08:40:26
+  UTC. Pipeline enabled/settings version 8/capacity 8; all four production
+  services active/NRestarts=0 and health/ready successful. The local Standard
+  launchd pool and SSH tunnel remain running. Claims repeatedly fail with
+  `RETRYABLE_INTERNAL_ERROR`, not Codex routing or authentication errors.
+  Researcher journal has 104 `Researcher tool failed` warnings with
+  `Query read timeout` in a five-minute sample. These are level 40; the
+  level>=50-only journal helper initially reported zero errors and cannot be
+  used alone to assess claim health.
+- **Observed lock chain:** a scheduler transaction (worker PID 2347235) holds
+  a `knowledge_demands` row while preparing further source/technical work.
+  Researcher PID 2348722 waits for that transaction from the second
+  `UPDATE pipeline_tasks SET payload = $2::jsonb WHERE id = $1`, with a tuple
+  lock on `knowledge_demands` (page 120, tuple 4). It already holds the
+  AI-capacity advisory lock; seven other claims wait on that lock. Earlier
+  samples show the same chain with different claimant PIDs. No host disk,
+  memory or IO-pressure exhaustion was observed.
+- **Cause:** the fidelity claim first updates lease/status and then updates
+  payload again in the same transaction. PostgreSQL checks foreign keys on a
+  tuple whose xmin is the current transaction even when key values are
+  unchanged, acquiring a key-share lock on the parent. This conflicts with
+  the scheduler's parent `FOR UPDATE` and holds up every capacity claimant.
+  The observed demand-row wait agrees with PostgreSQL 16's
+  [referential-integrity implementation](https://raw.githubusercontent.com/postgres/postgres/REL_16_STABLE/src/backend/utils/adt/ri_triggers.c)
+  (`RI_FKey_fk_upd_check_required`) and
+  [row-lock conflict rules](https://www.postgresql.org/docs/16/explicit-locking.html).
+- **Minimal correction prepared:** normalize the fidelity profile key and
+  optional model-fallback marker before the first lease update, and persist
+  that payload with the same update. Remove the second update. The claimed
+  model/effort/settings snapshot, finite retries, leases, operator capacity,
+  Pause, provenance and publication/QA requirements are unchanged.
+- **Validation so far:** Node 24 `pnpm check` and 16 focused execution,
+  scheduler and runtime tests pass; `git diff --check` passes. Added an actual
+  PostgreSQL concurrency regression: the worker holds the referenced demand
+  `FOR UPDATE` while two researcher lanes claim fidelity and unrelated work;
+  both must finish before releasing the parent, with the normalized key
+  persisted and one lease attempt. The database regression has **not run**.
+- **Blocker/result:** Docker CLI cannot connect to
+  `/Users/val/.docker/run/docker.sock`; Docker Desktop/Engine processes are
+  absent (only the privileged networking helper remains). Requested that the
+  user start Docker Desktop. No Docker reset, service restart, production
+  mutation or deployment was performed. Live SHA remains
+  `9020527385e8e719d69a859f7f9c548f82aee866`; collection is still stalled.
+  After Engine is available, prove regression failure before/pass after and
+  use only the canonical clean-main Node 24 deployment, followed by actual
+  progress/lease checks. November 6's read-only window failed; no new baseline
+  or completed extended soak is claimed. Node/Hugging Face exact replays are
+  still partial; missing private incident context remains explicit.
 
 ## 2026-11-06 13:27 UTC — Publication/QA lock correction deployed and advancing
 

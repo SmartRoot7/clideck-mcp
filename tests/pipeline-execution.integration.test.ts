@@ -15,7 +15,8 @@ import { createMetrics } from '../src/metrics.js'
 import { claimPipelineTask, recordAgentRunResult } from '../src/domain/pipeline.js'
 import {
   getExecutionSettings, getExecutionModels, publishExecutionCatalog, setExecutionSettings,
-  refreshModelPricing, retryConfiguredModel, ensureFidelityExecutionProfile
+  refreshModelPricing, retryConfiguredModel, ensureFidelityExecutionProfile,
+  fidelityExecutionProfileKey
 } from '../src/domain/pipeline-execution.js'
 import { pipelineExecutorIds } from '../src/domain/pipeline-runtime.js'
 import { createTestConfig, integrationDatabaseUrl } from './helpers.js'
@@ -34,6 +35,7 @@ suite('configurable execution integration', () => {
   let originalProfiles: ExecutionProfile[]
   let originalCapacity: number
   const taskIds: string[] = []
+  const demandIds: string[] = []
   let schedulerFixture: pg.PoolClient
 
   beforeAll(async () => {
@@ -74,6 +76,7 @@ suite('configurable execution integration', () => {
     await database.query("UPDATE pipeline_tasks SET status = 'cancelled' WHERE id = ANY($1::uuid[]) AND status IN ('queued', 'claimed', 'running')", [taskIds])
     await database.query("UPDATE agent_runs SET status = 'cancelled', completed_at = now() WHERE pipeline_task_id = ANY($1::uuid[]) AND status = 'running'", [taskIds])
     await database.query('DELETE FROM pipeline_model_circuits')
+    await database.query('DELETE FROM knowledge_demands WHERE id = ANY($1::uuid[])', [demandIds])
     await database.end()
   })
 
@@ -127,6 +130,43 @@ suite('configurable execution integration', () => {
     const snapshot = await database.query('SELECT model, reasoning_effort, execution_profile, settings_version FROM agent_runs WHERE pipeline_task_id = ANY($1::uuid[]) AND status = \'running\'', [taskIds])
     expect(snapshot.rows).toHaveLength(3)
     expect(snapshot.rows.every((run) => run['model'] === 'gpt-6-luna' && run['reasoning_effort'] === 'low' && run['execution_profile'] === 'luna')).toBe(true)
+  })
+
+  it('claims fidelity and another lane while the scheduler holds the unchanged parent demand', async () => {
+    await save(8)
+    const demandId = randomUUID()
+    demandIds.push(demandId)
+    await database.query(`INSERT INTO knowledge_demands (id,demand_key,tool_name,question,status)
+      VALUES ($1::uuid,decode(repeat(md5($1::text),2),'hex'),'query_network_knowledge',
+        'Fixture original question for concurrent fidelity claim','processing')`, [demandId])
+    const fidelityId = randomUUID()
+    taskIds.push(fidelityId)
+    await database.query(`INSERT INTO pipeline_tasks
+      (id,task_type,stage,priority,dedupe_key,knowledge_demand_id,payload)
+      VALUES ($1::uuid,'candidate_verification','verify',200,$1::text,$2,$3::jsonb)`,
+      [fidelityId,demandId,JSON.stringify({ audit_mode: 'fidelity',
+        quality_profile_key: 'queued-profile',quality_extraction_model: 'gpt-5.6-luna',
+        quality_extraction_reasoning_effort: 'low',candidates: [] })])
+    const otherId = await queue()
+    // Queue preparation owns this parent while processing other demands. Its
+    // lock must not force an unchanged foreign key to be rechecked at claim.
+    await schedulerFixture.query('SET LOCAL ROLE clideck_mcp_worker')
+    await schedulerFixture.query('SELECT id FROM knowledge_demands WHERE id=$1 FOR UPDATE', [demandId])
+    const claimDatabase = new pg.Pool({ connectionString: integrationDatabaseUrl,
+      max: 2,options: '-c role=clideck_mcp_researcher -c lock_timeout=500ms' })
+    try {
+      const claims = await Promise.all(pipelineExecutorIds.slice(0,2).map(executor =>
+        claimPipelineTask(claimDatabase,config,executor,'test:fidelity-parent-lock',executionProtocolVersion)))
+      expect(claims.map(claim => claim['pipeline_task_id']).sort()).toEqual([fidelityId,otherId].sort())
+      const fidelity = claims.find(claim => claim['pipeline_task_id'] === fidelityId)!
+      const expectedKey = fidelityExecutionProfileKey('gpt-5.6-luna','low','gpt-6-luna','low')
+      expect(fidelity).toMatchObject({ requested_model: 'gpt-6-luna',requested_reasoning_effort: 'low',
+        execution_profile: 'luna',payload: { quality_profile_key: expectedKey } })
+      const stored = (await database.query('SELECT payload,status,attempts FROM pipeline_tasks WHERE id=$1', [fidelityId])).rows[0]!
+      expect(stored).toMatchObject({ status: 'running',attempts: 1,payload: { quality_profile_key: expectedKey } })
+    } finally {
+      await claimDatabase.end()
+    }
   })
 
   it('drains 8 to 2 without cancelling existing runs, keeps their models and permits immediate expansion', async () => {
