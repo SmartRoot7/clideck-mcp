@@ -58,5 +58,7 @@ Snapshot journaling stores only redacted-input metadata, never evidence/previews
    persisted snapshot journal rows.
 
 Use live results when demonstrating these flows; dataset changes can change the
-particular returned revision. Historical demo/submission assets are in
-[the submission record](../devpost-submission.md).
+particular returned revision. Historical published references:
+[demo video](https://youtu.be/O5nXMNo9o20) and
+[challenge submission](https://devpost.com/software/clideck-mcp-network-evidence-workbench).
+The challenge is complete; earlier production scripts remain in Git history.
