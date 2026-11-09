@@ -1,5 +1,15 @@
 # CliDeck MCP
 
+<!-- BEGIN REQUIRED HUMAN TEXT FILTERS -->
+## Тексты для людей
+
+Перед выдачей, отправкой или публикацией любого нового или изменённого текста
+обязательны оба скилла: `remove-ai-marks`, затем `clean-user-facing-text`.
+Это относится и к контенту сайта, письмам, LinkedIn/Reddit, сообщениям и документации.
+Переписывание выполняется через GPT-6.1 Sol с reasoning `medium` в Codex. Порядок работы и ограничения
+описаны в [AGENTS.md](AGENTS.md).
+<!-- END REQUIRED HUMAN TEXT FILTERS -->
+
 An open-source framework for version-aware, source-backed knowledge that AI
 agents query through MCP. Known answers use deterministic PostgreSQL retrieval;
 incomplete answers create durable research demands. Isolated Codex runs discover
