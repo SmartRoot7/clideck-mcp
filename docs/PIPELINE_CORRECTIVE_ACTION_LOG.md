@@ -6,7 +6,19 @@ a restart alone is not a fix. Add evidence → cause → minimal correction → 
 SHA (or configuration-only status) → measured result, then restart the read-only
 soak. A clean baseline is not a completed extended observation window.
 
-## Handoff as of fidelity claim diagnosis, 2026-11-07
+## Handoff as of fidelity claim regression, 2026-11-09
+
+- **November 9 validation:** Docker Engine is available. The old implementation
+  fails the new claim concurrency regression; correction `6c3ad6d` passes all
+  15 focused PostgreSQL tests. Production remains `9020527`; collection had
+  resumed there before this correction was deployed. At 00:53:25 UTC, 529 AI
+  runs and 12 candidate publications completed in 30 minutes, eight executors
+  are fresh and no leases are expired. Exact Node/Hugging Face replays remain
+  partial. Deployment now waits for pre-existing operator edits in `AGENTS.md`
+  and `README.md` to be finished so that main is clean. Those edits are preserved;
+  no deploy or production mutation was attempted. No new acceptance baseline
+  or completed extended soak is claimed. The Docker-unavailable observations
+  below describe November 7, not the current blocker.
 
 Live application: `9020527385e8e719d69a859f7f9c548f82aee866` on
 `100.116.82.78`, deployed through `ops/scripts/deploy-production.sh`.
@@ -193,6 +205,36 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
 
 
 
+
+## 2026-11-09 00:54 UTC: Fidelity claim regression passes; clean-main deploy pending
+
+- Docker Engine `29.7.2` is available again. The old claim implementation from
+  `130a9cb` fails the new concurrent fidelity/parent-demand regression with
+  `canceling statement due to lock timeout`. The test runs without replacing
+  tracked source files: a temporary Vitest transform loads the old module from
+  an ignored file. With correction `6c3ad6d`, all 15 PostgreSQL execution,
+  candidate-locking and database-resilience tests pass, under the ordinary
+  migrated schema and worker/researcher grants. The disposable container is
+  removed afterward. Logs: `tmp/fidelity-claim-before-20261109.log` and
+  `tmp/fidelity-claim-validation-20261109.log`.
+- Production is still `9020527385e8e719d69a859f7f9c548f82aee866`.
+  Collection resumed on that release before this check, without this correction
+  being deployed. At 00:53:25 UTC health/ready pass, four services are active
+  with NRestarts=0, eight executors are fresh, seven leases are valid and none
+  expired. The last 30 minutes include 529 successful AI completions, 12
+  candidate publications, nine technical drafts and nine independent reviews.
+  No complete original-question replay closed a demand. Node/Hugging Face still
+  have 122/72 evidence windows and partial exact replays, with unchanged missing
+  incident evidence. This observed progress does not establish that the claim
+  defect is fixed or that the original questions have been learned.
+- The Docker blocker is resolved. Canonical deployment is now blocked by
+  pre-existing uncommitted operator changes in `AGENTS.md` and `README.md` on
+  `main` (`4747e83`). They were preserved. The project requires a clean main
+  commit for `ops/scripts/deploy-production.sh`; no deployment or production
+  mutation was attempted. The code correction remains committed and pushed.
+  Once the operator finishes those edits, run the canonical Node 24 deployment
+  and verify real progress before starting a new read-only observation window.
+  No completed extended soak or new acceptance baseline is claimed.
 
 ## 2026-11-07 12:48 UTC — Fidelity claim blocks all lanes on an unchanged parent FK
 
