@@ -6,24 +6,32 @@ a restart alone is not a fix. Add evidence → cause → minimal correction → 
 SHA (or configuration-only status) → measured result, then restart the read-only
 soak. A clean baseline is not a completed extended observation window.
 
-## Handoff as of fidelity claim regression, 2026-11-09
+## Handoff as of fidelity claim deployment, 2026-11-09
 
-- **November 9 validation:** Docker Engine is available. The old implementation
-  fails the new claim concurrency regression; correction `6c3ad6d` passes all
-  15 focused PostgreSQL tests. Production remains `9020527`; collection had
-  resumed there before this correction was deployed. At 00:53:25 UTC, 529 AI
-  runs and 12 candidate publications completed in 30 minutes, eight executors
-  are fresh and no leases are expired. Exact Node/Hugging Face replays remain
-  partial. Deployment now waits for pre-existing operator edits in `AGENTS.md`
-  and `README.md` to be finished so that main is clean. Those edits are preserved;
-  no deploy or production mutation was attempted. No new acceptance baseline
-  or completed extended soak is claimed. The Docker-unavailable observations
-  below describe November 7, not the current blocker.
-
-Live application: `9020527385e8e719d69a859f7f9c548f82aee866` on
+Live application: `62182b8f9a1b20682ef8b3cf80011dc47010c516` on
 `100.116.82.78`, deployed through `ops/scripts/deploy-production.sh`.
-Pipeline enabled, capacity 8. Operator settings version 8 use `gpt-6-luna`
-low/medium, High fallback `gpt-5.6-terra` medium; unchanged at this acceptance.
+Pipeline enabled, capacity 8, operator settings version 8. Luna remains
+`gpt-6-luna` low; High remains `gpt-6-luna` medium with `gpt-5.6-terra` medium
+fallback. The local AI pool uses Standard scheduling.
+
+- **Fidelity claim correction deployed:** the operator committed the pending
+  documentation changes. Canonical clean-main Node 24 deployment exits 0 after
+  all 425 tests, 250/250 evaluations, builds, validated backup, database checks,
+  switch and smokes. Services start at 01:53:54/55 UTC. At 01:58:48 UTC, 31 AI
+  runs and five fidelity checks have completed; eight executors are fresh and
+  eight leases valid, none expired. At 01:59:26 UTC, 44 AI runs, five fidelity
+  checks and one publication have completed. Health/ready pass; all four
+  services are active/NRestarts=0. Operator settings, models and worker item
+  UPDATE denial are preserved. Docker and clean-main blockers are resolved.
+- **Remaining scope:** one source-discovery reuse timeout and one learning-ledger
+  timeout occur in the short acceptance window, alongside bounded unsupported
+  technical-answer review rejections. They are not fidelity claim timeouts and
+  this correction does not claim to resolve all database errors. Exact
+  Node/Hugging Face replays remain partial, with 122/72 evidence windows and
+  specific missing incident evidence. Neither original question is closed.
+- **Read-only observation baseline:** November 9 01:58:48 UTC. This short
+  acceptance is not a completed extended soak. The blocked deployment and
+  Docker-unavailable observations below are historical.
 
 - **Fidelity claim outage, November 7 — correction prepared, deployment blocked:**
   At 12:41/12:42 UTC health/ready and all four services are healthy/NRestarts=0,
@@ -205,6 +213,56 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
 
 
 
+
+## 2026-11-09 02:00 UTC: Fidelity claim correction deployed and advancing
+
+- Deployed `62182b8f9a1b20682ef8b3cf80011dc47010c516` from clean, synchronized
+  main through `ops/scripts/deploy-production.sh`, using Node 24.22.1. The
+  complete outer script exits 0 and reports production deployment verified.
+  The operator's documentation commit was retained. No ad hoc production
+  mutation or restart replaced the canonical workflow.
+- The correction persists the fidelity profile key and optional fallback marker
+  in the first lease update, removing the second task update and its redundant
+  parent-FK recheck while capacity is locked. The real PostgreSQL regression
+  fails against the previous implementation and passes after correction.
+  All 425 tests (346 root, 32 domain, 47 admin), 250/250 evaluations, type checks,
+  local/Linux builds, converters, migrations/grants, reconciliation, indexes,
+  statistics and API/admin/MCP smokes pass.
+- Backup: `deploy-20261109T010250Z-62182b8`, file
+  `clideck-mcp-20261109T010250Z.dump`, 12,629,481,739 bytes. Normal archive and
+  checksum validation completed. Canonical retention removed the obsolete e2c4a6a
+  application release and November 6 deployment backup, retaining current
+  62182b8, previous application 9020527 and the latest daily/deployment backups.
+  About 130 GiB remain free. Deployment log:
+  `tmp/fidelity-claim-deploy-20261109.log`.
+- API/admin/researcher start at 01:53:54 UTC, worker at 01:53:55; all active,
+  NRestarts=0, health/ready successful. The canonical installer restores the
+  local Standard launchd pool. Initial 01:57:25 UTC acceptance shows eight
+  fresh executors and eight valid/no expired leases. At 01:58:48 UTC there
+  are 31 successful AI completions and five completed fidelity checks. At
+  01:59:26 UTC there are 44 successful AI completions, five fidelity checks,
+  one candidate publication, 11 fragment analyses and four diagnoses. One
+  AI artifact was rejected; quality gates remain
+  enforced. Capacity/settings remain enabled/version 8/capacity 8, execution
+  profiles unchanged and worker `knowledge_items` UPDATE privilege false.
+- Fresh journal evidence retains one `submit_source_discovery` timeout in
+  `reuseDuplicateSourcesForKnowledgeDemand`, one learning-ledger timeout and
+  six `TECHNICAL_REVIEW_WITHOUT_SUPPORTED_ANSWER` warnings. No fidelity-claim
+  timeout is observed. These remaining paths are not claimed fixed; successful
+  claims, fidelity checks and publication establish actual progress in this
+  short window, not the absence of every internal error.
+- `ops/sql/learning-health.sql` and exact original/context MCP replays still
+  show Node/Hugging Face partial. Their 122/72 evidence windows and concrete
+  missing incident evidence remain; OS/component versions are not conflated.
+  The correction does not close either original question. Evidence files:
+  `tmp/fidelity-claim-acceptance-20261109.json`,
+  `tmp/fidelity-claim-followup-20261109.json`,
+  `tmp/fidelity-claim-final-20261109.json` and
+  `tmp/fidelity-claim-journal-acceptance-20261109.json`.
+- New read-only observation baseline: November 9 01:58:48 UTC. This is a short
+  deployment acceptance, not a completed extended soak. Both required human-text
+  processing stages were applied to the new log text; reports are saved under
+  `tmp/fidelity-claim-resume-text/`.
 
 ## 2026-11-09 00:54 UTC: Fidelity claim regression passes; clean-main deploy pending
 
