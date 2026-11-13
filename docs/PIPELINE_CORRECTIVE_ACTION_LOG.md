@@ -6,6 +6,20 @@ a restart alone is not a fix. Add evidence → cause → minimal correction → 
 SHA (or configuration-only status) → measured result, then restart the read-only
 soak. A clean baseline is not a completed extended observation window.
 
+## Handoff as of candidate-publication state correction, 2026-11-13
+
+The 19:23 UTC compact slice confirms healthy services/executors and continued
+recovery progress (3,448 analyzed and 820 published recovered spans), but one
+recovered run failed after a redundant acquisition. A candidate-publication
+retry at 16:59:03 reset its source to `approved`; acquisition was queued at
+16:59:05, failed after five HTTP 403 attempts at 17:08:05, and run cleanup
+bulk-failed 313 untouched spans at 17:08:31 despite a saved chunked artifact.
+The previous observation window therefore failed this integrity criterion.
+A minimal correction and incident-scoped recovery migration are validated and
+await canonical deployment; live code remains `8d1efa3`. No restart or remote
+mutation has been used as a workaround. Exact Node/Hugging Face replays remain
+partial; neither original question is closed.
+
 ## Handoff as of fragment exhaustion deployment, 2026-11-13
 
 Fragment exhaustion correction is deployed as `8d1efa3` through the canonical
@@ -234,6 +248,41 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
 
 
 
+
+## 2026-11-13 19:31 UTC: Candidate publication failure resets source acquisition
+
+- **Evidence:** `tmp/heartbeat-{health,learning,recovery,services}-20261113T1922.json`
+  records health/ready passing, four active services/NRestarts=0, eight fresh
+  executors, eight valid/no expired leases, capacity 8/settings v8, 449 AI
+  completions in thirty minutes, and 4,268 recovered spans analyzed/published.
+  Scoped confirmation artifacts `tmp/heartbeat-recovery-{failure-scope,integrity,events}-20261113T1922.json`
+  identify recovery run `3960f37e-c7c8-4359-9b5b-686427799c14`, saved chunked PDF
+  `a65eff5c-6848-4d7a-a360-0201ea30cdb1`, and acquisition task
+  `35fe8a79-8764-405f-b358-00154c1d8d25`. Publication task
+  `f0460ddd-a903-4494-9478-5978c74705d9` retried a query timeout at 16:59:03;
+  redundant acquisition followed at 16:59:05. Five HTTP 403 attempts exhausted
+  at 17:08:05; run cleanup failed 313 zero-attempt spans at 17:08:31.
+- **Cause:** `failPipelineTask` applied its source-stage fallback `approved`
+  to `candidate_publication`, a record batch that can overlap extraction. The
+  scheduler then attached acquisition to the extracting run. Its terminal 403
+  caused normal run cleanup to discard untouched saved evidence. An isolated
+  403 is not the defect; the erroneous backward source transition is.
+- **Correction:** candidate-publication failure retains its bounded task retry
+  and candidate recovery behavior but leaves source lifecycle state unchanged.
+  Migration 055 targets only the confirmed failed run, with guards for its
+  chunked artifact, failure, absent newer version, zero attempts, no explicit
+  disposition and exact bulk-cleanup timestamp. It clones eligible spans into
+  a separate processing version, preserving failed history, hashes, artifact,
+  locators, evidence references and published revisions. No source-access or
+  publication-quality checks are relaxed; operator capacity/Pause/models remain.
+- **Validation:** two actual-PostgreSQL regressions fail before the correction
+  (`approved` on retry, `failed` on exhaustion) and pass after it; scheduler
+  refill creates no acquisition and retains the extracting run/untouched span.
+  Four recovery migration cases pass (054/055, newer-run exclusion and
+  idempotence), six focused tests total. Type checks pass. Artifacts:
+  `tmp/publication-state-{before,after,types}-20261113.log`.
+- **Deployment/result:** pending canonical clean-main Node 24 deployment.
+  No replacement soak baseline or extended-soak completion is claimed.
 
 ## 2026-11-13 14:30 UTC: Fragment exhaustion correction deployed; untouched evidence restored
 

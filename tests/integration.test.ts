@@ -7597,6 +7597,63 @@ describeIntegration('PostgreSQL integration', () => {
     }
   })
 
+  it.each([1, 5])('keeps candidate publication failure local to records (attempts: %s)', async attempts => {
+    const client = await database.connect()
+    try {
+      await client.query('BEGIN')
+      const transactionDatabase = {
+        connect: async () => ({
+          query: (sql: string | {text:string;values?:unknown[]}, parameters?: unknown[]) => {
+            const text = typeof sql === 'string' ? sql : sql.text
+            return /^(BEGIN|COMMIT|ROLLBACK)$/.test(text.trim())
+              ? Promise.resolve({ rows: [] }) : typeof sql === 'string'
+                ? client.query(sql, parameters) : client.query(sql)
+          },
+          release: () => undefined
+        })
+      } as unknown as Database
+      await client.query('UPDATE pipeline_settings SET enabled=false WHERE singleton')
+      const source = (await client.query<{id:string}>(`INSERT INTO source_candidates
+        (canonical_url,document_type,title,status,discovered_by)
+        VALUES ($1,'command_reference','Publication failure fixture','verifying','integration-test') RETURNING id`,
+      [`https://example.invalid/publication-failure-${randomUUID()}`])).rows[0]!.id
+      const artifact = (await client.query<{id:string}>(`INSERT INTO source_artifacts
+        (source_candidate_id,media_type,byte_size,content_hash,storage_path,status)
+        VALUES ($1,'text/plain',64,$2,'/tmp/publication-failure','chunked') RETURNING id`,
+      [source,sha256Label(randomUUID())])).rows[0]!.id
+      const run = (await client.query<{id:string}>(`INSERT INTO source_processing_runs
+        (source_candidate_id,source_artifact_id,processing_version,status)
+        VALUES ($1,$2,'publication-fixture','extracting') RETURNING id`,[source,artifact])).rows[0]!.id
+      await client.query(`INSERT INTO source_fragments
+        (source_artifact_id,processing_run_id,ordinal,content,content_hash,status)
+        VALUES ($1,$2,1,'Untouched evidence',$3,'queued')`,[artifact,run,sha256Label(randomUUID())])
+      const lease = randomUUID()
+      const task = (await client.query<{id:string}>(`INSERT INTO pipeline_tasks
+        (task_type,stage,status,priority,source_candidate_id,dedupe_key,payload,
+         claim_owner,lease_token_hash,lease_until,attempts)
+        VALUES ('candidate_publication','publish','running',98,$1,$2,'{}',
+          'publication-failure-fixture',$3,now()+interval '1 hour',$4) RETURNING id`,
+      [source,randomUUID(),sha256(lease),attempts])).rows[0]!.id
+      expect(await failPipelineTask(transactionDatabase,{
+        pipeline_task_id:task,lease_token:lease,failure_code:'QUERY_TIMEOUT',
+        failure_message:'Publication transaction timed out.'
+      })).toMatchObject({status:attempts<5?'queued':'failed',retrying:attempts<5})
+      expect((await client.query('SELECT status FROM source_candidates WHERE id=$1',[source])).rows[0])
+        .toEqual({status:'verifying'})
+      await client.query('UPDATE pipeline_settings SET enabled=true WHERE singleton')
+      await ensurePipelineWork(transactionDatabase)
+      expect((await client.query(`SELECT count(*)::int count FROM pipeline_tasks
+        WHERE source_candidate_id=$1 AND task_type='source_acquisition'`,[source])).rows[0]?.['count']).toBe(0)
+      expect((await client.query('SELECT status FROM source_processing_runs WHERE id=$1',[run])).rows[0])
+        .toEqual({status:'extracting'})
+      expect((await client.query('SELECT attempts FROM source_fragments WHERE processing_run_id=$1',[run])).rows[0])
+        .toEqual({attempts:0})
+    } finally {
+      await client.query('ROLLBACK')
+      client.release()
+    }
+  })
+
   it('does not retry permanently missing source URLs', async () => {
     const leaseToken = randomUUID()
     const task = await database.query<{ id: string }>(

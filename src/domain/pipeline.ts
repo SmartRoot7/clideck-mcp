@@ -7180,7 +7180,9 @@ export async function failPipelineTask(
         ],
       )
     }
-    if (task.source_candidate_id) {
+    // Record publication can overlap extraction from the same source. Its
+    // retries must not reset that source to acquisition or fail its evidence.
+    if (task.source_candidate_id && task.task_type !== 'candidate_publication') {
       const nonBlockingAiStage = nonBlockingAiTaskTypes.includes(
         task.task_type,
       )
