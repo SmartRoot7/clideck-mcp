@@ -524,6 +524,20 @@ export async function reconcileTerminalProcessingRunsWithClient(
              FROM pipeline_tasks failed
             WHERE failed.processing_run_id = run.id
               AND failed.status = 'failed'
+              -- Exhausting one fragment is local to its evidence span. Drain
+              -- the remaining evidence and reviews before closing this run.
+              AND (failed.failure_code IS DISTINCT FROM 'FRAGMENT_ATTEMPTS_EXHAUSTED'
+                OR NOT (
+                  EXISTS (SELECT 1 FROM source_fragments fragment
+                    WHERE fragment.processing_run_id=run.id
+                      AND fragment.status IN ('queued','reserved','analyzing'))
+                  OR EXISTS (SELECT 1 FROM pipeline_tasks live
+                    WHERE live.processing_run_id=run.id
+                      AND live.status IN ('queued','claimed','running'))
+                  OR EXISTS (SELECT 1 FROM knowledge_candidates candidate
+                    WHERE candidate.processing_run_id=run.id
+                      AND candidate.status IN ('analyzed','verified','deep_review','quarantined'))
+                ))
             ORDER BY failed.completed_at DESC NULLS LAST, failed.updated_at DESC
             LIMIT 1
          ) task ON true

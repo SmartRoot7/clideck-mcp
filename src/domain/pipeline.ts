@@ -1472,7 +1472,7 @@ async function reconcileExpiredAndCompletedWork(
   // eleventh pass; claim then tried to increment attempts past the database
   // constraint and every executor repeatedly hit the same unclaimable task.
   // Terminalize that already-materialized task before any executor can lease
-  // it, then let the run-scoped reconciler close the run and intake item.
+  // it. A mixed batch releases its unexhausted members for another task.
   const exhaustedFragmentTasks = await client.query<{
     id: string
     source_candidate_id: string | null
@@ -1498,11 +1498,14 @@ async function reconcileExpiredAndCompletedWork(
   for (const task of exhaustedFragmentTasks.rows) {
     await client.query(
       `UPDATE source_fragments
-          SET status = 'failed',
-              disposition = 'targeted_retry',
-              disposition_reason = 'targeted_retry',
-              disposition_detail =
-                'Analysis retry budget exhausted after repeated continuation.',
+          SET status = CASE WHEN attempts >= 10 THEN 'failed' ELSE 'queued' END,
+              disposition = CASE WHEN attempts >= 10
+                THEN 'targeted_retry' ELSE disposition END,
+              disposition_reason = CASE WHEN attempts >= 10
+                THEN 'targeted_retry' ELSE disposition_reason END,
+              disposition_detail = CASE WHEN attempts >= 10
+                THEN 'Analysis retry budget exhausted after repeated continuation.'
+                ELSE disposition_detail END,
               reservation_task_id = NULL,
               updated_at = now()
         WHERE reservation_task_id = $1

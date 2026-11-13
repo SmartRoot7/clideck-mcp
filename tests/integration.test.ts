@@ -489,7 +489,7 @@ describeIntegration('PostgreSQL integration', () => {
     }
   })
 
-  it('does not cancel a fresh task lease while terminalizing its processing run', async () => {
+  it('preserves queued and leased reviews after a fragment exhausts its retries', async () => {
     const client = await database.connect()
     const suffix = randomUUID().replaceAll('-', '').slice(0, 12)
     try {
@@ -556,7 +556,7 @@ describeIntegration('PostgreSQL integration', () => {
       await expect(reconcileTerminalProcessingRunsWithClient(
         client,
         [run.rows[0]!.id],
-      )).resolves.toBe(1)
+      )).resolves.toBe(0)
 
       const state = await client.query<{ id: string; status: string }>(
         `SELECT id, status
@@ -568,7 +568,7 @@ describeIntegration('PostgreSQL integration', () => {
       expect(new Map(state.rows.map((row) => [row.id, row.status]))).toEqual(
         new Map([
           [liveTask.rows[0]!.id, 'running'],
-          [queuedTask.rows[0]!.id, 'cancelled']
+          [queuedTask.rows[0]!.id, 'queued']
         ]),
       )
     } finally {
@@ -7303,7 +7303,7 @@ describeIntegration('PostgreSQL integration', () => {
     })
   })
 
-  it('terminalizes an exhausted continuation before an executor can claim it', async () => {
+  it.each([false, true])('isolates an exhausted continuation before claim (remaining fragments: %s)', async (hasRemaining) => {
     const suffix = randomUUID().replaceAll('-', '').slice(0, 12)
     await database.query(
       `UPDATE pipeline_tasks
@@ -7381,6 +7381,17 @@ describeIntegration('PostgreSQL integration', () => {
         task.rows[0]!.id
       ],
     )
+    const remaining = hasRemaining ? await database.query<{ id: string }>(
+      `INSERT INTO source_fragments (
+         source_artifact_id, processing_run_id, ordinal, content,
+         content_hash, status, attempts, reservation_task_id
+       ) VALUES
+         ($1,$2,1,'Unattempted evidence in the same batch',$3,'reserved',0,$5),
+         ($1,$2,2,'Unattempted evidence in the next batch',$4,'queued',0,NULL)
+       RETURNING id`,
+      [artifact.rows[0]!.id,run.rows[0]!.id,
+        sha256Label(`fresh-batch-${suffix}`),sha256Label(`fresh-next-${suffix}`),task.rows[0]!.id],
+    ) : null
 
     await ensurePipelineWork(database)
 
@@ -7418,10 +7429,18 @@ describeIntegration('PostgreSQL integration', () => {
       task_status: 'failed',
       failure_code: 'FRAGMENT_ATTEMPTS_EXHAUSTED',
       fragment_status: 'failed',
-      run_status: 'failed',
-      item_status: 'failed',
-      job_status: 'completed_with_errors'
+      run_status: hasRemaining ? 'extracting' : 'failed',
+      item_status: hasRemaining ? 'running' : 'failed',
+      job_status: hasRemaining ? 'running' : 'completed_with_errors'
     })
+    if (remaining) {
+      const fresh = await database.query<{ status: string; attempts: number }>(
+        'SELECT status,attempts FROM source_fragments WHERE id=ANY($1::uuid[])',
+        [remaining.rows.map(row => row.id)],
+      )
+      expect(fresh.rows).toHaveLength(2)
+      expect(fresh.rows.every(row => ['queued','reserved'].includes(row.status) && row.attempts===0)).toBe(true)
+    }
   })
 
   it('uses future refresh times as ordering instead of an idle-lane gate', async () => {

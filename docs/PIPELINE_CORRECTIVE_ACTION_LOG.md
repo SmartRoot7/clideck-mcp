@@ -6,7 +6,20 @@ a restart alone is not a fix. Add evidence → cause → minimal correction → 
 SHA (or configuration-only status) → measured result, then restart the read-only
 soak. A clean baseline is not a completed extended observation window.
 
-## Handoff as of fidelity claim deployment, 2026-11-09
+## Handoff as of fragment exhaustion correction, 2026-11-13
+
+Fragment exhaustion correction is prepared; production is still `62182b8`.
+One exhausted continuation incorrectly terminalized the whole processing run,
+including untouched evidence. A confirming read-only sample identifies 1,387
+never-attempted failed fragments in the sampled source; the exact recovery
+signature matches 338,667 fragments across 284 latest failed runs. Mixed batches
+now release their unexhausted members, and fragment-local exhaustion waits for
+remaining evidence/reviews before run reconciliation. Migration 054 copies only
+untouched cleanup-failed spans into a separate processing version, retaining
+the failed history and existing published revisions. The old implementation
+fails the PostgreSQL regression; seven focused tests pass after correction.
+Canonical clean-main Node 24 deployment and acceptance are pending. No restart
+or ad hoc production mutation has replaced the deployment workflow.
 
 Live application: `62182b8f9a1b20682ef8b3cf80011dc47010c516` on
 `100.116.82.78`, deployed through `ops/scripts/deploy-production.sh`.
@@ -213,6 +226,45 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
 
 
 
+
+## 2026-11-13 13:27 UTC: Fragment exhaustion drops untouched evidence; correction prepared
+
+- A stable source sample had 1,419 queued fragments at 07:33 UTC. At 13:18
+  UTC it has 1,403 failed, 163 analyzed and 23 published fragments, with no
+  live source tasks. The confirming slice shows 1,387 failed fragments with
+  zero attempts, all updated at the processing run's 07:49:08 terminalization.
+  Its queued continuation task failed with `FRAGMENT_ATTEMPTS_EXHAUSTED`.
+  Runtime remains healthy: eight fresh executors, eight valid/no expired
+  leases, capacity/settings 8/8, health/ready and four active services with
+  NRestarts=0. Activity did not establish successful evidence processing.
+- Cause: continuation reconciliation failed every reserved batch member and
+  passed its run to the general terminal reconciler, which also failed all
+  queued evidence in that run. A single fragment at ten attempts could thus
+  discard unrelated, never-attempted spans. The correction fails only exhausted
+  members, releases the remaining members and defers fragment-local run failure
+  while evidence, tasks or candidate reviews remain. Retry bounds, leases,
+  operator Pause/capacity, models, deduplication and publication checks remain.
+- Migration 054 selects only latest failed runs with that failure code and
+  untouched fragments whose failure timestamp matches run cleanup and whose
+  disposition is absent. A separate processing version preserves old failed
+  rows, source hashes/locators, artifact provenance and published revisions.
+  The read-only predicate matches 284 runs / 338,667 fragments, including the
+  confirmed source's 1,387 spans. It excludes attempted/dispositioned evidence
+  and sources with newer processing versions. It does not create user demands.
+- Validation: the mixed-batch PostgreSQL regression fails before correction
+  (remaining run/item incorrectly failed) and passes after it. Seven focused
+  tests cover isolated exhaustion, mixed/queued evidence, queued and leased
+  reviews, unrelated fatal run failure/locking and recovery idempotency/newer
+  version isolation. Canonical full checks/deployment are pending; deployed SHA
+  is still `62182b8f9a1b20682ef8b3cf80011dc47010c516`. No new observation baseline
+  or completed extended soak is claimed. Node/Hugging Face exact replays remain
+  partial with concrete missing incident context; neither question is closed.
+- Evidence: `tmp/heartbeat-health-20261113T0715.json`,
+  `tmp/heartbeat-health-20261113T1317.json`,
+  `tmp/heartbeat-large-source-confirmation-20261113T1317.json`,
+  `tmp/fragment-recovery-scope-20261113.json`,
+  `tmp/fragment-exhaustion-before-20261113.log` and
+  `tmp/fragment-recovery-validation-20261113.log`.
 
 ## 2026-11-09 02:00 UTC: Fidelity claim correction deployed and advancing
 
