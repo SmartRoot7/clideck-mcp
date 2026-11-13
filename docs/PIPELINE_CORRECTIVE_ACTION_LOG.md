@@ -21,7 +21,10 @@ with sixteen restored spans analyzed. Eight executors are fresh, six leases
 valid/none expired; 41 AI runs, ten analyses and one publication have completed
 since switching. Capacity/settings/models remain unchanged. Exact Node/Hugging
 Face replays remain partial, with specific missing incident context. Neither
-question is closed. Known journal timeouts and bounded quality rejections are
+question is closed. At 14:32 UTC, 88 AI runs have completed, with 51 recovered
+spans analyzed, nine recovered analyses and two recovered verifications complete;
+all eight executors are fresh with eight valid/no expired leases. Known journal
+timeouts and bounded quality rejections are
 not claimed fixed. New read-only baseline: 2026-11-13 14:29:25 UTC, not a
 completed extended soak. The November 9 observation window failed this evidence
 integrity criterion; the prepared/deployment-blocked notes below are historical.
@@ -270,6 +273,16 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
   slice retains two MCP journal write timeouts, two Gateway Timeouts and bounded
   unsupported-answer/provenance quality rejections. These paths are not claimed
   fixed by fragment isolation.
+- Follow-up at 14:32:41 UTC confirms continued progress: 88 successful AI runs,
+  seventeen analyses, nine fidelity checks and three publications since switch.
+  All eight executors are fresh, eight leases valid/none expired. Recovery has
+  51 analyzed, 38 analyzing, 32 reserved and 338,546 queued spans, with nine
+  recovered analyses and two recovered verifications complete; one recovery run
+  has reached auditing, 283 remain extracting. The sampled source is still queued
+  and its bounded provenance check remains clean. The aggregate reports one
+  complete replay closure, without attribution to this fix; exact Node/Hugging
+  Face replays remain partial. Final evidence is saved in
+  `tmp/fragment-exhaustion-final-{health,learning,recovery}-20261113.json`.
 - New read-only baseline: 2026-11-13 14:29:25 UTC. This short acceptance is not a
   completed extended soak. Follow recovered unattempted evidence and original
   question completion, not activity alone. Evidence:
