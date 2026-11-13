@@ -8,17 +8,32 @@ soak. A clean baseline is not a completed extended observation window.
 
 ## Handoff as of candidate-publication state correction, 2026-11-13
 
-The 19:23 UTC compact slice confirms healthy services/executors and continued
-recovery progress (3,448 analyzed and 820 published recovered spans), but one
-recovered run failed after a redundant acquisition. A candidate-publication
-retry at 16:59:03 reset its source to `approved`; acquisition was queued at
-16:59:05, failed after five HTTP 403 attempts at 17:08:05, and run cleanup
-bulk-failed 313 untouched spans at 17:08:31 despite a saved chunked artifact.
-The previous observation window therefore failed this integrity criterion.
-A minimal correction and incident-scoped recovery migration are validated and
-await canonical deployment; live code remains `8d1efa3`. No restart or remote
-mutation has been used as a workaround. Exact Node/Hugging Face replays remain
-partial; neither original question is closed.
+Candidate-publication failure isolation is deployed as
+`58ca0aa3a6c1fc83de71c49eaa63ad03fb78c3a7` through the canonical clean-main
+Node 24 workflow, exit 0. All 432 tests, 250/250 evaluations, builds, validated
+13,321,514,144-byte backup, migration/grants, indexes/stats and smokes pass.
+Record-publication retries/exhaustion no longer reset or fail a concurrently
+extracting source. Migration 055 restores the confirmed incident's 313
+untouched spans into run `cce6380d-4189-4ea1-a0e8-73910e3d4db9`, preserving the
+failed run and published revisions; all restored provenance matches. At
+20:31:55 UTC its first sixteen spans are reserved in queued analysis, 297
+remain queued. Since switching at 20:27:00 UTC, 25 AI runs, five analyses and
+six fidelity checks complete. All four services are active/NRestarts=0;
+eight executors are fresh, eight leases valid/none expired. Capacity 8,
+settings v8, enabled state and model profiles remain unchanged. Exact
+Node/Hugging Face replays remain partial with specific missing incident
+context and still-uncovered public workflow capabilities; neither question
+is closed. No fresh warning/error appears in the initial acceptance journal.
+At 20:33:21 UTC the restored run has completed its first analysis: sixteen
+spans analyzed, sixteen analyzing and 281 queued, with zero provenance
+mismatches. Since switching, 48 AI runs, seven analyses, eight fidelity checks
+and one candidate publication complete; eight executors are fresh, seven
+leases valid/none expired. One bounded artifact rejection and one exhausted
+fragment continuation remain visible; the restored run continues extracting.
+The publication query timeouts that triggered the backward transition are
+not claimed fixed. New read-only baseline: 2026-11-13 20:31:55 UTC, not a
+completed extended soak. The earlier fragment-recovery observation window
+failed this integrity criterion; the older handoff below is historical.
 
 ## Handoff as of fragment exhaustion deployment, 2026-11-13
 
@@ -281,8 +296,36 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
   Four recovery migration cases pass (054/055, newer-run exclusion and
   idempotence), six focused tests total. Type checks pass. Artifacts:
   `tmp/publication-state-{before,after,types}-20261113.log`.
-- **Deployment/result:** pending canonical clean-main Node 24 deployment.
-  No replacement soak baseline or extended-soak completion is claimed.
+- **Deployment/result, 20:32 UTC:** canonical clean-main Node 24 deployment of
+  `58ca0aa3a6c1fc83de71c49eaa63ad03fb78c3a7` exits 0. All 432 tests and 250/250
+  evaluations, builds, backup validation, migration/grants, reconciliation,
+  indexes/stats, atomic switch, restart and smokes pass. Backup
+  `deploy-20261113T193242Z-58ca0aa` is 13,321,514,144 bytes; the canonical
+  retention keeps the current and previous application (`8d1efa3`). Services
+  switch at 20:27:00 UTC, all active/NRestarts=0. At 20:31:52 UTC there are 25
+  completed AI runs, five analyses, six fidelity checks, eight fresh executors
+  and eight valid/no expired leases. Migration 055 created recovery run
+  `cce6380d-4189-4ea1-a0e8-73910e3d4db9` with exactly 313 spans and zero
+  provenance mismatches; original failed history remains. At 20:31:55 UTC,
+  sixteen are reserved in one queued analysis batch and 297 remain queued.
+  Capacity/settings/models/Pause behavior and worker knowledge-item UPDATE
+  denial are preserved. Initial post-switch journal has no level>=40 errors.
+  Exact Node/Hugging Face replays remain partial/needs_context, not closed;
+  their public cross-layer/standard-HTTPS workflow gaps also remain. This
+  correction does not claim to fix the original publication query timeouts.
+  Evidence: `tmp/publication-state-{deploy,acceptance-summary,followup-summary}-20261113.log`,
+  `tmp/publication-state-{acceptance,followup}-{health,learning,recovery}-20261113.json`,
+  `tmp/publication-state-services-20261113.txt`, and
+  `tmp/publication-state-{journal,profiles}-20261113.json`.
+  At 20:33:21 UTC the restored run has sixteen analyzed spans, sixteen
+  analyzing and 281 queued; one analysis completed and the next is running.
+  Provenance mismatch count remains zero. Since switching, 48 AI runs, seven
+  analyses, eight fidelity checks and one candidate publication complete,
+  with eight fresh executors and seven valid/no expired leases. One bounded
+  artifact rejection and one fragment-exhaustion continuation are recorded;
+  the restored run remains extracting. Final evidence:
+  `tmp/publication-state-final-{health,recovery,journal}-20261113.json`.
+  New read-only baseline: 2026-11-13 20:31:55 UTC; this is not an extended soak.
 
 ## 2026-11-13 14:30 UTC: Fragment exhaustion correction deployed; untouched evidence restored
 
