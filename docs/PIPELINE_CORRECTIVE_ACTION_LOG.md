@@ -6,22 +6,27 @@ a restart alone is not a fix. Add evidence → cause → minimal correction → 
 SHA (or configuration-only status) → measured result, then restart the read-only
 soak. A clean baseline is not a completed extended observation window.
 
-## Handoff as of fragment exhaustion correction, 2026-11-13
+## Handoff as of fragment exhaustion deployment, 2026-11-13
 
-Fragment exhaustion correction is prepared; production is still `62182b8`.
-One exhausted continuation incorrectly terminalized the whole processing run,
-including untouched evidence. A confirming read-only sample identifies 1,387
-never-attempted failed fragments in the sampled source; the exact recovery
-signature matches 338,667 fragments across 284 latest failed runs. Mixed batches
-now release their unexhausted members, and fragment-local exhaustion waits for
-remaining evidence/reviews before run reconciliation. Migration 054 copies only
-untouched cleanup-failed spans into a separate processing version, retaining
-the failed history and existing published revisions. The old implementation
-fails the PostgreSQL regression; seven focused tests pass after correction.
-Canonical clean-main Node 24 deployment and acceptance are pending. No restart
-or ad hoc production mutation has replaced the deployment workflow.
+Fragment exhaustion correction is deployed as `8d1efa3` through the canonical
+clean-main Node 24 workflow, exit 0. All 428 tests, 250/250 evaluations, builds,
+validated backup, migration/grants, reconciliation, indexes/stats and smokes
+pass. One exhausted continuation now fails only exhausted members; other spans
+and pending reviews continue. Migration 054 restored 338,667 untouched spans
+into 284 separate processing versions while retaining failed history and
+published revisions. The sampled source has all 1,387 untouched spans queued in
+recovery run `e583f990-993e-4dbc-a9eb-504d76923316`; its bounded provenance check
+has zero mismatches. At 14:29 UTC, two recovered analysis tasks have completed,
+with sixteen restored spans analyzed. Eight executors are fresh, six leases
+valid/none expired; 41 AI runs, ten analyses and one publication have completed
+since switching. Capacity/settings/models remain unchanged. Exact Node/Hugging
+Face replays remain partial, with specific missing incident context. Neither
+question is closed. Known journal timeouts and bounded quality rejections are
+not claimed fixed. New read-only baseline: 2026-11-13 14:29:25 UTC, not a
+completed extended soak. The November 9 observation window failed this evidence
+integrity criterion; the prepared/deployment-blocked notes below are historical.
 
-Live application: `62182b8f9a1b20682ef8b3cf80011dc47010c516` on
+Live application: `8d1efa3dae9fd51d81d18030b9e0831646e02972` on
 `100.116.82.78`, deployed through `ops/scripts/deploy-production.sh`.
 Pipeline enabled, capacity 8, operator settings version 8. Luna remains
 `gpt-6-luna` low; High remains `gpt-6-luna` medium with `gpt-5.6-terra` medium
@@ -226,6 +231,54 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
 
 
 
+
+## 2026-11-13 14:30 UTC: Fragment exhaustion correction deployed; untouched evidence restored
+
+- Deployed `8d1efa3dae9fd51d81d18030b9e0831646e02972` from clean synchronized
+  main through `ops/scripts/deploy-production.sh`, Node 24.22.1, outer exit 0.
+  All 428 tests (349 root, 32 domain, 47 admin), 250/250 evaluations, type
+  checks, local/Linux builds, converters, migration/grants, reconciliation,
+  indexes/statistics and API/admin/MCP smokes pass. The old implementation
+  fails the targeted PostgreSQL regression; seven focused tests pass after it.
+- Backup `deploy-20261113T132944Z-8d1efa3`, file
+  `clideck-mcp-20261113T132944Z.dump`, 13,173,074,034 bytes, passed archive and
+  checksum validation. Normal copying took about 48 minutes. Canonical retention
+  removed obsolete application 9020527 and the November 9 deployment backup;
+  current 8d1efa3, previous 62182b8 and latest daily/deployment copies remain.
+  No restart or ad hoc production mutation replaced the canonical workflow.
+- Services switch at 14:24:11 UTC (worker 14:24:12); all four active,
+  NRestarts=0, health/ready pass. Local Standard pool is restored by the script.
+  Initial 14:27:38 UTC acceptance is startup-only: seven executors fresh, no AI
+  completions yet. At 14:29:22 UTC all eight are fresh, six leases valid/none
+  expired, with 41 successful AI runs, ten analyses, five fidelity checks and
+  one publication since switching. One artifact rejection preserves the quality
+  gate. Pipeline remains enabled/version 8/capacity 8; Luna low, Luna High
+  medium/Terra medium fallback and worker item UPDATE denial are unchanged.
+- Migration 054 restored exactly 338,667 spans into 284 new extracting runs.
+  At 14:29:25 UTC sixteen recovered spans are analyzed, eighteen analyzing,
+  32 reserved and 338,601 queued; two recovered analysis tasks have completed.
+  All 1,387 untouched spans from the confirmed source are in its recovery run
+  `e583f990-993e-4dbc-a9eb-504d76923316`. The bounded source/artifact/hash/ordinal
+  check has zero mismatches. A full-cohort provenance aggregate exceeded the
+  eight-second read-only timeout, so acceptance uses the bounded sample and
+  the migration's deterministic copy/regression checks; it is not a full KB
+  provenance audit. Old failed spans/runs and published revisions are retained.
+- `ops/sql/learning-health.sql` and exact original/context MCP replays remain
+  partial for Node/Hugging Face, with concrete incident logs, versions and
+  invocation/context gaps. No original-question closure is attributed to this
+  recovery. The initial fresh journal slice has no errors; the later scoped
+  slice retains two MCP journal write timeouts, two Gateway Timeouts and bounded
+  unsupported-answer/provenance quality rejections. These paths are not claimed
+  fixed by fragment isolation.
+- New read-only baseline: 2026-11-13 14:29:25 UTC. This short acceptance is not a
+  completed extended soak. Follow recovered unattempted evidence and original
+  question completion, not activity alone. Evidence:
+  `tmp/fragment-exhaustion-deploy-20261113.log`,
+  `tmp/fragment-exhaustion-services-acceptance-20261113.json`,
+  `tmp/fragment-exhaustion-followup-health-20261113.json`,
+  `tmp/fragment-exhaustion-followup-learning-20261113.json`,
+  `tmp/fragment-exhaustion-followup-recovery-20261113.json` and
+  `tmp/fragment-exhaustion-journal-acceptance-20261113.json`.
 
 ## 2026-11-13 13:27 UTC: Fragment exhaustion drops untouched evidence; correction prepared
 
