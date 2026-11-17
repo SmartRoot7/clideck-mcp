@@ -524,11 +524,13 @@ export async function reconcileTerminalProcessingRunsWithClient(
              FROM pipeline_tasks failed
             WHERE failed.processing_run_id = run.id
               AND failed.status = 'failed'
-              -- Fragment exhaustion and a failed analysis authentication attempt
-              -- are local to their batch. Drain other evidence and reviews first.
+              -- Fragment exhaustion and confirmed analysis/review platform
+              -- failures are local to their batch. Drain other work first.
               AND ((failed.failure_code IS DISTINCT FROM 'FRAGMENT_ATTEMPTS_EXHAUSTED'
                     AND (failed.failure_code IS DISTINCT FROM 'CODEX_AUTH_FAILED'
-                         OR failed.task_type <> 'fragment_analysis'))
+                         OR failed.task_type NOT IN ('fragment_analysis','candidate_verification'))
+                    AND (failed.failure_code IS DISTINCT FROM 'AGENT_REPORTING_FAILED'
+                         OR failed.task_type <> 'candidate_verification'))
                 OR NOT (
                   EXISTS (SELECT 1 FROM source_fragments fragment
                     WHERE fragment.processing_run_id=run.id

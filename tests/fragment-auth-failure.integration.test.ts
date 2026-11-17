@@ -70,7 +70,12 @@ describeIntegration('Fragment authentication failure isolation', () => {
     }
   })
 
-  it.each([false,true])('recovers untouched auth-cleanup evidence only (newer: %s)', async newer => {
+  it.each([
+    {newer:false,taskType:'fragment_analysis',migration:'056_fragment_auth_failure_recovery.sql',prefix:'fragment-auth-repair-056-%'},
+    {newer:true,taskType:'fragment_analysis',migration:'056_fragment_auth_failure_recovery.sql',prefix:'fragment-auth-repair-056-%'},
+    {newer:false,taskType:'candidate_verification',migration:'057_verification_auth_failure_recovery.sql',prefix:'verify-auth-repair-057-%'},
+    {newer:true,taskType:'candidate_verification',migration:'057_verification_auth_failure_recovery.sql',prefix:'verify-auth-repair-057-%'}
+  ])('recovers untouched auth-cleanup evidence only ($taskType, newer: $newer)', async ({newer,taskType,migration:filename,prefix}) => {
     const client = await database.connect()
     try {
       await client.query('BEGIN')
@@ -88,7 +93,7 @@ describeIntegration('Fragment authentication failure isolation', () => {
       [source,artifact])).rows[0]!.id
       await client.query(`INSERT INTO pipeline_tasks
         (task_type,stage,status,priority,processing_run_id,dedupe_key,payload,failure_code,attempts,completed_at)
-        VALUES ('fragment_analysis','analyze','failed',80,$1,$2,'{}','CODEX_AUTH_FAILED',5,'2026-11-17 18:00Z')`,[run,randomUUID()])
+        VALUES ($3,'analyze','failed',80,$1,$2,'{}','CODEX_AUTH_FAILED',5,'2026-11-17 18:00Z')`,[run,randomUUID(),taskType])
       if (newer) await client.query(`INSERT INTO source_processing_runs
         (source_candidate_id,source_artifact_id,processing_version,status,created_at)
         VALUES ($1,$2,'newer-auth-fixture','extracting','2026-11-17 19:00Z')`,[source,artifact])
@@ -99,13 +104,13 @@ describeIntegration('Fragment authentication failure isolation', () => {
           CASE WHEN n=2 THEN 5 ELSE 0 END,
           CASE WHEN n=3 THEN 'targeted_retry' ELSE NULL END,'2026-11-17 18:00Z'
         FROM generate_series(1,4) n RETURNING *`,[artifact,run])).rows
-      const migration = (await readFile('migrations/056_fragment_auth_failure_recovery.sql','utf8'))
+      const migration = (await readFile('migrations/'+filename,'utf8'))
         .replace(/^BEGIN;\s*/,'').replace(/COMMIT;\s*$/,'')
       await client.query(migration)
       await client.query(migration)
       const recovered = (await client.query(`SELECT f.content_hash,f.attempts,f.status,r.counters
         FROM source_fragments f JOIN source_processing_runs r ON r.id=f.processing_run_id
-        WHERE r.source_candidate_id=$1 AND r.processing_version LIKE 'fragment-auth-repair-056-%'`,[source])).rows
+        WHERE r.source_candidate_id=$1 AND r.processing_version LIKE $2`,[source,prefix])).rows
       expect(recovered).toHaveLength(newer?0:1)
       if (!newer) expect(recovered[0]).toMatchObject({content_hash:'sha256:'+'1'.repeat(64),attempts:0,status:'queued',counters:{repair_of_processing_run:run}})
       expect((await client.query('SELECT * FROM source_fragments WHERE processing_run_id=$1 ORDER BY ordinal',[run])).rows).toEqual(original)

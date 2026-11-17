@@ -6,6 +6,32 @@ a restart alone is not a fix. Add evidence → cause → minimal correction → 
 SHA (or configuration-only status) → measured result, then restart the read-only
 soak. A clean baseline is not a completed extended observation window.
 
+## Handoff as of verification authentication isolation, 2026-11-17
+
+Fragment-analysis isolation is deployed as
+`edb50e8973d8a2042a64185a9237977af096df09`, canonical workflow exit 0:
+437 tests, 250/250 evaluations, builds, backup, migrations/grants,
+reconciliation/indexes/stats and smokes pass. Migration 056 restores 25,108
+spans in 32 runs with zero provenance mismatches and unchanged failed history.
+At 20:53:17 UTC, all eight executors are fresh, seven leases valid/none
+expired, and 44 AI runs complete since the 20:47:42 switch. Sixteen restored
+spans are analyzed, 61 analyzing, 25,031 queued; one restored analysis completes.
+The initial 20:51:10 sample preceded executor startup; its stale heartbeats
+clear without a restart by the 20:51:48 confirmation. Capacity 8/settings v8,
+Pause state and models are preserved. This is a short acceptance only.
+
+Scope confirmation also finds candidate-verification authentication failures
+on three runs; one already qualifies for migration 056, leaving two failed
+runs/915 untouched spans. One contains failed verification reporting tasks,
+which would still terminalize the run after authentication isolation alone.
+Both concrete cases reproduce in PostgreSQL. A second minimal correction
+keeps `CODEX_AUTH_FAILED` and `AGENT_REPORTING_FAILED` local for verification,
+preserves finite task failure and drains other evidence/reviews. Migration
+057 retains the same recovery guards and excludes already recovered/newer
+versions. All 18 focused tests and type checks pass; canonical deployment
+and final read-only acceptance are pending. Stable technical questions remain
+unresolved; completed drafting/review alone does not close them.
+
 ## Handoff as of fragment authentication isolation, 2026-11-17
 
 The November 13 observation window failed the evidence-integrity criterion.
@@ -283,6 +309,37 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
 
 
 
+## 2026-11-17 20:54 UTC: Verification failure also terminalizes unrelated evidence
+
+- **Evidence:** bounded confirmation of latest saved-artifact auth-failed runs
+  finds `fcbc52a7-27fe-46f1-b4e8-b34a3eccdf7d` (265 untouched spans) and
+  `b0cf95e9-150c-44ac-b59d-d336cf6a8620` (650). Their terminal authentication
+  tasks are `candidate_verification`, not analysis. The latter also has
+  five-attempt failed `AGENT_REPORTING_FAILED` verification tasks. A third
+  verification-affected run, `87e7fc1c-4eb1-4eb8-a218-319fdbe6a50b`, already
+  qualifies for migration 056 and its 1,156 spans exist in recovery run
+  `ebd1b8e8-02af-45d2-b245-7c77f9fdd949`. The newer-version guard excludes
+  it from a second recovery. Current census leaves only the two runs above.
+- **Cause:** the same terminal reconciler also treats these two confirmed
+  verification platform failures as fatal to unrelated source work, despite
+  the failure handler's local candidate transition to deep review. Deferring
+  only auth would still allow the observed reporting failure to terminate
+  pending work on the second run.
+- **Correction:** extend isolation only to verification auth/reporting failure;
+  retain mechanical/source failures, other codes and finite task attempts.
+  Migration 057 restores only latest saved-artifact auth-failed verification
+  runs in the confirmed deployed window, with the same exact cleanup timestamp,
+  zero attempts, absent disposition, non-rejected source and immutable-history
+  guards. Separate `verify-auth-repair-057-*` processing versions avoid stale
+  failed-task ownership. Preflight is two runs/915 spans. No operator settings,
+  models, capacity, leases or publication quality thresholds change.
+- **Validation:** auth and reporting verification regressions each fail on
+  deployed `edb50e8`, cancelling queued reviews despite a live review lease.
+  All 18 focused actual PostgreSQL tests and `pnpm check` pass after correction,
+  including idempotent migration and newer-version exclusion for both stages.
+- **Deployment/result:** pending canonical clean-main deployment and final
+  acceptance. The analysis correction's short observation is not extended soak.
+
 ## 2026-11-17 19:50 UTC: Fragment authentication failure discards unrelated saved evidence
 
 - **Evidence:** `tmp/heartbeat-20261117T1939-{services,health,learning,recovery,technical-chain}.json`
@@ -309,8 +366,8 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
   run's exact terminal timestamp are cloned. Content, hashes, locators,
   evidence spans and version metadata are preserved; original failures and
   published revisions are immutable. Guarded preflight is 32 runs/25,108
-  spans (`tmp/fragment-auth-recovery-scope-20261117.json`); explicit
-  dispositions explain why not every gross zero-attempt failure is eligible.
+  spans (`tmp/fragment-auth-recovery-scope-20261117.json`). This guarded
+  scope is separate from the gross restored-run cohort; no excluded span is reset.
   No models, operator settings, Pause, capacity, dedupe or lease policy change.
 - **Validation:** two regressions fail against the old implementation:
   untouched evidence is discarded and queued/leased verification is cancelled.
@@ -319,8 +376,22 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
   recovery, newer-version exclusion, original-history preservation and prior
   fragment/publication fixes. `pnpm check` passes under Node 24. The drained
   run fixture explicitly performs the mechanical worker's reconciliation tick.
-- **Deployment/result:** pending canonical clean-main deployment and read-only
-  acceptance. This is not a completed extended soak.
+- **Deployment/result:** canonical clean-main Node 24 deployment of
+  `edb50e8973d8a2042a64185a9237977af096df09` exits 0. All 437 tests,
+  250/250 evaluations, builds, validated backup at
+  `/var/backups/clideck-mcp/deploy-20261117T195146Z-edb50e8`, migration/grants,
+  reconciliation/indexes/stats and smokes pass. Four services are active with
+  NRestarts=0; the switch is at 20:47:42/43 UTC. Migration 056 restores 25,108
+  spans/32 runs with zero full restored-cohort provenance mismatches. At
+  20:53:17 UTC, eight executors are fresh, seven leases valid/none expired,
+  44 AI runs complete, and restored evidence advances: sixteen analyzed,
+  61 analyzing and 25,031 queued; one restored analysis completes. Evidence:
+  `tmp/fragment-auth-initial-{health,learning,recovery,technical-chain}-20261117.json`
+  and `tmp/fragment-auth-initial-live-{health,recovery}-20261117.json`.
+  The initial 20:51:10 sample precedes executor startup, cleared without
+  intervention by 20:51:48 (eight fresh, six leases, seventeen completions).
+  Read-only baseline 20:53:17 UTC is a short acceptance, not extended soak;
+  verification isolation below still requires deployment.
 
 ## 2026-11-13 19:31 UTC: Candidate publication failure resets source acquisition
 
