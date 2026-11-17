@@ -6,31 +6,45 @@ a restart alone is not a fix. Add evidence → cause → minimal correction → 
 SHA (or configuration-only status) → measured result, then restart the read-only
 soak. A clean baseline is not a completed extended observation window.
 
-## Handoff as of verification authentication isolation, 2026-11-17
+## Handoff as of analysis/verification failure isolation, 2026-11-17
 
-Fragment-analysis isolation is deployed as
-`edb50e8973d8a2042a64185a9237977af096df09`, canonical workflow exit 0:
-437 tests, 250/250 evaluations, builds, backup, migrations/grants,
-reconciliation/indexes/stats and smokes pass. Migration 056 restores 25,108
-spans in 32 runs with zero provenance mismatches and unchanged failed history.
-At 20:53:17 UTC, all eight executors are fresh, seven leases valid/none
-expired, and 44 AI runs complete since the 20:47:42 switch. Sixteen restored
-spans are analyzed, 61 analyzing, 25,031 queued; one restored analysis completes.
-The initial 20:51:10 sample preceded executor startup; its stale heartbeats
-clear without a restart by the 20:51:48 confirmation. Capacity 8/settings v8,
-Pause state and models are preserved. This is a short acceptance only.
+Deployed application: `7a70625ede35a272cf4223df852b90899fc99f8a`, canonical
+clean-main Node 24 workflow exit 0, after `edb50e8`. All 441 tests, 250/250
+evaluations, builds, validated 13,939,084,543-byte backup, migrations/grants,
+reconciliation/indexes/stats and smokes pass. Backup:
+`/var/backups/clideck-mcp/deploy-20261117T205543Z-7a70625`.
+Services switch at 21:54:19/20 UTC; health/ready pass and API/worker/admin/
+researcher are active with NRestarts=0. At 21:59:39 UTC, eight executors are
+fresh, eight leases valid/none expired, and 30 AI runs complete since switching.
+Enabled state, capacity 8/settings v8 and Luna/High model profiles are unchanged;
+worker UPDATE on knowledge_items remains denied.
 
-Scope confirmation also finds candidate-verification authentication failures
-on three runs; one already qualifies for migration 056, leaving two failed
-runs/915 untouched spans. One contains failed verification reporting tasks,
-which would still terminalize the run after authentication isolation alone.
-Both concrete cases reproduce in PostgreSQL. A second minimal correction
-keeps `CODEX_AUTH_FAILED` and `AGENT_REPORTING_FAILED` local for verification,
-preserves finite task failure and drains other evidence/reviews. Migration
-057 retains the same recovery guards and excludes already recovered/newer
-versions. All 18 focused tests and type checks pass; canonical deployment
-and final read-only acceptance are pending. Stable technical questions remain
-unresolved; completed drafting/review alone does not close them.
+The correction keeps exhausted fragment-analysis authentication and the two
+confirmed verification platform failures local while other evidence/reviews
+remain. Failed task attempts stay finite and visible. Migrations 056/057
+restore 26,023 untouched spans into 34 separate processing versions, with zero
+full-cohort provenance mismatches and unchanged failed history. Migration 056:
+32 runs/25,108 spans, including 79 analyzed and eight published by 21:59:39;
+none failed. Migration 057: two runs/915 spans queued, none failed; these two
+runs have not yet been analyzed. Seven restored analyses and six restored
+verifications have completed by 21:58:48. This establishes actual source
+progress, not closure of the original user questions.
+
+Exact Node/Hugging Face replays remain partial, learning status unavailable
+because the two replay ledger writes hit known query read timeouts. Latest
+technical drafts and independent High reviews are completed on separate agent
+runs, but unresolved/unknown, with no publication/revision. Node macOS 27.0.1
+remains an OS version; component version is null. Missing incident evidence
+and uncovered public workflow capabilities remain; neither question is closed.
+The 21:58 learning aggregate has 1,353 open demands, 1,310 older than a day,
+one closure (not either stable technical question), ten recent completed tasks
+all in the demand class, no background completion, and one empty discovery.
+Two warning-level learning-ledger timeouts remain in the acceptance journal;
+this correction does not claim to fix authentication itself or all timeouts.
+
+New read-only observation baseline: 2026-11-17 21:58:30 UTC. The 21:59:39
+follow-up is a short acceptance, not completed extended soak. Older handoffs
+below are historical; the November 13 window failed evidence integrity.
 
 ## Handoff as of fragment authentication isolation, 2026-11-17
 
@@ -337,8 +351,48 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
   deployed `edb50e8`, cancelling queued reviews despite a live review lease.
   All 18 focused actual PostgreSQL tests and `pnpm check` pass after correction,
   including idempotent migration and newer-version exclusion for both stages.
-- **Deployment/result:** pending canonical clean-main deployment and final
-  acceptance. The analysis correction's short observation is not extended soak.
+- **Deployment/result:** canonical clean-main Node 24 deployment of
+  `7a70625ede35a272cf4223df852b90899fc99f8a` exits 0. All 441 tests,
+  250/250 evaluations, builds, validated 13,939,084,543-byte backup,
+  migrations/grants, reconciliation/indexes/stats and smokes pass. Backup:
+  `/var/backups/clideck-mcp/deploy-20261117T205543Z-7a70625`. Previous
+  application `edb50e8` is retained. Four services switch at 21:54:19/20 UTC
+  and remain active/NRestarts=0; health/ready pass. At 21:59:39, all eight
+  executors are fresh, eight leases valid/none expired, 30 AI runs complete.
+  Enabled state/capacity 8/settings v8 and models are unchanged (Luna
+  gpt-6-luna low; High gpt-6-luna medium with gpt-5.6-terra medium fallback).
+  Worker item UPDATE remains denied. The two migration-057 runs have all
+  915 spans queued, none failed. Combined 056/057 recovery is 34 runs/26,023
+  spans with zero content/hash/artifact/locator/evidence-span mismatches and
+  unchanged failed history; seven restored analyses and six verifications
+  complete by 21:58:48. By 21:59:39, the 056 cohort has 79 analyzed and eight
+  published spans, none failed; no 057 analysis is claimed yet.
+- **Learning acceptance:** exact original Node/Hugging Face questions and
+  contexts are replayed through the global MCP. Both remain partial, with
+  learning unavailable; two matching fresh API warnings are Query read timeout
+  in the known learning ledger. No auth failure or mass cleanup recurs in this
+  short slice. Latest technical_answer and independent technical_answer_review
+  tasks are complete on distinct agents/profiles, but both answers remain
+  unresolved/unknown without publication or revision. Node OS version 27.0.1
+  is separate from component version (null); HF supplies no OS/component
+  version. The public cross-layer diagnostic/download workflows remain
+  incompletely covered. Node additionally needs incident timestamps, Node
+  version/errors, executor/health logs and correlated sleep/network/Tailscale
+  evidence. HF needs exact public repository/files/revision, timestamped
+  traceback, Python/huggingface_hub versions and download settings without
+  credentials. These are concrete gaps, not promises of automatic closure.
+  The mandatory learning aggregate records 1,353 open demands, 1,310 older
+  than a day; stable questions have 133/84 evidence windows and remain open.
+  Ten recent completed tasks are demand-class work (zero background), one
+  discovery yields no evidence, and one other demand closes. Agent activity
+  and the eight restored publications do not imply complete original answers.
+- **Evidence/baseline:** `tmp/fragment-auth-followup-{health,learning,recovery,technical-chain}-20261117.json`,
+  `tmp/fragment-auth-exact-replays-20261117.json`,
+  `tmp/fragment-auth-final-{progress,journal}-20261117.json`, and
+  `tmp/verification-auth-deploy-20261117.log`. New read-only baseline is
+  2026-11-17 21:58:30 UTC; the 21:59:39 follow-up is not extended soak.
+  Authentication classification and known learning-ledger timeouts remain
+  outside the claimed correction.
 
 ## 2026-11-17 19:50 UTC: Fragment authentication failure discards unrelated saved evidence
 
