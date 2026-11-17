@@ -524,9 +524,11 @@ export async function reconcileTerminalProcessingRunsWithClient(
              FROM pipeline_tasks failed
             WHERE failed.processing_run_id = run.id
               AND failed.status = 'failed'
-              -- Exhausting one fragment is local to its evidence span. Drain
-              -- the remaining evidence and reviews before closing this run.
-              AND (failed.failure_code IS DISTINCT FROM 'FRAGMENT_ATTEMPTS_EXHAUSTED'
+              -- Fragment exhaustion and a failed analysis authentication attempt
+              -- are local to their batch. Drain other evidence and reviews first.
+              AND ((failed.failure_code IS DISTINCT FROM 'FRAGMENT_ATTEMPTS_EXHAUSTED'
+                    AND (failed.failure_code IS DISTINCT FROM 'CODEX_AUTH_FAILED'
+                         OR failed.task_type <> 'fragment_analysis'))
                 OR NOT (
                   EXISTS (SELECT 1 FROM source_fragments fragment
                     WHERE fragment.processing_run_id=run.id

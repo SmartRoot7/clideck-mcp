@@ -6,6 +6,25 @@ a restart alone is not a fix. Add evidence → cause → minimal correction → 
 SHA (or configuration-only status) → measured result, then restart the read-only
 soak. A clean baseline is not a completed extended observation window.
 
+## Handoff as of fragment authentication isolation, 2026-11-17
+
+The November 13 observation window failed the evidence-integrity criterion.
+The compact November 17 19:40 UTC slice is operationally healthy (four active
+services/NRestarts=0, eight fresh executors, eight valid/no expired leases,
+capacity 8/settings v8, 448 AI completions in thirty minutes), but scoped
+confirmation finds 32 restored runs failed with `CODEX_AUTH_FAILED` and
+25,216 never-attempted spans bulk-failed. A minimal correction is prepared:
+keep exhausted fragment-analysis authentication failure local while other
+evidence/reviews remain. The failed task retains its five-attempt limit.
+Migration 056 preserves old history and recovers only latest-run, saved,
+zero-attempt evidence with no disposition and the exact cleanup timestamp;
+the guarded preflight count is 32 runs/25,108 spans. Fourteen focused actual
+PostgreSQL regressions and type checks pass. Canonical deployment and measured
+acceptance are pending. The previous deployed application remains `58ca0aa`.
+Underlying authentication failure is classified, not proven to be expired
+credentials; current executors are completing work. Do not restart them as a
+substitute for this correction. Stable Node/Hugging Face demands remain open.
+
 ## Handoff as of candidate-publication state correction, 2026-11-13
 
 Candidate-publication failure isolation is deployed as
@@ -263,6 +282,45 @@ soak snapshots remain at `git show c53a740:docs/PIPELINE_CORRECTIVE_ACTION_LOG.m
 
 
 
+
+## 2026-11-17 19:50 UTC: Fragment authentication failure discards unrelated saved evidence
+
+- **Evidence:** `tmp/heartbeat-20261117T1939-{services,health,learning,recovery,technical-chain}.json`
+  captures the compact health and learning slice. The scoped confirmation
+  artifacts `tmp/heartbeat-20261117T1939-{recovery-confirmation,auth-failure-scope}.json`
+  identify 32 failed restored runs and 25,216 zero-attempt spans. Sample run
+  `14842dd1-1c3b-49d4-80df-d47c33353e39` lost 416 untouched spans at
+  18:34:30 UTC, after analysis task `065bc954-7db0-40c0-bea9-2044a6ff3112`
+  exhausted five `CODEX_AUTH_FAILED` attempts at 18:34:03. Current service and
+  executor health is good; the classified failure's original stderr is not
+  retained, so an underlying credential or network cause is not asserted.
+- **Cause:** terminal-run reconciliation treats failed fragment-analysis
+  authentication as fatal for the entire processing run. Its cleanup cancels
+  pending reviews and bulk-fails unrelated queued fragments even though the
+  analysis failure handler already isolates its own reserved batch. Existing
+  fragment-exhaustion isolation did not cover this confirmed code.
+- **Correction:** defer only `fragment_analysis` / `CODEX_AUTH_FAILED` run
+  closure while pending fragments, tasks or reviews remain, retaining final
+  closure after work drains. Five-attempt task failure remains visible.
+  Migration 056 creates separate recovery versions only for failures since
+  the current application's switch at November 13 20:27 UTC, with an actual
+  failed analysis-auth task, a chunked saved artifact, no newer run, and
+  non-rejected source. Only failed, zero-attempt, undisposed spans with the
+  run's exact terminal timestamp are cloned. Content, hashes, locators,
+  evidence spans and version metadata are preserved; original failures and
+  published revisions are immutable. Guarded preflight is 32 runs/25,108
+  spans (`tmp/fragment-auth-recovery-scope-20261117.json`); explicit
+  dispositions explain why not every gross zero-attempt failure is eligible.
+  No models, operator settings, Pause, capacity, dedupe or lease policy change.
+- **Validation:** two regressions fail against the old implementation:
+  untouched evidence is discarded and queued/leased verification is cancelled.
+  After correction, all 14 selected PostgreSQL tests pass, covering auth
+  isolation, drained-run closure, pending reviews, finite retries, idempotent
+  recovery, newer-version exclusion, original-history preservation and prior
+  fragment/publication fixes. `pnpm check` passes under Node 24. The drained
+  run fixture explicitly performs the mechanical worker's reconciliation tick.
+- **Deployment/result:** pending canonical clean-main deployment and read-only
+  acceptance. This is not a completed extended soak.
 
 ## 2026-11-13 19:31 UTC: Candidate publication failure resets source acquisition
 

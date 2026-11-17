@@ -489,7 +489,7 @@ describeIntegration('PostgreSQL integration', () => {
     }
   })
 
-  it('preserves queued and leased reviews after a fragment exhausts its retries', async () => {
+  it.each(['FRAGMENT_ATTEMPTS_EXHAUSTED','CODEX_AUTH_FAILED'])('preserves queued and leased reviews after local fragment failure (%s)', async failureCode => {
     const client = await database.connect()
     const suffix = randomUUID().replaceAll('-', '').slice(0, 12)
     try {
@@ -520,10 +520,10 @@ describeIntegration('PostgreSQL integration', () => {
            failure_code, failure_message, completed_at
          ) VALUES (
            'fragment_analysis', 'analyze', 'failed', 1, $1, $2,
-           $3, '{}'::jsonb, 5, 'FRAGMENT_ATTEMPTS_EXHAUSTED',
+           $3, '{}'::jsonb, 5, $4,
            'Synthetic terminal fragment failure.', now()
          )`,
-        [source.rows[0]!.id, run.rows[0]!.id, `live-failed-${suffix}`],
+        [source.rows[0]!.id, run.rows[0]!.id, `live-failed-${suffix}`,failureCode],
       )
       const liveTask = await client.query<{ id: string }>(
         `INSERT INTO pipeline_tasks (
