@@ -490,11 +490,14 @@ describeIntegration('PostgreSQL integration', () => {
   })
 
   it.each([
-    ['FRAGMENT_ATTEMPTS_EXHAUSTED','fragment_analysis'],
-    ['CODEX_AUTH_FAILED','fragment_analysis'],
-    ['CODEX_AUTH_FAILED','candidate_verification'],
-    ['AGENT_REPORTING_FAILED','candidate_verification']
-  ])('preserves queued and leased reviews after local fragment failure (%s/%s)', async (failureCode,taskType) => {
+    ['FRAGMENT_ATTEMPTS_EXHAUSTED', 'fragment_analysis', 'analyze'],
+    ['CODEX_AUTH_FAILED', 'fragment_analysis', 'analyze'],
+    ['CODEX_AUTH_FAILED', 'candidate_verification', 'verify'],
+    ['AGENT_REPORTING_FAILED', 'candidate_verification', 'verify'],
+    ['LEASE_ATTEMPTS_EXHAUSTED', 'candidate_verification', 'verify'],
+    ['AGENT_ARTIFACT_REJECTED', 'candidate_deep_review', 'deep_review'],
+    ['PIPELINE_MECHANICAL_FAILURE', 'candidate_publication', 'publish']
+  ])('preserves queued and leased reviews after a batch fails (%s/%s)', async (failureCode, taskType, stage) => {
     const client = await database.connect()
     const suffix = randomUUID().replaceAll('-', '').slice(0, 12)
     try {
@@ -524,11 +527,11 @@ describeIntegration('PostgreSQL integration', () => {
            processing_run_id, dedupe_key, payload, attempts,
            failure_code, failure_message, completed_at
          ) VALUES (
-           $5, 'analyze', 'failed', 1, $1, $2,
+           $5, $6, 'failed', 1, $1, $2,
            $3, '{}'::jsonb, 5, $4,
-           'Synthetic terminal fragment failure.', now()
+           'Synthetic terminal batch failure.', now()
          )`,
-        [source.rows[0]!.id, run.rows[0]!.id, `live-failed-${suffix}`,failureCode,taskType],
+        [source.rows[0]!.id, run.rows[0]!.id, `live-failed-${suffix}`, failureCode, taskType, stage],
       )
       const liveTask = await client.query<{ id: string }>(
         `INSERT INTO pipeline_tasks (

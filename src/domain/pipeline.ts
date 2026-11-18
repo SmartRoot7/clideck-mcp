@@ -43,7 +43,6 @@ import {
   replayDemandCoverage
 } from './demand-intelligence.js'
 import { decomposeNetworkQuestion, normalizeTopicSlug } from './network-intent.js'
-import { recoverUnqueuedKnowledgeDemands } from './mcp-observability.js'
 import {
   candidateKnowledgeSchema,
   deactivatePublishedCandidates,
@@ -2599,7 +2598,9 @@ async function queueDemandDiscoveryWork(
     [row.id],
   )
   const termPatterns = knowledgeDemandTermPatterns(row.question)
-  const existingSources = await client.query<{ id: string }>(
+  // Technical synthesis reads linked evidence without reassigning source
+  // ownership. Do not scan network reuse candidates it cannot use.
+  const existingSources = row.domain_id === 'technical-operations' ? [] : (await client.query<{ id: string }>(
     `SELECT source.id
        FROM source_candidates source
        JOIN source_artifacts artifact
@@ -2660,9 +2661,9 @@ async function queueDemandDiscoveryWork(
       source.updated_at DESC
       LIMIT 8`,
     [row.id, row.coverage_target_id, termPatterns],
-  )
-  const reused = row.domain_id==='technical-operations' ? { sourceIds:[],reusedFragments:0,reopenedCandidates:0 } : await reuseDuplicateSourcesForKnowledgeDemand(
-    client, row.id, existingSources.rows.map((source) => source.id),
+  )).rows
+  const reused = await reuseDuplicateSourcesForKnowledgeDemand(
+    client, row.id, existingSources.map((source) => source.id),
   )
   if (reused.sourceIds.length > 0) {
     await client.query(
@@ -3801,8 +3802,6 @@ async function ensureStreamingWorkInTransaction(
   )
   const pipeline = settings.rows[0]
   if (!pipeline?.enabled) return
-
-  await recoverUnqueuedKnowledgeDemands(client)
 
   await reconcileCompletedSources(client)
   await reconcileTechnicalDemandFailures(client)

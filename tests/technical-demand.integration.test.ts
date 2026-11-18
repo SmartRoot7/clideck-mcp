@@ -12,7 +12,7 @@ import { sha256, sha256Label } from '../src/crypto.js'
 import { integrationDatabaseUrl,createTestConfig } from './helpers.js'
 import { queueUnknownKnowledgeDemand, getKnowledgeLearningProgress, reportKnowledgeGap } from '../src/domain/mcp-observability.js'
 import { ensurePipelineWork,claimPipelineTask,claimMechanicalPipelineTask,submitTechnicalAnswer,publishTechnicalPipelineAnswer,completeMechanicalPipelineTask } from '../src/domain/pipeline.js'
-import { lookupTechnicalAnswer,technicalLegacyAnswer,technicalFeedbackHash } from '../src/domain/technical-demand.js'
+import { lookupTechnicalAnswer,queueTechnicalAnswer,technicalLegacyAnswer,technicalFeedbackHash } from '../src/domain/technical-demand.js'
 import { technicalQuestionKey } from '../src/domain/technical-learning.js'
 import { createDomainKnowledgeRevision } from '../src/domain/domain-knowledge.js'
 import { technicalRequestContext, type TechnicalAnswerDraft } from '@clideck/domain-technical-operations'
@@ -45,7 +45,7 @@ suite('original-question technical learning',()=>{
  }
  const question=()=>`Inspect a Python library fixture without modifying configuration, test ${randomUUID()}`
  const context={operating_system:'macOS',operating_system_version:'27.0.1',component:'fixture-runtime',component_version:'1'}
- async function fixture(db:Database,client:pg.PoolClient, q=question(),requestedContext:Record<string,unknown>=context,beforeQueue?:(id:string)=>Promise<void>) {
+ async function prepareFixture(db:Database,client:pg.PoolClient,q:string,requestedContext:Record<string,unknown>) {
   const id=await queueUnknownKnowledgeDemand(db,'query_domain_knowledge',{question:q,context:requestedContext},{domain_id:'technical-operations',unknown:true})
   await client.query("UPDATE pipeline_tasks SET status='cancelled' WHERE knowledge_demand_id=$1",[id])
   await client.query("UPDATE knowledge_demands SET diagnosis_status='completed',status='queued' WHERE id=$1",[id])
@@ -59,7 +59,11 @@ suite('original-question technical learning',()=>{
     VALUES ($1,'fixture.txt',$2,'text/plain',32,'chunked') RETURNING id`,[source.rows[0].id,sha256Label(q)])
   for(let i=0;i<22;i++) await client.query(`INSERT INTO source_fragments(source_artifact_id,ordinal,content,content_hash,status)
     VALUES ($1,$2,$3,$4,'analyzed')`,[artifact.rows[0].id,i,`Read the controlled fixture. Evidence span ${i}.`,sha256Label('span'+i)])
-  await beforeQueue?.(id!)
+  return id!
+ }
+ async function fixture(db:Database,client:pg.PoolClient, q=question(),requestedContext:Record<string,unknown>=context,beforeQueue?:(id:string)=>Promise<void>) {
+  const id=await prepareFixture(db,client,q,requestedContext)
+  await beforeQueue?.(id)
   await ensurePipelineWork(db)
   const task=(await client.query("SELECT * FROM pipeline_tasks WHERE knowledge_demand_id=$1 AND task_type='technical_answer' AND status='queued'",[id])).rows[0]
   expect(task).toBeTruthy()
@@ -99,6 +103,23 @@ suite('original-question technical learning',()=>{
   expect(claim['execution_profile']).toBe('luna')
   expect((claim['payload'] as any).question_key).toBe(task['payload'].question_key)
   expect((claim['payload'] as any).knowledge_demand).toBeUndefined()
+ }))
+ it('drops the draft if feedback changes during evidence lookup', () => isolated(async (db, client) => {
+  const id = await prepareFixture(db, client, question(), context)
+  const duringLookup = {
+    query: async (sql: string, values?: unknown[]) => {
+      const result = await client.query(sql, values)
+      if (sql.includes('WITH linked_sources AS')) {
+        await client.query(`UPDATE knowledge_demands
+          SET context=context || '{"feedback_reason":"New incident context"}'::jsonb WHERE id=$1`, [id])
+      }
+      return result
+    }
+  } as unknown as pg.PoolClient
+  const enqueue = vi.fn(async () => randomUUID())
+  expect(await queueTechnicalAnswer(duringLookup, enqueue)).toBe(false)
+  expect(enqueue).not.toHaveBeenCalled()
+  expect((await client.query('SELECT id FROM technical_demand_answers WHERE demand_id=$1', [id])).rows).toHaveLength(0)
  }))
  it.each([
   ['source_discovery','discover'],['fragment_analysis','analyze'],

@@ -524,13 +524,12 @@ export async function reconcileTerminalProcessingRunsWithClient(
              FROM pipeline_tasks failed
             WHERE failed.processing_run_id = run.id
               AND failed.status = 'failed'
-              -- Fragment exhaustion and confirmed analysis/review platform
-              -- failures are local to their batch. Drain other work first.
-              AND ((failed.failure_code IS DISTINCT FROM 'FRAGMENT_ATTEMPTS_EXHAUSTED'
-                    AND (failed.failure_code IS DISTINCT FROM 'CODEX_AUTH_FAILED'
-                         OR failed.task_type NOT IN ('fragment_analysis','candidate_verification'))
-                    AND (failed.failure_code IS DISTINCT FROM 'AGENT_REPORTING_FAILED'
-                         OR failed.task_type <> 'candidate_verification'))
+              -- Only document-wide stages can terminate a run with pending
+              -- work. The failure code describes the error, not its scope.
+              AND (failed.task_type IN (
+                  'source_acquisition', 'source_conversion',
+                  'source_chunking', 'source_publication'
+                )
                 OR NOT (
                   EXISTS (SELECT 1 FROM source_fragments fragment
                     WHERE fragment.processing_run_id=run.id

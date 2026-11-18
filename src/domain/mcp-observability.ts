@@ -3,6 +3,7 @@ import { technicalFeedbackHash, technicalRequestScope } from './technical-demand
 import { isIP } from 'node:net'
 
 import type { Database, DatabaseClient } from '../db.js'
+import { withTransaction } from '../db.js'
 import { sha256, sha256Label } from '../crypto.js'
 import type { PublicActor } from './auth.js'
 import { resolveNetworkContext } from './context.js'
@@ -464,7 +465,19 @@ export async function reportKnowledgeGap(database: Database, input: {
 
 /** Recover durable requests after an intake failure; never lose a gap because
  * the public request happened to race a deploy or a transient DB failure. */
-export async function recoverUnqueuedKnowledgeDemands(client: DatabaseClient): Promise<void> {
+export async function recoverUnqueuedKnowledgeDemands(database: Database): Promise<void> {
+  // Commit recovery writes separately from scheduler work. Upserting a
+  // logged demand locks it against an exact replay until this commit.
+  await withTransaction(database, async (client) => {
+    await client.query("SET LOCAL statement_timeout = '9s'")
+    const settings = await client.query<{ enabled: boolean }>(
+      'SELECT enabled FROM pipeline_settings WHERE singleton',
+    )
+    if (settings.rows[0]?.enabled) await recoverDemandLogs(client)
+  })
+}
+
+async function recoverDemandLogs(client: DatabaseClient): Promise<void> {
   const logs = await client.query<{ id: string; tool_name: string; request_payload: unknown; response_payload: unknown }>(
     `SELECT id,tool_name,request_payload,response_payload FROM mcp_request_logs
       WHERE outcome='unknown' AND knowledge_demand_id IS NULL

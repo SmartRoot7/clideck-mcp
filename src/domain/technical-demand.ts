@@ -101,15 +101,17 @@ export function technicalLegacyAnswer(record: PackPublicRecord): PublicKnowledge
 export async function queueTechnicalAnswer(client: DatabaseClient, enqueue: Enqueue): Promise<boolean> {
   const selected = await client.query<{
     id: string; question: string; context: Record<string, unknown>; technical_answer_key: string;
+    diagnostic_id: string;
     diagnosis: { subquestions?: Array<{ capability: string }>; missing_capabilities?: string[] };
   }>(`SELECT demand.id, demand.question, demand.context, demand.technical_answer_key,
+          diagnostic.id AS diagnostic_id,
           jsonb_build_object('subquestions', diagnostic.subquestions,
             'missing_capabilities', diagnostic.missing_capabilities,
             'search_expansions', diagnostic.search_expansions) AS diagnosis
        FROM knowledge_demands demand
        JOIN LATERAL (SELECT * FROM knowledge_demand_diagnostics
          WHERE knowledge_demand_id=demand.id AND status='completed'
-         ORDER BY created_at DESC LIMIT 1) diagnostic ON true
+         ORDER BY created_at DESC, id DESC LIMIT 1) diagnostic ON true
       WHERE demand.domain_id='technical-operations' AND demand.status<>'published'
         AND (demand.source_candidate_id IS NOT NULL
           OR EXISTS(SELECT 1 FROM source_candidates source WHERE source.knowledge_demand_id=demand.id AND source.source_kind='official_web')
@@ -121,8 +123,7 @@ export async function queueTechnicalAnswer(client: DatabaseClient, enqueue: Enqu
         AND NOT EXISTS (SELECT 1 FROM pipeline_tasks task WHERE task.knowledge_demand_id=demand.id
           AND task.task_type IN ('technical_answer','technical_answer_review','technical_answer_publication')
           AND task.status IN ('queued','claimed','running'))
-      ORDER BY demand.priority DESC, demand.first_seen_at
-      FOR UPDATE OF demand SKIP LOCKED`)
+      ORDER BY demand.priority DESC, demand.first_seen_at`)
   for (const demand of selected.rows) {
     const context = technicalRequestScope(demand.question, demand.context)
     const questionKey = technicalQuestionKey(demand.question, context)
@@ -186,6 +187,24 @@ export async function queueTechnicalAnswer(client: DatabaseClient, enqueue: Enqu
       refs.push({ id:fragment.id,offset,content_hash:fragment.content_hash })
     }
     if (!refs.length) continue
+    // Evidence lookup can be expensive. Lock only the demand we can advance,
+    // and abandon the draft if an intake or diagnosis changed its inputs.
+    const current = await client.query(
+      `SELECT demand.id FROM knowledge_demands demand
+       WHERE demand.id=$1 AND demand.question=$2 AND demand.context=$3::jsonb
+         AND demand.technical_answer_key=$4 AND demand.domain_id='technical-operations'
+         AND demand.status<>'published' AND demand.diagnosis_status='completed'
+         AND demand.last_error_code IS DISTINCT FROM 'CONTEXT_REQUIRED'
+         AND $5 = (SELECT id FROM knowledge_demand_diagnostics
+           WHERE knowledge_demand_id=demand.id AND status='completed'
+           ORDER BY created_at DESC, id DESC LIMIT 1)
+         AND NOT EXISTS (SELECT 1 FROM pipeline_tasks task WHERE task.knowledge_demand_id=demand.id
+           AND task.task_type IN ('technical_answer','technical_answer_review','technical_answer_publication')
+           AND task.status IN ('queued','claimed','running'))
+       FOR UPDATE OF demand SKIP LOCKED`,
+      [demand.id, demand.question, JSON.stringify(demand.context), demand.technical_answer_key, demand.diagnostic_id],
+    )
+    if (!current.rows.length) continue
     const evidenceHash = sha256Label(JSON.stringify([questionKey, feedbackHash, policyVersion, refs, retained.map(item=>item.content_hash)]))
     const required = [...new Set([...(demand.diagnosis.subquestions ?? []).map(part=>part.capability),...(demand.diagnosis.missing_capabilities ?? [])])]
     const inserted = await client.query<{id:string}>(`INSERT INTO technical_demand_answers

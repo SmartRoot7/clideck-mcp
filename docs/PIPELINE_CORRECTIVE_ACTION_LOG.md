@@ -6,6 +6,48 @@ a restart alone is not a fix. Add evidence → cause → minimal correction → 
 SHA (or configuration-only status) → measured result, then restart the read-only
 soak. A clean baseline is not a completed extended observation window.
 
+## 2026-11-18 01:27 UTC: Make batch failure isolation independent of error codes
+
+The November 17 fixes isolated specific error codes. The deployed SQL still
+allows an exhausted verification lease or a failed deep-review/publication
+batch to cancel unrelated pending work. Production has a terminal
+`candidate_verification` lease in the previously recovered run
+`87e7fc1c-4eb1-4eb8-a218-319fdbe6a50b`. Its recorded bulk failure was attributed
+to auth and repaired by migration 056. PostgreSQL tests reproduce the remaining
+failure paths with untouched work and an active review lease.
+
+- Only document-wide acquisition, conversion, chunking and source publication
+  can terminate a run immediately after task failure. Other failed tasks keep
+  their own terminal state and the reconciler waits for pending fragments,
+  tasks and reviews to drain. Source failure and cancellation stay explicit.
+- The exact Node.js replay at 01:20 UTC gave `partial` with learning
+  unavailable. `pg_stat_activity` captured a `transactionid` wait for more
+  than ten seconds. The Hugging Face replay at 01:21 showed the lock on
+  `knowledge_demands` while the blocker was scheduling evidence selection,
+  source preparation and candidate work. It eventually returned `partial`
+  with its existing learning ID. Logged request recovery now commits in its
+  own worker maintenance transaction and does not run while paused. Technical
+  synthesis reads evidence before taking a demand lock and rechecks the
+  original question, context, diagnosis and in-flight stages before enqueue.
+  Technical discovery skips the expensive network reuse scan whose results it
+  could never use.
+- Before the change, three additional batch failure cases and the intake
+  transaction case reproduce against PostgreSQL. Afterward 135 focused tests
+  pass, including recovery with production grants, Pause/Resume, rejecting a
+  draft after feedback changes, and exact publication replay through an
+  independent review.
+- The learning snapshot before deployment has 1,359 open questions, including
+  1,314 older than a day, and zero complete replays in the last 30 minutes.
+  Of 612 completed demand tasks, 99 discoveries found no new evidence and
+  there were no background completions. Node.js and Hugging Face remain open.
+
+Deployment and production acceptance pending. For the stability check, use
+the existing six-hour read-only snapshots over 72 hours from the new baseline.
+Record recurrence of collateral fragment loss, stalled leases, incomplete
+intake recovery and actual evidence/replay progress. Record partial answers and
+their missing context separately from complete replays. Reset the observation
+window if a corrective deployment is needed.
+
 ## Handoff as of analysis/verification failure isolation, 2026-11-17
 
 Deployed application: `7a70625ede35a272cf4223df852b90899fc99f8a`, canonical

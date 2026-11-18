@@ -88,16 +88,38 @@ suite('urgent learning reliability', () => {
   })
   it.each(['clideck_mcp_researcher','clideck_mcp_worker'])('recovers a durable intake failure with the actual %s permissions', async (role) => {
     await transaction(async (db,client) => {
+      await client.query('UPDATE pipeline_settings SET enabled=true WHERE singleton')
       const request = { question: question(), context }
       const log = await client.query(`INSERT INTO mcp_request_logs
         (request_id,actor_kind,tool_name,request_payload,response_payload,question_preview,response_preview,outcome,duration_ms)
         VALUES ($1,'anonymous','query_network_knowledge',$2,'{"unknown":true}', $3,'unknown','unknown',1) RETURNING id`,
       [randomUUID(),request,request.question])
       await client.query(`SET LOCAL ROLE ${role}`)
-      await recoverUnqueuedKnowledgeDemands(client)
+      await recoverUnqueuedKnowledgeDemands(db)
       const stored = await client.query('SELECT knowledge_demand_id,learning_recovery_checked_at FROM mcp_request_logs WHERE id=$1',[log.rows[0]!.id])
       expect(stored.rows[0]?.knowledge_demand_id).toBeTruthy()
       expect(stored.rows[0]?.learning_recovery_checked_at).toBeTruthy()
+    })
+  })
+  it('leaves intake recovery outside the scheduler transaction', async () => {
+    await transaction(async (db, client) => {
+      await client.query('UPDATE pipeline_settings SET enabled=true WHERE singleton')
+      const request = { question: question(), context }
+      const log = await client.query<{ id: string }>(`INSERT INTO mcp_request_logs
+        (request_id,actor_kind,tool_name,request_payload,response_payload,question_preview,response_preview,outcome,duration_ms)
+        VALUES ($1,'anonymous','query_network_knowledge',$2,'{"unknown":true}', $3,'unknown','unknown',1) RETURNING id`,
+      [randomUUID(), request, request.question])
+      await ensurePipelineWork(db)
+      const stored = await client.query('SELECT knowledge_demand_id,learning_recovery_checked_at FROM mcp_request_logs WHERE id=$1', [log.rows[0]!.id])
+      expect(stored.rows[0]).toEqual({ knowledge_demand_id: null, learning_recovery_checked_at: null })
+      await client.query('UPDATE pipeline_settings SET enabled=false WHERE singleton')
+      await recoverUnqueuedKnowledgeDemands(db)
+      const paused = await client.query('SELECT knowledge_demand_id FROM mcp_request_logs WHERE id=$1', [log.rows[0]!.id])
+      expect(paused.rows[0]?.knowledge_demand_id).toBeNull()
+      await client.query('UPDATE pipeline_settings SET enabled=true WHERE singleton')
+      await recoverUnqueuedKnowledgeDemands(db)
+      const resumed = await client.query('SELECT knowledge_demand_id FROM mcp_request_logs WHERE id=$1', [log.rows[0]!.id])
+      expect(resumed.rows[0]?.knowledge_demand_id).toBeTruthy()
     })
   })
   it('repairs queued diagnosis without a task and chooses it before background work', async () => {
