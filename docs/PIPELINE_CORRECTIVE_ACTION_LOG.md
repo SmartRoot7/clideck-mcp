@@ -41,12 +41,31 @@ failure paths with untouched work and an active review lease.
   Of 612 completed demand tasks, 99 discoveries found no new evidence and
   there were no background completions. Node.js and Hugging Face remain open.
 
-Deployment and production acceptance pending. For the stability check, use
-the existing six-hour read-only snapshots over 72 hours from the new baseline.
-Record recurrence of collateral fragment loss, stalled leases, incomplete
-intake recovery and actual evidence/replay progress. Record partial answers and
-their missing context separately from complete replays. Reset the observation
-window if a corrective deployment is needed.
+Canonical Node 24 deployment of `96fc4ea95ef63dcd60165e2128c58a3980f3e50c`
+exits 0 with 446 tests, 250/250 evaluations, build and all production smokes
+passing. Verified backup is 13,961,630,081 bytes in
+`/var/backups/clideck-mcp/deploy-20261118T012917Z-96fc4ea`. Services switched
+at 02:24:15–16 UTC. Health/ready and all four services are healthy with zero
+restarts. At 02:28:07 UTC eight executors are fresh, seven leases valid and
+none expired. Thirteen AI runs completed, including analysis and verification.
+The recovered cohort has 1,511 analyzed and 427 published spans, with zero
+provenance mismatches. Its 64 previously failed spans have attempted work.
+No post-switch batch failure has terminalized untouched fragments in the
+sample and no intake logs await recovery. The initial journal has no warning.
+Both exact replays now return their original learning IDs with `discovering`
+and concrete missing context. Both remain partial, with the latest independent
+reviews unresolved and no new answer publication. The Node.js query still
+stores 27.0.1 as the OS version. The technical evidence window counts are
+133 and 84. One other demand closed in the 30-minute aggregate. The 14 recent
+completed tasks are demand work. Evidence: `tmp/stability-{initial,followup}-*.json`,
+`tmp/stability-deploy.log` and the pre-deployment `tmp/stability-ledger-*.log`.
+
+New read-only observation baseline: 2026-11-18 02:28:07 UTC. Use the existing
+six-hour snapshots over 72 hours from this baseline. Check for collateral
+fragment loss, stalled leases, incomplete intake recovery and actual
+evidence/replay progress. Track partial answers and missing context separately
+from complete replays. A corrective deployment restarts the window. The
+post-switch sample establishes the baseline and the 72-hour check is open.
 
 ## Handoff as of analysis/verification failure isolation, 2026-11-17
 
