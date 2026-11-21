@@ -11,7 +11,7 @@ import type { Database } from '../src/db.js'
 import { sha256, sha256Label } from '../src/crypto.js'
 import { integrationDatabaseUrl,createTestConfig } from './helpers.js'
 import { queueUnknownKnowledgeDemand, getKnowledgeLearningProgress, reportKnowledgeGap } from '../src/domain/mcp-observability.js'
-import { ensurePipelineWork,claimPipelineTask,claimMechanicalPipelineTask,submitTechnicalAnswer,publishTechnicalPipelineAnswer,completeMechanicalPipelineTask } from '../src/domain/pipeline.js'
+import { ensurePipelineWork,refillTechnicalAnswerWork,claimPipelineTask,claimMechanicalPipelineTask,submitTechnicalAnswer,publishTechnicalPipelineAnswer,completeMechanicalPipelineTask } from '../src/domain/pipeline.js'
 import { lookupTechnicalAnswer,queueTechnicalAnswer,technicalLegacyAnswer,technicalFeedbackHash } from '../src/domain/technical-demand.js'
 import { technicalQuestionKey } from '../src/domain/technical-learning.js'
 import { createDomainKnowledgeRevision } from '../src/domain/domain-knowledge.js'
@@ -64,7 +64,7 @@ suite('original-question technical learning',()=>{
  async function fixture(db:Database,client:pg.PoolClient, q=question(),requestedContext:Record<string,unknown>=context,beforeQueue?:(id:string)=>Promise<void>) {
   const id=await prepareFixture(db,client,q,requestedContext)
   await beforeQueue?.(id)
-  await ensurePipelineWork(db)
+  await refillTechnicalAnswerWork(db)
   const task=(await client.query("SELECT * FROM pipeline_tasks WHERE knowledge_demand_id=$1 AND task_type='technical_answer' AND status='queued'",[id])).rows[0]
   expect(task).toBeTruthy()
   return {id:id!,q,task}
@@ -103,6 +103,37 @@ suite('original-question technical learning',()=>{
   expect(claim['execution_profile']).toBe('luna')
   expect((claim['payload'] as any).question_key).toBe(task['payload'].question_key)
   expect((claim['payload'] as any).knowledge_demand).toBeUndefined()
+ }))
+ it('keeps technical evidence scans out of the shared scheduler', () => isolated(async (db, client) => {
+  const id = await prepareFixture(db, client, question(), context)
+  const queuedDrafts = () => client.query(
+    "SELECT id FROM pipeline_tasks WHERE knowledge_demand_id=$1 AND task_type='technical_answer'",
+    [id],
+  )
+  await ensurePipelineWork(db)
+  expect((await queuedDrafts()).rows).toHaveLength(0)
+  await client.query('UPDATE pipeline_settings SET enabled=false WHERE singleton')
+  await refillTechnicalAnswerWork(db)
+  expect((await queuedDrafts()).rows).toHaveLength(0)
+  await client.query('UPDATE pipeline_settings SET enabled=true WHERE singleton')
+  await refillTechnicalAnswerWork(db)
+  await refillTechnicalAnswerWork(db)
+  expect((await queuedDrafts()).rows).toHaveLength(1)
+ }))
+ it('honors Pause that arrives during evidence lookup', () => isolated(async (db, client) => {
+  await prepareFixture(db, client, question(), context)
+  const duringLookup = {
+    query: async (sql: string, values?: unknown[]) => {
+      const result = await client.query(sql, values)
+      if (sql.includes('WITH linked_sources AS')) {
+        await client.query('UPDATE pipeline_settings SET enabled=false WHERE singleton')
+      }
+      return result
+    }
+  } as unknown as pg.PoolClient
+  const enqueue = vi.fn(async () => randomUUID())
+  expect(await queueTechnicalAnswer(duringLookup, enqueue)).toBe(false)
+  expect(enqueue).not.toHaveBeenCalled()
  }))
  it('drops the draft if feedback changes during evidence lookup', () => isolated(async (db, client) => {
   const id = await prepareFixture(db, client, question(), context)
@@ -282,10 +313,11 @@ suite('original-question technical learning',()=>{
   await submitTechnicalAnswer(db,{pipeline_task_id:review.id,lease_token:await lease(client,review.id),artifact:{...draft(task,false),approved:false,next_searches:['Find official Python inspection details.']}})
   const focused=(await client.query("SELECT priority FROM pipeline_tasks WHERE knowledge_demand_id=$1 AND task_type='source_discovery' AND status='queued'",[id])).rows[0]
   expect(focused?.priority).toBe(165)
+  await refillTechnicalAnswerWork(db)
   const next=(await client.query("SELECT * FROM pipeline_tasks WHERE knowledge_demand_id=$1 AND task_type='technical_answer' AND id<>$2",[id,task.id])).rows[0]
   expect(next).toBeTruthy();expect(next.payload.previous_answer).toBeTruthy()
   expect(next.payload.evidence.some((item:any)=>!firstIds.includes(item.id))).toBe(true)
-  await ensurePipelineWork(db)
+  await refillTechnicalAnswerWork(db)
   expect((await client.query("SELECT count(*)::int count FROM pipeline_tasks WHERE knowledge_demand_id=$1 AND task_type='technical_answer'",[id])).rows[0].count).toBe(2)
  }))
  it('continues public evidence research while retaining private incident evidence requirements',()=>isolated(async(db,client)=>{
@@ -297,6 +329,7 @@ suite('original-question technical learning',()=>{
   await submitTechnicalAnswer(db,{pipeline_task_id:review.id,lease_token:await lease(client,review.id),artifact:{...draft(task,false),approved:false,missing_context:missingContext,next_searches:nextSearches}})
   const focused=(await client.query("SELECT priority FROM pipeline_tasks WHERE knowledge_demand_id=$1 AND task_type='source_discovery' AND status='queued'",[id])).rows[0]
   expect(focused?.priority).toBe(165)
+  await refillTechnicalAnswerWork(db)
   const next=(await client.query("SELECT payload FROM pipeline_tasks WHERE knowledge_demand_id=$1 AND task_type='technical_answer' AND id<>$2",[id,task.id])).rows[0]
   expect(next).toBeTruthy()
   expect(await getKnowledgeLearningProgress(db,id)).toMatchObject({needs_context:true,missing_context:missingContext})
@@ -455,6 +488,7 @@ suite('original-question technical learning',()=>{
   await submitTechnicalAnswer(db,{pipeline_task_id:task.id,lease_token:await lease(client,task.id),artifact:answer})
   const review=(await client.query("SELECT * FROM pipeline_tasks WHERE knowledge_demand_id=$1 AND task_type='technical_answer_review'",[id])).rows[0]
   await submitTechnicalAnswer(db,{pipeline_task_id:review.id,lease_token:await lease(client,review.id),artifact:{...answer,approved:false}})
+  await refillTechnicalAnswerWork(db)
   const next=(await client.query("SELECT payload FROM pipeline_tasks WHERE knowledge_demand_id=$1 AND task_type='technical_answer' AND id<>$2",[id,task.id])).rows[0]
   expect(next).toBeTruthy()
   expect(Buffer.byteLength(next.payload.evidence.map((item:any)=>item.content).join(''))).toBeLessThanOrEqual(65536)

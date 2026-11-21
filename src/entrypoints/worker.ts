@@ -12,6 +12,7 @@ import {
   purgeExpiredSourceArtifacts
 } from '../domain/pipeline-worker.js'
 import { purgeExpiredMcpRequestLogs, recoverUnqueuedKnowledgeDemands } from '../domain/mcp-observability.js'
+import { refillTechnicalAnswerWork } from '../domain/pipeline.js'
 import { reconcileTerminalProcessingRuns } from '../domain/intake.js'
 import { refreshPublicStatsCacheIfStale } from '../domain/telemetry.js'
 import { createLogger } from '../logger.js'
@@ -23,8 +24,11 @@ const database = createDatabase(config, logger, config.workerDatabaseUrl)
 const statsDatabase = createDatabase({ ...config, databaseMaxConnections: 2 }, logger, config.workerDatabaseUrl, { queryTimeoutMs: 60_000 })
 const statsRefresh = backgroundMaintenance(() => refreshPublicStatsCacheIfStale(statsDatabase), (error) =>
   logger.warn({ err: error }, 'Background public statistics refresh failed'))
-const learningRecovery = backgroundMaintenance(() => recoverUnqueuedKnowledgeDemands(database), (error) =>
-  logger.warn({ err: error }, 'Learning intake recovery will retry'))
+const learningMaintenance = backgroundMaintenance(async () => {
+  await recoverUnqueuedKnowledgeDemands(database).catch((error: unknown) =>
+    logger.warn({ err: error }, 'Learning intake recovery will retry'))
+  await refillTechnicalAnswerWork(database)
+}, (error) => logger.warn({ err: error }, 'Technical answer scheduling will retry'))
 const instanceId = `worker-${randomUUID()}`
 const abortController = new AbortController()
 let nextRequestLogCleanupAt = 0
@@ -44,7 +48,7 @@ try {
       }
       await runWorkerMaintenance(database, instanceId)
       statsRefresh.start()
-      learningRecovery.start()
+      learningMaintenance.start()
       await purgeExpiredSourceArtifacts(database, logger)
       if (Date.now() >= nextRequestLogCleanupAt) {
         await purgeExpiredMcpRequestLogs(
@@ -86,7 +90,7 @@ try {
   process.exitCode = 1
 } finally {
   await statsRefresh.finish()
-  await learningRecovery.finish()
+  await learningMaintenance.finish()
   await statsDatabase.end()
   await database.end()
   logger.info({ instanceId }, 'CliDeck MCP worker stopped')

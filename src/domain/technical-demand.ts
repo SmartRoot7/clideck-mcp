@@ -187,8 +187,7 @@ export async function queueTechnicalAnswer(client: DatabaseClient, enqueue: Enqu
       refs.push({ id:fragment.id,offset,content_hash:fragment.content_hash })
     }
     if (!refs.length) continue
-    // Evidence lookup can be expensive. Lock only the demand we can advance,
-    // and abandon the draft if an intake or diagnosis changed its inputs.
+    // Lock only the demand we can advance, and abandon stale draft inputs.
     const current = await client.query(
       `SELECT demand.id FROM knowledge_demands demand
        WHERE demand.id=$1 AND demand.question=$2 AND demand.context=$3::jsonb
@@ -205,6 +204,12 @@ export async function queueTechnicalAnswer(client: DatabaseClient, enqueue: Enqu
       [demand.id, demand.question, JSON.stringify(demand.context), demand.technical_answer_key, demand.diagnostic_id],
     )
     if (!current.rows.length) continue
+    // Respect Pause without waiting on a scheduler that holds settings and
+    // may need this demand. A later maintenance pass can retry the draft.
+    const enabled = await client.query(
+      'SELECT 1 FROM pipeline_settings WHERE singleton AND enabled FOR SHARE SKIP LOCKED',
+    )
+    if (!enabled.rows.length) return false
     const evidenceHash = sha256Label(JSON.stringify([questionKey, feedbackHash, policyVersion, refs, retained.map(item=>item.content_hash)]))
     const required = [...new Set([...(demand.diagnosis.subquestions ?? []).map(part=>part.capability),...(demand.diagnosis.missing_capabilities ?? [])])]
     const inserted = await client.query<{id:string}>(`INSERT INTO technical_demand_answers
@@ -212,7 +217,7 @@ export async function queueTechnicalAnswer(client: DatabaseClient, enqueue: Enqu
       VALUES ($1,$2,$3,$4::jsonb,$5,$6::jsonb,$7,$8) ON CONFLICT (demand_id,evidence_hash) DO NOTHING RETURNING id`,
       [demand.id,questionKey,feedbackHash,JSON.stringify(context),evidenceHash,JSON.stringify(refs),policyVersion,required])
     const answerId = inserted.rows[0]?.id
-    if (!answerId) continue
+    if (!answerId) return false
     const taskId = await enqueue(client, { type:'technical_answer',stage:'analyze',priority:165,
       knowledgeDemandId:demand.id,queueClass:'demand',dedupeKey:`technical:${answerId}:draft`,
       payload:{ answer_id:answerId,question_key:questionKey,feedback_hash:feedbackHash,

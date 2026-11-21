@@ -3835,9 +3835,6 @@ async function ensureStreamingWorkInTransaction(
     if (!(await queueDemandDiagnosisWork(client))) break
   }
   for (let index = 0; index < pipeline.max_concurrent_ai_runs; index++) {
-    if (!(await queueTechnicalAnswer(client, insertTask))) break
-  }
-  for (let index = 0; index < pipeline.max_concurrent_ai_runs; index++) {
     if (!(await queueDemandDiscoveryWork(client))) break
   }
   await queueUrgentDemandWork(client, pipeline.max_concurrent_ai_runs)
@@ -4019,6 +4016,28 @@ async function ensureStreamingWorkInTransaction(
   ) {
     if (!(await queueDiscoveryWork(client))) break
     reserved += 1
+  }
+}
+
+export async function refillTechnicalAnswerWork(database: Database): Promise<void> {
+  const settings = await database.query<{ max_concurrent_ai_runs: number }>(
+    'SELECT max_concurrent_ai_runs FROM pipeline_settings WHERE singleton AND enabled',
+  )
+  const capacity = settings.rows[0]?.max_concurrent_ai_runs ?? 0
+  for (let index = 0; index < capacity; index++) {
+    const queued = await withTransaction(database, async (client) => {
+      // Rank evidence outside the general scheduler transaction, which holds
+      // candidate and task locks required by active artifact submissions.
+      const scheduler = await client.query<{ acquired: boolean }>(
+        `SELECT pg_try_advisory_xact_lock(
+           hashtext('clideck-mcp:technical-answer-scheduler')
+         ) AS acquired`,
+      )
+      if (!scheduler.rows[0]?.acquired) return false
+      await client.query("SET LOCAL statement_timeout = '9s'")
+      return queueTechnicalAnswer(client, insertTask)
+    })
+    if (!queued) break
   }
 }
 

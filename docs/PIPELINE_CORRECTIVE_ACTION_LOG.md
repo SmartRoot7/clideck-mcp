@@ -6,6 +6,35 @@ a restart alone is not a fix. Add evidence → cause → minimal correction → 
 SHA (or configuration-only status) → measured result, then restart the read-only
 soak. A clean baseline is not a completed extended observation window.
 
+## 2026-11-21: Separate technical evidence lookup from scheduler writes
+
+Production on `96fc4ea` at 08:37 UTC had eight fresh executors and no
+currently expired leases, but 19 AI runs started in the preceding 30 minutes
+had ended with `LEASE_EXPIRED`. The confirmation slice found two exhausted
+diagnosis tasks and continuing submission timeouts. PostgreSQL captured a
+42-second worker transaction ranking technical evidence while two
+verification submissions waited on its candidate locks, one for 31 seconds.
+A further request was waiting on a task lock held by one of those submissions.
+
+The general scheduler reserved publication candidates before scanning linked
+sources for technical answers. Moving the demand row lock later in the prior
+release left those earlier scheduler locks in place for the full scan.
+Technical draft refill now uses the existing worker learning maintenance.
+Each draft has its own transaction, ranks evidence independently of shared
+scheduler writes, and rechecks the demand and Pause at enqueue time. It keeps
+the operator-selected refill capacity and the existing draft, review,
+publication, and exact-replay gates.
+
+On Node 24.22.1, 112 focused PostgreSQL tests passed after migrations, seed,
+applicability reindex, and production grants. The new regressions cover
+separate scheduler entry points, deduplication, and Pause during evidence
+lookup. Existing cases still cover new evidence after partial review.
+
+The initial 72-hour window ended at 02:28:07 UTC. It had no recurrence of
+collateral fragment failure, and seven demands reached complete replay.
+The Node.js and Hugging Face sample replays remain partial with concrete
+missing context.
+
 ## 2026-11-18 01:27 UTC: Make batch failure isolation independent of error codes
 
 The November 17 fixes isolated specific error codes. The deployed SQL still
