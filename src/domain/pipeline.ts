@@ -5681,6 +5681,63 @@ export async function submitDemandDiagnosis(
   database: Database,
   input: z.infer<typeof demandDiagnosisSubmissionSchema>,
 ): Promise<Record<string, unknown>> {
+  const diagnosis = demandDiagnosisAgentArtifactSchema.parse(input.diagnosis)
+  const prepared = await withTransaction(database, async (client) => {
+    await client.query('SET TRANSACTION READ ONLY')
+    const task = await findPipelineLeaseSnapshot(
+      client,
+      input.pipeline_task_id,
+      input.lease_token,
+    )
+    if (!task) throw new Error('PIPELINE_LEASE_INVALID')
+    if (task.task_type !== 'demand_diagnosis' || !task.knowledge_demand_id) {
+      throw new Error('PIPELINE_TASK_TYPE_INVALID')
+    }
+    const selected = await client.query<{
+      id: string
+      question: string
+      tool_name: string
+      context: Record<string, unknown>
+      diagnosis_version: string
+      domain_id: string
+    }>(
+      `SELECT id, question, tool_name, context, diagnosis_version, domain_id
+         FROM knowledge_demands WHERE id = $1`,
+      [task.knowledge_demand_id],
+    )
+    const demand = selected.rows[0]
+    if (!demand) throw new Error('KNOWLEDGE_DEMAND_NOT_FOUND')
+
+    const fallbackParts = demand.domain_id === 'technical-operations'
+      ? []
+      : decomposeNetworkQuestion(demand.question)
+    const fallback = {
+      answers: [],
+      answerStatus: 'unknown' as const,
+      coverage: fallbackParts.map((part) => ({
+        capability: part.capability,
+        label: part.label,
+        status: 'missing' as const,
+        answer_refs: []
+      }))
+    }
+    if (demand.domain_id === 'technical-operations') {
+      return { demand, fallbackParts, replay: fallback }
+    }
+
+    // Stop the server query before the client query deadline. Replay is
+    // advisory here, and a timeout can still leave a genuine gap to research.
+    await client.query('SAVEPOINT demand_coverage_replay')
+    await client.query("SET LOCAL statement_timeout = '8s'")
+    try {
+      const replay = await replayDemandCoverage(client, demand, diagnosis)
+      return { demand, fallbackParts, replay }
+    } catch {
+      await client.query('ROLLBACK TO SAVEPOINT demand_coverage_replay')
+      return { demand, fallbackParts, replay: fallback }
+    }
+  })
+
   const result = await withTransaction(database, async (client) => {
     const task = await assertPipelineLease(
       client,
@@ -5690,26 +5747,23 @@ export async function submitDemandDiagnosis(
     if (task.task_type !== 'demand_diagnosis' || !task.knowledge_demand_id) {
       throw new Error('PIPELINE_TASK_TYPE_INVALID')
     }
-    const demandResult = await client.query<{
-      id: string
-      question: string
-      tool_name: string
-      demand_count: number
-      diagnosis_version: string
-      domain_id: string
-    }>(
-      `SELECT id, question, tool_name, demand_count, diagnosis_version, domain_id
+    const demandResult = await client.query<{ id: string; demand_count: number }>(
+      `SELECT id, demand_count
          FROM knowledge_demands
         WHERE id = $1
+          AND question = $2 AND tool_name = $3 AND context = $4::jsonb
+          AND diagnosis_version = $5 AND domain_id = $6
         FOR UPDATE`,
-      [task.knowledge_demand_id],
+      [task.knowledge_demand_id, prepared.demand.question, prepared.demand.tool_name,
+        JSON.stringify(prepared.demand.context), prepared.demand.diagnosis_version,
+        prepared.demand.domain_id],
     )
     const demand = demandResult.rows[0]
-    if (!demand) throw new Error('KNOWLEDGE_DEMAND_NOT_FOUND')
+    if (!demand || task.knowledge_demand_id !== prepared.demand.id) {
+      throw new Error('DEMAND_DIAGNOSIS_INPUT_CHANGED')
+    }
 
-    const diagnosis = demandDiagnosisAgentArtifactSchema.parse(input.diagnosis)
-    const fallbackParts = demand.domain_id==='technical-operations' ? [] : decomposeNetworkQuestion(demand.question)
-    const identity = diagnosticTopicIdentity(diagnosis, fallbackParts)
+    const identity = diagnosticTopicIdentity(diagnosis, prepared.fallbackParts)
     const topic = await client.query<{ id: string; created: boolean }>(
       `INSERT INTO demand_topics (
          topic_key, topic_slug, scope, request_count,
@@ -5762,29 +5816,9 @@ export async function submitDemandDiagnosis(
       )
     }
 
-    let replay: Awaited<ReturnType<typeof replayDemandCoverage>>
-    await client.query('SAVEPOINT demand_coverage_replay')
-    try {
-      if (demand.domain_id === 'technical-operations') throw new Error('TECHNICAL_REPLAY_REQUIRES_REVIEWED_ANSWER')
-      replay = await replayDemandCoverage(client, demand, diagnosis)
-    } catch {
-      await client.query('ROLLBACK TO SAVEPOINT demand_coverage_replay')
-      replay = {
-        answers: [],
-        crossPlatformExamples: [],
-        answerStatus: 'unknown',
-        coverage: fallbackParts.map((part) => ({
-          capability: part.capability,
-          label: part.label,
-          status: 'missing' as const,
-          answer_refs: []
-        })),
-        context: {} as Awaited<ReturnType<typeof replayDemandCoverage>>['context']
-      }
-    }
-    await client.query('RELEASE SAVEPOINT demand_coverage_replay')
+    const replay = prepared.replay
     const firstRevisionRef = replay.answers[0]?.revision_ref ?? null
-    const acceptedExisting =
+    const canCloseFromReplay =
       diagnosis.answer_status === 'complete' && diagnosis.missing_capabilities.length === 0 &&
       diagnosis.subquestions.every((part) => part.status === 'covered') &&
       replay.answerStatus === 'complete' && firstRevisionRef !== null
@@ -5803,7 +5837,7 @@ export async function submitDemandDiagnosis(
       [
         demand.id,
         task.id,
-        demand.diagnosis_version,
+        prepared.demand.diagnosis_version,
         diagnosis.failure_class,
         diagnosis.answer_status,
         JSON.stringify(diagnosis.canonical_context),
@@ -5823,8 +5857,9 @@ export async function submitDemandDiagnosis(
       ],
     )
 
-    if (acceptedExisting) {
-      await client.query(
+    let acceptedExisting = false
+    if (canCloseFromReplay) {
+      const closed = await client.query(
         `UPDATE knowledge_demands demand
             SET status = 'published', diagnosis_status = 'completed',
                 diagnosis_task_id = NULL, canonical_context = $2::jsonb,
@@ -5834,10 +5869,15 @@ export async function submitDemandDiagnosis(
                 last_error_code = NULL, completed_at = now(),
                 last_seen_at = now()
            FROM knowledge_revisions revision
+           JOIN active_knowledge_state matching ON matching.revision_id = revision.id
            CROSS JOIN active_release active
           WHERE demand.id = $1 AND revision.public_ref = $3`,
         [demand.id, JSON.stringify(diagnosis.canonical_context), firstRevisionRef],
       )
+      acceptedExisting = (closed.rowCount ?? 0) > 0
+    }
+    const replayStatus = canCloseFromReplay && !acceptedExisting ? 'unknown' : replay.answerStatus
+    if (acceptedExisting) {
       await client.query(
         `UPDATE demand_topics SET state = 'resolved', completed_at = now(),
                 updated_at = now()
@@ -5860,11 +5900,11 @@ export async function submitDemandDiagnosis(
                 last_error_code = NULL, next_retry_at = now(),
                 last_seen_at = now()
           WHERE id = $1`,
-        [demand.id, JSON.stringify(diagnosis.canonical_context), replay.answerStatus],
+        [demand.id, JSON.stringify(diagnosis.canonical_context), replayStatus],
       )
     }
     const completion = {
-      answer_status: replay.answerStatus,
+      answer_status: replayStatus,
       topic: identity.topicSlug,
       reused_existing_knowledge: acceptedExisting,
       missing_capabilities: replay.coverage

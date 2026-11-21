@@ -969,6 +969,7 @@ describeIntegration('PostgreSQL integration', () => {
 
   async function completeMissingKnowledgeDiagnosis(
     demandId: string,
+    submissionDatabase = database,
   ): Promise<void> {
     const task = await database.query<{ id: string }>(
       `SELECT id FROM pipeline_tasks
@@ -987,7 +988,7 @@ describeIntegration('PostgreSQL integration', () => {
         WHERE id = $1`,
       [task.rows[0]!.id, sha256(lease)],
     )
-    await submitDemandDiagnosis(database, {
+    await submitDemandDiagnosis(submissionDatabase, {
       pipeline_task_id: task.rows[0]!.id,
       lease_token: lease,
       diagnosis: {
@@ -1018,6 +1019,76 @@ describeIntegration('PostgreSQL integration', () => {
       }
     })
   }
+
+  it.each(['unchanged', 'context changed', 'lease expired'])(
+    'replays diagnosis without write locks and checks the current input (%s)',
+    async (scenario) => {
+      const request = {
+        question: `Read-only diagnosis of unpublished behavior ${randomUUID()}`,
+        context: { vendor: 'Cisco', operating_system: 'IOS XE', version: '17.9.4' }
+      }
+      const id = (await queueUnknownKnowledgeDemand(
+        database, 'query_network_knowledge', request, { unknown: true, context: request.context },
+      ))!
+      let replayStarted = false
+      const submissionDatabase = {
+        connect: async () => {
+          const client = await database.connect()
+          return {
+            query: async (sql: string, params?: unknown[]) => {
+              const result = await client.query(sql, params)
+              if (sql === "SET LOCAL statement_timeout = '8s'") {
+                replayStarted = true
+                const updater = await database.connect()
+                try {
+                  await updater.query('BEGIN')
+                  await updater.query(
+                    'SELECT id FROM knowledge_demands WHERE id=$1 FOR UPDATE NOWAIT', [id],
+                  )
+                  await updater.query(
+                    "SELECT id FROM pipeline_tasks WHERE knowledge_demand_id=$1 AND status='running' FOR UPDATE NOWAIT", [id],
+                  )
+                  if (scenario === 'context changed') {
+                    await updater.query(
+                      `UPDATE knowledge_demands SET context=context || '{"version":"17.12.1"}' WHERE id=$1`, [id],
+                    )
+                  }
+                  if (scenario === 'lease expired') {
+                    await updater.query(
+                      "UPDATE pipeline_tasks SET lease_until=now()-interval '1 second' WHERE knowledge_demand_id=$1 AND status='running'", [id],
+                    )
+                  }
+                  await updater.query('COMMIT')
+                } finally {
+                  await updater.query('ROLLBACK')
+                  updater.release()
+                }
+              }
+              return result
+            },
+            release: client.release.bind(client)
+          }
+        }
+      } as unknown as Database
+      try {
+        const submission = completeMissingKnowledgeDiagnosis(id, submissionDatabase)
+        if (scenario === 'unchanged') {
+          await expect(submission).resolves.toBeUndefined()
+        } else {
+          const code = scenario === 'context changed' ? 'DEMAND_DIAGNOSIS_INPUT_CHANGED' : 'PIPELINE_LEASE_INVALID'
+          await expect(submission).rejects.toThrow(code)
+        }
+        expect(replayStarted).toBe(true)
+        const diagnostics = await database.query(
+          'SELECT id FROM knowledge_demand_diagnostics WHERE knowledge_demand_id=$1', [id],
+        )
+        expect(diagnostics.rows).toHaveLength(scenario === 'unchanged' ? 1 : 0)
+      } finally {
+        await database.query('DELETE FROM pipeline_tasks WHERE knowledge_demand_id=$1', [id])
+        await database.query('DELETE FROM knowledge_demands WHERE id=$1', [id])
+      }
+    },
+  )
 
   it('retains parallel demand diagnoses and one live task per demand', async () => {
     const client = await database.connect()

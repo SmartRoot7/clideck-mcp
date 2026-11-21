@@ -30,10 +30,43 @@ applicability reindex, and production grants. The new regressions cover
 separate scheduler entry points, deduplication, and Pause during evidence
 lookup. Existing cases still cover new evidence after partial review.
 
+Canonical Node 24 deployment of `09e246464d42343eee458f47cdfb8f58d4dff8fa`
+exited 0 with 448 tests, 250 evaluations, build, and production smokes.
+The verified backup is 14,392,487,536 bytes at
+`/var/backups/clideck-mcp/deploy-20261121T084403Z-09e2464`. All four services
+switched at 09:43:26 UTC. At 09:48:10 UTC all eight executors were fresh, and
+all eight leases were valid. Nine AI runs completed, including candidate
+verification and technical answer review. The two unchanged MCP questions
+returned partial answers under their original IDs with specific missing
+context. This initial check also uncovered the diagnosis issue below.
+
 The initial 72-hour window ended at 02:28:07 UTC. It had no recurrence of
 collateral fragment failure, and seven demands reached complete replay.
 The Node.js and Hugging Face sample replays remain partial with concrete
 missing context.
+
+## 2026-11-21: Release diagnosis leases during exact-question search
+
+After `09e2464`, diagnosis submissions still timed out. PostgreSQL at
+09:48 UTC captured two researcher transactions reading broad coverage for
+about a minute, each blocking a submission or failure handler on its task
+row. This time the expensive SQL was the diagnosis replay ranking query.
+By 09:51 UTC, 27 verification tasks and one technical draft had finished,
+with zero verification submission timeouts since switch. Diagnosis had
+16 submission timeouts and two terminal lease failures in the same slice.
+
+Diagnosis now searches using the stored original question and context in a
+read-only transaction before taking task, demand, or topic write locks.
+PostgreSQL applies a deadline below the existing client query timeout. If
+replay times out, the diagnosis can still record the gap and continue
+research. The write transaction validates the live lease and unchanged inputs
+again. Closure still requires complete diagnosis and complete replay, and it
+checks that the matching revision is still active.
+
+On Node 24.22.1, 115 focused PostgreSQL tests passed. The new concurrency
+cases acquire the original demand and task rows from another connection
+during replay and verify that changed context or an expired lease blocks
+the subsequent write.
 
 ## 2026-11-18 01:27 UTC: Make batch failure isolation independent of error codes
 
