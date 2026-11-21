@@ -68,6 +68,25 @@ cases acquire the original demand and task rows from another connection
 during replay and verify that changed context or an expired lease blocks
 the subsequent write.
 
+Canonical Node 24 deployment of `9453829f7f0c949b3b4dd3f3a3fc6132f182a495`
+exited 0 with 451 tests, 250 evaluations, build, and production smokes.
+The verified backup is 14,393,816,139 bytes at
+`/var/backups/clideck-mcp/deploy-20261121T095401Z-9453829`. Services switched
+at 10:53:40–41 UTC and all four reported active with zero automatic
+restarts. At 10:58:09 UTC, all eight executors were fresh with eight valid
+leases and zero expired. Twelve AI runs completed, including three demand
+diagnoses, four candidate verifications, and one independent technical
+answer review. A candidate publication also completed. The final baseline
+had no lock waiters or server warnings since switch. Both exact MCP replays
+returned their original IDs and specific missing context with partial
+answers. The sample has no complete publication. The Node.js request still
+stores 27.0.1 as the OS version separately from the component version.
+
+New read-only 72-hour observation starts at 2026-11-21 10:58:09 UTC on
+`9453829`. Track diagnosis and verification submissions, lease recovery,
+technical draft and review progression, and complete original-question
+replays. Evidence is in `tmp/20261121-diagnosis-replay-{deploy,acceptance}.log`.
+
 ## 2026-11-18 01:27 UTC: Make batch failure isolation independent of error codes
 
 The November 17 fixes isolated specific error codes. The deployed SQL still
