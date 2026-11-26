@@ -27,6 +27,28 @@ The Node 24 PostgreSQL regression published at the former checkpoint
 boundary and restored both the previous release and the new delta.
 Type checking passed.
 
+The first deployment attempt stopped at the admin authorization test because
+its database fixture accepted SQL strings only. After the fixture accepted
+query configurations, the canonical Node 24 deployment of
+`ec5364ee23d3b50ca489340d3a4e6dd8fbfef52a` exited 0. All 451 tests, 250
+evaluations, builds, migrations, grants and production smokes passed. The
+verified backup is 15,125,636,003 bytes in
+`/var/backups/clideck-mcp/deploy-20261126T151017Z-ec5364e`.
+
+The four services switched at 16:12:57–58 UTC. At 16:20:21 UTC, all were
+active with zero automatic restarts. All eight executors were fresh, all
+eight leases valid and none expired. There were 45 completed AI runs,
+including 23 technical drafts and 21 independent reviews. Three technical
+publications created delta releases 127690–127692. Fresh researcher logs
+showed artifact validation rejections and no query read timeouts. Both
+original questions still gave partial answers with specific missing context.
+
+Restart the 72-hour read-only observation at 2026-11-26 16:20:21 UTC on
+`ec5364e`. Track publication at former checkpoint boundaries, verification
+submissions, leases and complete original-question replays. The short
+baseline did not cross a former checkpoint boundary. Deployment evidence
+is in `tmp/20261126-checkpoint-publication-deploy-retry.log`.
+
 ## 2026-11-21: Separate technical evidence lookup from scheduler writes
 
 Production on `96fc4ea` at 08:37 UTC had eight fresh executors and no
