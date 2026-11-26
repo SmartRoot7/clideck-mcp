@@ -3100,7 +3100,7 @@ describeIntegration('PostgreSQL integration', () => {
     )
   })
 
-  it('publishes deltas without copying the active snapshot and rolls back exactly', async () => {
+  it('publishes a delta at a former checkpoint boundary and restores both releases', async () => {
     const unique = randomUUID()
     const before = await database.query<{
       release_id: string
@@ -3124,6 +3124,7 @@ describeIntegration('PostgreSQL integration', () => {
     const baseline = before.rows[0]!
     const client = await database.connect()
     let deltaReleaseId = ''
+    let deltaRevisionId = ''
     try {
       await client.query('BEGIN')
       const candidate = {
@@ -3164,13 +3165,17 @@ describeIntegration('PostgreSQL integration', () => {
         }]
       }
       const revision = await createKnowledgeRevision(client, candidate)
+      await client.query(`SELECT setval(sequence_name, (nextval(sequence_name) / 120 + 1) * 120 - 1)
+        FROM pg_get_serial_sequence('releases', 'sequence') AS seq(sequence_name)`)
       const release = await publishKnowledgeBatch(
         client,
         [revision],
         'Validate incremental release storage.',
         'integration-test',
       )
+      expect(release.sequence % 120).toBe(0)
       deltaReleaseId = release.releaseId
+      deltaRevisionId = revision.revisionId
       await client.query('COMMIT')
     } catch (error) {
       await client.query('ROLLBACK')
@@ -3234,6 +3239,22 @@ describeIntegration('PostgreSQL integration', () => {
        GROUP BY active.release_id`,
     )
     expect(rolledBack.rows[0]).toEqual(baseline)
+
+    try {
+      const restored = await activateKnowledgeRelease(
+        database,
+        deltaReleaseId,
+        'integration-test-restore',
+      )
+      expect(restored.revision_count).toBe(baseline.revision_count + 1)
+      const revision = await database.query(
+        'SELECT revision_id FROM active_knowledge_state WHERE revision_id = $1',
+        [deltaRevisionId],
+      )
+      expect(revision.rowCount).toBe(1)
+    } finally {
+      await activateKnowledgeRelease(database, baseline.release_id, 'integration-test-cleanup')
+    }
   })
 
   it('reconciles stale agent runs without racing recent submissions', async () => {

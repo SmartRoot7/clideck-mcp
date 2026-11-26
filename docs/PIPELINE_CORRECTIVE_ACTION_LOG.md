@@ -6,6 +6,27 @@ a restart alone is not a fix. Add evidence → cause → minimal correction → 
 SHA (or configuration-only status) → measured result, then restart the read-only
 soak. A clean baseline is not a completed extended observation window.
 
+## 2026-11-26: Keep full release snapshots out of routine publication
+
+Production on `9453829` logged four candidate-verification read timeouts
+and two candidate-publication read timeouts between 15:00:54 and 15:02:11
+UTC. The publication stack reached the full `release_items` copy, which
+holds the release lock and candidate locks while copying the active state.
+Release sequence 127680 was consumed without a committed release. The
+last committed checkpoint was 49920 on October 8. The active state had
+about 770,000 records by this check, and the copy exceeded its 60-second
+deadline. Delta releases continued and no expired leases remained.
+
+Publications and compensating releases now append deltas when a base
+release already exists. Activation rebuilds the target state from the
+nearest existing snapshot and the latest change per item on the target's
+parent chain, including deactivations. The activation transaction stays
+atomic. In a read-only production check, reconstruction across 76,325
+deltas matched all 769,755 active item/revision pairs in 8.7 seconds.
+The Node 24 PostgreSQL regression published at the former checkpoint
+boundary and restored both the previous release and the new delta.
+Type checking passed.
+
 ## 2026-11-21: Separate technical evidence lookup from scheduler writes
 
 Production on `96fc4ea` at 08:37 UTC had eight fresh executors and no

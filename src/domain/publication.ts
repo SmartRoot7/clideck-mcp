@@ -431,9 +431,6 @@ export async function publishKnowledgeBatch(
     [reason, createdBy, current.rows[0]?.release_id ?? null],
   )
   const releaseId = release.rows[0]!.id
-  const checkpoint =
-    !current.rows[0] ||
-    Number(release.rows[0]!.sequence) % 120 === 0
   await client.query(
     `INSERT INTO release_changes (
        release_id,
@@ -483,7 +480,7 @@ export async function publishKnowledgeBatch(
     ],
   )
 
-  if (checkpoint) {
+  if (!current.rows[0]) {
     await client.query(
       `UPDATE releases
        SET release_mode = 'checkpoint'
@@ -597,8 +594,7 @@ async function publishCompensatingChanges(
       )
     }
   }
-  const checkpoint = !current.rows[0] || Number(release.rows[0]!.sequence) % 120 === 0
-  if (checkpoint) {
+  if (!current.rows[0]) {
     await client.query(`UPDATE releases SET release_mode = 'checkpoint' WHERE id = $1`, [releaseId])
     await client.query({
       text: `INSERT INTO release_items (
@@ -806,6 +802,7 @@ export async function activateKnowledgeRelease(
            child.depth + 1
          FROM releases parent
          JOIN ancestry child ON child.parent_release_id = parent.id
+         WHERE child.release_mode = 'delta'
        )
        SELECT id, release_mode, depth
        FROM ancestry
@@ -825,41 +822,31 @@ export async function activateKnowledgeRelease(
          revision_id uuid NOT NULL
        ) ON COMMIT DROP`,
     )
-    await client.query(
-      `INSERT INTO desired_active_knowledge_state (
-         knowledge_item_id,
-         revision_id
+    await client.query({
+      text: `WITH latest_changes AS MATERIALIZED (
+         SELECT DISTINCT ON (change.knowledge_item_id)
+           change.knowledge_item_id, change.new_revision_id, change.change_kind
+         FROM unnest($2::uuid[]) WITH ORDINALITY AS delta(id, depth)
+         JOIN release_changes change ON change.release_id = delta.id
+         ORDER BY change.knowledge_item_id, delta.depth
        )
-       SELECT knowledge_item_id, revision_id
-       FROM release_items
-       WHERE release_id = $1`,
-      [base.id],
-    )
-    const forward = ancestry.rows
-      .filter((release) => release.depth < base.depth)
-      .sort((left, right) => right.depth - left.depth)
-    for (const release of forward) {
-      await client.query(
-        `INSERT INTO desired_active_knowledge_state (
-           knowledge_item_id,
-           revision_id
+       INSERT INTO desired_active_knowledge_state (knowledge_item_id, revision_id)
+       SELECT item.knowledge_item_id, item.revision_id
+       FROM release_items item
+       WHERE item.release_id = $1
+         AND NOT EXISTS (
+           SELECT 1 FROM latest_changes change
+           WHERE change.knowledge_item_id = item.knowledge_item_id
          )
-         SELECT knowledge_item_id, new_revision_id
-         FROM release_changes
-         WHERE release_id = $1 AND change_kind = 'upsert'
-         ON CONFLICT (knowledge_item_id) DO UPDATE SET
-           revision_id = excluded.revision_id`,
-        [release.id],
-      )
-      await client.query(
-        `DELETE FROM desired_active_knowledge_state desired
-          USING release_changes change
-         WHERE change.release_id = $1
-           AND change.change_kind = 'deactivate'
-           AND desired.knowledge_item_id = change.knowledge_item_id`,
-        [release.id],
-      )
-    }
+       UNION ALL
+       SELECT knowledge_item_id, new_revision_id
+       FROM latest_changes WHERE change_kind = 'upsert'`,
+      values: [
+        base.id,
+        ancestry.rows.slice(0, base.depth).map((release) => release.id)
+      ],
+      query_timeout: publicationSerializationTimeoutMs
+    })
 
     await client.query('DELETE FROM active_knowledge_state')
     await client.query(
