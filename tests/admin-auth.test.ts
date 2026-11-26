@@ -55,8 +55,8 @@ function signedHeaders(input: {
 
 function createAdminTestApp() {
   const config = createTestConfig({ adminActorHmacSecret: secret })
-  const query = vi.fn(async (sqlValue: unknown, params?: unknown[]) => {
-    const sql = String(sqlValue)
+  const query = vi.fn(async (sqlValue: string | { text: string }, params?: unknown[]) => {
+    const sql = typeof sqlValue === 'string' ? sqlValue : sqlValue.text
     if (['BEGIN', 'COMMIT', 'ROLLBACK'].includes(sql)) {
       return { rows: [] }
     }
